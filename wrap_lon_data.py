@@ -29,8 +29,7 @@ def wrap_lon_to_180(data: xr.DataArray | xr.Dataset,
         data = data.assign_coords(**{lon: (lambda x: ((x[lon] + 180) % 360) - 180)})
     return data.sortby(lon, ascending=True)
 
-data = xr.open_dataset(r"E:/CumData/HadISST_sst.nc")
-# print(data)
+data = xr.open_dataset(r"HadISST_sst.nc")
 data = wrap_lon_to_180(data, lon = 'longitude', center_on_180 = True)
 print(data)
 data = wrap_lon_to_180(data, lon = 'longitude', center_on_180 = False)
