@@ -17,5 +17,10 @@ from .gradients import (
     calculate_vertical_gradient
 )
 
-__version__ = "0.1.0"
-__all__ = ['io', 'calculations', 'gradients', 'plotting']
+from .causality import (
+    liang_causality,
+    granger_causality
+)
+
+__version__ = "0.2.0"
+__all__ = ['io', 'calculations', 'gradients', 'plotting', 'causality']
