@@ -53,7 +53,7 @@ def add_equal_axes(ax, loc, pad, width):
         y0_new = bbox.y1 + pad
         y1_new = y0_new + width
 
-    # 创建新Axes.
+    # Create new Axes.
     fig = axes[0].get_figure()
     bbox_new = mtransforms.Bbox.from_extents(x0_new, y0_new, x1_new, y1_new)
     ax_new = fig.add_axes(bbox_new)
