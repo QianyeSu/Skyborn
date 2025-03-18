@@ -5,33 +5,33 @@ import numpy as np
 
 def add_equal_axes(ax, loc, pad, width):
     '''
-    在原有的Axes旁新添一个等高或等宽的Axes并返回该对象.
+    Add a new Axes with equal height or width next to the original Axes and return that object.
 
     Parameters
     ----------
     ax : Axes or array_like of Axes
-        原有的Axes,也可以为一组Axes构成的数组.
+        The original Axes, or can be an array of Axes.
 
     loc : {'left', 'right', 'bottom', 'top'}
-        新Axes相对于旧Axes的位置.
+        Position of the new Axes relative to the old Axes.
 
     pad : float
-        新Axes与旧Axes的间距.
+        Spacing between the new Axes and the old Axes.
 
     width: float
-        当loc='left'或'right'时,width表示新Axes的宽度.
-        当loc='bottom'或'top'时,width表示新Axes的高度.
+        When loc='left' or 'right', width represents the width of the new Axes.
+        When loc='bottom' or 'top', width represents the height of the new Axes.
 
     Returns
     -------
     ax_new : Axes
-        新Axes对象.
+        New Axes object.
     '''
-    # 无论ax是单个还是一组Axes,获取ax的大小位置.
+    # Whether ax is a single Axes or a group of Axes, get the size and position of ax.
     axes = np.atleast_1d(ax).ravel()
     bbox = mtransforms.Bbox.union([ax.get_position() for ax in axes])
 
-    # 决定新Axes的大小位置.
+    # Determine the size and position of the new Axes.
     if loc == 'left':
         x0_new = bbox.x0 - pad - width
         x1_new = x0_new + width
@@ -53,7 +53,7 @@ def add_equal_axes(ax, loc, pad, width):
         y0_new = bbox.y1 + pad
         y1_new = y0_new + width
 
-    # 创建新Axes.
+    # Create new Axes.
     fig = axes[0].get_figure()
     bbox_new = mtransforms.Bbox.from_extents(x0_new, y0_new, x1_new, y1_new)
     ax_new = fig.add_axes(bbox_new)
