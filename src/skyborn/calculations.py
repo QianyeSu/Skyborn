@@ -47,7 +47,7 @@ def linear_regression(data: np.ndarray, predictor: np.ndarray) -> Tuple[np.ndarr
     # Reshape results back to original dimensions
     regression_coef = regression_coef.reshape((dim1, dim2))
 
-    # Calculate p-valuesgit status
+    # Calculate p-values
     p_values = f_regression(data_flat, predictor)[1].reshape(dim1, dim2)
 
     return regression_coef, p_values
