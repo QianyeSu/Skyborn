@@ -16,6 +16,11 @@ from .gradients import (
     calculate_zonal_gradient,
     calculate_vertical_gradient
 )
+# 导入因果关系分析模块的函数
+from .causality import (
+    liang_causality,
+    granger_causality
+)
 
-__version__ = "0.1.0"
-__all__ = ['io', 'calculations', 'gradients', 'plotting']
+__version__ = "0.2.0"
+__all__ = ['io', 'calculations', 'gradients', 'plotting', 'causality']
