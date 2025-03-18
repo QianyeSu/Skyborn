@@ -1,0 +1,17 @@
+echo "# Python相关" > .gitignore
+echo "__pycache__/" >> .gitignore
+echo "*.py[cod]" >> .gitignore
+echo "*$py.class" >> .gitignore
+echo "*.so" >> .gitignore
+echo "dist/" >> .gitignore
+echo "build/" >> .gitignore
+echo "*.egg-info/" >> .gitignore
+echo "*.egg" >> .gitignore
+echo ".env" >> .gitignore
+echo ".venv" >> .gitignore
+echo "env/" >> .gitignore
+echo "venv/" >> .gitignore
+echo "ENV/" >> .gitignore
+echo "env.bak/" >> .gitignore
+echo "venv.bak/" >> .gitignore
+echo ".ipynb_checkpoints" >> .gitignore
