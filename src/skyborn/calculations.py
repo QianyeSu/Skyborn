@@ -6,20 +6,51 @@ from typing import Tuple, Union
 from sklearn.feature_selection import f_regression
 
 
-def linearRegression(mat, sequence):
-    '''
-    回归函数 第一个是需要回归的变量，第二个为一个数组
-    '''
-    if len(mat) != len(sequence):
-        raise ValueError('Data, array must be must be equal!!!!!!!'
-                         ' %s and %s' % (mat.shape[0], len(sequence)))
-    A = np.column_stack((sequence, np.ones(sequence.shape[0])))
-    (a, b, c) = mat.shape
-    mat_rshp = mat.reshape((a, b*c))
-    mat_rshp_reg = np.linalg.lstsq(A, mat_rshp, rcond=None)[0][0]
-    mat_reg = mat_rshp_reg.reshape((b, c))
-    pvalue = f_regression(mat_rshp, sequence)[1].reshape(b, c)
-    return mat_reg, pvalue
+def linear_regression(data: np.ndarray, predictor: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Perform linear regression between a 3D data array and a predictor sequence.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        A 3D array of shape (n_samples, dim1, dim2) containing dependent variables.
+    predictor : np.ndarray
+        A 1D array of shape (n_samples,) containing the independent variable.
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        A tuple containing:
+        - regression_coefficients: The slope of the regression line with shape (dim1, dim2)
+        - p_values: The p-values of the regression with shape (dim1, dim2)
+
+    Raises
+    ------
+    ValueError
+        If the number of samples in data doesn't match the length of the predictor.
+    """
+    if len(data) != len(predictor):
+        raise ValueError(f"Number of samples in data ({data.shape[0]}) must match "
+                         f"length of predictor ({len(predictor)})")
+
+    # Create design matrix with predictor and intercept
+    design_matrix = np.column_stack((predictor, np.ones(predictor.shape[0])))
+
+    # Get original dimensions and reshape for regression
+    n_samples, dim1, dim2 = data.shape
+    data_flat = data.reshape((n_samples, dim1 * dim2))
+
+    # Perform linear regression
+    regression_coef = np.linalg.lstsq(
+        design_matrix, data_flat, rcond=None)[0][0]
+
+    # Reshape results back to original dimensions
+    regression_coef = regression_coef.reshape((dim1, dim2))
+
+    # Calculate p-values
+    p_values = f_regression(data_flat, predictor)[1].reshape(dim1, dim2)
+
+    return regression_coef, p_values
 
 
 def convert_longitude_range(data: Union[xr.DataArray, xr.Dataset],
