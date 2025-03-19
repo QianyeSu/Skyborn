@@ -24,6 +24,9 @@ setuptools.setup(
         "cartopy",
         "netCDF4",
         "metpy",
+        "tqdm",
+        "statsmodels",
+        "scipy",
         "cfgrib",
         "eccodes",
         "scikit-learn"

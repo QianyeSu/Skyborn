@@ -6,15 +6,16 @@ from typing import Tuple, Union
 from sklearn.feature_selection import f_regression
 
 
-def linear_regression(data: np.ndarray, predictor: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def linear_regression(data: Union[np.ndarray, xr.DataArray], predictor: Union[np.ndarray, xr.DataArray]) -> Tuple[np.ndarray, np.ndarray]:
     """
     Perform linear regression between a 3D data array and a predictor sequence.
+    Handles both numpy arrays and xarray DataArrays.
 
     Parameters
     ----------
-    data : np.ndarray
+    data : np.ndarray or xr.DataArray
         A 3D array of shape (n_samples, dim1, dim2) containing dependent variables.
-    predictor : np.ndarray
+    predictor : np.ndarray or xr.DataArray
         A 1D array of shape (n_samples,) containing the independent variable.
 
     Returns
@@ -29,6 +30,13 @@ def linear_regression(data: np.ndarray, predictor: np.ndarray) -> Tuple[np.ndarr
     ValueError
         If the number of samples in data doesn't match the length of the predictor.
     """
+    # Convert xr.DataArray to np.ndarray if needed
+    if isinstance(data, xr.DataArray):
+        data = data.values
+
+    if isinstance(predictor, xr.DataArray):
+        predictor = predictor.values
+
     if len(data) != len(predictor):
         raise ValueError(f"Number of samples in data ({data.shape[0]}) must match "
                          f"length of predictor ({len(predictor)})")
