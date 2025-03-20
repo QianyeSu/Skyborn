@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Utilities for Liang and Granger causality analysis
+https://github.com/LinkedEarth/Pyleoclim_util
 """
 
 __all__ = [
