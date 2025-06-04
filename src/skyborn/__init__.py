@@ -1,13 +1,7 @@
-"""
-Skyborn 大气科学研究工具库
-
-提供大气科学常用数据处理、分析和可视化功能模块
-"""
-
 from .io import read_netcdf, read_grib
 from .calculations import (
     convert_longitude_range,
-    linearRegression
+    linear_regression
 )
 from . import plot
 from .gradients import (
