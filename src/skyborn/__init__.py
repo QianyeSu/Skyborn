@@ -9,7 +9,7 @@ from .calculations import (
     convert_longitude_range,
     linearRegression
 )
-from .plotting import add_equal_axes, createFigure
+from . import plot
 from .gradients import (
     calculate_gradient,
     calculate_meridional_gradient,
