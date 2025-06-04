@@ -22,5 +22,5 @@ from .causality import (
     granger_causality
 )
 
-__version__ = "0.2.0"
-__all__ = ['io', 'calculations', 'gradients', 'plotting', 'causality']
+__version__ = "0.3.0"  # Updated to version 0.3.0
+__all__ = ['io', 'calculations', 'gradients', 'causality', 'plot']
