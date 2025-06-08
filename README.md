@@ -14,3 +14,9 @@ To install the Skyborn package, you can use pip:
 
 ```bash
 pip install skyborn
+```
+or
+
+```bash
+pip install -U --index-url https://pypi.org/simple/ skyborn
+```
