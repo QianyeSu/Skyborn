@@ -13,7 +13,8 @@ from .regridding import (
     NearestRegridder,
     BilinearRegridder,
     ConservativeRegridder,
-    nearest_neighbor_indices
+    nearest_neighbor_indices,
+    regrid_dataset
 )
 
 __all__ = [
@@ -22,5 +23,6 @@ __all__ = [
     'NearestRegridder',
     'BilinearRegridder',
     'ConservativeRegridder',
-    'nearest_neighbor_indices'
+    'nearest_neighbor_indices',
+    'regrid_dataset'
 ]
