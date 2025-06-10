@@ -109,74 +109,56 @@ def unproject_vectors(nt, Xc):
 #################################################################
 
 
-def SSM(exp, X_mm, init=1955, end=1995):
+def SSM(X_dict, X_mm):
     """
     Calculates the squared difference between each models ensemble mean and the multi-model mean. Based on
     (Ribes et al., 2017)
-    :param exp: str
-        Experiment to calculate the difference (e.g., 'historical', 'historicalNat')
+    :param X_dict: dict
+        Dictionary where keys are experiment names and values are arrays (n_members, n_time)
     :param X_mm: numpy.ndarray
-        Array with multi-model ensemble mean
-    :param init: int
-        Correspondent year to start the analysis
-    :param end: int
-        Correspondent year to finish the analysis
+        Multi-model ensemble mean, shape (n_time,)
     :return:
     np.diag(((Xc - Xc_mm) ** 2.).sum(axis=1)): numpy.ndarray
         nt -1 x nt - 1 array of the difference between each model ensemble mean the multi-model mean
     """
-    # reads ensemble mean for each model
-    ifiles = glob('data/model/%s/ensmean/*_%s_%s.csv' % (exp, init, end))
+    # Make sure X_mm has right shape
+    if X_mm.ndim == 1:
+        X_mm = X_mm.reshape((len(X_mm), 1))
 
-    df = pd.DataFrame()
-    for ifile in ifiles:
-        df_temp = pd.read_csv(ifile, index_col=0, parse_dates=True)
-        df = pd.concat([df, df_temp['anomaly'].to_frame(
-            os.path.basename(ifile)[:-4])], axis=1)
+    # Calculate ensemble mean for each experiment
+    exp_means = []
+    for exp_name, exp_data in X_dict.items():
+        # Get ensemble mean for this experiment
+        ensemble_mean = np.mean(exp_data, axis=0)  # shape: (n_time,)
+        exp_means.append(ensemble_mean)
 
-    # remove columns (ensemble members with nan)
-    df.dropna(inplace=True, axis=1)
-    # gets ensemble values and multi model (mm) ensemble
-    X = df.values
+    # Stack all experiment means: (n_time, n_experiments)
+    X = np.column_stack(exp_means)
 
-    # project the data
+    # Apply projection (this is the default behavior in original SSM)
     Xc = project_vectors(X.shape[0], X)
-    Xc_mm = project_vectors(X.shape[0], X_mm.reshape((X.shape[0], 1)))
+    Xc_mm = project_vectors(X.shape[0], X_mm)
 
     return np.diag(((Xc - Xc_mm) ** 2.).sum(axis=1))
 
 #################################################################
 
 
-def get_nruns(exp, how='pandas', init=1955, end=1995):
+def get_nruns(X_dict):
     """
-    Reads the number of runs for each model
-    :param exp: str
-        Experiment to calculate the difference (e.g., 'historical', 'historicalNat')
-    :param how: str
-        Used to see if the number of runs is calculated using the pandas dataframes or text file ('historicalOA' for
-        example)
-    :param init: int
-        Correspondent year to start the analysis
-    :param end: int
-        Correspondent year to finish the analysis
+    Gets the number of runs for each CESM2 experiment
+
+    :param X_dict: dict
+        Dictionary where keys are experiment names (e.g., 'CESM2-GHG', 'CESM2-EE') 
+        and values are arrays with shape (n_members, n_time)
     :return:
     nruns: numpy.ndarray
-       Array with the number of runs for each model
+        Array with number of runs for each experiment
     """
-    if how == 'pandas':
-        ifiles = glob('data/model/%s/ensemble/*_%s_%s.csv' % (exp, init, end))
-        nruns = []
-
-        for ifile in sorted(ifiles):
-            df_temp = pd.read_csv(ifile, index_col=0, parse_dates=True)
-            nruns.append(len(df_temp.columns))
-
-        nruns = np.array(nruns)
-    elif how == 'loadtxt':
-        nruns = np.loadtxt('data/model/%s/ensemble/nruns_%s.txt' % (exp, exp))
-
-    return nruns
+    nruns = []
+    for exp_name, exp_data in X_dict.items():
+        nruns.append(exp_data.shape[0])  # number of members
+    return np.array(nruns)
 
 #################################################################
 

@@ -100,7 +100,7 @@ def all_trends(y_star_hat, Xi_star_hat, Cy_star_hat, Cxi_star_hat):
     # save data as csv
     df = pd.DataFrame(trends_list, columns=[
                       'forcing', 'trend', 'trend_min', 'trend_max'])
-    df.to_csv('trends.csv', index=False)
+    # df.to_csv('trends.csv', index=False)
 
     return df
 
