@@ -17,9 +17,49 @@ from sklearn import neighbors
 
 import functools
 import dataclasses
-from typing import Union
+from typing import Union, Tuple, Optional
 
 Array = Union[np.ndarray]
+
+
+def _detect_coordinate_names(dataset: xarray.Dataset) -> Tuple[str, str]:
+    """
+    Detect latitude and longitude coordinate names in the dataset.
+
+    Args:
+        dataset: xarray Dataset
+
+    Returns:
+        Tuple of (longitude_name, latitude_name)
+
+    Raises:
+        ValueError: If coordinate names cannot be detected
+    """
+    # Common variations of coordinate names
+    lon_names = ['longitude', 'lon', 'long', 'x']
+    lat_names = ['latitude', 'lat', 'y']
+
+    # Find longitude coordinate
+    lon_coord = None
+    for name in lon_names:
+        if name in dataset.dims:
+            lon_coord = name
+            break
+
+    # Find latitude coordinate
+    lat_coord = None
+    for name in lat_names:
+        if name in dataset.dims:
+            lat_coord = name
+            break
+
+    if lon_coord is None or lat_coord is None:
+        available_dims = list(dataset.dims.keys())
+        raise ValueError(f"Could not detect longitude/latitude coordinates. "
+                         f"Available dimensions: {available_dims}. "
+                         f"Expected one of: lon={lon_names}, lat={lat_names}")
+
+    return lon_coord, lat_coord
 
 
 @dataclasses.dataclass(frozen=True)
@@ -32,6 +72,14 @@ class Grid:
     @classmethod
     def from_degrees(cls, lon: np.ndarray, lat: np.ndarray) -> Grid:
         return cls(np.deg2rad(lon), np.deg2rad(lat))
+
+    @classmethod
+    def from_dataset(cls, dataset: xarray.Dataset) -> Grid:
+        """Create a Grid from an xarray Dataset by auto-detecting coordinates."""
+        lon_name, lat_name = _detect_coordinate_names(dataset)
+        lon_values = dataset[lon_name].values
+        lat_values = dataset[lat_name].values
+        return cls.from_degrees(lon_values, lat_values)
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -58,22 +106,51 @@ class Regridder:
         """Regrid an array with dimensions (..., lon, lat) from source to target."""
         raise NotImplementedError
 
-    def regrid_dataset(self, dataset: xarray.Dataset) -> xarray.Dataset:
-        """Regrid an xarray.Dataset from source to target."""
-        if not (dataset['latitude'].diff('latitude') > 0).all():
-            dataset = dataset.isel(latitude=slice(None, None, -1))  # Reverse
-        assert (dataset['latitude'].diff('latitude') > 0).all()
+    def regrid_dataset(self, dataset: xarray.Dataset,
+                       lon_dim: Optional[str] = None,
+                       lat_dim: Optional[str] = None) -> xarray.Dataset:
+        """
+        Regrid an xarray.Dataset from source to target.
 
+        Args:
+            dataset: Input xarray Dataset
+            lon_dim: Name of longitude dimension (auto-detected if None)
+            lat_dim: Name of latitude dimension (auto-detected if None)
+
+        Returns:
+            Regridded xarray Dataset
+        """
+        # Auto-detect coordinate names if not provided
+        if lon_dim is None or lat_dim is None:
+            detected_lon, detected_lat = _detect_coordinate_names(dataset)
+            lon_dim = lon_dim or detected_lon
+            lat_dim = lat_dim or detected_lat
+
+        # Ensure latitude is in ascending order
+        if not (dataset[lat_dim].diff(lat_dim) > 0).all():
+            dataset = dataset.isel({lat_dim: slice(None, None, -1)})  # Reverse
+        assert (dataset[lat_dim].diff(lat_dim) > 0).all()
+
+        # Apply regridding
         dataset = xarray.apply_ufunc(
             self.regrid_array,
             dataset,
-            input_core_dims=[['longitude', 'latitude']],
-            output_core_dims=[['longitude', 'latitude']],
-            exclude_dims={'longitude', 'latitude'},
+            input_core_dims=[[lon_dim, lat_dim]],
+            output_core_dims=[[lon_dim, lat_dim]],
+            exclude_dims={lon_dim, lat_dim},
             vectorize=True,
             dask='allowed',  # Allow Dask arrays to be passed to the function
             output_dtypes=[dataset[list(dataset.data_vars)[0]].dtype],
         )
+
+        # Update coordinates to target grid
+        target_lon_deg = np.rad2deg(self.target.lon)
+        target_lat_deg = np.rad2deg(self.target.lat)
+        dataset = dataset.assign_coords({
+            lon_dim: target_lon_deg,
+            lat_dim: target_lat_deg
+        })
+
         return dataset
 
 
@@ -284,3 +361,39 @@ class ConservativeRegridder(Regridder):
 
     def regrid_array(self, field: Array) -> np.ndarray:
         return self._nanmean(field)
+
+
+# Convenience function for easy regridding
+def regrid_dataset(dataset: xarray.Dataset,
+                   target_grid: Grid,
+                   method: str = 'bilinear',
+                   lon_dim: Optional[str] = None,
+                   lat_dim: Optional[str] = None) -> xarray.Dataset:
+    """
+    Convenience function to regrid a dataset.
+
+    Args:
+        dataset: Input xarray Dataset
+        target_grid: Target grid for regridding
+        method: Interpolation method ('nearest', 'bilinear', 'conservative')
+        lon_dim: Name of longitude dimension (auto-detected if None)
+        lat_dim: Name of latitude dimension (auto-detected if None)
+
+    Returns:
+        Regridded xarray Dataset
+    """
+    # Create source grid from dataset
+    source_grid = Grid.from_dataset(dataset)
+
+    # Select regridder based on method
+    if method == 'nearest':
+        regridder = NearestRegridder(source_grid, target_grid)
+    elif method == 'bilinear':
+        regridder = BilinearRegridder(source_grid, target_grid)
+    elif method == 'conservative':
+        regridder = ConservativeRegridder(source_grid, target_grid)
+    else:
+        raise ValueError(
+            f"Unknown method: {method}. Choose from 'nearest', 'bilinear', 'conservative'")
+
+    return regridder.regrid_dataset(dataset, lon_dim=lon_dim, lat_dim=lat_dim)
