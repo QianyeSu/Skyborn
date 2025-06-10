@@ -16,5 +16,7 @@ from .causality import (
     granger_causality
 )
 
-__version__ = "0.3.2"  # Updated to version 0.3.2
+from . import interp
+
+__version__ = "0.3.3"  # Updated to version 0.3.2
 __all__ = ['io', 'calculations', 'gradients', 'causality', 'plot', "ROF"]
