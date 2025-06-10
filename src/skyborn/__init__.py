@@ -17,6 +17,6 @@ from .causality import (
 )
 
 from . import interp
-
+from . import ROF
 __version__ = "0.3.3"  # Updated to version 0.3.2
 __all__ = ['io', 'calculations', 'gradients', 'causality', 'plot', "ROF"]
