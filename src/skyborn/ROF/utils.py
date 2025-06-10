@@ -163,42 +163,39 @@ def get_nruns(X_dict):
 #################################################################
 
 
-def Cm_estimate(exp, Cv, X_mm, how_nr='pandas', init=1955, end=1995):
+def Cm_estimate(X_dict, Cv, X_mm):
     """
     Estimated covariance matrix for model error (Ribes et al., 2017)
-    :param exp: str
-        Experiment to calculate the difference (e.g., 'historical', 'historicalNat')
+    Modified for CESM2 experiments with ensemble member arrays
+
+    :param X_dict: dict
+        Dictionary where keys are experiment names (e.g., 'CESM2-GHG', 'CESM2-EE') 
+        and values are arrays with shape (n_members, n_time)
     :param Cv: numpy.ndarray
         Array with internal variability covariance matrix
     :param X_mm: numpy.ndarray
         Array with multi-model ensemble mean
-    :param how_nr:
-        Used to see if the number of runs is calculated using the pandas dataframes or text file ('historicalOA' for
-        example)
-    :param init: int
-        Correspondent year to start the analysis
-    :param end: int
-        Correspondent year to finish the analysis
     :return:
     Cm_pos_hat: numpy.ndarray
         Estimated covariance matrix for model error
     """
 
-    # model difference
-    _SSM = SSM(exp, X_mm, init=init, end=end)
+    # Calculate model differences using our modified SSM function
+    _SSM = SSM(X_dict, X_mm)
 
-    # nruns - number of runs / nm - number of models
-    nruns = get_nruns(exp, how=how_nr, init=init, end=end)
-    nm = len(nruns)
+    # Get number of runs and number of models using our modified function
+    nruns = get_nruns(X_dict)
+    nm = len(nruns)  # number of experiments
 
+    # Calculate Cv_all based on number of runs for each experiment
     Cv_all = np.zeros(Cv.shape)
     for nr in nruns:
         Cv_all += Cv / nr
 
-    # first estimation of Cm
+    # First estimation of Cm
     Cm_hat = (1. / (nm - 1.)) * (_SSM - ((nm - 1.) / nm) * Cv_all)
 
-    # set negative eigenvalues to zero and recompose the signal
+    # Set negative eigenvalues to zero and recompose the signal
     S, X = np.linalg.eig(Cm_hat)
     S[S < 0] = 0
     Cm_pos_hat = np.linalg.multi_dot(
@@ -211,33 +208,28 @@ def Cm_estimate(exp, Cv, X_mm, how_nr='pandas', init=1955, end=1995):
 #################################################################
 
 
-def Cv_estimate(exp, Cv, how_nr='pandas', init=1955, end=1995):
+def Cv_estimate(X_dict, Cv):
     """
     Estimated covariance matrix for internal variability considering multiple models (Ribes et al., 2017)
-    :param exp: str
-        Experiment to calculate the difference (e.g., 'historical', 'historicalNat')
+    Modified for CESM2 experiments with ensemble member arrays
+
+    :param X_dict: dict
+        Dictionary where keys are experiment names and values are arrays (n_members, n_time)
     :param Cv: numpy.ndarray
         Array with internal variability covariance matrix
-    :param how_nr:
-        Used to see if the number of runs is calculated using the pandas dataframes or text file ('historicalOA' for
-        example)
-    :param init: int
-        Correspondent year to start the analysis
-    :param end: int
-        Correspondent year to finish the analysis
     :return:
     Cv_estimate: numpy.ndarray
         Estimated covariance matrix for internal variability considering multiple models
     """
-    # nruns - number of runs / nm - number of models
-    nruns = get_nruns(exp, how=how_nr, init=init, end=end)
+    # Get number of runs and number of models
+    nruns = get_nruns(X_dict)
     nm = len(nruns)
 
     Cv_all = np.zeros(Cv.shape)
     for nr in nruns:
         Cv_all += Cv / nr
 
-    Cv_estimate = (1. / (nm ** 2.) * Cv_all)
+    Cv_estimate = (1. / (nm ** 2.)) * Cv_all
 
     return Cv_estimate
 
