@@ -2,8 +2,8 @@
 This scripts contains functions that performs nearest, bilinear, and conservative interpolation
 on xarray.Datasets. The original version of this script is available at WeatherBench2.
 
-Yingkai Sha
-ksha@ucar.edu
+Qianye Su
+suqianye2000@gmail.com
 
 Reference
  - WeatherBench2 regridding: 
