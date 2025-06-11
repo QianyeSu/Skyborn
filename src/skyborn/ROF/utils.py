@@ -3,9 +3,10 @@ import numpy as np
 import pandas as pd
 from glob import glob
 from scipy import stats
+from typing import Dict, List, Tuple, Union, Any
 
 
-def speco(C):
+def speco(C: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
     This function computes eigenvalues and eigenvectors, in descending order
     :param C: numpy.ndarray
@@ -39,7 +40,7 @@ def speco(C):
     return P, D
 
 
-def chi2_test(d_cons, df):
+def chi2_test(d_cons: float, df: int) -> float:
     """
     Check whether it is from a chi-squared distribution or not
     :param d_cons: float
@@ -55,7 +56,8 @@ def chi2_test(d_cons, df):
 
     return pv_cons
 
-def project_vectors(nt, X):
+
+def project_vectors(nt: int, X: np.ndarray) -> np.ndarray:
     """
     This function provides a projection matrix U that can be applied to X to ensure its covariance matrix to be
     full-ranked. Projects to a nt-1 subspace (ref: Ribes et al., 2013).
@@ -78,7 +80,7 @@ def project_vectors(nt, X):
     return np.dot(U, X)
 
 
-def unproject_vectors(nt, Xc):
+def unproject_vectors(nt: int, Xc: np.ndarray) -> np.ndarray:
     """
     This function provides unprojects a matrix nt subspace to we can compute the trends
     :param nt: int
@@ -100,7 +102,7 @@ def unproject_vectors(nt, Xc):
     return np.dot(Ui, Xc)
 
 
-def SSM(X_dict, X_mm):
+def SSM(X_dict: Dict[str, np.ndarray], X_mm: np.ndarray) -> np.ndarray:
     """
     Calculates the squared difference between each models ensemble mean and the multi-model mean. Based on
     (Ribes et al., 2017)
@@ -133,7 +135,7 @@ def SSM(X_dict, X_mm):
     return np.diag(((Xc - Xc_mm) ** 2.).sum(axis=1))
 
 
-def get_nruns(X_dict):
+def get_nruns(X_dict: Dict[str, np.ndarray]) -> np.ndarray:
     """
     Gets the number of runs for each CESM2 experiment
 
@@ -150,7 +152,7 @@ def get_nruns(X_dict):
     return np.array(nruns)
 
 
-def Cm_estimate(X_dict, Cv, X_mm):
+def Cm_estimate(X_dict: Dict[str, np.ndarray], Cv: np.ndarray, X_mm: np.ndarray) -> np.ndarray:
     """
     Estimated covariance matrix for model error (Ribes et al., 2017)
     Modified for CESM2 experiments with ensemble member arrays
@@ -193,7 +195,7 @@ def Cm_estimate(X_dict, Cv, X_mm):
     return Cm_pos_hat
 
 
-def Cv_estimate(X_dict, Cv):
+def Cv_estimate(X_dict: Dict[str, np.ndarray], Cv: np.ndarray) -> np.ndarray:
     """
     Estimated covariance matrix for internal variability considering multiple models (Ribes et al., 2017)
     Modified for CESM2 experiments with ensemble member arrays
@@ -217,6 +219,7 @@ def Cv_estimate(X_dict, Cv):
     Cv_estimate = (1. / (nm ** 2.)) * Cv_all
 
     return Cv_estimate
+
 
 if __name__ == "__main__":
     T = 11
