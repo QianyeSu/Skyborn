@@ -1,7 +1,7 @@
 '''Codes for detection and attribution analysis below are adopted from https://github.com/rafaelcabreu/attribution, by Rafael Abreu '''
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy.stats as stats
+from typing import Dict, Any, Tuple, Literal
 from .preprocess import PreProcess
 from .utils import chi2_test
 
@@ -22,7 +22,7 @@ class AttributionModel:
         Ordinary Least Square (OLS) estimation of beta from the linear model y = beta * X + epsilon
     """
 
-    def __init__(self, X, y):
+    def __init__(self, X: np.ndarray, y: np.ndarray):
         """
         :param X: numpy.ndarray
             Array of size nt x nf, where nf is the number of forcings, with the model output as a timeseries
@@ -36,7 +36,7 @@ class AttributionModel:
         self.nr = self.nt - 1
         self.I = X.shape[1]
 
-    def ols(self, Cf, Proj, Z2, cons_test='AT99'):
+    def ols(self, Cf: np.ndarray, Proj: np.ndarray, Z2: np.ndarray, cons_test: Literal['AT99'] = 'AT99') -> Dict[str, np.ndarray]:
         """
         Ordinary Least Square (OLS) estimation of beta from the linear model y = beta * X + epsilon as discussed in the
         following reference:
@@ -96,7 +96,7 @@ class AttributionModel:
 
     #################################################################
 
-    def ribes(self, Cxi, Cy):
+    def ribes(self, Cxi: np.ndarray, Cy: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Aurelien Ribes model proposed in 2017 is implemented following the reference:
         Ribes, Aurelien, et al. (2017) A new statistical approach to climate change detection and attribution.
