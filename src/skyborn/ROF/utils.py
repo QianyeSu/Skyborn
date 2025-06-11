@@ -38,8 +38,6 @@ def speco(C):
 
     return P, D
 
-#################################################################
-
 
 def chi2_test(d_cons, df):
     """
@@ -56,9 +54,6 @@ def chi2_test(d_cons, df):
     pv_cons = 1. - rien
 
     return pv_cons
-
-#################################################################
-
 
 def project_vectors(nt, X):
     """
@@ -82,8 +77,6 @@ def project_vectors(nt, X):
 
     return np.dot(U, X)
 
-#################################################################
-
 
 def unproject_vectors(nt, Xc):
     """
@@ -105,8 +98,6 @@ def unproject_vectors(nt, Xc):
     Ui = np.linalg.inv(u.T)[:, :nt - 1]
 
     return np.dot(Ui, Xc)
-
-#################################################################
 
 
 def SSM(X_dict, X_mm):
@@ -141,8 +132,6 @@ def SSM(X_dict, X_mm):
 
     return np.diag(((Xc - Xc_mm) ** 2.).sum(axis=1))
 
-#################################################################
-
 
 def get_nruns(X_dict):
     """
@@ -159,8 +148,6 @@ def get_nruns(X_dict):
     for exp_name, exp_data in X_dict.items():
         nruns.append(exp_data.shape[0])  # number of members
     return np.array(nruns)
-
-#################################################################
 
 
 def Cm_estimate(X_dict, Cv, X_mm):
@@ -205,8 +192,6 @@ def Cm_estimate(X_dict, Cv, X_mm):
 
     return Cm_pos_hat
 
-#################################################################
-
 
 def Cv_estimate(X_dict, Cv):
     """
@@ -232,9 +217,6 @@ def Cv_estimate(X_dict, Cv):
     Cv_estimate = (1. / (nm ** 2.)) * Cv_all
 
     return Cv_estimate
-
-#################################################################
-
 
 if __name__ == "__main__":
     T = 11
