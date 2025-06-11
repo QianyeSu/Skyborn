@@ -1,4 +1,5 @@
 import numpy as np
+from typing import Tuple, Literal
 from .utils import speco
 
 
@@ -27,7 +28,7 @@ class PreProcess:
         Computes regularized covariance matrix
     """
 
-    def __init__(self, y, X, Z):
+    def __init__(self, y: np.ndarray, X: np.ndarray, Z: np.ndarray):
         """
         :param y: numpy.ndarray
             Array of size nt with observations as a timeseries
@@ -42,9 +43,7 @@ class PreProcess:
 
         self.nt = y.shape[0]
 
-    #################################################################
-
-    def extract_Z2(self, method='regular', frac=0.5):
+    def extract_Z2(self, method: Literal['regular'] = 'regular', frac: float = 0.5) -> Tuple[np.ndarray, np.ndarray]:
         """
         This function is used to split a big sample Z (dimension: nz x p, containing nz iid realisation of a random
         vector of size p) into two samples Z1 and Z2 (respectively of dimension nz1 x p and nz2 x p, with
@@ -75,9 +74,7 @@ class PreProcess:
 
         return Z1, Z2
 
-    #################################################################
-
-    def proj_fullrank(self, Z1, Z2):
+    def proj_fullrank(self, Z1: np.ndarray, Z2: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         This function provides a projection matrix U that can be applied to y, X, Z1 and Z2 to ensure its covariance
         matrix to be full-ranked. Uses variables defined in 'self', Z1 and Z2 computed in 'extract_Z2' method.
@@ -90,7 +87,7 @@ class PreProcess:
             y projected in U
         Xc: numpy.ndarray
             X projected in U
-        Z1: numpy.ndarray
+        Z1c: numpy.ndarray
             Z1 projected in U
         Z2c: numpy.ndarray
             Z2 projected in U
@@ -112,9 +109,8 @@ class PreProcess:
 
         return yc, Xc, Z1c, Z2c
 
-    #################################################################
-
-    def creg(self, X, method='ledoit', alpha1=1e-10, alpha2=1):
+    def creg(self, X: np.ndarray, method: Literal['ledoit', 'specified'] = 'ledoit',
+             alpha1: float = 1e-10, alpha2: float = 1) -> np.ndarray:
         """
         This function compute the regularised covariance matrix estimate following the equation
         'Cr = alpha1 * Ip + alpha2 * CE' where alpha1 and alpha2 are parameters Ip is the p x p identity matrix and CE
@@ -165,8 +161,6 @@ class PreProcess:
         Cr = alpha1 * Ip + alpha2 * CE
 
         return Cr
-
-    #################################################################
 
 
 if __name__ == "__main__":
