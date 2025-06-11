@@ -94,8 +94,6 @@ class AttributionModel:
 
         return Beta_hat
 
-    #################################################################
-
     def ribes(self, Cxi: np.ndarray, Cy: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Aurelien Ribes model proposed in 2017 is implemented following the reference:
@@ -165,8 +163,6 @@ class AttributionModel:
                   (i+1), chi2_test(d_cons, self.nt), np.exp(d_cons / -2.)))
 
         return y_star_hat, Xi_star_hat, Cy_star_hat, Cxi_star_hat
-
-#################################################################
 
 
 if __name__ == "__main__":
