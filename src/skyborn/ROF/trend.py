@@ -1,15 +1,16 @@
 import numpy as np
 import pandas as pd
+from typing import List, Tuple, Union
 from .utils import unproject_vectors
 
 
-def calculate_trend(y):
+def calculate_trend(y: np.ndarray) -> float:
     """
     Calculate the trend by unprojecting a vector to the nt subspace and the using OLS estimation
     :param y: numpy.ndarray
         nt -1 array used to calculate the trend
     :return:
-    beta_hat: numpy.ndarray
+    beta_hat: float
         value of the scaling factor of the OLS adjustment
     """
     nt = len(y) + 1
@@ -23,10 +24,8 @@ def calculate_trend(y):
 
     return beta_hat[1]  # only return the trend
 
-#################################################################
 
-
-def calculate_uncertainty(y, Cy, alpha=0.05, nsamples=4000):
+def calculate_uncertainty(y: np.ndarray, Cy: np.ndarray, alpha: float = 0.05, nsamples: int = 4000) -> np.ndarray:
     """
     Calculate trend uncertainty by generating multiple series and the calculating the confidence interval
     :param y: numpy.ndarray
@@ -54,10 +53,9 @@ def calculate_uncertainty(y, Cy, alpha=0.05, nsamples=4000):
 
     return np.array([trend_min, trend_max])
 
-#################################################################
 
-
-def all_trends(y_star_hat, Xi_star_hat, Cy_star_hat, Cxi_star_hat):
+def all_trends(y_star_hat: np.ndarray, Xi_star_hat: np.ndarray,
+               Cy_star_hat: np.ndarray, Cxi_star_hat: np.ndarray) -> pd.DataFrame:
     """
     Calculate all trends (observations and each individual forcing) and save it to a csv file
     :param y_star_hat: np.ndarray
@@ -72,7 +70,7 @@ def all_trends(y_star_hat, Xi_star_hat, Cy_star_hat, Cxi_star_hat):
     df: pandas.DataFrame
         dataframe with the trend for the observations and each of the forcings
     """
-    trends_list = []
+    trends_list: List[List[Union[str, float]]] = []
 
     trend = calculate_trend(y_star_hat)
     confidence_interval = calculate_uncertainty(
@@ -103,5 +101,3 @@ def all_trends(y_star_hat, Xi_star_hat, Cy_star_hat, Cxi_star_hat):
     # df.to_csv('trends.csv', index=False)
 
     return df
-
-#################################################################
