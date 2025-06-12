@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="skyborn",
-    version="0.3.4",  # 与pyproject.toml保持一致
+    version="0.3.5",  # Keep consistent with pyproject.toml
     author="Qianye Su",
     author_email="suqianye2000@gmail.com",
     description="Atmospheric science research utilities",
