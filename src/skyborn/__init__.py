@@ -18,4 +18,4 @@ from .causality import (
 from . import plot
 from . import interp
 from . import ROF
-__version__ = "0.3.4"  # Updated to version 0.3.4
+__version__ = "0.3.5"  # Updated to version 0.3.5
