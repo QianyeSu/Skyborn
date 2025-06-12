@@ -187,6 +187,7 @@ class CurvedQuiverLegend(Artist):
         text_props: dict = None,
         padding: float = 0.01,
         margin: float = 0.02,
+        reference_speed: float = 2.0,
         # If None, automatically determined based on whether units is empty
         center_label: bool = None,
     ) -> None:
@@ -215,6 +216,7 @@ class CurvedQuiverLegend(Artist):
             Maximum arrow length (relative to legend box)
         """
         super().__init__()
+        self.reference_speed = reference_speed
         self.margin = margin
         self.ax = ax
         self.curved_quiver_set = curved_quiver_set
@@ -527,28 +529,30 @@ class CurvedQuiverLegend(Artist):
                     **self.text_props
                 )
 
-    # Keep other methods...
-
     def _calculate_arrow_length(self):
         """Calculate arrow length based on actual wind speed and original data"""
         try:
-            # Method 1: Use scale information from original curved_quiver
+            # Use the scale information from the original curved_quiver
             if hasattr(self.curved_quiver_set, 'resolution') and hasattr(self.curved_quiver_set, 'magnitude'):
-                resolution = self.curved_quiver_set.resolution
-                magnitude = self.curved_quiver_set.magnitude
+                # resolution = self.curved_quiver_set.resolution
+                # magnitude = self.curved_quiver_set.magnitude
 
-                # Calculate proportion relative to maximum wind speed
-                max_magnitude = np.max(magnitude)
-                if max_magnitude > 0:
-                    scale_factor = self.U / max_magnitude
-                    # Ensure arrow length is within reasonable range
-                    arrow_length = min(
-                        scale_factor * self.max_arrow_length, self.max_arrow_length)
-                    arrow_length = max(
-                        arrow_length, self.max_arrow_length * 0.2)  # Minimum length
-                    return arrow_length
+                # Use reference speed to scale the arrow
+                reference_speed = getattr(
+                    self, 'reference_speed', 2.0)  # Default reference speed is 2.0
 
-            # Method 2: If can't get scale info, use simple linear scaling
+                # Calculate the scale factor
+                scale_factor = self.U / reference_speed
+
+                # Ensure arrow length is within reasonable range
+                arrow_length = min(
+                    # Allow arrows up to 4x maximum
+                    scale_factor * self.max_arrow_length, self.max_arrow_length * 4)
+                arrow_length = max(
+                    arrow_length, self.max_arrow_length * 0.2)  # Minimum length
+                return arrow_length
+
+            # Method 2: If scale information is unavailable, use simple linear scaling
             # Assume common wind speed range is 0-20 m/s
             scale_factor = min(self.U / 20.0, 1.0)
             arrow_length = max(
@@ -558,7 +562,7 @@ class CurvedQuiverLegend(Artist):
         except Exception as e:
             print(
                 f"Warning: Could not calculate proportional arrow length: {e}")
-            # Fallback to fixed length
+            # Fall back to fixed length
             return self.max_arrow_length * 0.6
 
     def _calculate_position(self):
@@ -640,7 +644,7 @@ class CurvedQuiverLegend(Artist):
 def add_curved_quiverkey(
     ax,
     curved_quiver_set,  # Pass the curved_quiver return object
-    U: float,
+    U: float = 2.0,
     units: str = "m/s",
     loc: str = "lower right",
     labelpos: str = "E",  # label position
