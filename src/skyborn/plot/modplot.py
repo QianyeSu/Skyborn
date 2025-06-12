@@ -293,7 +293,6 @@ def velovect(
 
 
 class CurvedQuiverplotSet:
-
     def __init__(
         self,
         lines,
@@ -330,7 +329,24 @@ class CurvedQuiverplotSet:
         self.grains = grains
         self.broken_streamlines = broken_streamlines
 
+        # New attribute added for handling scaling
+        self.max_magnitude = np.max(
+            magnitude) if magnitude is not None else None
 
+        # Set scaling factor based on integration_direction
+        self.scale_factor = 2.0 if integration_direction == "both" else 1.0
+
+    def get_scale_factor(self):
+        """Get the current scaling factor"""
+        return self.scale_factor
+
+    def scale_value(self, value):
+        """Convert physical value to display value (for conversion from actual wind speed to display scale)"""
+        return value / self.scale_factor
+
+    def unscale_value(self, value):
+        """Convert display value back to physical value (for conversion from display scale to actual wind speed)"""
+        return value * self.scale_factor
 # Coordinate definitions
 # ========================
 
