@@ -13,7 +13,7 @@ from matplotlib.patches import FancyArrowPatch
 
 import xarray as xr
 import matplotlib.pyplot as plt
-import numpy as np
+# import numpy as np
 # import matplotlib
 from matplotlib.artist import Artist, allow_rasterization
 from matplotlib.patches import Rectangle
