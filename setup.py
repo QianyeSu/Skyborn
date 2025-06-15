@@ -7,13 +7,13 @@ setuptools.setup(
     author_email="suqianye2000@gmail.com",
     description="Atmospheric science research utilities",
     long_description="Skyborn is a tool for easy plotting ERA5 weather data.",
-    license="MIT",
+    license="BSD-3-Clause",
     license_files=("LICENSE.txt"),
     packages=setuptools.find_packages(where="src"),
     package_dir={"": "src"},
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
     ],
 
