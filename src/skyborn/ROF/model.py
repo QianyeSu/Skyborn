@@ -1,4 +1,14 @@
-'''Codes for detection and attribution analysis below are adopted from https://github.com/rafaelcabreu/attribution, by Rafael Abreu '''
+'''
+This script is designed to support optimal fingerprinting attribution analysis by providing essential data processing and analysis functions.
+
+Qianye Su
+suqianye2000@gmail.com
+
+Reference
+ - ROF: 
+     https://github.com/pinplex/PyDnA
+     https://github.com/rafaelcabreu/attribution, by Rafael Abreu
+'''
 import numpy as np
 import scipy.stats as stats
 from typing import Dict, Any, Tuple, Literal
