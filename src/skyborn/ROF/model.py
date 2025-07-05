@@ -44,7 +44,7 @@ class AttributionModel:
         self.nt = y.shape[0]
         # 1 stands for the number of spatial patterns (dealing only with timeseries)
         self.nr = self.nt - 1
-        self.I = X.shape[1]
+        self.num_forcings = X.shape[1]
 
     def ols(self, Cf: np.ndarray, Proj: np.ndarray, Z2: np.ndarray, cons_test: Literal['AT99'] = 'AT99') -> Dict[str, np.ndarray]:
         """
@@ -93,8 +93,8 @@ class AttributionModel:
 
         if cons_test == 'AT99':  # formula provided by Allen & Tett (1999)
             d_cons = np.linalg.multi_dot(
-                [epsilon.T, np.linalg.pinv(Var_valid), epsilon]) / (self.nr - self.I)
-            rien = stats.f.cdf(d_cons, dfn=self.nr-self.I, dfd=nz2)
+                [epsilon.T, np.linalg.pinv(Var_valid), epsilon]) / (self.nr - self.num_forcings)
+            rien = stats.f.cdf(d_cons, dfn=self.nr-self.num_forcings, dfd=nz2)
             pv_cons = 1 - rien
 
         print("Consistency test: %s p-value: %.5f" % (cons_test, pv_cons))
