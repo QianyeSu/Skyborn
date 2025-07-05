@@ -1,7 +1,7 @@
-import os
+# import os
 import numpy as np
-import pandas as pd
-from glob import glob
+# import pandas as pd
+# from glob import glob
 from scipy import stats
 from typing import Dict, List, Tuple, Union, Any
 
@@ -10,34 +10,33 @@ def speco(C: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
     This function computes eigenvalues and eigenvectors, in descending order
     :param C: numpy.ndarray
-        A p x p symetric real matrix
+        A p x p symmetric real matrix
     :return:
-    P: numpy.ndarray
-        The eigenvectors (P[:, i] is the ist eigenvector)
-    D: numpy.ndarray
+    eigenvectors: numpy.ndarray
+        The eigenvectors (eigenvectors[:, i] is the i-th eigenvector)
+    eigenvalues_diag: numpy.ndarray
         The eigenvalues as a diagonal matrix
     """
     # Compute eigenvalues and eigenvectors (the eigenvectors are non unique so the values may change from one software
     # to another e.g. python, matlab, scilab)
-    D0, P0 = np.linalg.eig(C)
+    raw_eigenvals, raw_eigenvecs = np.linalg.eig(C)
 
     # Take real part (to avoid numeric noise, eg small complex numbers)
-    if np.max(np.imag(D0)) / np.max(np.real(D0)) > 1e-12:
+    if np.max(np.imag(raw_eigenvals)) / np.max(np.real(raw_eigenvals)) > 1e-12:
         raise ValueError("Matrix is not symmetric")
 
-    # Check that C is symetric (<=> real eigen-values/-vectors)
-    P1 = np.real(P0)
-    D1 = np.real(D0)
+    # Check that C is symmetric (<=> real eigen-values/-vectors)
+    eigenvecs_real = np.real(raw_eigenvecs)
+    eigenvals_real = np.real(raw_eigenvals)
 
-    # sort eigenvalues in descending order and
-    # get their indices to order the eigenvector
-    Do = np.sort(D1)[::-1]
-    o = np.argsort(D1)[::-1]
+    # Sort eigenvalues in descending order and get their indices to order the eigenvectors
+    eigenvals_sorted = np.sort(eigenvals_real)[::-1]
+    sort_indices = np.argsort(eigenvals_real)[::-1]
 
-    P = P1[:, o]
-    D = np.diag(Do)
+    eigenvectors = eigenvecs_real[:, sort_indices]
+    eigenvalues_diag = np.diag(eigenvals_sorted)
 
-    return P, D
+    return eigenvectors, eigenvalues_diag
 
 
 def chi2_test(d_cons: float, df: int) -> float:
