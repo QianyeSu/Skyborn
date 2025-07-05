@@ -43,7 +43,7 @@ class AttributionModel:
         self.X = X
         self.nt = y.shape[0]            # Number of time steps
         # 1 stands for the number of spatial patterns (dealing only with timeseries)
-        self.n_reduced = self.nt - 1           # Number of reduced dimensions
+        self.n_reduced = self.nt - 1    # Number of reduced dimensions
         self.num_forcings = X.shape[1]  # Number of forcing factors
 
     def ols(self, Cf: np.ndarray, Proj: np.ndarray, Z2: np.ndarray, cons_test: Literal['AT99'] = 'AT99') -> Dict[str, np.ndarray]:
