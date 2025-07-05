@@ -70,13 +70,11 @@ def project_vectors(nt: int, X: np.ndarray) -> np.ndarray:
     """
     # Create centering matrix M = I - (1/nt) * ones_matrix
     # This removes the mean from each time series
-    identity_matrix = np.eye(nt, nt)
-    ones_matrix = np.ones((nt, nt))
-    centering_matrix = identity_matrix - ones_matrix / nt
+    centering_matrix = np.eye(nt, nt) - np.ones((nt, nt)) / nt
 
     # Compute eigen-decomposition of centering matrix
     # Note: rank(M) = nt-1, so M has one eigenvalue equal to 0
-    eigenvectors, eigenvalues_diag = speco(centering_matrix)
+    eigenvectors, _ = speco(centering_matrix)
 
     # Select first (nt-1) eigenvectors corresponding to non-zero eigenvalues
     # These form the projection matrix U
