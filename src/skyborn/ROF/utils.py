@@ -90,24 +90,30 @@ def project_vectors(nt: int, X: np.ndarray) -> np.ndarray:
 
 def unproject_vectors(nt: int, Xc: np.ndarray) -> np.ndarray:
     """
-    This function provides unprojects a matrix nt subspace to we can compute the trends
+    Unproject data from (nt-1) subspace back to nt subspace for trend computation.
+
     :param nt: int
-        number of time steps
+        Number of time steps
     :param Xc: numpy.ndarray
-        nt x nf array to be unprojected
+        Projected data matrix (nt-1 x nf) to be unprojected
     :return:
-    np.dot(U, X): numpy.ndarray
-        nt - 1 x nf array of projected timeseries
+    numpy.ndarray
+        Unprojected data matrix (nt x nf)
     """
-    M = np.eye(nt, nt) - np.ones((nt, nt)) / nt
+    # Create centering matrix: I - (1/nt)*ones
+    centering_matrix = np.eye(nt, nt) - np.ones((nt, nt)) / nt
 
-    # Eigen-vectors/-values of M; note that rk(M)=nt-1, so M has one eigenvalue equal to 0.
-    u, d = speco(M)
+    # Get eigenvectors
+    eigenvectors, _ = speco(centering_matrix)
 
-    # inverse of the projection matrix
-    Ui = np.linalg.inv(u.T)[:, :nt - 1]
+    # Compute inverse projection matrix
+    # Note: This is the pseudo-inverse for the reduced subspace
+    inverse_projection = np.linalg.inv(eigenvectors.T)[:, :nt - 1]
 
-    return np.dot(Ui, Xc)
+    # Apply inverse projection
+    unprojected_X = np.dot(inverse_projection, Xc)
+
+    return unprojected_X
 
 
 def SSM(X_dict: Dict[str, np.ndarray], X_mm: np.ndarray) -> np.ndarray:
