@@ -22,4 +22,4 @@ where = ["src"]
 
 [tool.setuptools.dynamic]
 version = { attr = "skyborn.__version__" }
-dependencies = { file = ["requirements.txt"] } # 从文件读取依赖
+dependencies = { file = ["requirements.txt"] }
