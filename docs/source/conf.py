@@ -1,5 +1,6 @@
 # -- Path setup --
 import os
+import skyborn
 import sys
 sys.path.insert(0, os.path.abspath('../..'))
 
@@ -14,7 +15,7 @@ sys.path.insert(0, os.path.abspath('../..'))
 project = 'Skyborn'
 copyright = '2025, Qianye Su'
 author = 'Qianye Su'
-release = '0.3.5'
+release = skyborn.__version__
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
