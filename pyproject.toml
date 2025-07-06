@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skyborn"
-dynamic = ["version"]
+dynamic = ["version", "dependencies"] # 添加 dependencies 到动态列表
 description = "Atmospheric science research utilities"
 authors = [{ name = "Qianye Su", email = "suqianye2000@gmail.com" }]
 license = { file = "LICENSE.txt" }
@@ -12,20 +12,6 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: BSD License",
     "Operating System :: OS Independent",
-]
-dependencies = [
-    "numpy",
-    "xarray",
-    "matplotlib",
-    "cartopy",
-    "netCDF4",
-    "metpy",
-    "tqdm",
-    "statsmodels",
-    "scipy",
-    "cfgrib",
-    "eccodes",
-    "scikit-learn",
 ]
 
 [tool.setuptools]
@@ -36,3 +22,4 @@ where = ["src"]
 
 [tool.setuptools.dynamic]
 version = { attr = "skyborn.__version__" }
+dependencies = { file = ["requirements.txt"] } # 从文件读取依赖
