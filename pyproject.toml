@@ -4,7 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skyborn"
-dynamic = ["version", "dependencies"] # 添加 dependencies 到动态列表
+dynamic = [
+    "version",
+    "dependencies",
+    "optional-dependencies",
+] # Use dynamic versioning and dependencies
 description = "Atmospheric science research utilities"
 authors = [{ name = "Qianye Su", email = "suqianye2000@gmail.com" }]
 license = { file = "LICENSE.txt" }
@@ -23,3 +27,5 @@ where = ["src"]
 [tool.setuptools.dynamic]
 version = { attr = "skyborn.__version__" }
 dependencies = { file = ["requirements.txt"] }
+optional-dependencies.dev = { file = ["requirements-dev.txt"] }
+optional-dependencies.docs = { file = ["requirements-docs.txt"] }
