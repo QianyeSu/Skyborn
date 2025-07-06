@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skyborn"
-version = "0.3.5"
+dynamic = ["version"]
 description = "Atmospheric science research utilities"
 authors = [{ name = "Qianye Su", email = "suqianye2000@gmail.com" }]
 license = { file = "LICENSE.txt" }
@@ -33,3 +33,6 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "skyborn.__version__" }
