@@ -168,10 +168,13 @@ jobs:
             python -c "
             import skyborn
             import numpy as np
+            import xarray as xr
             
-            # Create a simple test
+            # Create a simple test using correct xarray syntax
             data = np.array([350, 10, 180, 270])
-            result = skyborn.convert_longitude_range(data, (-180, 180))
+            lon_coords = np.array([0, 1, 2, 3])
+            da = xr.DataArray(data, coords=[lon_coords], dims=['lon'])
+            result = skyborn.convert_longitude_range(da, lon='lon', center_on_180=True)
             assert len(result) == len(data), 'Length mismatch'
             print('✓ Basic assertion test passed')
             "
