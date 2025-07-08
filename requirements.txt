@@ -10,3 +10,4 @@ scipy
 cfgrib
 eccodes
 scikit-learn
+subprocess
