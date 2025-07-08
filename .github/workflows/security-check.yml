@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/**'           # Source code changes
-      - 'requirements*.txt' # Dependency file changes
-      - 'pyproject.toml'   # Project configuration changes
+      - "src/**" # Source code changes
+      - "requirements*.txt" # Dependency file changes
+      - "pyproject.toml" # Project configuration changes
   pull_request:
     branches: [main]
   schedule:

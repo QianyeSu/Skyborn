@@ -90,8 +90,10 @@ def example_era5_conversion():
         output_file = convert_grib_to_nc(
             grib_files="era5_data.grib",
             output_file="era5_data.nc",
-            ignore_keys=["method", "type", "stream"],  # Commonly ignored keys for ERA5
-            split_keys=["param", "levtype"],  # Split by parameter and level type
+            # Commonly ignored keys for ERA5
+            ignore_keys=["method", "type", "stream"],
+            # Split by parameter and level type
+            split_keys=["param", "levtype"],
             data_type="NC_FLOAT",  # Recommended precision for ERA5
             unlimited_dimension="time",  # Unlimited time dimension
             file_kind=4,  # netCDF-4 format
