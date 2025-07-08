@@ -6,7 +6,6 @@ This script builds both English and Chinese versions of the documentation
 using Sphinx with proper configuration for each language.
 """
 
-import os
 import sys
 import subprocess
 import shutil
@@ -195,12 +194,12 @@ def main():
     
     # Summary
     print("\n" + "=" * 50)
-    print(f"📊 Build Summary:")
+    print("📊 Build Summary:")
     print(f"   Languages built: {success_count}/{len(LANGUAGES)}")
     
     if success_count == len(LANGUAGES):
         print("🎉 All documentation built successfully!")
-        print(f"\n📖 View documentation:")
+        print("\n📖 View documentation:")
         print(f"   Main page: file://{BUILD_DIR.absolute()}/index.html")
         print(f"   English:   file://{BUILD_DIR.absolute()}/html/en/index.html")
         print(f"   Chinese:   file://{BUILD_DIR.absolute()}/html/zh_CN/index.html")

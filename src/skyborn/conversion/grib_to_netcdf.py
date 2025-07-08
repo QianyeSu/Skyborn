@@ -264,7 +264,7 @@ def convert_grib_to_nc(
     )
     
     if verbose:
-        print(f"Converting GRIB to NetCDF...")
+        print("Converting GRIB to NetCDF...")
         print(f"Input files: {[str(f) for f in validated_grib_files]}")
         print(f"Output file: {output_path}")
         print(f"Command: {' '.join(cmd)}")
@@ -282,7 +282,7 @@ def convert_grib_to_nc(
             print("STDOUT:", result.stdout)
         
         if verbose:
-            print(f"✅ Conversion completed successfully!")
+            print("✅ Conversion completed successfully!")
             print(f"Output saved to: {output_path.absolute()}")
         
         return output_path
