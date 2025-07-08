@@ -7,6 +7,4 @@ dependencies:
   - numpy
   - xarray
   - pytest
-  - pip
-  - pip:
-      - -e .
+  - pytest-cov
