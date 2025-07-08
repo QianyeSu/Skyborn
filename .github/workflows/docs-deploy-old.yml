@@ -1,22 +1,24 @@
 # GitHub Actions workflow for building and deploying Sphinx documentation to GitHub Pages
-name: "Deploy Documentation"
+# This workflow is triggered on pushes to the main branch and supports multi-language documentation
+name: Deploy Documentation
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]  # Deploy docs when pushing to main branch
     paths:
-      - 'docs/**'
-      - 'src/**'
-      - '.github/workflows/docs-deploy.yml'
-  workflow_dispatch:
+      - 'docs/**'       # Only run when documentation files change
+      - 'src/**'        # Or when source code changes (for API docs)
+      - '.github/workflows/docs-deploy.yml'  # Or when this workflow changes
+  workflow_dispatch:     # Allow manual triggering
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+# Set permissions for GitHub Pages deployment
 permissions:
   contents: read
   pages: write
   id-token: write
 
 # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
@@ -27,13 +29,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Fetch full history for proper version detection
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
@@ -42,7 +44,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-docs.txt
-          pip install -e .
+          pip install -e .  # Install package in development mode for API docs
+
+      - name: Configure git for GitHub Actions
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Build English documentation
         run: |
@@ -56,29 +63,17 @@ jobs:
 
       - name: Prepare GitHub Pages structure
         run: |
+          # Create the root directory for GitHub Pages
           mkdir -p _site
 
-          # Check if documentation was built successfully
-          if [ ! -d "docs/build/en/html" ]; then
-            echo "Error: English documentation not found at docs/build/en/html"
-            find docs/build -type d -name "html" || echo "No html directories found"
-            exit 1
-          fi
-
-          if [ ! -d "docs/build/zh_CN/html" ]; then
-            echo "Error: Chinese documentation not found at docs/build/zh_CN/html"
-            find docs/build -type d -name "html" || echo "No html directories found"
-            exit 1
-          fi
-
-          # Copy documentation
+          # Copy English docs to root (default language)
           cp -r docs/build/en/html/* _site/
+
+          # Copy Chinese docs to zh_CN subdirectory
           mkdir -p _site/zh_CN
           cp -r docs/build/zh_CN/html/* _site/zh_CN/
-          mkdir -p _site/en
-          cp -r docs/build/en/html/* _site/en/
 
-          # Create language selector
+          # Create a simple language selector index page
           cat > _site/index.html << 'EOF'
           <!DOCTYPE html>
           <html>
@@ -90,8 +85,12 @@ jobs:
                   body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
                   .language-selector { margin: 20px; }
                   .language-selector a {
-                      display: inline-block; margin: 10px; padding: 15px 30px;
-                      background-color: #007acc; color: white; text-decoration: none;
+                      display: inline-block;
+                      margin: 10px;
+                      padding: 15px 30px;
+                      background-color: #007acc;
+                      color: white;
+                      text-decoration: none;
                       border-radius: 5px;
                   }
                   .language-selector a:hover { background-color: #005999; }
@@ -108,27 +107,31 @@ jobs:
           </html>
           EOF
 
-          # Debug: Show what was created
-          echo "Site structure:"
-          find _site -type f -name "*.html" | head -5
+          # Copy English docs to en subdirectory for explicit access
+          mkdir -p _site/en
+          cp -r docs/build/en/html/* _site/en/
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v3
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v2
         with:
           path: '_site'
 
   # Deployment job
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
 
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v2
+
+      - name: Comment deployment status
+        if: github.event_name == 'push'
+        run: |
+          echo "📚 Documentation deployed successfully!"
+          echo "🌐 English: ${{ steps.deployment.outputs.page_url }}en/"
+          echo "🌐 中文: ${{ steps.deployment.outputs.page_url }}zh_CN/"
