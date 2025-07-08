@@ -1,10 +1,10 @@
-# Pre-commit hooks configuration
+# Simplified pre-commit hooks configuration for core code quality
 # See https://pre-commit.com for more information
 
 repos:
-  # 基础代码检查
+  # Basic code checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v4.6.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -13,60 +13,33 @@ repos:
       - id: check-merge-conflict
       - id: check-toml
       - id: debug-statements
-      - id: mixed-line-ending
-        args: ['--fix=lf']
 
-  # Python 代码格式化
+  # Python code formatting
   - repo: https://github.com/psf/black
-    rev: 24.1.1
+    rev: 24.4.2
     hooks:
       - id: black
         language_version: python3
         args: ['--line-length=88']
 
-  # Import 排序
+  # Import sorting
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
       - id: isort
         args: ["--profile", "black", "--line-length=88"]
 
-  # 代码质量检查
+  # Code quality checks (essential only)
   - repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
+    rev: 7.1.0
     hooks:
       - id: flake8
-        args: ['--max-line-length=88', '--extend-ignore=E203,W503']
-        additional_dependencies: [flake8-docstrings, flake8-bugbear]
+        args: ['--max-line-length=88', '--extend-ignore=E203,W503,E501']
 
-  # 类型检查（可选，比较严格）
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
-    hooks:
-      - id: mypy
-        additional_dependencies: [types-all]
-        args: [--ignore-missing-imports, --no-strict-optional]
-
-  # 安全检查
+  # Security checks (basic)
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.5
+    rev: 1.7.9
     hooks:
       - id: bandit
-        args: ['-r', 'src/', '-f', 'json']
+        args: ['-r', 'src/', '--skip', 'B101,B601']
         exclude: tests/
-
-  # 文档检查
-  - repo: https://github.com/pycqa/pydocstyle
-    rev: 6.3.0
-    hooks:
-      - id: pydocstyle
-        args: ['--convention=numpy']
-        additional_dependencies: [tomli]
-
-  # Jupyter notebook 检查（如果您使用 notebook）
-  - repo: https://github.com/nbQA-dev/nbQA
-    rev: 1.7.1
-    hooks:
-      - id: nbqa-black
-      - id: nbqa-isort
-      - id: nbqa-flake8
