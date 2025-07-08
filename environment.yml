@@ -8,3 +8,4 @@ dependencies:
   - xarray
   - pytest
   - pytest-cov
+  - pip
