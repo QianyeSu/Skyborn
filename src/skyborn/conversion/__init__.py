@@ -15,6 +15,10 @@ from .grib_to_netcdf import (
     grib2nc,
     grib_to_netcdf,
     GribToNetCDFError,
+    # Private functions for testing
+    _check_grib_to_netcdf_available,
+    _validate_grib_files,
+    _build_grib_to_netcdf_command,
 )
 
 __all__ = [
@@ -24,4 +28,8 @@ __all__ = [
     "grib2nc",
     "grib_to_netcdf",
     "GribToNetCDFError",
+    # Private functions (for testing)
+    "_check_grib_to_netcdf_available",
+    "_validate_grib_files",
+    "_build_grib_to_netcdf_command",
 ]
