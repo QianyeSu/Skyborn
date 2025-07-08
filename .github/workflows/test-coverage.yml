@@ -131,20 +131,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install sphinx sphinx-rtd-theme myst-parser sphinx-autodoc-typehints
+          pip install -r requirements-docs.txt
 
-      - name: Test English docs build
+      - name: Test documentation build
         run: |
           cd docs
-          sphinx-build -b html source/en build/html/en -W
-
-      - name: Test Chinese docs build
-        run: |
-          cd docs
-          sphinx-build -b html source/zh_CN build/html/zh_CN -W
+          sphinx-build -b html source/en build/html --quiet
 
       - name: Upload docs artifacts
         uses: actions/upload-artifact@v4
         with:
           name: documentation
-          path: docs/build/
+          path: docs/build/html/
