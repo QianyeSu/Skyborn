@@ -9,6 +9,17 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch: # 添加手动触发
+    inputs:
+      version:
+        description: "Version to publish (optional, will use current version if empty)"
+        required: false
+        type: string
+      dry_run:
+        description: "Dry run (build only, do not publish)"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,8 +40,26 @@ jobs:
           pip install build
       - name: Build package
         run: python -m build
+
+      - name: Show build info
+        run: |
+          echo "Built packages:"
+          ls -la dist/
+          echo "Package contents:"
+          if [ -f dist/*.whl ]; then
+            python -m zipfile -l dist/*.whl | head -20
+          fi
+
       - name: Publish package
+        if: ${{ !inputs.dry_run }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Dry run completed
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo "🎯 Dry run completed successfully!"
+          echo "Package built but not published."
+          echo "Remove 'dry_run' option to publish for real."
