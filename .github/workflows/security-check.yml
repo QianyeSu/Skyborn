@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main, develop]
   schedule:
-    - cron: "0 6 * * 1" # 每周一早上6点检查
+    - cron: "0 6 * * 1" # Check every Monday at 6 AM
   workflow_dispatch:
 
 jobs:
@@ -31,12 +31,12 @@ jobs:
 
       - name: Check for security vulnerabilities
         run: |
-          # 检查已知的安全漏洞
+          # Check for known security vulnerabilities
           safety check || echo "Safety check completed with warnings"
 
       - name: Run bandit security scan
         run: |
-          # 扫描代码中的安全问题
+          # Scan code for security issues
           bandit -r src/skyborn -f json -o bandit-report.json || echo "Bandit scan completed"
 
       - name: Check dependencies with pip-audit
