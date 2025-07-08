@@ -2,61 +2,66 @@
 
 ## 🔧 问题修复 (Issues Fixed)
 
-### 原问题 (Original Problem)
-```
-sphinx.errors.ConfigError: config directory doesn't contain a conf.py file (/home/runner/work/Skyborn/Skyborn/docs/source/en)
-```
+### 原问题 (Original Problems)
+1. ```
+   sphinx.errors.ConfigError: config directory doesn't contain a conf.py file (/home/runner/work/Skyborn/Skyborn/docs/source/en)
+   ```
 
-### 根本原因 (Root Cause)
-- Sphinx 试图在 `docs/source/en` 目录中查找 `conf.py` 文件
-- 但是 `conf.py` 位于 `docs/source` 目录中
-- 多语言配置结构不完整
+2. ```
+   UnicodeDecodeError: 'gbk' codec can't decode byte 0xa8 in position 56: illegal multibyte sequence
+   ```
+
+### 根本原因 (Root Causes)
+1. **配置文件问题**: Sphinx 无法在语言子目录中找到 `conf.py` 文件
+2. **编码问题**: Windows 系统上处理中文字符时的编码错误 (GBK vs UTF-8)
 
 ## ✅ 解决方案 (Solutions Implemented)
 
-### 1. 创建语言特定的配置文件
+### 1. 创建语言特定的配置文件 ✅
 - **English**: `docs/source/en/conf.py`
 - **Chinese**: `docs/source/zh_CN/conf.py`
-- 这些文件继承主配置文件 `docs/source/conf.py`
+- 使用 `with open(..., encoding='utf-8')` 正确读取主配置文件
+- 添加 `# -*- coding: utf-8 -*-` 编码声明
 
-### 2. 更新构建脚本
-- **修复了** `build_docs.py` 中的输出路径
-- **添加了** 命令行参数支持 (`--lang`, `--clean`)
-- **改进了** 错误处理和依赖检查
+### 2. 修复 Unicode 编码问题 ✅
+- **环境变量**: 设置 `PYTHONIOENCODING=utf-8`
+- **进程编码**: 在 subprocess.run 中明确指定 `encoding='utf-8'`
+- **Locale 设置**: 添加 `LANG=en_US.UTF-8` 和 `LC_ALL=en_US.UTF-8`
+- **Sphinx 参数**: 添加 `-E -a` 参数强制重新构建
 
-### 3. 更新文档依赖
+### 3. 改进构建脚本 ✅
+- **错误处理**: 更详细的错误输出和诊断信息
+- **命令行参数**: 支持 `--lang` 和 `--clean` 参数
+- **编码安全**: 所有文件操作都使用 UTF-8 编码
+
+### 4. 更新文档依赖 ✅
 - **添加了** `sphinx-autodoc-typehints` 到 `requirements-docs.txt`
 - **确保了** 所有必需的 Sphinx 扩展都已包含
 
-### 4. 验证构建流程
-- ✅ 英语文档构建成功
-- ✅ 中文文档构建成功
-- ✅ 多语言索引页面生成正确
-- ✅ GitHub Actions 工作流程路径匹配
-
-## 📁 新的目录结构 (New Directory Structure)
+## 📁 目录结构 (Directory Structure)
 
 ```
 docs/
 ├── source/
-│   ├── conf.py              # 主配置文件
+│   ├── conf.py              # 主配置文件 (UTF-8)
 │   ├── en/
-│   │   ├── conf.py          # 英语特定配置
+│   │   ├── conf.py          # 英语特定配置 (UTF-8)
 │   │   ├── index.rst
 │   │   ├── installation.rst
 │   │   ├── quickstart.rst
 │   │   └── api/
 │   └── zh_CN/
-│       ├── conf.py          # 中文特定配置
+│       ├── conf.py          # 中文特定配置 (UTF-8)
 │       ├── index.rst
 │       ├── installation.rst
 │       ├── quickstart.rst
+│       ├── conversion_module_zh.md
 │       └── api/
 ├── build/
-│   ├── en/html/             # 英语文档输出
-│   ├── zh_CN/html/          # 中文文档输出
-│   └── index.html           # 语言选择页面
-└── build_docs.py            # 构建脚本
+│   ├── en/html/             # 英语文档输出 ✅
+│   ├── zh_CN/html/          # 中文文档输出 ✅
+│   └── index.html           # 语言选择页面 ✅
+└── build_docs.py            # 构建脚本 (已修复编码)
 ```
 
 ## 🚀 使用方法 (Usage)
@@ -75,37 +80,48 @@ python build_docs.py --lang en --clean
 python build_docs.py --lang zh_CN --clean
 ```
 
-### GitHub Actions 自动构建
-- 推送到 `main` 分支时自动触发
-- 构建多语言文档并部署到 GitHub Pages
-- 英语文档：`https://your-repo.github.io/en/`
-- 中文文档：`https://your-repo.github.io/zh_CN/`
+### 验证结果 (Verification)
+- ✅ 英语文档构建成功
+- ✅ 中文文档构建成功 (编码问题已修复)
+- ✅ 多语言索引页面生成正确
+- ✅ 所有 Unicode 字符正确显示
 
-## 🎯 关于 setup_dev.py 的建议
+## 🎯 技术细节 (Technical Details)
 
-### 当前状态 (Current Status)
-- ✅ 所有中文注释已翻译为英语
-- ✅ 代码风格已修复
-- ✅ Python 版本要求已更新 (3.9+)
+### 编码修复 (Encoding Fixes)
+```python
+# 1. 设置环境变量
+os.environ['PYTHONIOENCODING'] = 'utf-8'
 
-### 是否需要 (Is it Necessary?)
-**推荐保留**，原因：
-1. **新手友好** - 为新开发者提供一键设置
-2. **自动化配置** - 自动创建 VS Code 设置
-3. **文档价值** - 作为开发环境设置的参考
+# 2. 正确读取配置文件
+with open('../conf.py', 'r', encoding='utf-8') as f:
+    exec(f.read())
 
-### 替代方案 (Alternatives)
-如果不需要，可以创建简单的 `Makefile`：
-```makefile
-setup-dev:
-	pip install -e ".[dev]"
-	pre-commit install
+# 3. 子进程使用正确编码
+subprocess.run(
+    cmd,
+    encoding='utf-8',
+    env={'PYTHONIOENCODING': 'utf-8', 'LANG': 'en_US.UTF-8'}
+)
 ```
 
-## 🎉 结果 (Results)
+### Sphinx 构建参数 (Sphinx Build Parameters)
+```bash
+sphinx-build -b html -E -a source_dir output_dir
+# -E: 重新读取所有文件
+# -a: 重新构建所有输出文件
+```
+
+## 🎉 最终结果 (Final Results)
 
 文档构建问题已完全解决！现在可以：
-- ✅ 在本地成功构建文档
+- ✅ 在本地成功构建多语言文档
+- ✅ 正确处理中文字符和 Unicode 内容
 - ✅ 在 GitHub Actions 中自动构建和部署
-- ✅ 支持多语言文档
+- ✅ 支持完整的多语言文档结构
 - ✅ 提供用户友好的语言选择界面
+
+### 部署地址 (Deployment URLs)
+- 🌐 主页面: `https://your-repo.github.io/`
+- 🇺🇸 英语文档: `https://your-repo.github.io/en/`
+- 🇨🇳 中文文档: `https://your-repo.github.io/zh_CN/`
