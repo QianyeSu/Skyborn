@@ -14,6 +14,10 @@ authors = [{ name = "Qianye Su", email = "suqianye2000@gmail.com" }]
 license = { file = "LICENSE.txt" }
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10", 
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: BSD License",
     "Operating System :: OS Independent",
 ]
@@ -34,7 +38,7 @@ optional-dependencies.docs = { file = ["requirements-docs.txt"] }
 
 [tool.black]
 line-length = 88
-target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+target-version = ['py39', 'py310', 'py311', 'py312']  # Updated to focus on modern Python versions
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -76,7 +80,7 @@ exclude = [
 max-complexity = 10
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"  # Updated minimum version
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
