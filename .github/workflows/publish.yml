@@ -9,7 +9,7 @@ on:
   push:
     tags:
       - "v*.*.*"
-  workflow_dispatch: # 添加手动触发
+  workflow_dispatch:
     inputs:
       version:
         description: "Version to publish (optional, will use current version if empty)"
