@@ -1,112 +1,28 @@
-# Conservative CI workflow - focuses on stability and core functionality
-# Replaces complex cross-platform testing with reliable Ubuntu-based tests
-
-name: Stable CI
+name: Tests
 
 on:
   push:
-    branches: [ main ]  # 只在推送到 main 时运行
+    branches: [main]
     paths:
-      - 'src/**'           # 源代码变化
-      - 'tests/**'         # 测试代码变化
-      - 'requirements*.txt' # 依赖变化
-      - 'pyproject.toml'   # 项目配置变化
+      - 'src/**'
+      - 'tests/**'
+      - 'requirements*.txt'
+      - 'pyproject.toml'
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
-  # Core functionality test - most important
-  core-test:
-    name: Core Functionality Test
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install numpy xarray
-          pip install -e .
-
-      - name: Test package import
-        run: |
-          python -c "
-          import skyborn
-          print(f'✓ Skyborn {skyborn.__version__} imported successfully')
-
-          # List available functions
-          functions = [attr for attr in dir(skyborn) if not attr.startswith('_')]
-          print(f'Available functions: {functions}')
-          "
-
-      - name: Test core functionality
-        run: |
-          python -c "
-          import skyborn
-          import numpy as np
-          import xarray as xr
-
-          print('Testing core functions...')
-
-          # Test 1: Longitude conversion with xarray
-          print('1. Testing longitude conversion...')
-          data = np.array([350, 10, 180, 270])
-          lon_coords = np.array([0, 1, 2, 3])  # dummy coordinates
-          # Create xarray DataArray (required for convert_longitude_range)
-          da = xr.DataArray(data, coords=[lon_coords], dims=['lon'])
-          try:
-              result = skyborn.convert_longitude_range(da, lon='lon', center_on_180=True)
-              print(f'   Input: {data}')
-              print(f'   Output: {result.values}')
-              print('   ✓ Longitude conversion works')
-          except Exception as e:
-              print(f'   Longitude conversion test failed: {e}')
-
-          # Test 2: Gradient calculation
-          print('2. Testing gradient calculation...')
-          field = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-          coords = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
-          grad = skyborn.calculate_gradient(field, coords)
-          print(f'   Field: {field}')
-          print(f'   Coords: {coords}')
-          print(f'   Gradient shape: {grad.shape}')
-          print('   ✓ Gradient calculation works')
-
-          # Test 3: Linear regression (if available)
-          try:
-              x = np.array([1, 2, 3, 4, 5])
-              y = np.array([2, 4, 6, 8, 10])
-              slope, intercept = skyborn.linear_regression(x, y)
-              print(f'3. Linear regression: slope={slope:.2f}, intercept={intercept:.2f}')
-              print('   ✓ Linear regression works')
-          except Exception as e:
-              print(f'   Linear regression test skipped: {e}')
-
-          print('All core tests passed! 🎉')
-          "
-
-  # Multi-version test - Ubuntu only for stability
-  multi-version-test:
-    name: Python ${{ matrix.python-version }} Test
-    runs-on: ubuntu-latest
-    needs: core-test
-    continue-on-error: true
-
+  test:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12']  # Removed 3.8 for better stability
+        os: ["ubuntu-latest"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
-      - name: Checkout code
+      - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
@@ -117,70 +33,18 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy xarray
+          pip install -r requirements.txt || pip install numpy xarray
           pip install -e .
 
-      - name: Quick functionality test
+      - name: List installed packages
+        run: pip list
+
+      - name: Test with pytest
         run: |
-          python -c "
-          import skyborn
-          import numpy as np
-          import xarray as xr
-
-          # Quick test to ensure basic functionality
-          # Test gradient calculation (numpy-based)
-          field = np.array([1.0, 2.0, 3.0])
-          coords = np.array([0.0, 1.0, 2.0])
-          grad = skyborn.calculate_gradient(field, coords)
-
-          # Test longitude conversion (xarray-based)
-          data = np.array([350, 10])
-          da = xr.DataArray(data, coords=[np.array([0, 1])], dims=['lon'])
-          result = skyborn.convert_longitude_range(da, lon='lon', center_on_180=True)
-
-          print(f'✓ Python ${{ matrix.python-version }}: All basic functions work!')
-          "
-
-  # Basic unit tests (if any exist)
-  unit-tests:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    needs: core-test
-    continue-on-error: true
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install numpy xarray pytest
-          pip install -e .
-
-      - name: Run tests if they exist
-        run: |
+          pip install pytest
           if [ -d "tests" ] && [ -n "$(find tests -name '*.py' -type f)" ]; then
-            echo "Running available tests..."
-            pytest tests/ -v --tb=short || echo "Some tests failed, but continuing..."
+            python -m pytest tests/ -v
           else
-            echo "No test files found, creating a basic test..."
-            python -c "
-            import skyborn
-            import numpy as np
-            import xarray as xr
-
-            # Create a simple test using correct xarray syntax
-            data = np.array([350, 10, 180, 270])
-            lon_coords = np.array([0, 1, 2, 3])
-            da = xr.DataArray(data, coords=[lon_coords], dims=['lon'])
-            result = skyborn.convert_longitude_range(da, lon='lon', center_on_180=True)
-            assert len(result) == len(data), 'Length mismatch'
-            print('✓ Basic assertion test passed')
-            "
+            echo "No test files found, running basic import test"
+            python -c "import skyborn; print('✓ Package imports successfully')"
           fi
