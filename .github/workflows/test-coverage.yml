@@ -11,23 +11,23 @@ jobs:
   coverage:
     name: Code Coverage Analysis
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch full history for coverage comparison
-          
+
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libeccodes-dev
-          
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -35,7 +35,7 @@ jobs:
           pip install pytest pytest-cov pytest-xdist coverage[toml]
           # Try to install eccodes, but don't fail if it doesn't work
           pip install eccodes || echo "eccodes installation failed, continuing without it"
-          
+
       - name: Run tests with coverage
         run: |
           pytest tests/ \
@@ -45,7 +45,7 @@ jobs:
             --cov-report=term-missing \
             --cov-fail-under=50 \
             -v || echo "Some tests failed, but continuing..."
-            
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
@@ -55,7 +55,7 @@ jobs:
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-          
+
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4
         with:
@@ -66,22 +66,22 @@ jobs:
   performance:
     name: Performance Benchmarks
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e .
           pip install pytest-benchmark memory-profiler numpy xarray
-          
+
       - name: Run performance tests
         run: |
           python -c "
@@ -89,9 +89,9 @@ jobs:
           import numpy as np
           import xarray as xr
           import skyborn
-          
+
           print('Performance benchmarks:')
-          
+
           # Test longitude conversion performance with correct xarray usage
           data = np.random.rand(1000, 1000)
           lon_coords = np.arange(1000)
@@ -101,7 +101,7 @@ jobs:
           converted = skyborn.convert_longitude_range(da, lon='lon', center_on_180=True)
           end = time.time()
           print(f'Longitude conversion (1000x1000): {end-start:.4f}s')
-          
+
           # Test gradient calculation performance (1D)
           data_1d = np.random.rand(1000)
           coords_1d = np.linspace(-90, 90, 1000)
@@ -109,7 +109,7 @@ jobs:
           grad = skyborn.calculate_gradient(data_1d, coords_1d)
           end = time.time()
           print(f'Gradient calculation (1000 points): {end-start:.4f}s')
-          
+
           print('Performance tests completed!')
           "
 
@@ -117,32 +117,32 @@ jobs:
   docs:
     name: Documentation Build Test
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e .
           pip install sphinx sphinx-rtd-theme myst-parser sphinx-autodoc-typehints
-          
+
       - name: Test English docs build
         run: |
           cd docs
           sphinx-build -b html source/en build/html/en -W
-          
+
       - name: Test Chinese docs build
         run: |
           cd docs
           sphinx-build -b html source/zh_CN build/html/zh_CN -W
-          
+
       - name: Upload docs artifacts
         uses: actions/upload-artifact@v4
         with:

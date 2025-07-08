@@ -4,8 +4,12 @@ from typing import Union, Optional
 EARTH_RADIUS = 6371e3  # Earth's mean radius (m)
 
 
-def calculate_gradient(field: np.ndarray, coordinates: np.ndarray,
-                       axis: int = -1, radius: float = 6371000.0) -> np.ndarray:
+def calculate_gradient(
+    field: np.ndarray,
+    coordinates: np.ndarray,
+    axis: int = -1,
+    radius: float = 6371000.0,
+) -> np.ndarray:
     """Calculate gradient of an arbitrary dimensional array along specified coordinates
 
     Args:
@@ -20,7 +24,8 @@ def calculate_gradient(field: np.ndarray, coordinates: np.ndarray,
     # Check if input data dimensions match
     if coordinates.size != field.shape[axis]:
         raise ValueError(
-            f"Coordinate array size ({coordinates.size}) does not match field size ({field.shape[axis]}) on the specified axis")
+            f"Coordinate array size ({coordinates.size}) does not match field size ({field.shape[axis]}) on the specified axis"
+        )
 
     # Determine if coordinates are latitude or longitude
     is_latitude = False
@@ -43,7 +48,7 @@ def calculate_gradient(field: np.ndarray, coordinates: np.ndarray,
     idx_ranges = [slice(None)] * ndim
 
     # Use central difference for interior points
-    inner_range = slice(1, field.shape[axis]-1)
+    inner_range = slice(1, field.shape[axis] - 1)
     idx_forward = idx_ranges.copy()
     idx_forward[axis] = slice(2, field.shape[axis])
 
@@ -51,7 +56,7 @@ def calculate_gradient(field: np.ndarray, coordinates: np.ndarray,
     idx_center[axis] = inner_range
 
     idx_backward = idx_ranges.copy()
-    idx_backward[axis] = slice(0, field.shape[axis]-2)
+    idx_backward[axis] = slice(0, field.shape[axis] - 2)
 
     # Use vectorized operations to calculate gradient for interior points
     forward_dists = np.diff(distances[1:])
@@ -68,9 +73,9 @@ def calculate_gradient(field: np.ndarray, coordinates: np.ndarray,
 
     # Calculate gradient using weighted difference formula
     gradient[tuple(idx_center)] = (
-        b0 / a0 / c0 * field[tuple(idx_forward)] -
-        a0 / b0 / c0 * field[tuple(idx_backward)] +
-        (a0 - b0) / a0 / b0 * field[tuple(idx_center)]
+        b0 / a0 / c0 * field[tuple(idx_forward)]
+        - a0 / b0 / c0 * field[tuple(idx_backward)]
+        + (a0 - b0) / a0 / b0 * field[tuple(idx_center)]
     )
 
     # Handle boundary points (forward and backward differences)
@@ -79,22 +84,28 @@ def calculate_gradient(field: np.ndarray, coordinates: np.ndarray,
     left_idx[axis] = 0
     left_idx_plus = idx_ranges.copy()
     left_idx_plus[axis] = 1
-    gradient[tuple(left_idx)] = (field[tuple(left_idx_plus)] -
-                                 field[tuple(left_idx)]) / (distances[1] - distances[0])
+    gradient[tuple(left_idx)] = (
+        field[tuple(left_idx_plus)] - field[tuple(left_idx)]
+    ) / (distances[1] - distances[0])
 
     # Right boundary
     right_idx = idx_ranges.copy()
     right_idx[axis] = -1
     right_idx_minus = idx_ranges.copy()
     right_idx_minus[axis] = -2
-    gradient[tuple(right_idx)] = (field[tuple(right_idx)] -
-                                  field[tuple(right_idx_minus)]) / (distances[-1] - distances[-2])
+    gradient[tuple(right_idx)] = (
+        field[tuple(right_idx)] - field[tuple(right_idx_minus)]
+    ) / (distances[-1] - distances[-2])
 
     return gradient
 
 
-def calculate_meridional_gradient(field: np.ndarray, latitudes: np.ndarray,
-                                  lat_axis: int = -1, radius: float = 6371000.0) -> np.ndarray:
+def calculate_meridional_gradient(
+    field: np.ndarray,
+    latitudes: np.ndarray,
+    lat_axis: int = -1,
+    radius: float = 6371000.0,
+) -> np.ndarray:
     """Calculate meridional gradient (gradient along latitude direction)
 
     Args:
@@ -109,9 +120,9 @@ def calculate_meridional_gradient(field: np.ndarray, latitudes: np.ndarray,
     return calculate_gradient(field, latitudes, axis=lat_axis, radius=radius)
 
 
-def calculate_vertical_gradient(field: np.ndarray,
-                                pressure: np.ndarray,
-                                pressure_axis: int = -3) -> np.ndarray:
+def calculate_vertical_gradient(
+    field: np.ndarray, pressure: np.ndarray, pressure_axis: int = -3
+) -> np.ndarray:
     """Calculate vertical gradient (gradient along pressure direction)
 
     Args:
@@ -125,8 +136,14 @@ def calculate_vertical_gradient(field: np.ndarray,
     return calculate_gradient(field, pressure, axis=pressure_axis, radius=None)
 
 
-def calculate_zonal_gradient(field: np.ndarray, longitudes: np.ndarray, latitudes: np.ndarray,
-                             lon_axis: int = -1, lat_axis: int = -2, radius: float = 6371000.0) -> np.ndarray:
+def calculate_zonal_gradient(
+    field: np.ndarray,
+    longitudes: np.ndarray,
+    latitudes: np.ndarray,
+    lon_axis: int = -1,
+    lat_axis: int = -2,
+    radius: float = 6371000.0,
+) -> np.ndarray:
     """Calculate zonal gradient (gradient along longitude direction)
 
     Args:
@@ -149,8 +166,7 @@ def calculate_zonal_gradient(field: np.ndarray, longitudes: np.ndarray, latitude
         cos_lat_expanded = cos_lat.reshape(1, 1, -1, 1)
 
         # Convert longitudes to actual distances considering latitude
-        effective_distances = np.radians(
-            longitudes) * radius * cos_lat_expanded
+        effective_distances = np.radians(longitudes) * radius * cos_lat_expanded
 
         # Calculate gradient
         return calculate_gradient(field, effective_distances, axis=lon_axis, radius=1.0)
@@ -158,8 +174,7 @@ def calculate_zonal_gradient(field: np.ndarray, longitudes: np.ndarray, latitude
     # If field is 3D (time, lat, lon)
     elif field.ndim == 3 and lon_axis == -1 and lat_axis == -2:
         cos_lat_expanded = cos_lat.reshape(1, -1, 1)
-        effective_distances = np.radians(
-            longitudes) * radius * cos_lat_expanded
+        effective_distances = np.radians(longitudes) * radius * cos_lat_expanded
         return calculate_gradient(field, effective_distances, axis=lon_axis, radius=1.0)
 
     else:
@@ -184,6 +199,7 @@ def calculate_zonal_gradient(field: np.ndarray, longitudes: np.ndarray, latitude
 
             # Calculate gradient for current latitude
             result[tuple(idx)] = calculate_gradient(
-                field[tuple(idx)], current_effective_dist, axis=lon_axis, radius=1.0)
+                field[tuple(idx)], current_effective_dist, axis=lon_axis, radius=1.0
+            )
 
         return result

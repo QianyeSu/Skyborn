@@ -1,5 +1,6 @@
 # import os
 import numpy as np
+
 # import pandas as pd
 # from glob import glob
 from scipy import stats
@@ -51,7 +52,7 @@ def chi2_test(d_cons: float, df: int) -> float:
         p-value for the test
     """
     rien = stats.chi2.cdf(d_cons, df=df)
-    pv_cons = 1. - rien
+    pv_cons = 1.0 - rien
 
     return pv_cons
 
@@ -78,7 +79,7 @@ def project_vectors(nt: int, X: np.ndarray) -> np.ndarray:
 
     # Select first (nt-1) eigenvectors corresponding to non-zero eigenvalues
     # These form the projection matrix U
-    projection_matrix = eigenvectors[:, :nt - 1].T
+    projection_matrix = eigenvectors[:, : nt - 1].T
 
     # Apply projection to input data
     projected_X = np.dot(projection_matrix, X)
@@ -106,7 +107,7 @@ def unproject_vectors(nt: int, Xc: np.ndarray) -> np.ndarray:
 
     # Compute inverse projection matrix
     # Note: This is the pseudo-inverse for the reduced subspace
-    inverse_projection = np.linalg.inv(eigenvectors.T)[:, :nt - 1]
+    inverse_projection = np.linalg.inv(eigenvectors.T)[:, : nt - 1]
 
     # Apply inverse projection
     unprojected_X = np.dot(inverse_projection, Xc)
@@ -144,7 +145,7 @@ def SSM(X_dict: Dict[str, np.ndarray], X_mm: np.ndarray) -> np.ndarray:
     Xc = project_vectors(X.shape[0], X)
     Xc_mm = project_vectors(X.shape[0], X_mm)
 
-    return np.diag(((Xc - Xc_mm) ** 2.).sum(axis=1))
+    return np.diag(((Xc - Xc_mm) ** 2.0).sum(axis=1))
 
 
 def get_nruns(X_dict: Dict[str, np.ndarray]) -> np.ndarray:
@@ -152,7 +153,7 @@ def get_nruns(X_dict: Dict[str, np.ndarray]) -> np.ndarray:
     Gets the number of runs for each CESM2 experiment
 
     :param X_dict: dict
-        Dictionary where keys are experiment names (e.g., 'CESM2-GHG', 'CESM2-EE') 
+        Dictionary where keys are experiment names (e.g., 'CESM2-GHG', 'CESM2-EE')
         and values are arrays with shape (n_members, n_time)
     :return:
     nruns: numpy.ndarray
@@ -164,13 +165,15 @@ def get_nruns(X_dict: Dict[str, np.ndarray]) -> np.ndarray:
     return np.array(nruns)
 
 
-def Cm_estimate(X_dict: Dict[str, np.ndarray], Cv: np.ndarray, X_mm: np.ndarray) -> np.ndarray:
+def Cm_estimate(
+    X_dict: Dict[str, np.ndarray], Cv: np.ndarray, X_mm: np.ndarray
+) -> np.ndarray:
     """
     Estimated covariance matrix for model error (Ribes et al., 2017)
     Modified for CESM2 experiments with ensemble member arrays
 
     :param X_dict: dict
-        Dictionary where keys are experiment names (e.g., 'CESM2-GHG', 'CESM2-EE') 
+        Dictionary where keys are experiment names (e.g., 'CESM2-GHG', 'CESM2-EE')
         and values are arrays with shape (n_members, n_time)
     :param Cv: numpy.ndarray
         Array with internal variability covariance matrix
@@ -194,15 +197,16 @@ def Cm_estimate(X_dict: Dict[str, np.ndarray], Cv: np.ndarray, X_mm: np.ndarray)
         Cv_all += Cv / nr
 
     # First estimation of Cm
-    Cm_hat = (1. / (nm - 1.)) * (_SSM - ((nm - 1.) / nm) * Cv_all)
+    Cm_hat = (1.0 / (nm - 1.0)) * (_SSM - ((nm - 1.0) / nm) * Cv_all)
 
     # Set negative eigenvalues to zero and recompose the signal
     S, X = np.linalg.eig(Cm_hat)
     S[S < 0] = 0
     Cm_pos_hat = np.linalg.multi_dot(
-        [X, np.diag(S), np.linalg.inv(X)])  # spectral decomposition
+        [X, np.diag(S), np.linalg.inv(X)]
+    )  # spectral decomposition
 
-    Cm_pos_hat = (1. + (1. / nm)) * Cm_pos_hat
+    Cm_pos_hat = (1.0 + (1.0 / nm)) * Cm_pos_hat
 
     return Cm_pos_hat
 
@@ -228,7 +232,7 @@ def Cv_estimate(X_dict: Dict[str, np.ndarray], Cv: np.ndarray) -> np.ndarray:
     for nr in nruns:
         Cv_all += Cv / nr
 
-    Cv_estimate = (1. / (nm ** 2.)) * Cv_all
+    Cv_estimate = (1.0 / (nm**2.0)) * Cv_all
 
     return Cv_estimate
 

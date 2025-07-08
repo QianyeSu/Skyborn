@@ -25,12 +25,13 @@ logger = logging.getLogger(__name__)
 
 # Type definitions
 PathLike = Union[str, Path]
-DataType = Literal['NC_BYTE', 'NC_SHORT', 'NC_INT', 'NC_FLOAT', 'NC_DOUBLE']
+DataType = Literal["NC_BYTE", "NC_SHORT", "NC_INT", "NC_FLOAT", "NC_DOUBLE"]
 FileKind = Literal[1, 2, 3, 4]
 
 
 class GribToNetCDFError(Exception):
     """Exception raised when grib_to_netcdf conversion fails."""
+
     pass
 
 
@@ -58,69 +59,69 @@ def _build_grib_to_netcdf_command(
     ignore_keys: Optional[List[str]] = None,
     split_keys: Optional[List[str]] = None,
     reference_date: Optional[str] = None,
-    data_type: DataType = 'NC_SHORT',
+    data_type: DataType = "NC_SHORT",
     no_time_validity: bool = False,
     force: bool = False,
     multi_field_off: bool = False,
     file_kind: FileKind = 2,
     deflate_level: Optional[int] = None,
     shuffle: bool = False,
-    unlimited_dimension: Optional[str] = None
+    unlimited_dimension: Optional[str] = None,
 ) -> List[str]:
     """Build the grib_to_netcdf command with all options."""
-    
+
     cmd = ["grib_to_netcdf"]
-    
+
     # Ignore keys
     if ignore_keys:
         cmd.extend(["-I", ",".join(ignore_keys)])
-    
+
     # Split keys
     if split_keys:
         cmd.extend(["-S", ",".join(split_keys)])
-    
+
     # Reference date
     if reference_date:
         cmd.extend(["-R", reference_date])
-    
+
     # Data type
     cmd.extend(["-D", data_type])
-    
+
     # No time validity
     if no_time_validity:
         cmd.append("-T")
-    
+
     # Force execution
     if force:
         cmd.append("-f")
-    
+
     # Multi-field support off
     if multi_field_off:
         cmd.append("-M")
-    
+
     # File kind
     cmd.extend(["-k", str(file_kind)])
-    
+
     # Deflate compression (only for netCDF-4)
     if deflate_level is not None and file_kind in [3, 4]:
         if not (0 <= deflate_level <= 9):
             raise ValueError("Deflate level must be between 0 and 9")
         cmd.extend(["-d", str(deflate_level)])
-    
+
     # Shuffle data
     if shuffle:
         cmd.append("-s")
-    
+
     # Unlimited dimension
     if unlimited_dimension:
         cmd.extend(["-u", unlimited_dimension])
-    
+
     # Output file
     cmd.extend(["-o", str(output_file)])
-    
+
     # Input GRIB files
     cmd.extend([str(f) for f in grib_files])
-    
+
     return cmd
 
 
@@ -130,7 +131,7 @@ def convert_grib_to_nc(
     ignore_keys: Optional[List[str]] = None,
     split_keys: Optional[List[str]] = None,
     reference_date: Optional[str] = None,
-    data_type: DataType = 'NC_SHORT',
+    data_type: DataType = "NC_SHORT",
     no_time_validity: bool = False,
     force: bool = False,
     multi_field_off: bool = False,
@@ -138,14 +139,14 @@ def convert_grib_to_nc(
     deflate_level: Optional[int] = None,
     shuffle: bool = False,
     unlimited_dimension: Optional[str] = None,
-    verbose: bool = True
+    verbose: bool = True,
 ) -> Path:
     """
     Convert GRIB file(s) to NetCDF format using eccodes grib_to_netcdf tool.
-    
+
     This function provides a Python interface to the grib_to_netcdf command-line tool.
     Only regular lat/lon grids and regular Gaussian grids are supported.
-    
+
     Parameters:
     -----------
     grib_files : PathLike or List[PathLike]
@@ -180,12 +181,12 @@ def convert_grib_to_nc(
         Set dimension to be unlimited (e.g., 'time').
     verbose : bool, default True
         Print verbose output during conversion.
-    
+
     Returns:
     --------
     Path
         Path to the created NetCDF file.
-    
+
     Raises:
     -------
     GribToNetCDFError
@@ -194,12 +195,12 @@ def convert_grib_to_nc(
         If input GRIB files don't exist.
     ValueError
         If invalid parameters are provided.
-    
+
     Examples:
     ---------
     Basic usage:
     >>> convert_grib_to_nc('input.grib', 'output.nc')
-    
+
     Convert multiple files with custom settings:
     >>> convert_grib_to_nc(
     ...     ['file1.grib', 'file2.grib'],
@@ -208,7 +209,7 @@ def convert_grib_to_nc(
     ...     ignore_keys=['type', 'step'],
     ...     unlimited_dimension='time'
     ... )
-    
+
     High precision with compression:
     >>> convert_grib_to_nc(
     ...     'input.grib',
@@ -219,33 +220,33 @@ def convert_grib_to_nc(
     ...     shuffle=True
     ... )
     """
-    
+
     # Check if grib_to_netcdf is available
     if not _check_grib_to_netcdf_available():
         raise GribToNetCDFError(
             "grib_to_netcdf command not found. "
             "Please ensure eccodes is installed and available in PATH."
         )
-    
+
     # Convert single file to list
     if isinstance(grib_files, (str, Path)):
         grib_files = [grib_files]
-    
+
     # Validate input files
     validated_grib_files = _validate_grib_files(grib_files)
-    
+
     # Convert output path
     output_path = Path(output_file)
-    
+
     # Create output directory if it doesn't exist
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Set default values if not provided
     if ignore_keys is None:
-        ignore_keys = ['method', 'type', 'stream', 'refdate', 'hdate']
+        ignore_keys = ["method", "type", "stream", "refdate", "hdate"]
     if split_keys is None:
-        split_keys = ['param', 'expver']
-    
+        split_keys = ["param", "expver"]
+
     # Build command
     cmd = _build_grib_to_netcdf_command(
         output_file=output_path,
@@ -260,33 +261,28 @@ def convert_grib_to_nc(
         file_kind=file_kind,
         deflate_level=deflate_level,
         shuffle=shuffle,
-        unlimited_dimension=unlimited_dimension
+        unlimited_dimension=unlimited_dimension,
     )
-    
+
     if verbose:
         print("Converting GRIB to NetCDF...")
         print(f"Input files: {[str(f) for f in validated_grib_files]}")
         print(f"Output file: {output_path}")
         print(f"Command: {' '.join(cmd)}")
-    
+
     try:
         # Execute the command
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
         if verbose and result.stdout:
             print("STDOUT:", result.stdout)
-        
+
         if verbose:
             print("✅ Conversion completed successfully!")
             print(f"Output saved to: {output_path.absolute()}")
-        
+
         return output_path
-        
+
     except subprocess.CalledProcessError as e:
         error_msg = f"grib_to_netcdf failed with return code {e.returncode}"
         if e.stderr:
@@ -294,7 +290,7 @@ def convert_grib_to_nc(
         if e.stdout:
             error_msg += f"\nSTDOUT: {e.stdout}"
         raise GribToNetCDFError(error_msg) from e
-    
+
     except Exception as e:
         raise GribToNetCDFError(f"Unexpected error during conversion: {str(e)}") from e
 
@@ -303,11 +299,11 @@ def convert_grib_to_nc_simple(
     grib_file: PathLike,
     output_file: PathLike,
     high_precision: bool = False,
-    compress: bool = False
+    compress: bool = False,
 ) -> Path:
     """
     Simplified interface for GRIB to NetCDF conversion with common presets.
-    
+
     Parameters:
     -----------
     grib_file : PathLike
@@ -318,30 +314,30 @@ def convert_grib_to_nc_simple(
         Use higher precision (NC_FLOAT instead of NC_SHORT).
     compress : bool, default False
         Enable compression for smaller file size (uses netCDF-4 format).
-    
+
     Returns:
     --------
     Path
         Path to the created NetCDF file.
-    
+
     Examples:
     ---------
     Basic conversion:
     >>> convert_grib_to_nc_simple('data.grib', 'data.nc')
-    
+
     High precision conversion:
     >>> convert_grib_to_nc_simple('data.grib', 'data.nc', high_precision=True)
-    
+
     Compressed output:
     >>> convert_grib_to_nc_simple('data.grib', 'data.nc', compress=True)
     """
-    
+
     # Set parameters based on presets
-    data_type = 'NC_FLOAT' if high_precision else 'NC_SHORT'
+    data_type = "NC_FLOAT" if high_precision else "NC_SHORT"
     file_kind = 4 if compress else 2
     deflate_level = 6 if compress else None
     shuffle = compress
-    
+
     return convert_grib_to_nc(
         grib_files=grib_file,
         output_file=output_file,
@@ -349,7 +345,7 @@ def convert_grib_to_nc_simple(
         file_kind=file_kind,
         deflate_level=deflate_level,
         shuffle=shuffle,
-        unlimited_dimension='time'
+        unlimited_dimension="time",
     )
 
 
@@ -357,11 +353,11 @@ def batch_convert_grib_to_nc(
     input_directory: PathLike,
     output_directory: PathLike,
     pattern: str = "*.grib*",
-    **kwargs
+    **kwargs,
 ) -> List[Path]:
     """
     Batch convert all GRIB files in a directory to NetCDF format.
-    
+
     Parameters:
     -----------
     input_directory : PathLike
@@ -372,17 +368,17 @@ def batch_convert_grib_to_nc(
         File pattern to match GRIB files.
     **kwargs
         Additional arguments passed to convert_grib_to_nc.
-    
+
     Returns:
     --------
     List[Path]
         List of paths to created NetCDF files.
-    
+
     Examples:
     ---------
     Convert all GRIB files in a directory:
     >>> batch_convert_grib_to_nc('/path/to/grib_files', '/path/to/output')
-    
+
     Convert with custom pattern and settings:
     >>> batch_convert_grib_to_nc(
     ...     '/path/to/grib_files',
@@ -393,29 +389,31 @@ def batch_convert_grib_to_nc(
     """
     input_dir = Path(input_directory)
     output_dir = Path(output_directory)
-    
+
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Find all GRIB files
     grib_files = list(input_dir.glob(pattern))
-    
+
     if not grib_files:
-        raise FileNotFoundError(f"No GRIB files found in {input_dir} with pattern {pattern}")
-    
+        raise FileNotFoundError(
+            f"No GRIB files found in {input_dir} with pattern {pattern}"
+        )
+
     converted_files = []
-    
+
     for grib_file in grib_files:
         # Create output filename
         output_file = output_dir / f"{grib_file.stem}.nc"
-        
+
         try:
             result_path = convert_grib_to_nc(grib_file, output_file, **kwargs)
             converted_files.append(result_path)
         except Exception as e:
             logger.error(f"Failed to convert {grib_file}: {e}")
             continue
-    
+
     print(f"✅ Batch conversion completed! Converted {len(converted_files)} files.")
     return converted_files
 
