@@ -3,8 +3,8 @@
 Welcome to Skyborn's Documentation!
 ====================================
 
-Skyborn is a comprehensive Python library for atmospheric data processing, analysis, and visualization. 
-It provides tools for working with meteorological and climate datasets, including GRIB to NetCDF conversion, 
+Skyborn is a comprehensive Python library for atmospheric data processing, analysis, and visualization.
+It provides tools for working with meteorological and climate datasets, including GRIB to NetCDF conversion,
 data interpolation, gradient calculations, and specialized plotting functions.
 
 .. toctree::
@@ -31,7 +31,7 @@ Features
 ========
 
 * **Data Conversion**: GRIB to NetCDF conversion using eccodes
-* **Interpolation**: Advanced interpolation and regridding capabilities  
+* **Interpolation**: Advanced interpolation and regridding capabilities
 * **Gradient Calculations**: Meridional, zonal, and vertical gradients
 * **Causality Analysis**: Liang and Granger causality analysis
 * **Visualization**: Specialized atmospheric data plotting tools
@@ -43,10 +43,10 @@ Quick Example
 .. code-block:: python
 
    import skyborn
-   
+
    # Convert GRIB to NetCDF
    skyborn.grib2nc('input.grib', 'output.nc')
-   
+
    # Calculate gradients
    import xarray as xr
    ds = xr.open_dataset('output.nc')

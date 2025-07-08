@@ -238,7 +238,7 @@ def velovect(
         s = np.cumsum(np.hypot(np.diff(tx), np.diff(ty)))
         n = np.searchsorted(s, s[-1])
         arrow_tail = (tx[n], ty[n])
-        arrow_head = (np.mean(tx[n: n + 2]), np.mean(ty[n: n + 2]))
+        arrow_head = (np.mean(tx[n : n + 2]), np.mean(ty[n : n + 2]))
 
         if isinstance(linewidth, np.ndarray):
             line_widths = interpgrid(linewidth, tgx, tgy)[:-1]
@@ -255,8 +255,7 @@ def velovect(
         )
         arrows.append(p)
 
-    lc = mcollections.LineCollection(
-        streamlines, transform=transform, **line_kw)
+    lc = mcollections.LineCollection(streamlines, transform=transform, **line_kw)
     lc.sticky_edges.x[:] = [grid.x_origin, grid.x_origin + grid.width]
     lc.sticky_edges.y[:] = [grid.y_origin, grid.y_origin + grid.height]
     if use_multicolor_lines:
@@ -330,8 +329,7 @@ class CurvedQuiverplotSet:
         self.broken_streamlines = broken_streamlines
 
         # New attribute added for handling scaling
-        self.max_magnitude = np.max(
-            magnitude) if magnitude is not None else None
+        self.max_magnitude = np.max(magnitude) if magnitude is not None else None
 
         # Set scaling factor based on integration_direction
         self.scale_factor = 2.0 if integration_direction == "both" else 1.0
@@ -347,6 +345,8 @@ class CurvedQuiverplotSet:
     def unscale_value(self, value):
         """Convert display value back to physical value (for conversion from display scale to actual wind speed)"""
         return value * self.scale_factor
+
+
 # Coordinate definitions
 # ========================
 
@@ -487,8 +487,7 @@ class StreamMask:
         try:
             self.nx, self.ny = (30 * np.broadcast_to(density, 2)).astype(int)
         except ValueError as err:
-            raise ValueError(
-                "'density' must be a scalar or be of length " "2") from err
+            raise ValueError("'density' must be a scalar or be of length " "2") from err
         if self.nx < 0 or self.ny < 0:
             raise ValueError("'density' must be positive")
         self._mask = np.zeros((self.ny, self.nx))

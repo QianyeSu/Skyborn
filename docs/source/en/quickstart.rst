@@ -24,10 +24,10 @@ Convert GRIB files to NetCDF format:
 
    # Simple conversion
    skyborn.grib2nc('input.grib', 'output.nc')
-   
+
    # With options
    skyborn.convert_grib_to_nc_simple(
-       'input.grib', 
+       'input.grib',
        'output.nc',
        high_precision=True,
        compress=True
@@ -43,7 +43,7 @@ Load and Analyze Data
 
    # Load NetCDF data
    ds = xr.open_dataset('output.nc')
-   
+
    # Basic data info
    print(ds)
    print(ds.data_vars)
@@ -55,19 +55,19 @@ Calculate Gradients
 
    # Meridional gradient (∂/∂lat)
    temp_grad_lat = skyborn.calculate_meridional_gradient(
-       ds['temperature'], 
+       ds['temperature'],
        'latitude'
    )
-   
+
    # Zonal gradient (∂/∂lon)
    temp_grad_lon = skyborn.calculate_zonal_gradient(
-       ds['temperature'], 
+       ds['temperature'],
        'longitude'
    )
-   
+
    # General gradient
    pressure_grad = skyborn.calculate_gradient(
-       ds['pressure'], 
+       ds['pressure'],
        'level'
    )
 
@@ -78,7 +78,7 @@ Data Manipulation
 
    # Convert longitude range
    ds_converted = skyborn.convert_longitude_range(ds, target_range=(-180, 180))
-   
+
    # Linear regression
    slope, intercept, r_value = skyborn.linear_regression(
        ds['temperature'].values.flatten(),
@@ -94,13 +94,13 @@ Interpolation and Regridding
 .. code-block:: python
 
    from skyborn.interp import interpolation, regridding
-   
+
    # Interpolate data
    interpolated = interpolation.interpolate_data(
        ds['temperature'],
        target_coords={'latitude': np.arange(-90, 91, 1)}
    )
-   
+
    # Regrid to new grid
    regridded = regridding.regrid_data(
        ds['temperature'],
@@ -117,7 +117,7 @@ Causality Analysis
        ds['temperature'].values,
        ds['precipitation'].values
    )
-   
+
    # Granger causality
    granger_result = skyborn.granger_causality(
        ds['temperature'].values,
@@ -131,14 +131,14 @@ Visualization
 .. code-block:: python
 
    from skyborn.plot import plotting, modplot
-   
+
    # Basic plotting
    fig, ax = plotting.plot_contour(
        ds['temperature'].isel(time=0),
        levels=20,
        title='Temperature Distribution'
    )
-   
+
    # Specialized atmospheric plots
    fig = modplot.plot_wind_field(
        ds['u_wind'].isel(time=0),
@@ -161,7 +161,7 @@ Process Multiple Files
        high_precision=True,
        compress=True
    )
-   
+
    print(f"Converted {len(converted_files)} files")
 
 Common Workflows
@@ -194,28 +194,28 @@ Climate Analysis Pipeline
        # 1. Convert data
        nc_file = f"{output_dir}/converted_data.nc"
        skyborn.grib2nc(grib_file, nc_file, compress=True)
-       
+
        # 2. Load and process
        ds = xr.open_dataset(nc_file)
-       
+
        # 3. Calculate gradients
        temp_grad = skyborn.calculate_meridional_gradient(
            ds['temperature'], 'latitude'
        )
-       
+
        # 4. Causality analysis
        causality = skyborn.liang_causality(
            ds['temperature'].values,
            ds['pressure'].values
        )
-       
+
        # 5. Save results
        results = xr.Dataset({
            'temperature_gradient': temp_grad,
            'causality_strength': (['time'], causality)
        })
        results.to_netcdf(f"{output_dir}/analysis_results.nc")
-       
+
        return results
 
 Best Practices
@@ -236,10 +236,10 @@ Memory Management
 
    # For large datasets, use dask
    import dask.array as da
-   
+
    # Load data lazily
    ds = xr.open_dataset('large_file.nc', chunks={'time': 100})
-   
+
    # Process with dask
    result = skyborn.calculate_gradient(ds['temperature'], 'latitude')
    result = result.compute()  # Execute computation
@@ -250,7 +250,7 @@ Error Handling
 .. code-block:: python
 
    from skyborn.conversion import GribToNetCDFError
-   
+
    try:
        skyborn.grib2nc('input.grib', 'output.nc')
    except GribToNetCDFError as e:

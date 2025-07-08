@@ -38,11 +38,11 @@ def check_python_version():
 def install_dev_dependencies():
     """Install development dependencies"""
     print("\n📦 Installing development dependencies...")
-    
+
     # Install package itself in editable mode
     if not run_command("pip install -e ."):
         return False
-    
+
     # Install development tools
     dev_packages = [
         "pre-commit",
@@ -53,37 +53,38 @@ def install_dev_dependencies():
         "pytest",
         "pytest-cov",
         "bandit",
-        "safety"
+        "safety",
     ]
-    
+
     for package in dev_packages:
         if not run_command(f"pip install {package}"):
             print(f"⚠️ Failed to install {package}, continuing...")
-    
+
     return True
 
 
 def setup_pre_commit():
     """Set up pre-commit hooks"""
     print("\n🪝 Setting up pre-commit hooks...")
-    
+
     # Install pre-commit hooks
     if not run_command("pre-commit install"):
         return False
-    
+
     # Run once to ensure it works properly
     print("🧪 Running pre-commit on all files (first time setup)...")
     run_command("pre-commit run --all-files", check=False)
-    
+
     return True
+
 
 def create_vscode_settings():
     """Create VS Code settings for development"""
     print("\n🔧 Creating VS Code settings...")
-    
+
     vscode_dir = Path(".vscode")
     vscode_dir.mkdir(exist_ok=True)
-    
+
     settings = {
         "python.defaultInterpreterPath": "./venv/bin/python",
         "python.formatting.provider": "black",
@@ -92,18 +93,13 @@ def create_vscode_settings():
         "python.linting.mypyEnabled": True,
         "python.sortImports.args": ["--profile", "black"],
         "editor.formatOnSave": True,
-        "editor.codeActionsOnSave": {
-            "source.organizeImports": True
-        },
-        "[python]": {
-            "editor.rulers": [88],
-            "editor.tabSize": 4
-        }
+        "editor.codeActionsOnSave": {"source.organizeImports": True},
+        "[python]": {"editor.rulers": [88], "editor.tabSize": 4},
     }
-    
+
     with open(vscode_dir / "settings.json", "w") as f:
         json.dump(settings, f, indent=2)
-    
+
     print("✅ VS Code settings created")
 
 
@@ -111,24 +107,24 @@ def main():
     """Main function to set up development environment"""
     print("🚀 Setting up Skyborn development environment")
     print("=" * 50)
-    
+
     # Check Python version
     if not check_python_version():
         sys.exit(1)
-    
+
     # Install dependencies
     if not install_dev_dependencies():
         print("❌ Failed to install dependencies")
         sys.exit(1)
-    
+
     # Set up pre-commit
     if not setup_pre_commit():
         print("❌ Failed to setup pre-commit")
         sys.exit(1)
-    
+
     # Create VS Code settings
     create_vscode_settings()
-    
+
     print("\n" + "=" * 50)
     print("🎉 Development environment setup complete!")
     print("\n📝 Next steps:")

@@ -31,10 +31,10 @@ def run_command(cmd, cwd=None):
     try:
         # Set proper encoding for Windows
         result = subprocess.run(
-            cmd, 
-            shell=True, 
+            cmd,
+            shell=True,
             cwd=cwd,
-            capture_output=True, 
+            capture_output=True,
             text=True,
             encoding='utf-8',
             check=True
@@ -50,18 +50,18 @@ def check_dependencies():
     """Check if required packages are installed."""
     required_packages = [
         'sphinx',
-        'sphinx-rtd-theme', 
+        'sphinx-rtd-theme',
         'myst-parser',
         'sphinx-autodoc-typehints'
     ]
-    
+
     missing = []
     for package in required_packages:
         try:
             __import__(package.replace('-', '_'))
         except ImportError:
             missing.append(package)
-    
+
     if missing:
         print("Missing required packages:")
         for pkg in missing:
@@ -69,7 +69,7 @@ def check_dependencies():
         print("\nInstall with:")
         print(f"pip install {' '.join(missing)}")
         return False
-    
+
     return True
 
 def clean_build():
@@ -84,23 +84,23 @@ def build_language(lang_code):
     lang_name = LANGUAGES[lang_code]
     source_path = SOURCE_DIR / lang_code
     output_path = BUILD_DIR / lang_code / "html"
-    
+
     print(f"\nBuilding {lang_name} documentation...")
     print(f"Source: {source_path}")
     print(f"Output: {output_path}")
-    
+
     # Create output directory
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Build command with explicit encoding
     cmd = f"sphinx-build -b html -E -a {source_path} {output_path}"
-    
+
     # Set environment variables for proper encoding
     env = os.environ.copy()
     env['PYTHONIOENCODING'] = 'utf-8'
     env['LANG'] = 'en_US.UTF-8'
     env['LC_ALL'] = 'en_US.UTF-8'
-    
+
     try:
         # Run sphinx-build with proper encoding
         result = subprocess.run(
@@ -174,73 +174,73 @@ def create_index_page():
 <body>
     <h1>Skyborn Documentation</h1>
     <p>Select your preferred language / 选择您的语言</p>
-    
+
     <div class="language-selector">
         <a href="en/html/index.html" class="language-option">
             <div class="language-title">English</div>
             <div class="language-desc">English Documentation</div>
         </a>
-        
+
         <a href="zh_CN/html/index.html" class="language-option">
             <div class="language-title">中文</div>
             <div class="language-desc">中文文档</div>
         </a>
     </div>
-    
+
     <footer style="margin-top: 50px; color: #666;">
         <p>Skyborn - Atmospheric Data Processing Library</p>
     </footer>
 </body>
 </html>"""
-    
+
     index_file = BUILD_DIR / "index.html"
     with open(index_file, 'w', encoding='utf-8') as f:
         f.write(index_content)
-    
+
     print(f"✅ Main index page created: {index_file}")
 
 def main():
     """Main build function."""
     parser = argparse.ArgumentParser(description='Build Skyborn documentation')
-    parser.add_argument('--lang', choices=['en', 'zh_CN'], 
+    parser.add_argument('--lang', choices=['en', 'zh_CN'],
                        help='Build specific language only')
     parser.add_argument('--clean', action='store_true',
                        help='Clean build directory before building')
-    
+
     args = parser.parse_args()
-    
+
     print("🚀 Building Skyborn Multi-language Documentation")
     print("=" * 50)
-    
+
     # Check dependencies
     if not check_dependencies():
         sys.exit(1)
-    
+
     # Clean build directory if requested
     if args.clean:
         clean_build()
-    
+
     # Build specific language or all languages
     if args.lang:
         languages_to_build = [args.lang]
     else:
         languages_to_build = list(LANGUAGES.keys())
-    
+
     # Build each language
     success_count = 0
     for lang_code in languages_to_build:
         if build_language(lang_code):
             success_count += 1
-    
+
     # Create main index page if building all languages
     if not args.lang:
         create_index_page()
-    
+
     # Summary
     print("\n" + "=" * 50)
     print("📊 Build Summary:")
     print(f"   Languages built: {success_count}/{len(languages_to_build)}")
-    
+
     if success_count == len(languages_to_build):
         print("🎉 All documentation built successfully!")
         if not args.lang:

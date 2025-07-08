@@ -4,7 +4,7 @@ import numpy as np
 
 
 def add_equal_axes(ax, loc, pad, width):
-    '''
+    """
     Add a new Axes with equal height or width next to the original Axes and return that object.
 
     Parameters
@@ -26,28 +26,28 @@ def add_equal_axes(ax, loc, pad, width):
     -------
     ax_new : Axes
         New Axes object.
-    '''
+    """
     # Whether ax is a single Axes or a group of Axes, get the size and position of ax.
     axes = np.atleast_1d(ax).ravel()
     bbox = mtransforms.Bbox.union([ax.get_position() for ax in axes])
 
     # Determine the size and position of the new Axes.
-    if loc == 'left':
+    if loc == "left":
         x0_new = bbox.x0 - pad - width
         x1_new = x0_new + width
         y0_new = bbox.y0
         y1_new = bbox.y1
-    elif loc == 'right':
+    elif loc == "right":
         x0_new = bbox.x1 + pad
         x1_new = x0_new + width
         y0_new = bbox.y0
         y1_new = bbox.y1
-    elif loc == 'bottom':
+    elif loc == "bottom":
         x0_new = bbox.x0
         x1_new = bbox.x1
         y0_new = bbox.y0 - pad - width
         y1_new = y0_new + width
-    elif loc == 'top':
+    elif loc == "top":
         x0_new = bbox.x0
         x1_new = bbox.x1
         y0_new = bbox.y1 + pad

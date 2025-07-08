@@ -47,7 +47,7 @@ Convert a single GRIB file to NetCDF:
 .. code-block:: python
 
    from skyborn.conversion import convert_grib_to_nc_simple
-   
+
    convert_grib_to_nc_simple('input.grib', 'output.nc')
 
 Advanced Usage
@@ -58,7 +58,7 @@ Convert with custom options:
 .. code-block:: python
 
    from skyborn.conversion import convert_grib_to_nc
-   
+
    convert_grib_to_nc(
        grib_files=['file1.grib', 'file2.grib'],
        output_file='merged.nc',
@@ -77,7 +77,7 @@ Convert multiple files:
 .. code-block:: python
 
    from skyborn.conversion import batch_convert_grib_to_nc
-   
+
    converted = batch_convert_grib_to_nc(
        input_directory='./grib_data/',
        output_directory='./netcdf_data/',
