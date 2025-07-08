@@ -5,11 +5,11 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"  # Changed to weekly for stability
+      interval: "weekly" # Changed to weekly for stability
       day: "monday"
       time: "06:00"
       timezone: "UTC"
-    open-pull-requests-limit: 5  # Reduced number
+    open-pull-requests-limit: 5 # Reduced number
     commit-message:
       prefix: "deps"
       include: "scope"

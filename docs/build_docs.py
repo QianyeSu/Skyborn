@@ -26,6 +26,7 @@ LANGUAGES = {
     'zh_CN': '中文 (简体)'
 }
 
+
 def run_command(cmd, cwd=None):
     """Run a shell command and return the result."""
     try:
@@ -45,6 +46,7 @@ def run_command(cmd, cwd=None):
         if e.stderr:
             print(f"Error output: {e.stderr}")
         return None
+
 
 def check_dependencies():
     """Check if required packages are installed."""
@@ -72,12 +74,14 @@ def check_dependencies():
 
     return True
 
+
 def clean_build():
     """Clean the build directory."""
     if BUILD_DIR.exists():
         print("Cleaning build directory...")
         shutil.rmtree(BUILD_DIR)
     BUILD_DIR.mkdir(exist_ok=True)
+
 
 def build_language(lang_code):
     """Build documentation for a specific language."""
@@ -124,6 +128,7 @@ def build_language(lang_code):
         if e.stderr:
             print(f"Error: {e.stderr}")
         return False
+
 
 def create_index_page():
     """Create a main index page with language selection."""
@@ -199,13 +204,14 @@ def create_index_page():
 
     print(f"✅ Main index page created: {index_file}")
 
+
 def main():
     """Main build function."""
     parser = argparse.ArgumentParser(description='Build Skyborn documentation')
     parser.add_argument('--lang', choices=['en', 'zh_CN'],
-                       help='Build specific language only')
+                        help='Build specific language only')
     parser.add_argument('--clean', action='store_true',
-                       help='Clean build directory before building')
+                        help='Clean build directory before building')
 
     args = parser.parse_args()
 
@@ -246,11 +252,14 @@ def main():
         if not args.lang:
             print("\n📖 View documentation:")
             print(f"   Main page: file://{BUILD_DIR.absolute()}/index.html")
-        print(f"   English:   file://{BUILD_DIR.absolute()}/en/html/index.html")
-        print(f"   Chinese:   file://{BUILD_DIR.absolute()}/zh_CN/html/index.html")
+        print(
+            f"   English:   file://{BUILD_DIR.absolute()}/en/html/index.html")
+        print(
+            f"   Chinese:   file://{BUILD_DIR.absolute()}/zh_CN/html/index.html")
     else:
         print("⚠️  Some builds failed. Check the output above for details.")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

@@ -5,10 +5,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/**'
-      - 'tests/**'
-      - '.pre-commit-config.yaml'
-      - 'pyproject.toml'
+      - "src/**"
+      - "tests/**"
+      - ".pre-commit-config.yaml"
+      - "pyproject.toml"
 
 jobs:
   main:
