@@ -7,7 +7,6 @@
 
 import subprocess
 import sys
-import os
 from pathlib import Path
 
 def run_command(cmd, check=True, shell=False):
