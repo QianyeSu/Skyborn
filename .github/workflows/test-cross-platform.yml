@@ -5,7 +5,7 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
   test:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     
     strategy:
-      fail-fast: false  # 一个失败不会停止其他测试
+      fail-fast: false  # Don't stop other tests if one fails
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
@@ -59,7 +59,7 @@ jobs:
         
       - name: Install optional dependencies
         run: |
-          # 尝试安装 eccodes，失败不阻止测试
+          # Try to install eccodes, don't fail tests if installation fails
           pip install eccodes || echo "eccodes installation failed, continuing without it"
         shell: bash
         continue-on-error: true
@@ -106,7 +106,7 @@ jobs:
           "
         continue-on-error: true
 
-  # 代码质量检查
+  # Code quality checks
   code-quality:
     name: Code Quality Checks
     runs-on: ubuntu-latest
@@ -142,7 +142,7 @@ jobs:
           black --check --diff src/skyborn
         continue-on-error: true
 
-  # 构建测试
+  # Build tests
   build-test:
     name: Test Package Build
     runs-on: ubuntu-latest
