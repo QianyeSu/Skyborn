@@ -258,19 +258,15 @@ def liang_causality(
     ----------
     y1, y2 : array
         vectors of (real) numbers with identical length, no NaNs allowed
-
     npt : int >=1
         time advance in performing Euler forward differencing,
         e.g., 1, 2. Unless the series are generated with a highly chaotic deterministic system,
         npt=1 should be used
-
     signif_test : str; {'isopersist', 'isospec'}
         the method for significance test
         see signif_isospec and signif_isopersist for details.
-
     nsim : int
         the number of AR(1) surrogates for significance test
-
     qs : list
         the quantiles for significance test
 
@@ -278,36 +274,25 @@ def liang_causality(
     -------
     res : dict
         A dictionary of results including:
-        - T21 : float
-            information flow from y2 to y1 (Note: not y1 -> y2!)
-        - tau21 : float
-            the standardized information flow from y2 to y1
-        - Z : float
-            the total information flow from y2 to y1
-        - dH1_star : float
-            dH*/dt (Liang, 2016)
+
+        - T21 : float - information flow from y2 to y1 (Note: not y1 -> y2!)
+        - tau21 : float - the standardized information flow from y2 to y1
+        - Z : float - the total information flow from y2 to y1
+        - dH1_star : float - dH*/dt (Liang, 2016)
         - dH1_noise : float
-        - signif_qs :
-            the quantiles for significance test
-        - T21_noise : list
-            the quantiles of the information flow from noise2 to noise1 for significance testing
-        - tau21_noise : list
-            the quantiles of the standardized information flow from noise2 to noise1 for significance testing
+        - signif_qs : the quantiles for significance test
+        - T21_noise : list - the quantiles of the information flow from noise2 to noise1 for significance testing
+        - tau21_noise : list - the quantiles of the standardized information flow from noise2 to noise1 for significance testing
 
     See also
     --------
-
     pyleoclim.utils.causality.liang : information flow estimated using the Liang algorithm
-
     pyleoclim.utils.causality.granger_causality : information flow estimated using the Granger algorithm
-
     pyleoclim.utils.causality.signif_isopersist : significance test with AR(1) with same persistence
-
     pyleoclim.utils.causality.causality.signif_isospec : significance test with surrogates with randomized phases
 
     References
     ----------
-
     Liang, X.S. (2013) The Liang-Kleeman Information Flow: Theory and Applications. Entropy, 15, 327-360, doi:10.3390/e15010327
 
     Liang, X.S. (2014) Unraveling the cause-effect relation between timeseries. Physical review, E 90, 052150

@@ -10,7 +10,6 @@ data interpolation, gradient calculations, and specialized plotting functions.
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
-   :numbered:
 
    installation
    quickstart
@@ -19,13 +18,6 @@ data interpolation, gradient calculations, and specialized plotting functions.
    examples/index
    changelog
    contributing
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Language:
-
-   English <self>
-   中文 <../zh_CN/index>
 
 Features
 ========

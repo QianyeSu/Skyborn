@@ -1,0 +1,45 @@
+name: "Quick Documentation Test"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-docs.txt
+          pip install -e .
+
+      - name: Test imports
+        run: |
+          python -c "import skyborn; print(f'Skyborn version: {skyborn.__version__}')"
+
+      - name: Build docs in current directory
+        run: |
+          cd docs
+          echo "Building English docs..."
+          sphinx-build -b html source/en build/en/html
+          echo "Building Chinese docs..."
+          sphinx-build -b html source/zh_CN build/zh_CN/html
+
+      - name: Check output
+        run: |
+          echo "English docs:"
+          ls -la docs/build/en/html/ | head -5
+          echo "Chinese docs:"
+          ls -la docs/build/zh_CN/html/ | head -5
+          echo "HTML files found:"
+          find docs/build -name "*.html" | wc -l

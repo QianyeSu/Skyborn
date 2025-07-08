@@ -47,25 +47,18 @@ jobs:
           echo "✅ Documentation build completed"
           ls -la build/html/
 
-      - name: Debug build structure
-        run: |
-          echo "🔍 Checking build structure..."
-          pwd
-          find . -name "build" -type d 2>/dev/null || echo "No build directories found"
-          find . -name "*.html" | head -10 || echo "No HTML files found"
-          ls -la docs/ || echo "docs directory not found"
-          ls -la docs/build/ || echo "docs/build directory not found"
-          ls -la docs/build/en/ || echo "docs/build/en directory not found"
-          ls -la docs/build/en/html/ || echo "docs/build/en/html directory not found"
-
       - name: Prepare GitHub Pages
         run: |
           mkdir -p _site
 
-          # Copy documentation as main site
-          echo "✅ English documentation found"
-          cp -r docs/build/html/* _site/
-          echo "✅ Documentation copied to site root"
+          # Copy documentation as the main site
+          if [ -d "docs/build/html" ]; then
+            cp -r docs/build/html/* _site/
+            echo "✅ Documentation copied successfully"
+          else
+            echo "❌ Documentation not found"
+            exit 1
+          fi
 
           echo "📁 Final site structure:"
           find _site -type f -name "*.html" | head -10

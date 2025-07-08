@@ -3,17 +3,14 @@ Conversion Module
 
 .. currentmodule:: skyborn.conversion
 
-.. currentmodule:: skyborn.conversion
-
 The conversion module provides tools for converting between different atmospheric data formats.
 
 GRIB to NetCDF Conversion
 -------------------------
 
-.. automodule:: skyborn.conversion.grib_to_netcdf
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. currentmodule:: skyborn.conversion.grib_to_netcdf
+
+This module provides a Python interface to the eccodes grib_to_netcdf tool for converting GRIB files to NetCDF format.
 
 Main Functions
 ~~~~~~~~~~~~~~
@@ -27,11 +24,13 @@ Main Functions
 Convenience Aliases
 ~~~~~~~~~~~~~~~~~~~
 
-.. autodata:: grib2nc
-   :annotation: = convert_grib_to_nc_simple
+.. data:: grib2nc
 
-.. autodata:: grib_to_netcdf
-   :annotation: = convert_grib_to_nc
+   Alias for :func:`convert_grib_to_nc_simple`
+
+.. data:: grib_to_netcdf
+
+   Alias for :func:`convert_grib_to_nc`
 
 Exceptions
 ~~~~~~~~~~

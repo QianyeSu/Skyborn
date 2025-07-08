@@ -5,6 +5,7 @@ This section contains the complete API documentation for all Skyborn modules.
 
 .. toctree::
    :maxdepth: 2
+   :numbered:
 
    conversion
    calculations
@@ -12,7 +13,6 @@ This section contains the complete API documentation for all Skyborn modules.
    causality
    interpolation
    plotting
-   rof
 
 Core Functions
 --------------

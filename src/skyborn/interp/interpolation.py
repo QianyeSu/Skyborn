@@ -1,8 +1,10 @@
 """
 Interpolation functions for hybrid-sigma and multidimensional data.
-Reference
- - geocat-comp interpolation:
-     https://github.com/NCAR/geocat-comp/blob/main/geocat/comp/interpolation.py
+
+References
+----------
+geocat-comp interpolation:
+    https://github.com/NCAR/geocat-comp/blob/main/geocat/comp/interpolation.py
 """
 
 import typing
