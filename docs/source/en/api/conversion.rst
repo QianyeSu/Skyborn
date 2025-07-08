@@ -1,5 +1,7 @@
 Conversion Module
-================
+=================
+
+.. currentmodule:: skyborn.conversion
 
 .. currentmodule:: skyborn.conversion
 
