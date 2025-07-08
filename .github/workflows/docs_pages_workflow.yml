@@ -1,0 +1,188 @@
+name: docs_pages_workflow
+
+# execute this workflow automatically when we push to main
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual trigger
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build_docs_job:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install system dependencies 🔧
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y optipng
+
+      - name: Install Python dependencies 💻
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-docs.txt
+          pip install -e .
+
+      - name: Build English documentation 📚
+        run: |
+          cd docs
+          echo "📚 Building English documentation..."
+          sphinx-build -b html source/en build/html/en -v
+          echo "✅ English documentation completed"
+
+      - name: Build Chinese documentation 📚
+        run: |
+          cd docs
+          echo "📚 Building Chinese documentation..."
+          sphinx-build -b html source/zh_CN build/html/zh_CN -v
+          echo "✅ Chinese documentation completed"
+
+      - name: Create multi-language index page 🌐
+        run: |
+          cd docs/build/html
+          cat > index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <meta charset="UTF-8">
+              <title>Skyborn Documentation</title>
+              <meta http-equiv="refresh" content="3;url=./en/">
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      text-align: center;
+                      margin: 0;
+                      padding: 50px 20px;
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      color: white;
+                      min-height: 100vh;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                  }
+                  .container {
+                      max-width: 600px;
+                      background: rgba(255, 255, 255, 0.1);
+                      backdrop-filter: blur(10px);
+                      border-radius: 20px;
+                      padding: 40px;
+                      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+                  }
+                  h1 {
+                      font-size: 2.5em;
+                      margin-bottom: 10px;
+                      color: #fff;
+                  }
+                  .subtitle {
+                      font-size: 1.2em;
+                      margin-bottom: 30px;
+                      opacity: 0.9;
+                  }
+                  .language-selector {
+                      display: flex;
+                      gap: 20px;
+                      justify-content: center;
+                      margin: 30px 0;
+                  }
+                  .language-selector a {
+                      display: inline-block;
+                      padding: 15px 30px;
+                      background: rgba(255, 255, 255, 0.2);
+                      color: white;
+                      text-decoration: none;
+                      border-radius: 10px;
+                      border: 2px solid rgba(255, 255, 255, 0.3);
+                      transition: all 0.3s ease;
+                      font-weight: 500;
+                  }
+                  .language-selector a:hover {
+                      background: rgba(255, 255, 255, 0.3);
+                      border-color: rgba(255, 255, 255, 0.5);
+                      transform: translateY(-2px);
+                  }
+                  .auto-redirect {
+                      margin-top: 30px;
+                      font-size: 0.9em;
+                      opacity: 0.8;
+                  }
+                  .emoji {
+                      font-size: 1.5em;
+                      margin-right: 8px;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>🌤️ Skyborn Documentation</h1>
+                  <p class="subtitle">Atmospheric data processing and analysis toolkit</p>
+                  <div class="language-selector">
+                      <a href="./en/">
+                          <span class="emoji">🇺🇸</span>English Documentation
+                      </a>
+                      <a href="./zh_CN/">
+                          <span class="emoji">🇨🇳</span>中文文档
+                      </a>
+                  </div>
+                  <div class="auto-redirect">
+                      <p>⏱️ Automatically redirecting to English documentation in 3 seconds...</p>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Prepare deployment structure 📁
+        run: |
+          cd docs/build/html
+          touch .nojekyll
+          echo "📁 Documentation structure:"
+          ls -la
+          echo "📁 English docs:"
+          ls -la en/ | head -5
+          echo "📁 Chinese docs:"
+          ls -la zh_CN/ | head -5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs/build/html
+
+  # Deployment job
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build_docs_job
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy to GitHub Pages 🚀
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Show deployment info ℹ️
+        run: |
+          echo "🎉 Documentation deployment completed!"
+          echo "📖 Main site: ${{ steps.deployment.outputs.page_url }}"
+          echo "🇺🇸 English: ${{ steps.deployment.outputs.page_url }}en/"
+          echo "🇨🇳 Chinese: ${{ steps.deployment.outputs.page_url }}zh_CN/"
