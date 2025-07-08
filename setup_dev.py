@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
-设置脚本：安装开发环境和 pre-commit 钩子
+Setup script: Install development environment and pre-commit hooks
 
-运行此脚本来设置完整的开发环境，包括 pre-commit 钩子。
+Run this script to set up the complete development environment, including pre-commit hooks.
 """
 
+import json
 import subprocess
 import sys
 from pathlib import Path
 
+
 def run_command(cmd, check=True, shell=False):
-    """运行命令并打印输出"""
+    """Run command and print output"""
     print(f"🔧 Running: {cmd}")
     try:
         if shell:
@@ -22,24 +24,26 @@ def run_command(cmd, check=True, shell=False):
         print(f"❌ Command failed: {e}")
         return False
 
+
 def check_python_version():
-    """检查 Python 版本"""
+    """Check Python version compatibility"""
     version = sys.version_info
-    if version.major < 3 or (version.major == 3 and version.minor < 8):
-        print("❌ Python 3.8+ is required")
+    if version.major < 3 or (version.major == 3 and version.minor < 9):
+        print("❌ Python 3.9+ is required")
         return False
     print(f"✅ Python {version.major}.{version.minor}.{version.micro}")
     return True
 
+
 def install_dev_dependencies():
-    """安装开发依赖"""
+    """Install development dependencies"""
     print("\n📦 Installing development dependencies...")
     
-    # 安装包本身（可编辑模式）
+    # Install package itself in editable mode
     if not run_command("pip install -e ."):
         return False
     
-    # 安装开发工具
+    # Install development tools
     dev_packages = [
         "pre-commit",
         "black",
@@ -58,22 +62,23 @@ def install_dev_dependencies():
     
     return True
 
+
 def setup_pre_commit():
-    """设置 pre-commit 钩子"""
+    """Set up pre-commit hooks"""
     print("\n🪝 Setting up pre-commit hooks...")
     
-    # 安装 pre-commit 钩子
+    # Install pre-commit hooks
     if not run_command("pre-commit install"):
         return False
     
-    # 运行一次以确保工作正常
+    # Run once to ensure it works properly
     print("🧪 Running pre-commit on all files (first time setup)...")
     run_command("pre-commit run --all-files", check=False)
     
     return True
 
 def create_vscode_settings():
-    """创建 VS Code 设置"""
+    """Create VS Code settings for development"""
     print("\n🔧 Creating VS Code settings...")
     
     vscode_dir = Path(".vscode")
@@ -96,47 +101,48 @@ def create_vscode_settings():
         }
     }
     
-    import json
     with open(vscode_dir / "settings.json", "w") as f:
         json.dump(settings, f, indent=2)
     
     print("✅ VS Code settings created")
 
+
 def main():
-    """主函数"""
+    """Main function to set up development environment"""
     print("🚀 Setting up Skyborn development environment")
     print("=" * 50)
     
-    # 检查 Python 版本
+    # Check Python version
     if not check_python_version():
         sys.exit(1)
     
-    # 安装依赖
+    # Install dependencies
     if not install_dev_dependencies():
         print("❌ Failed to install dependencies")
         sys.exit(1)
     
-    # 设置 pre-commit
+    # Set up pre-commit
     if not setup_pre_commit():
         print("❌ Failed to setup pre-commit")
         sys.exit(1)
     
-    # 创建 VS Code 设置
+    # Create VS Code settings
     create_vscode_settings()
     
     print("\n" + "=" * 50)
     print("🎉 Development environment setup complete!")
     print("\n📝 Next steps:")
-    print("1. 开始开发代码")
-    print("2. pre-commit 会在每次提交时自动运行")
-    print("3. 运行 'pre-commit run --all-files' 手动检查所有文件")
-    print("4. 运行 'pytest' 执行测试")
+    print("1. Start developing code")
+    print("2. Pre-commit will run automatically on each commit")
+    print("3. Run 'pre-commit run --all-files' to manually check all files")
+    print("4. Run 'pytest' to execute tests")
     print("\n💡 Useful commands:")
-    print("  pre-commit run --all-files  # 运行所有检查")
-    print("  black src/                  # 格式化代码")
-    print("  isort src/                  # 排序导入")
-    print("  flake8 src/                 # 代码质量检查")
-    print("  pytest tests/               # 运行测试")
+    print("  pre-commit run --all-files  # Run all checks")
+    print("  black src/                  # Format code")
+    print("  isort src/                  # Sort imports")
+    print("  flake8 src/                 # Code quality check")
+    print("  pytest tests/               # Run tests")
+
 
 if __name__ == "__main__":
     main()
