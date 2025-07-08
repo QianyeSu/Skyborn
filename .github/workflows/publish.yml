@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # 先运行测试确保质量
+  # Run tests first to ensure quality
   test-before-publish:
     name: Run Tests Before Publishing
     runs-on: ubuntu-latest
@@ -46,7 +46,7 @@ jobs:
           print('Core functions verified')
           "
 
-  # 构建和发布
+  # Build and publish
   build-and-publish:
     name: Build and Publish to PyPI
     runs-on: ubuntu-latest
