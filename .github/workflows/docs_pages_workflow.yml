@@ -4,6 +4,10 @@ name: docs_pages_workflow
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'docs/**'          # 文档内容变化
+      - 'src/**'           # 源代码变化（API文档需要更新）
+      - 'requirements-docs.txt'  # 文档依赖变化
   workflow_dispatch:  # Allow manual trigger
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages

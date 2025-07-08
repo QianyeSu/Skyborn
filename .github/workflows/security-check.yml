@@ -2,9 +2,13 @@ name: Dependency and Security Check
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
+    paths:
+      - 'src/**'           # Source code changes
+      - 'requirements*.txt' # Dependency file changes
+      - 'pyproject.toml'   # Project configuration changes
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   schedule:
     - cron: "0 6 * * 1" # Check every Monday at 6 AM
   workflow_dispatch:
