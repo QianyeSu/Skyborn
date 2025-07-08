@@ -16,7 +16,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 获取完整历史用于覆盖率比较
+          fetch-depth: 0  # Fetch full history for coverage comparison
           
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -33,7 +33,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
           pip install pytest pytest-cov pytest-xdist coverage[toml]
-          pip install eccodes  # 用于完整功能测试
+          pip install eccodes  # For complete functionality testing
           
       - name: Run tests with coverage
         run: |
