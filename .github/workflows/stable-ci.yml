@@ -27,6 +27,10 @@ jobs:
       - name: Check workspace
         run: echo ${{ github.workspace }}
 
+      - name: Install package in development mode
+        shell: bash -l {0}
+        run: pip install -e .
+
       - name: List installed packages
         shell: bash -l {0}
         run: conda list
