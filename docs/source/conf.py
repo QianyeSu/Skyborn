@@ -24,6 +24,7 @@ release = skyborn.__version__
 
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',  # 添加 autosummary 扩展
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
     'sphinx.ext.mathjax',
@@ -32,6 +33,10 @@ extensions = [
     'sphinx_autodoc_typehints',
     'myst_parser',  # For Markdown support
 ]
+
+# Autosummary settings
+autosummary_generate = True
+autosummary_imported_members = True
 
 # Support for Markdown files
 source_suffix = {
