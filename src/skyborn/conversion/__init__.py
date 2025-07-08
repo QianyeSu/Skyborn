@@ -8,6 +8,8 @@ Author: Qianye Su
 Email: suqianye2000@gmail.com
 """
 
+import subprocess  # For testing patches
+
 from .grib_to_netcdf import (
     convert_grib_to_nc,
     convert_grib_to_nc_simple,
