@@ -1,0 +1,143 @@
+name: Test Coverage and Quality
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  coverage:
+    name: Code Coverage Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史用于覆盖率比较
+          
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libeccodes-dev
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-cov pytest-xdist coverage[toml]
+          pip install eccodes  # 用于完整功能测试
+          
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ \
+            --cov=src/skyborn \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            --cov-fail-under=70 \
+            -v
+            
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: skyborn-coverage
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+  # 性能测试
+  performance:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest-benchmark memory-profiler
+          
+      - name: Run performance tests
+        run: |
+          python -c "
+          import time
+          import numpy as np
+          import skyborn
+          
+          print('Performance benchmarks:')
+          
+          # Test gradient calculation performance
+          data = np.random.rand(1000, 1000)
+          start = time.time()
+          grad = skyborn.calculate_gradient(data, 'test')
+          end = time.time()
+          print(f'Gradient calculation (1000x1000): {end-start:.4f}s')
+          
+          # Test longitude conversion performance
+          start = time.time()
+          converted = skyborn.convert_longitude_range(data, (-180, 180))
+          end = time.time()
+          print(f'Longitude conversion (1000x1000): {end-start:.4f}s')
+          
+          print('Performance tests completed!')
+          "
+
+  # 文档构建测试
+  docs:
+    name: Documentation Build Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install sphinx sphinx-rtd-theme myst-parser sphinx-autodoc-typehints
+          
+      - name: Test English docs build
+        run: |
+          cd docs
+          sphinx-build -b html source/en build/html/en -W
+          
+      - name: Test Chinese docs build
+        run: |
+          cd docs
+          sphinx-build -b html source/zh_CN build/html/zh_CN -W
+          
+      - name: Upload docs artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/build/

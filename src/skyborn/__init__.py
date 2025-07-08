@@ -15,7 +15,18 @@ from .causality import (
     liang_causality,
     granger_causality
 )
+
+# Import conversion functions for easy access
+from .conversion import (
+    convert_grib_to_nc,
+    convert_grib_to_nc_simple,
+    batch_convert_grib_to_nc,
+    grib2nc,
+    grib_to_netcdf
+)
+
 from . import plot
 from . import interp
 from . import ROF
+from . import conversion
 __version__ = "0.3.5"  # Updated to version 0.3.5
