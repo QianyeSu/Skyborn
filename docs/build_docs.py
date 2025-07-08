@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Multi-language documentation builder for Skyborn.
 
@@ -7,10 +8,14 @@ using Sphinx with proper configuration for each language.
 """
 
 import argparse
+import os
 import sys
 import subprocess
 import shutil
 from pathlib import Path
+
+# Set proper encoding for Windows
+os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 # Configuration
 DOCS_DIR = Path(__file__).parent
@@ -24,18 +29,21 @@ LANGUAGES = {
 def run_command(cmd, cwd=None):
     """Run a shell command and return the result."""
     try:
+        # Set proper encoding for Windows
         result = subprocess.run(
             cmd, 
             shell=True, 
             cwd=cwd,
             capture_output=True, 
             text=True,
+            encoding='utf-8',
             check=True
         )
         return result.stdout
     except subprocess.CalledProcessError as e:
         print(f"Error running command: {cmd}")
-        print(f"Error output: {e.stderr}")
+        if e.stderr:
+            print(f"Error output: {e.stderr}")
         return None
 
 def check_dependencies():
@@ -84,18 +92,37 @@ def build_language(lang_code):
     # Create output directory
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # Build command
-    cmd = f"sphinx-build -b html {source_path} {output_path}"
+    # Build command with explicit encoding
+    cmd = f"sphinx-build -b html -E -a {source_path} {output_path}"
     
-    # Run sphinx-build
-    result = run_command(cmd, cwd=DOCS_DIR)
+    # Set environment variables for proper encoding
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
+    env['LANG'] = 'en_US.UTF-8'
+    env['LC_ALL'] = 'en_US.UTF-8'
     
-    if result is not None:
+    try:
+        # Run sphinx-build with proper encoding
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            cwd=DOCS_DIR,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            env=env,
+            check=True
+        )
         print(f"✅ {lang_name} documentation built successfully!")
         print(f"   Open: {output_path}/index.html")
         return True
-    else:
+    except subprocess.CalledProcessError as e:
         print(f"❌ Failed to build {lang_name} documentation")
+        print(f"Command: {cmd}")
+        if e.stdout:
+            print(f"Output: {e.stdout}")
+        if e.stderr:
+            print(f"Error: {e.stderr}")
         return False
 
 def create_index_page():
