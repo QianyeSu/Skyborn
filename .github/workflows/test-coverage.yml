@@ -80,21 +80,25 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install pytest-benchmark memory-profiler
+          pip install pytest-benchmark memory-profiler numpy xarray
           
       - name: Run performance tests
         run: |
           python -c "
           import time
           import numpy as np
+          import xarray as xr
           import skyborn
           
           print('Performance benchmarks:')
           
-          # Test longitude conversion performance
+          # Test longitude conversion performance with correct xarray usage
           data = np.random.rand(1000, 1000)
+          lon_coords = np.arange(1000)
+          lat_coords = np.arange(1000)
+          da = xr.DataArray(data, coords=[lat_coords, lon_coords], dims=['lat', 'lon'])
           start = time.time()
-          converted = skyborn.convert_longitude_range(data, (-180, 180))
+          converted = skyborn.convert_longitude_range(da, lon='lon', center_on_180=True)
           end = time.time()
           print(f'Longitude conversion (1000x1000): {end-start:.4f}s')
           

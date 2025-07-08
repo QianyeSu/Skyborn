@@ -24,6 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install numpy xarray  # Add required dependencies
           pip install -e .
           pip install pytest
 
@@ -38,8 +39,10 @@ jobs:
           print(f'Skyborn {skyborn.__version__} working correctly')
           # Test core functions
           import numpy as np
+          import xarray as xr
           data = np.random.rand(10, 10)
-          skyborn.convert_longitude_range(data, (-180, 180))
+          da = xr.DataArray(data, dims=['lat', 'lon'])
+          skyborn.convert_longitude_range(da, lon='lon', center_on_180=True)
           print('Core functions verified')
           "
 
