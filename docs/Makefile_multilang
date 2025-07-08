@@ -1,0 +1,47 @@
+# Makefile for building multi-language Sphinx documentation
+
+# You can set these variables from the command line.
+SPHINXOPTS    =
+SPHINXBUILD   = sphinx-build
+SOURCEDIR     = source
+BUILDDIR      = build
+
+# Help
+help:
+	@echo "Please use 'make <target>' where <target> is one of"
+	@echo "  html-en    to make standalone HTML files (English)"
+	@echo "  html-zh    to make standalone HTML files (Chinese)"
+	@echo "  html-all   to make HTML files for all languages"
+	@echo "  clean      to remove build files"
+	@echo "  install    to install required dependencies"
+
+# Clean build directory
+clean:
+	rm -rf $(BUILDDIR)/*
+
+# Install required dependencies
+install:
+	pip install sphinx sphinx-rtd-theme myst-parser sphinx-autodoc-typehints
+
+# Build English documentation
+html-en:
+	$(SPHINXBUILD) -b html $(SOURCEDIR)/en $(BUILDDIR)/html/en $(SPHINXOPTS)
+	@echo "English documentation built. Open $(BUILDDIR)/html/en/index.html"
+
+# Build Chinese documentation
+html-zh:
+	$(SPHINXBUILD) -b html $(SOURCEDIR)/zh_CN $(BUILDDIR)/html/zh_CN $(SPHINXOPTS)
+	@echo "Chinese documentation built. Open $(BUILDDIR)/html/zh_CN/index.html"
+
+# Build all languages
+html-all: html-en html-zh
+	@echo "All documentation built successfully!"
+
+# Live reload for development
+live-en:
+	sphinx-autobuild $(SOURCEDIR)/en $(BUILDDIR)/html/en
+
+live-zh:
+	sphinx-autobuild $(SOURCEDIR)/zh_CN $(BUILDDIR)/html/zh_CN
+
+.PHONY: help clean install html-en html-zh html-all live-en live-zh

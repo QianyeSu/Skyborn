@@ -1,0 +1,82 @@
+name: Dependency and Security Check
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: "0 6 * * 1" # 每周一早上6点检查
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    name: Security and Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit pip-audit
+          pip install -e .
+
+      - name: Check for security vulnerabilities
+        run: |
+          # 检查已知的安全漏洞
+          safety check || echo "Safety check completed with warnings"
+
+      - name: Run bandit security scan
+        run: |
+          # 扫描代码中的安全问题
+          bandit -r src/skyborn -f json -o bandit-report.json || echo "Bandit scan completed"
+
+      - name: Check dependencies with pip-audit
+        run: |
+          pip-audit --desc --output-format=json --output-file=audit-report.json || echo "Audit completed"
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            audit-report.json
+
+  dependency-update-check:
+    name: Check for Dependency Updates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-tools
+
+      - name: Check for outdated dependencies
+        run: |
+          pip list --outdated --format=json > outdated-deps.json
+          echo "Outdated dependencies:"
+          pip list --outdated || echo "All dependencies up to date"
+
+      - name: Upload dependency report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-report
+          path: outdated-deps.json
