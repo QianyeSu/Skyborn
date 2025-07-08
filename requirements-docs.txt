@@ -3,3 +3,4 @@ sphinx-rtd-theme>=1.0.0
 myst-parser>=0.18.0
 sphinx-autodoc-typehints>=1.0.0
 nbsphinx>=0.8.0
+sphinx-autosummary-accessors>=2023.4.0
