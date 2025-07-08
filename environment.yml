@@ -8,4 +8,7 @@ dependencies:
   - xarray
   - pytest
   - pytest-cov
+  - eccodes  # For GRIB processing
   - pip
+  - pip:
+      - -e .
