@@ -147,8 +147,8 @@ def convert_grib_to_nc(
     This function provides a Python interface to the grib_to_netcdf command-line tool.
     Only regular lat/lon grids and regular Gaussian grids are supported.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     grib_files : PathLike or List[PathLike]
         Path(s) to input GRIB file(s). Can be a single file or list of files.
     output_file : PathLike
@@ -169,10 +169,12 @@ def convert_grib_to_nc(
         Turn off support for multiple fields in single GRIB message.
     file_kind : {1, 2, 3, 4}, default 2
         NetCDF file format:
-        1 = netCDF classic file format
-        2 = netCDF 64 bit classic file format (Default)
-        3 = netCDF-4 file format
-        4 = netCDF-4 classic model file format
+
+        * 1 = netCDF classic file format
+        * 2 = netCDF 64 bit classic file format (Default)
+        * 3 = netCDF-4 file format
+        * 4 = netCDF-4 classic model file format
+
     deflate_level : int, optional
         Compression level (0-9) for netCDF-4 output format only.
     shuffle : bool, default False
@@ -182,13 +184,13 @@ def convert_grib_to_nc(
     verbose : bool, default True
         Print verbose output during conversion.
 
-    Returns:
-    --------
+    Returns
+    -------
     Path
         Path to the created NetCDF file.
 
-    Raises:
-    -------
+    Raises
+    ------
     GribToNetCDFError
         If grib_to_netcdf tool is not available or conversion fails.
     FileNotFoundError
@@ -196,12 +198,14 @@ def convert_grib_to_nc(
     ValueError
         If invalid parameters are provided.
 
-    Examples:
-    ---------
+    Examples
+    --------
     Basic usage:
+
     >>> convert_grib_to_nc('input.grib', 'output.nc')
 
     Convert multiple files with custom settings:
+
     >>> convert_grib_to_nc(
     ...     ['file1.grib', 'file2.grib'],
     ...     'output.nc',
@@ -211,6 +215,7 @@ def convert_grib_to_nc(
     ... )
 
     High precision with compression:
+
     >>> convert_grib_to_nc(
     ...     'input.grib',
     ...     'output.nc',
@@ -304,8 +309,8 @@ def convert_grib_to_nc_simple(
     """
     Simplified interface for GRIB to NetCDF conversion with common presets.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     grib_file : PathLike
         Path to input GRIB file.
     output_file : PathLike
@@ -315,20 +320,23 @@ def convert_grib_to_nc_simple(
     compress : bool, default False
         Enable compression for smaller file size (uses netCDF-4 format).
 
-    Returns:
-    --------
+    Returns
+    -------
     Path
         Path to the created NetCDF file.
 
-    Examples:
-    ---------
+    Examples
+    --------
     Basic conversion:
+
     >>> convert_grib_to_nc_simple('data.grib', 'data.nc')
 
     High precision conversion:
+
     >>> convert_grib_to_nc_simple('data.grib', 'data.nc', high_precision=True)
 
     Compressed output:
+
     >>> convert_grib_to_nc_simple('data.grib', 'data.nc', compress=True)
     """
 
@@ -358,8 +366,8 @@ def batch_convert_grib_to_nc(
     """
     Batch convert all GRIB files in a directory to NetCDF format.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     input_directory : PathLike
         Directory containing GRIB files.
     output_directory : PathLike
@@ -369,17 +377,19 @@ def batch_convert_grib_to_nc(
     **kwargs
         Additional arguments passed to convert_grib_to_nc.
 
-    Returns:
-    --------
+    Returns
+    -------
     List[Path]
         List of paths to created NetCDF files.
 
-    Examples:
-    ---------
+    Examples
+    --------
     Convert all GRIB files in a directory:
+
     >>> batch_convert_grib_to_nc('/path/to/grib_files', '/path/to/output')
 
     Convert with custom pattern and settings:
+
     >>> batch_convert_grib_to_nc(
     ...     '/path/to/grib_files',
     ...     '/path/to/output',
