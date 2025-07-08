@@ -1,75 +1,31 @@
-# Dependabot configuration for automated dependency updates
-# This configuration helps keep dependencies up-to-date and secure
-# Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
-
+# Simplified Dependabot configuration for stable dependency management
 version: 2
 updates:
-  # Enable updates for Python dependencies
+  # Python dependencies - conservative approach
   - package-ecosystem: "pip"
-    directory: "/"  # Look for pip dependencies in the root directory
+    directory: "/"
     schedule:
-      interval: "daily"  # Check for updates daily
-      time: "06:00"     # At 6 AM UTC
+      interval: "weekly"  # Changed to weekly for stability
+      day: "monday"
+      time: "06:00"
       timezone: "UTC"
-    open-pull-requests-limit: 10  # Maximum number of open PRs
-    reviewers:
-      - "suqianye2000"  # Request review from maintainer
-    assignees:
-      - "suqianye2000"  # Assign PRs to maintainer
+    open-pull-requests-limit: 5  # Reduced number
     commit-message:
-      prefix: "deps"    # Prefix commit messages with 'deps'
-      include: "scope"  # Include dependency scope in commit message
-    # Group updates by dependency type
-    groups:
-      production-dependencies:
-        patterns:
-          - "*"
-        exclude-patterns:
-          - "pytest*"
-          - "coverage*"
-          - "black*"
-          - "flake8*"
-          - "mypy*"
-          - "sphinx*"
-          - "pre-commit*"
-      development-dependencies:
-        patterns:
-          - "pytest*"
-          - "coverage*"
-          - "black*"
-          - "flake8*"
-          - "mypy*"
-          - "sphinx*"
-          - "pre-commit*"
-    # Ignore specific dependencies that require manual updates
+      prefix: "deps"
+      include: "scope"
+    # Only allow patch and minor updates for stability
     ignore:
-      - dependency-name: "python"  # Don't auto-update Python version requirements
+      - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-    # Enable security-only updates for major versions
-    allow:
-      - dependency-type: "direct"
-      - dependency-type: "indirect"
-    # Auto-merge patch and minor updates for production dependencies
-    rebase-strategy: "auto"
 
-  # Enable updates for GitHub Actions
+  # GitHub Actions - also weekly
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"  # Check for GitHub Actions updates weekly
-      day: "monday"       # On Mondays
-      time: "06:00"
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
       timezone: "UTC"
-    open-pull-requests-limit: 5
-    reviewers:
-      - "suqianye2000"
-    assignees:
-      - "suqianye2000"
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "ci"
-      include: "scope"
-    # Group all GitHub Actions updates together
-    groups:
-      github-actions:
-        patterns:
-          - "*"
