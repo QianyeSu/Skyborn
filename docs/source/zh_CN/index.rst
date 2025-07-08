@@ -43,10 +43,10 @@ Skyborn 是一个专为大气数据处理、分析和可视化设计的综合性
 .. code-block:: python
 
    import skyborn
-   
+
    # GRIB 转换为 NetCDF
    skyborn.grib2nc('input.grib', 'output.nc')
-   
+
    # 计算梯度
    import xarray as xr
    ds = xr.open_dataset('output.nc')

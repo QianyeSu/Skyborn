@@ -13,6 +13,7 @@ from matplotlib.patches import FancyArrowPatch
 
 import xarray as xr
 import matplotlib.pyplot as plt
+
 # import numpy as np
 # import matplotlib
 from matplotlib.artist import Artist, allow_rasterization
@@ -253,6 +254,7 @@ class CurvedQuiverLegend(Artist):
 
         # Create temporary text object to measure size
         import matplotlib.pyplot as plt
+
         fig = plt.figure(figsize=(10, 10))  # Create temporary figure
         renderer = fig.canvas.get_renderer()
 
@@ -266,19 +268,29 @@ class CurvedQuiverLegend(Artist):
 
         # Adjust box size to ensure it can contain text and arrow
         # Adjust for different labelpos
-        if labelpos in ['E', 'W']:  # Horizontal layout
+        if labelpos in ["E", "W"]:  # Horizontal layout
             if self.center_label:
                 # Center mode
                 min_width = self.arrow_length + 3 * self.padding + text_width
                 total_content_width = self.arrow_length + self.padding + text_width
             else:
                 # Adjust based on labelpos
-                if labelpos == 'E':  # Text to the right of the arrow
-                    min_width = 2 * self.padding + self.arrow_length + \
-                        self.padding + text_width + self.padding
+                if labelpos == "E":  # Text to the right of the arrow
+                    min_width = (
+                        2 * self.padding
+                        + self.arrow_length
+                        + self.padding
+                        + text_width
+                        + self.padding
+                    )
                 else:  # labelpos == 'W', text to the left of the arrow
-                    min_width = 2 * self.padding + text_width + \
-                        self.padding + self.arrow_length + self.padding
+                    min_width = (
+                        2 * self.padding
+                        + text_width
+                        + self.padding
+                        + self.arrow_length
+                        + self.padding
+                    )
                 total_content_width = min_width - 2 * self.padding
 
             # Ensure box is wide enough
@@ -290,8 +302,9 @@ class CurvedQuiverLegend(Artist):
 
         else:  # Vertical layout (labelpos in ['N', 'S'])
             # In vertical direction, text and arrow are stacked
-            min_height = text_height + 2 * self.padding + \
-                0.03  # 0.03 is an estimate for arrow height
+            min_height = (
+                text_height + 2 * self.padding + 0.03
+            )  # 0.03 is an estimate for arrow height
 
             # Ensure box is wide enough to accommodate the maximum width of arrow and text
             min_width = max(self.arrow_length, text_width) + 2 * self.padding
@@ -312,7 +325,7 @@ class CurvedQuiverLegend(Artist):
             width=self.width,
             height=self.height,
             transform=ax.transAxes,
-            **self.patch_props
+            **self.patch_props,
         )
 
         # Set arrow and text positions based on labelpos
@@ -336,21 +349,20 @@ class CurvedQuiverLegend(Artist):
         box_center_y = self.y + self.height / 2
 
         # Set default text alignment
-        self.text_props.update({
-            'verticalalignment': 'center',
-            'horizontalalignment': 'center'
-        })
+        self.text_props.update(
+            {"verticalalignment": "center", "horizontalalignment": "center"}
+        )
 
         if self.center_label:
             # Center mode - entire combination (arrow+text) is centered
-            if self.labelpos in ['E', 'W']:  # Horizontal layout
+            if self.labelpos in ["E", "W"]:  # Horizontal layout
                 # Calculate total content width
                 total_content_width = self.arrow_length + self.padding + text_width
 
                 # Group start position to center the entire element
                 group_start_x = box_center_x - (total_content_width / 2)
 
-                if self.labelpos == 'E':  # Text to the right of arrow
+                if self.labelpos == "E":  # Text to the right of arrow
                     # Set arrow position
                     arrow_start_x = group_start_x
                     arrow_end_x = arrow_start_x + self.arrow_length
@@ -360,17 +372,17 @@ class CurvedQuiverLegend(Artist):
                         (arrow_start_x, box_center_y),
                         (arrow_end_x, box_center_y),
                         transform=self.ax.transAxes,
-                        **self.arrow_props
+                        **self.arrow_props,
                     )
 
                     # Set text position
                     text_x = arrow_end_x + self.padding
-                    self.text_props['horizontalalignment'] = 'left'
+                    self.text_props["horizontalalignment"] = "left"
 
                 else:  # self.labelpos == 'W', text to the left of arrow
                     # Place text first
                     text_x = group_start_x
-                    self.text_props['horizontalalignment'] = 'right'
+                    self.text_props["horizontalalignment"] = "right"
 
                     # Set arrow position
                     arrow_start_x = text_x + text_width + self.padding
@@ -381,19 +393,20 @@ class CurvedQuiverLegend(Artist):
                         (arrow_start_x, box_center_y),
                         (arrow_end_x, box_center_y),
                         transform=self.ax.transAxes,
-                        **self.arrow_props
+                        **self.arrow_props,
                     )
 
                 # Create text
                 self.text = Text(
-                    text_x, box_center_y,
+                    text_x,
+                    box_center_y,
                     self.text_content,
                     transform=self.ax.transAxes,
-                    **self.text_props
+                    **self.text_props,
                 )
 
             else:  # Vertical layout (self.labelpos in ['N', 'S'])
-                if self.labelpos == 'N':  # Text above the arrow
+                if self.labelpos == "N":  # Text above the arrow
                     # Set arrow position (horizontally centered)
                     arrow_start_x = box_center_x - self.arrow_length / 2
                     arrow_end_x = box_center_x + self.arrow_length / 2
@@ -406,12 +419,12 @@ class CurvedQuiverLegend(Artist):
                         (arrow_start_x, arrow_y),
                         (arrow_end_x, arrow_y),
                         transform=self.ax.transAxes,
-                        **self.arrow_props
+                        **self.arrow_props,
                     )
 
                     # Set text position (upper half)
                     text_y = box_center_y + self.padding / 2
-                    self.text_props['verticalalignment'] = 'bottom'
+                    self.text_props["verticalalignment"] = "bottom"
 
                 else:  # self.labelpos == 'S', text below the arrow
                     # Set arrow position (horizontally centered)
@@ -426,24 +439,25 @@ class CurvedQuiverLegend(Artist):
                         (arrow_start_x, arrow_y),
                         (arrow_end_x, arrow_y),
                         transform=self.ax.transAxes,
-                        **self.arrow_props
+                        **self.arrow_props,
                     )
 
                     # Set text position (lower half)
                     text_y = box_center_y - self.padding / 2
-                    self.text_props['verticalalignment'] = 'top'
+                    self.text_props["verticalalignment"] = "top"
 
                 # Create text (horizontally centered)
                 self.text = Text(
-                    box_center_x, text_y,
+                    box_center_x,
+                    text_y,
                     self.text_content,
                     transform=self.ax.transAxes,
-                    **self.text_props
+                    **self.text_props,
                 )
 
         else:  # Non-centered mode
-            if self.labelpos in ['E', 'W']:  # Horizontal layout
-                if self.labelpos == 'E':  # Text to the right of arrow
+            if self.labelpos in ["E", "W"]:  # Horizontal layout
+                if self.labelpos == "E":  # Text to the right of arrow
                     # Layout starting from left
                     arrow_start_x = self.x + self.padding
                     arrow_end_x = arrow_start_x + self.arrow_length
@@ -453,12 +467,12 @@ class CurvedQuiverLegend(Artist):
                         (arrow_start_x, box_center_y),
                         (arrow_end_x, box_center_y),
                         transform=self.ax.transAxes,
-                        **self.arrow_props
+                        **self.arrow_props,
                     )
 
                     # Create text label
                     text_x = arrow_end_x + self.padding
-                    self.text_props['horizontalalignment'] = 'left'
+                    self.text_props["horizontalalignment"] = "left"
 
                 else:  # self.labelpos == 'W', text to the left of arrow
                     # Layout starting from right
@@ -470,18 +484,19 @@ class CurvedQuiverLegend(Artist):
                         (arrow_start_x, box_center_y),
                         (arrow_end_x, box_center_y),
                         transform=self.ax.transAxes,
-                        **self.arrow_props
+                        **self.arrow_props,
                     )
 
                     # Create text label
                     text_x = arrow_start_x - self.padding
-                    self.text_props['horizontalalignment'] = 'right'
+                    self.text_props["horizontalalignment"] = "right"
 
                 self.text = Text(
-                    text_x, box_center_y,
+                    text_x,
+                    box_center_y,
                     self.text_content,
                     transform=self.ax.transAxes,
-                    **self.text_props
+                    **self.text_props,
                 )
 
             else:  # Vertical layout (self.labelpos in ['N', 'S'])
@@ -489,7 +504,7 @@ class CurvedQuiverLegend(Artist):
                 arrow_start_x = self.x + (self.width - self.arrow_length) / 2
                 arrow_end_x = arrow_start_x + self.arrow_length
 
-                if self.labelpos == 'N':  # Text above the arrow
+                if self.labelpos == "N":  # Text above the arrow
                     # Arrow at bottom
                     arrow_y = self.y + self.padding + 0.015  # Give the arrow some space
 
@@ -498,12 +513,12 @@ class CurvedQuiverLegend(Artist):
                         (arrow_start_x, arrow_y),
                         (arrow_end_x, arrow_y),
                         transform=self.ax.transAxes,
-                        **self.arrow_props
+                        **self.arrow_props,
                     )
 
                     # Text at top
                     text_y = self.y + self.height - self.padding
-                    self.text_props['verticalalignment'] = 'top'
+                    self.text_props["verticalalignment"] = "top"
 
                 else:  # self.labelpos == 'S', text below the arrow
                     # Arrow at top
@@ -514,32 +529,36 @@ class CurvedQuiverLegend(Artist):
                         (arrow_start_x, arrow_y),
                         (arrow_end_x, arrow_y),
                         transform=self.ax.transAxes,
-                        **self.arrow_props
+                        **self.arrow_props,
                     )
 
                     # Text at bottom
                     text_y = self.y + self.padding
-                    self.text_props['verticalalignment'] = 'bottom'
+                    self.text_props["verticalalignment"] = "bottom"
 
                 # Create text (horizontally centered)
                 self.text = Text(
-                    box_center_x, text_y,
+                    box_center_x,
+                    text_y,
                     self.text_content,
                     transform=self.ax.transAxes,
-                    **self.text_props
+                    **self.text_props,
                 )
 
     def _calculate_arrow_length(self):
         """Calculate arrow length based on actual wind speed and original data"""
         try:
             # Use the scale information from the original curved_quiver
-            if hasattr(self.curved_quiver_set, 'resolution') and hasattr(self.curved_quiver_set, 'magnitude'):
+            if hasattr(self.curved_quiver_set, "resolution") and hasattr(
+                self.curved_quiver_set, "magnitude"
+            ):
                 # resolution = self.curved_quiver_set.resolution
                 # magnitude = self.curved_quiver_set.magnitude
 
                 # Use reference speed to scale the arrow
                 reference_speed = getattr(
-                    self, 'reference_speed', 2.0)  # Default reference speed is 2.0
+                    self, "reference_speed", 2.0
+                )  # Default reference speed is 2.0
 
                 # Calculate the scale factor
                 scale_factor = self.U / reference_speed
@@ -547,28 +566,30 @@ class CurvedQuiverLegend(Artist):
                 # Ensure arrow length is within reasonable range
                 arrow_length = min(
                     # Allow arrows up to 4x maximum
-                    scale_factor * self.max_arrow_length, self.max_arrow_length * 4)
+                    scale_factor * self.max_arrow_length,
+                    self.max_arrow_length * 4,
+                )
                 arrow_length = max(
-                    arrow_length, self.max_arrow_length * 0.2)  # Minimum length
+                    arrow_length, self.max_arrow_length * 0.2
+                )  # Minimum length
                 return arrow_length
 
             # Method 2: If scale information is unavailable, use simple linear scaling
             # Assume common wind speed range is 0-20 m/s
             scale_factor = min(self.U / 20.0, 1.0)
             arrow_length = max(
-                scale_factor * self.max_arrow_length, self.max_arrow_length * 0.2)
+                scale_factor * self.max_arrow_length, self.max_arrow_length * 0.2
+            )
             return arrow_length
 
         except Exception as e:
-            print(
-                f"Warning: Could not calculate proportional arrow length: {e}")
+            print(f"Warning: Could not calculate proportional arrow length: {e}")
             # Fall back to fixed length
             return self.max_arrow_length * 0.6
 
     def _calculate_position(self):
         """Calculate legend box position based on loc parameter"""
-        margin = getattr(
-            self, 'margin', 0.02)  # Use class attribute or default
+        margin = getattr(self, "margin", 0.02)  # Use class attribute or default
 
         if self.loc == "lower left":
             self.x = margin
@@ -590,10 +611,10 @@ class CurvedQuiverLegend(Artist):
     def _setup_arrow_props(self, arrow_props):
         """Set default arrow properties"""
         defaults = {
-            'arrowstyle': '->',
-            'mutation_scale': 20,
-            'linewidth': 1.5,
-            'color': 'black',
+            "arrowstyle": "->",
+            "mutation_scale": 20,
+            "linewidth": 1.5,
+            "color": "black",
         }
         if arrow_props:
             defaults.update(arrow_props)
@@ -602,10 +623,10 @@ class CurvedQuiverLegend(Artist):
     def _setup_patch_props(self, patch_props):
         """Set default background box properties"""
         defaults = {
-            'linewidth': 1,
-            'edgecolor': 'black',
-            'facecolor': 'white',
-            'alpha': 0.9,
+            "linewidth": 1,
+            "edgecolor": "black",
+            "facecolor": "white",
+            "alpha": 0.9,
         }
         if patch_props:
             defaults.update(patch_props)
@@ -614,10 +635,10 @@ class CurvedQuiverLegend(Artist):
     def _setup_text_props(self, text_props):
         """Set default text properties"""
         defaults = {
-            'fontsize': 10,
-            'verticalalignment': 'center',
-            'horizontalalignment': 'left',
-            'color': 'black',
+            "fontsize": 10,
+            "verticalalignment": "center",
+            "horizontalalignment": "left",
+            "color": "black",
         }
         if text_props:
             defaults.update(text_props)
@@ -648,7 +669,7 @@ def add_curved_quiverkey(
     units: str = "m/s",
     loc: str = "lower right",
     labelpos: str = "E",  # label position
-    **kwargs
+    **kwargs,
 ) -> CurvedQuiverLegend:
     """
     Convenience function: Add proportionally scaled curved quiver legend to axes
@@ -679,4 +700,6 @@ def add_curved_quiverkey(
     CurvedQuiverLegend
         Legend object
     """
-    return CurvedQuiverLegend(ax, curved_quiver_set, U, units=units, loc=loc, labelpos=labelpos, **kwargs)
+    return CurvedQuiverLegend(
+        ax, curved_quiver_set, U, units=units, loc=loc, labelpos=labelpos, **kwargs
+    )

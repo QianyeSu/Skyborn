@@ -10,7 +10,7 @@ Core Dependencies
 ~~~~~~~~~~~~~~~~~
 
 * **NumPy** (>=1.19.0) - Numerical computing
-* **Pandas** (>=1.3.0) - Data manipulation  
+* **Pandas** (>=1.3.0) - Data manipulation
 * **Xarray** (>=0.19.0) - N-dimensional labeled arrays
 * **SciPy** (>=1.7.0) - Scientific computing
 * **Matplotlib** (>=3.4.0) - Plotting
@@ -64,7 +64,7 @@ To use the GRIB to NetCDF conversion functionality:
 
    # Using conda (recommended)
    conda install -c conda-forge eccodes
-   
+
    # Using pip
    pip install eccodes
 
@@ -75,7 +75,7 @@ For Geospatial Plotting
 
    # Using conda
    conda install -c conda-forge cartopy
-   
+
    # Using pip
    pip install cartopy
 
@@ -88,7 +88,7 @@ To install all optional dependencies:
 
    # Using conda
    conda install -c conda-forge skyborn eccodes cartopy dask
-   
+
    # Using pip
    pip install skyborn[complete]
 
@@ -101,10 +101,10 @@ To verify your installation:
 
    import skyborn
    print(f"Skyborn version: {skyborn.__version__}")
-   
+
    # Test basic functionality
    skyborn.convert_longitude_range  # Should not raise an error
-   
+
    # Test GRIB conversion (if eccodes is installed)
    try:
        skyborn.grib2nc
@@ -129,7 +129,7 @@ Platform-Specific Notes
   - Recommend using Anaconda/Miniconda
   - Some packages may require Visual Studio Build Tools
 
-**macOS**:  
+**macOS**:
   - May need to install Xcode command line tools
   - Use conda for easier dependency management
 
@@ -147,7 +147,7 @@ For developers:
    git clone https://github.com/yourusername/skyborn.git
    cd skyborn
    pip install -e .[dev]
-   
+
    # Install pre-commit hooks
    pre-commit install
 

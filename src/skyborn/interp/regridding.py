@@ -1,4 +1,4 @@
-'''
+"""
 This scripts contains functions that performs nearest, bilinear, and conservative interpolation
 on xarray.Datasets. The original version of this script is available at WeatherBench2.
 
@@ -6,9 +6,10 @@ Qianye Su
 suqianye2000@gmail.com
 
 Reference
- - WeatherBench2 regridding: 
+ - WeatherBench2 regridding:
      https://github.com/google-research/weatherbench2/blob/main/weatherbench2/regridding.py
-'''
+"""
+
 from __future__ import annotations
 
 import xarray
@@ -36,8 +37,8 @@ def _detect_coordinate_names(dataset: xarray.Dataset) -> Tuple[str, str]:
         ValueError: If coordinate names cannot be detected
     """
     # Common variations of coordinate names
-    lon_names = ['longitude', 'lon', 'long', 'x']
-    lat_names = ['latitude', 'lat', 'y']
+    lon_names = ["longitude", "lon", "long", "x"]
+    lat_names = ["latitude", "lat", "y"]
 
     # Find longitude coordinate
     lon_coord = None
@@ -55,9 +56,11 @@ def _detect_coordinate_names(dataset: xarray.Dataset) -> Tuple[str, str]:
 
     if lon_coord is None or lat_coord is None:
         available_dims = list(dataset.dims.keys())
-        raise ValueError(f"Could not detect longitude/latitude coordinates. "
-                         f"Available dimensions: {available_dims}. "
-                         f"Expected one of: lon={lon_names}, lat={lat_names}")
+        raise ValueError(
+            f"Could not detect longitude/latitude coordinates. "
+            f"Available dimensions: {available_dims}. "
+            f"Expected one of: lon={lon_names}, lat={lat_names}"
+        )
 
     return lon_coord, lat_coord
 
@@ -106,9 +109,12 @@ class Regridder:
         """Regrid an array with dimensions (..., lon, lat) from source to target."""
         raise NotImplementedError
 
-    def regrid_dataset(self, dataset: xarray.Dataset,
-                       lon_dim: Optional[str] = None,
-                       lat_dim: Optional[str] = None) -> xarray.Dataset:
+    def regrid_dataset(
+        self,
+        dataset: xarray.Dataset,
+        lon_dim: Optional[str] = None,
+        lat_dim: Optional[str] = None,
+    ) -> xarray.Dataset:
         """
         Regrid an xarray.Dataset from source to target.
 
@@ -139,31 +145,28 @@ class Regridder:
             output_core_dims=[[lon_dim, lat_dim]],
             exclude_dims={lon_dim, lat_dim},
             vectorize=True,
-            dask='allowed',  # Allow Dask arrays to be passed to the function
+            dask="allowed",  # Allow Dask arrays to be passed to the function
             output_dtypes=[dataset[list(dataset.data_vars)[0]].dtype],
         )
 
         # Update coordinates to target grid
         target_lon_deg = np.rad2deg(self.target.lon)
         target_lat_deg = np.rad2deg(self.target.lat)
-        dataset = dataset.assign_coords({
-            lon_dim: target_lon_deg,
-            lat_dim: target_lat_deg
-        })
+        dataset = dataset.assign_coords(
+            {lon_dim: target_lon_deg, lat_dim: target_lat_deg}
+        )
 
         return dataset
 
 
-def nearest_neighbor_indices(
-    source_grid: Grid, target_grid: Grid
-) -> np.ndarray:
+def nearest_neighbor_indices(source_grid: Grid, target_grid: Grid) -> np.ndarray:
     """Returns Haversine nearest neighbor indices from source_grid to target_grid."""
     # Construct a BallTree to find nearest neighbors on the sphere
-    source_mesh = np.meshgrid(source_grid.lat, source_grid.lon, indexing='ij')
-    target_mesh = np.meshgrid(target_grid.lat, target_grid.lon, indexing='ij')
+    source_mesh = np.meshgrid(source_grid.lat, source_grid.lon, indexing="ij")
+    target_mesh = np.meshgrid(target_grid.lat, target_grid.lon, indexing="ij")
     index_coords = np.stack([x.ravel() for x in source_mesh], axis=-1)
     query_coords = np.stack([x.ravel() for x in target_mesh], axis=-1)
-    tree = neighbors.BallTree(index_coords, metric='haversine')
+    tree = neighbors.BallTree(index_coords, metric="haversine")
     indices = tree.query(query_coords, return_distance=False).squeeze(axis=-1)
     return indices
 
@@ -180,14 +183,14 @@ class NearestRegridder(Regridder):
         """2D nearest neighbor interpolation using BallTree."""
         if array.shape != self.source.shape:
             raise ValueError(
-                f'Expected array.shape={array.shape} to match source.shape={self.source.shape}')
+                f"Expected array.shape={array.shape} to match source.shape={self.source.shape}"
+            )
         array_flat = array.ravel()
         interpolated = array_flat[self.indices]
         return interpolated.reshape(self.target.shape)
 
     def regrid_array(self, field: Array) -> np.ndarray:
-        interp = np.vectorize(self._nearest_neighbor_2d,
-                              signature='(a,b)->(c,d)')
+        interp = np.vectorize(self._nearest_neighbor_2d, signature="(a,b)->(c,d)")
         return interp(field)
 
 
@@ -201,21 +204,27 @@ class BilinearRegridder(Regridder):
         lon_target = self.target.lon
 
         # Interpolate over latitude
-        lat_interp = np.array([
-            np.interp(lat_target, lat_source, f) for f in field.transpose(1, 0, *range(2, field.ndim))
-        ]).transpose(1, 0, *range(2, field.ndim))
+        lat_interp = np.array(
+            [
+                np.interp(lat_target, lat_source, f)
+                for f in field.transpose(1, 0, *range(2, field.ndim))
+            ]
+        ).transpose(1, 0, *range(2, field.ndim))
 
         # Interpolate over longitude
-        lon_interp = np.array([
-            np.interp(lon_target, lon_source, f) for f in lat_interp.transpose(0, *range(2, field.ndim), 1)
-        ]).transpose(0, *range(2, field.ndim), 1)
+        lon_interp = np.array(
+            [
+                np.interp(lon_target, lon_source, f)
+                for f in lat_interp.transpose(0, *range(2, field.ndim), 1)
+            ]
+        ).transpose(0, *range(2, field.ndim), 1)
 
         return lon_interp
 
 
 def _assert_increasing(x: np.ndarray) -> None:
     if not (np.diff(x) > 0).all():
-        raise ValueError(f'Array is not increasing: {x}')
+        raise ValueError(f"Array is not increasing: {x}")
 
 
 def _latitude_cell_bounds(x: Array) -> np.ndarray:
@@ -230,12 +239,8 @@ def _latitude_overlap(
     """Calculate the area overlap as a function of latitude."""
     source_bounds = _latitude_cell_bounds(source_points)
     target_bounds = _latitude_cell_bounds(target_points)
-    upper = np.minimum(
-        target_bounds[1:, np.newaxis], source_bounds[np.newaxis, 1:]
-    )
-    lower = np.maximum(
-        target_bounds[:-1, np.newaxis], source_bounds[np.newaxis, :-1]
-    )
+    upper = np.minimum(target_bounds[1:, np.newaxis], source_bounds[np.newaxis, 1:])
+    lower = np.maximum(target_bounds[:-1, np.newaxis], source_bounds[np.newaxis, :-1])
     # Normalized cell area: integral from lower to upper of cos(latitude)
     overlap = (upper > lower) * (np.sin(upper) - np.sin(lower))
     return overlap
@@ -305,7 +310,7 @@ def _longitude_overlap(
     y0 = second_lower[np.newaxis, :]
     y1 = second_upper[np.newaxis, :]
 
-    overlap_func = np.vectorize(_periodic_overlap, excluded=['period'])
+    overlap_func = np.vectorize(_periodic_overlap, excluded=["period"])
     overlap = overlap_func(x0, x1, y0, y1, period=period)
     return overlap
 
@@ -334,14 +339,10 @@ class ConservativeRegridder(Regridder):
 
     def _mean(self, field: Array) -> np.ndarray:
         """Computes cell-averages of field on the target grid."""
-        lon_weights = _conservative_longitude_weights(
-            self.source.lon, self.target.lon
-        )
-        lat_weights = _conservative_latitude_weights(
-            self.source.lat, self.target.lat
-        )
+        lon_weights = _conservative_longitude_weights(self.source.lon, self.target.lon)
+        lat_weights = _conservative_latitude_weights(self.source.lat, self.target.lat)
         result = np.einsum(
-            'ac,bd,...cd->...ab',
+            "ac,bd,...cd->...ab",
             lon_weights,
             lat_weights,
             field,
@@ -354,7 +355,7 @@ class ConservativeRegridder(Regridder):
         nulls = np.isnan(field)
         total = self._mean(np.where(nulls, 0, field))
         count = self._mean(~nulls)
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             result = np.true_divide(total, count)
             result[count == 0] = np.nan  # Set divisions by zero to NaN
         return result
@@ -364,11 +365,13 @@ class ConservativeRegridder(Regridder):
 
 
 # Convenience function for easy regridding
-def regrid_dataset(dataset: xarray.Dataset,
-                   target_grid: Grid,
-                   method: str = 'bilinear',
-                   lon_dim: Optional[str] = None,
-                   lat_dim: Optional[str] = None) -> xarray.Dataset:
+def regrid_dataset(
+    dataset: xarray.Dataset,
+    target_grid: Grid,
+    method: str = "bilinear",
+    lon_dim: Optional[str] = None,
+    lat_dim: Optional[str] = None,
+) -> xarray.Dataset:
     """
     Convenience function to regrid a dataset.
 
@@ -386,14 +389,15 @@ def regrid_dataset(dataset: xarray.Dataset,
     source_grid = Grid.from_dataset(dataset)
 
     # Select regridder based on method
-    if method == 'nearest':
+    if method == "nearest":
         regridder = NearestRegridder(source_grid, target_grid)
-    elif method == 'bilinear':
+    elif method == "bilinear":
         regridder = BilinearRegridder(source_grid, target_grid)
-    elif method == 'conservative':
+    elif method == "conservative":
         regridder = ConservativeRegridder(source_grid, target_grid)
     else:
         raise ValueError(
-            f"Unknown method: {method}. Choose from 'nearest', 'bilinear', 'conservative'")
+            f"Unknown method: {method}. Choose from 'nearest', 'bilinear', 'conservative'"
+        )
 
     return regridder.regrid_dataset(dataset, lon_dim=lon_dim, lat_dim=lat_dim)

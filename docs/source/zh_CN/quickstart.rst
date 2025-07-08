@@ -24,10 +24,10 @@
 
    # 简单转换
    skyborn.grib2nc('input.grib', 'output.nc')
-   
+
    # 带选项的转换
    skyborn.convert_grib_to_nc_simple(
-       'input.grib', 
+       'input.grib',
        'output.nc',
        high_precision=True,
        compress=True
@@ -43,7 +43,7 @@
 
    # 加载 NetCDF 数据
    ds = xr.open_dataset('output.nc')
-   
+
    # 基本数据信息
    print(ds)
    print(ds.data_vars)
@@ -55,19 +55,19 @@
 
    # 经向梯度 (∂/∂lat)
    temp_grad_lat = skyborn.calculate_meridional_gradient(
-       ds['temperature'], 
+       ds['temperature'],
        'latitude'
    )
-   
+
    # 纬向梯度 (∂/∂lon)
    temp_grad_lon = skyborn.calculate_zonal_gradient(
-       ds['temperature'], 
+       ds['temperature'],
        'longitude'
    )
-   
+
    # 通用梯度
    pressure_grad = skyborn.calculate_gradient(
-       ds['pressure'], 
+       ds['pressure'],
        'level'
    )
 
@@ -78,7 +78,7 @@
 
    # 转换经度范围
    ds_converted = skyborn.convert_longitude_range(ds, target_range=(-180, 180))
-   
+
    # 线性回归
    slope, intercept, r_value = skyborn.linear_regression(
        ds['temperature'].values.flatten(),
@@ -94,13 +94,13 @@
 .. code-block:: python
 
    from skyborn.interp import interpolation, regridding
-   
+
    # 数据插值
    interpolated = interpolation.interpolate_data(
        ds['temperature'],
        target_coords={'latitude': np.arange(-90, 91, 1)}
    )
-   
+
    # 重网格化到新网格
    regridded = regridding.regrid_data(
        ds['temperature'],
@@ -117,7 +117,7 @@
        ds['temperature'].values,
        ds['precipitation'].values
    )
-   
+
    # Granger 因果关系
    granger_result = skyborn.granger_causality(
        ds['temperature'].values,
@@ -131,14 +131,14 @@
 .. code-block:: python
 
    from skyborn.plot import plotting, modplot
-   
+
    # 基础绘图
    fig, ax = plotting.plot_contour(
        ds['temperature'].isel(time=0),
        levels=20,
        title='温度分布'
    )
-   
+
    # 专业大气绘图
    fig = modplot.plot_wind_field(
        ds['u_wind'].isel(time=0),
@@ -161,7 +161,7 @@
        high_precision=True,
        compress=True
    )
-   
+
    print(f"已转换 {len(converted_files)} 个文件")
 
 常用工作流程
@@ -194,28 +194,28 @@ ERA5 数据处理
        # 1. 转换数据
        nc_file = f"{output_dir}/converted_data.nc"
        skyborn.grib2nc(grib_file, nc_file, compress=True)
-       
+
        # 2. 加载和处理
        ds = xr.open_dataset(nc_file)
-       
+
        # 3. 计算梯度
        temp_grad = skyborn.calculate_meridional_gradient(
            ds['temperature'], 'latitude'
        )
-       
+
        # 4. 因果关系分析
        causality = skyborn.liang_causality(
            ds['temperature'].values,
            ds['pressure'].values
        )
-       
+
        # 5. 保存结果
        results = xr.Dataset({
            'temperature_gradient': temp_grad,
            'causality_strength': (['time'], causality)
        })
        results.to_netcdf(f"{output_dir}/analysis_results.nc")
-       
+
        return results
 
 最佳实践
@@ -236,10 +236,10 @@ ERA5 数据处理
 
    # 对于大型数据集，使用 dask
    import dask.array as da
-   
+
    # 延迟加载数据
    ds = xr.open_dataset('large_file.nc', chunks={'time': 100})
-   
+
    # 使用 dask 处理
    result = skyborn.calculate_gradient(ds['temperature'], 'latitude')
    result = result.compute()  # 执行计算
@@ -250,7 +250,7 @@ ERA5 数据处理
 .. code-block:: python
 
    from skyborn.conversion import GribToNetCDFError
-   
+
    try:
        skyborn.grib2nc('input.grib', 'output.nc')
    except GribToNetCDFError as e:

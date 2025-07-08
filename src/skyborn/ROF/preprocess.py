@@ -43,7 +43,9 @@ class PreProcess:
 
         self.nt = y.shape[0]
 
-    def extract_Z2(self, method: Literal['regular'] = 'regular', frac: float = 0.5) -> Tuple[np.ndarray, np.ndarray]:
+    def extract_Z2(
+        self, method: Literal["regular"] = "regular", frac: float = 0.5
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         This function is used to split a big sample Z (dimension: nz x p, containing nz iid realisation of a random
         vector of size p) into two samples Z1 and Z2 (respectively of dimension nz1 x p and nz2 x p, with
@@ -61,7 +63,7 @@ class PreProcess:
         nz = self.Z.shape[1]
         ind_z2 = np.zeros(nz)
 
-        if method == 'regular':
+        if method == "regular":
             # if frac = 0.5 ix would be [1, 3, 5, ..., ], so gets the index
             # for every two points
             # -1 is because python starts index at 0
@@ -70,11 +72,13 @@ class PreProcess:
             Z2 = self.Z[:, ind_z2 == 1]
             Z1 = self.Z[:, ind_z2 == 0]
         else:
-            raise NotImplementedError('Method not implemented yet')
+            raise NotImplementedError("Method not implemented yet")
 
         return Z1, Z2
 
-    def proj_fullrank(self, Z1: np.ndarray, Z2: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def proj_fullrank(
+        self, Z1: np.ndarray, Z2: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         This function provides a projection matrix U that can be applied to y, X, Z1 and Z2 to ensure its covariance
         matrix to be full-ranked. Uses variables defined in 'self', Z1 and Z2 computed in 'extract_Z2' method.
@@ -99,7 +103,7 @@ class PreProcess:
         u, d = speco(M)
 
         # (nt-1) first eigenvectors (ie the ones corresponding to non-zero eigenvalues)
-        U = u[:, :self.nt-1].T
+        U = u[:, : self.nt - 1].T
 
         # Project all input data
         yc = np.dot(U, self.y)
@@ -109,8 +113,13 @@ class PreProcess:
 
         return yc, Xc, Z1c, Z2c
 
-    def creg(self, X: np.ndarray, method: Literal['ledoit', 'specified'] = 'ledoit',
-             alpha1: float = 1e-10, alpha2: float = 1) -> np.ndarray:
+    def creg(
+        self,
+        X: np.ndarray,
+        method: Literal["ledoit", "specified"] = "ledoit",
+        alpha1: float = 1e-10,
+        alpha2: float = 1,
+    ) -> np.ndarray:
         """
         This function compute the regularised covariance matrix estimate following the equation
         'Cr = alpha1 * Ip + alpha2 * CE' where alpha1 and alpha2 are parameters Ip is the p x p identity matrix and CE
@@ -136,7 +145,7 @@ class PreProcess:
 
         # method for the regularised covariance matrix estimate as introduced by Ledoit & Wolf (2004) more specifically
         # on pages 379-380
-        if method == 'ledoit':
+        if method == "ledoit":
             m = np.trace(np.dot(CE, Ip)) / p  # first estimate in L&W
             XP = CE - m * Ip
             d2 = np.trace(np.dot(XP, XP.T)) / p  # second estimate in L&W
@@ -148,15 +157,15 @@ class PreProcess:
                 Mi = np.dot(Xi.T, Xi)
                 bt[i] = np.trace(np.dot((Mi - CE), (Mi - CE).T)) / p
 
-            bb2 = (1. / n ** 2.) * bt.sum()
+            bb2 = (1.0 / n**2.0) * bt.sum()
             b2 = min(bb2, d2)  # third estimate in L&W
             a2 = d2 - b2  # fourth estimate in L&W
 
-            alpha1 = (b2 * m / d2)
-            alpha2 = (a2 / d2)
+            alpha1 = b2 * m / d2
+            alpha2 = a2 / d2
 
-        elif method != 'specified':
-            raise NotImplementedError('Method not implemented yet')
+        elif method != "specified":
+            raise NotImplementedError("Method not implemented yet")
 
         Cr = alpha1 * Ip + alpha2 * CE
 
