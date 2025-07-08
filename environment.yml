@@ -9,4 +9,4 @@ dependencies:
   - pytest
   - pip
   - pip:
-    - -e .
+      - -e .
