@@ -135,7 +135,7 @@ def curved_quiver(
     v = ds[v].data
 
     # https://scitools.org.uk/cartopy/docs/latest/gallery/miscellanea/logo.html#sphx-glr-gallery-miscellanea-logo-py
-    if ax == None:
+    if ax is None:
         ax = plt.gca()
     if type(transform).__name__ == "PlateCarree":
         transform = transform._as_mpl_transform(ax)
