@@ -6,6 +6,7 @@ This script builds both English and Chinese versions of the documentation
 using Sphinx with proper configuration for each language.
 """
 
+import argparse
 import sys
 import subprocess
 import shutil
@@ -74,7 +75,7 @@ def build_language(lang_code):
     """Build documentation for a specific language."""
     lang_name = LANGUAGES[lang_code]
     source_path = SOURCE_DIR / lang_code
-    output_path = BUILD_DIR / "html" / lang_code
+    output_path = BUILD_DIR / lang_code / "html"
     
     print(f"\nBuilding {lang_name} documentation...")
     print(f"Source: {source_path}")
@@ -148,12 +149,12 @@ def create_index_page():
     <p>Select your preferred language / 选择您的语言</p>
     
     <div class="language-selector">
-        <a href="html/en/index.html" class="language-option">
+        <a href="en/html/index.html" class="language-option">
             <div class="language-title">English</div>
             <div class="language-desc">English Documentation</div>
         </a>
         
-        <a href="html/zh_CN/index.html" class="language-option">
+        <a href="zh_CN/html/index.html" class="language-option">
             <div class="language-title">中文</div>
             <div class="language-desc">中文文档</div>
         </a>
@@ -173,6 +174,14 @@ def create_index_page():
 
 def main():
     """Main build function."""
+    parser = argparse.ArgumentParser(description='Build Skyborn documentation')
+    parser.add_argument('--lang', choices=['en', 'zh_CN'], 
+                       help='Build specific language only')
+    parser.add_argument('--clean', action='store_true',
+                       help='Clean build directory before building')
+    
+    args = parser.parse_args()
+    
     print("🚀 Building Skyborn Multi-language Documentation")
     print("=" * 50)
     
@@ -180,29 +189,38 @@ def main():
     if not check_dependencies():
         sys.exit(1)
     
-    # Clean build directory
-    clean_build()
+    # Clean build directory if requested
+    if args.clean:
+        clean_build()
+    
+    # Build specific language or all languages
+    if args.lang:
+        languages_to_build = [args.lang]
+    else:
+        languages_to_build = list(LANGUAGES.keys())
     
     # Build each language
     success_count = 0
-    for lang_code in LANGUAGES:
+    for lang_code in languages_to_build:
         if build_language(lang_code):
             success_count += 1
     
-    # Create main index page
-    create_index_page()
+    # Create main index page if building all languages
+    if not args.lang:
+        create_index_page()
     
     # Summary
     print("\n" + "=" * 50)
     print("📊 Build Summary:")
-    print(f"   Languages built: {success_count}/{len(LANGUAGES)}")
+    print(f"   Languages built: {success_count}/{len(languages_to_build)}")
     
-    if success_count == len(LANGUAGES):
+    if success_count == len(languages_to_build):
         print("🎉 All documentation built successfully!")
-        print("\n📖 View documentation:")
-        print(f"   Main page: file://{BUILD_DIR.absolute()}/index.html")
-        print(f"   English:   file://{BUILD_DIR.absolute()}/html/en/index.html")
-        print(f"   Chinese:   file://{BUILD_DIR.absolute()}/html/zh_CN/index.html")
+        if not args.lang:
+            print("\n📖 View documentation:")
+            print(f"   Main page: file://{BUILD_DIR.absolute()}/index.html")
+        print(f"   English:   file://{BUILD_DIR.absolute()}/en/html/index.html")
+        print(f"   Chinese:   file://{BUILD_DIR.absolute()}/zh_CN/html/index.html")
     else:
         print("⚠️  Some builds failed. Check the output above for details.")
         sys.exit(1)
