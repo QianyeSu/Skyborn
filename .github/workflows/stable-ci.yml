@@ -5,9 +5,14 @@ name: Stable CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]  # 只在推送到 main 时运行
+    paths:
+      - 'src/**'           # 源代码变化
+      - 'tests/**'         # 测试代码变化
+      - 'requirements*.txt' # 依赖变化
+      - 'pyproject.toml'   # 项目配置变化
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
