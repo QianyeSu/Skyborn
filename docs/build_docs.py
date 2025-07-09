@@ -11,6 +11,7 @@ import os
 import sys
 import subprocess
 import shutil
+import re
 from pathlib import Path
 
 # Set proper encoding for Windows
@@ -20,6 +21,22 @@ os.environ['PYTHONIOENCODING'] = 'utf-8'
 DOCS_DIR = Path(__file__).parent
 SOURCE_DIR = DOCS_DIR / "source"
 BUILD_DIR = DOCS_DIR / "build" / "html"
+
+
+def get_version_from_init():
+    """Get version from skyborn/__init__.py"""
+    init_file = DOCS_DIR.parent / "src" / "skyborn" / "__init__.py"
+
+    if init_file.exists():
+        with open(init_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+            # Find the version line
+            version_match = re.search(
+                r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+            if version_match:
+                return version_match.group(1)
+
+    return "0.3.7"  # fallback version
 
 
 def run_command(cmd, cwd=None):
@@ -80,17 +97,46 @@ def clean_build():
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def copy_entrance_page():
-    """Copy the entrance page to the build directory."""
+def setup_entrance_page():
+    """Setup entrance page as index.html and rename original index.html to documentation.html."""
     entrance_source = SOURCE_DIR / "entrance.html"
-    entrance_dest = BUILD_DIR / "entrance.html"
+    original_index = BUILD_DIR / "index.html"
+    documentation_page = BUILD_DIR / "documentation.html"
 
     if entrance_source.exists():
-        print("Copying entrance page...")
-        shutil.copy2(entrance_source, entrance_dest)
-        print(f"✅ Entrance page copied to {entrance_dest}")
+        print("Setting up entrance page as main index...")
+
+        # 1. If the original index.html exists, rename it to documentation.html
+        if original_index.exists():
+            print("Renaming original index.html to documentation.html...")
+            shutil.move(str(original_index), str(documentation_page))
+            print(f"✅ Original documentation moved to {documentation_page}")
+
+        # 2. Read entrance.html and update version information
+        with open(entrance_source, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Get current version
+        current_version = get_version_from_init()
+
+        # Update version information
+        content = re.sub(
+            r'Version\s+[\d\.]+',
+            f'Version {current_version}',
+            content
+        )
+
+        # 3. Write the new index.html
+        with open(original_index, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        print(
+            f"✅ Entrance page set as main index with version {current_version}: {original_index}")
+
+        return True
     else:
         print("⚠️  Entrance page not found, skipping...")
+        return False
 
 
 def build_documentation():
@@ -125,11 +171,11 @@ def build_documentation():
         )
         print("✅ Documentation built successfully!")
 
-        # Copy entrance page
-        copy_entrance_page()
+        # Setup entrance page as main index
+        setup_entrance_page()
 
-        print(f"   Open: {BUILD_DIR}/entrance.html (Entry Page)")
-        print(f"   Open: {BUILD_DIR}/index.html (Documentation)")
+        print(f"   Open: {BUILD_DIR}/index.html (Entry Page)")
+        print(f"   Open: {BUILD_DIR}/documentation.html (Documentation)")
         return True
     except subprocess.CalledProcessError as e:
         print("❌ Failed to build documentation")
@@ -161,11 +207,11 @@ def main():
 
     # Build documentation
     if build_documentation():
-        copy_entrance_page()
         print("\n" + "=" * 40)
         print("🎉 Documentation built successfully!")
-        print(f"🚪 Entry Page: file://{BUILD_DIR.absolute()}/entrance.html")
-        print(f"📖 Documentation: file://{BUILD_DIR.absolute()}/index.html")
+        print(f"🚪 Entry Page: file://{BUILD_DIR.absolute()}/index.html")
+        print(
+            f"📖 Documentation: file://{BUILD_DIR.absolute()}/documentation.html")
     else:
         print("\n" + "=" * 40)
         print("⚠️  Build failed. Check the output above for details.")
