@@ -12,7 +12,7 @@ dynamic = [
 description = "Atmospheric science research utilities"
 readme = "README.md"
 authors = [{ name = "Qianye Su", email = "suqianye2000@gmail.com" }]
-license = { file = "LICENSE.txt" }
+license = { file = "LICENSE" }
 requires-python = ">=3.9"
 keywords = [
     "atmospheric-science",
