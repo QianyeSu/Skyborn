@@ -80,6 +80,19 @@ def clean_build():
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def copy_entrance_page():
+    """Copy the entrance page to the build directory."""
+    entrance_source = SOURCE_DIR / "entrance.html"
+    entrance_dest = BUILD_DIR / "entrance.html"
+
+    if entrance_source.exists():
+        print("Copying entrance page...")
+        shutil.copy2(entrance_source, entrance_dest)
+        print(f"✅ Entrance page copied to {entrance_dest}")
+    else:
+        print("⚠️  Entrance page not found, skipping...")
+
+
 def build_documentation():
     """Build the documentation."""
     print("\nBuilding Skyborn documentation...")
@@ -111,7 +124,12 @@ def build_documentation():
             check=True
         )
         print("✅ Documentation built successfully!")
-        print(f"   Open: {BUILD_DIR}/index.html")
+
+        # Copy entrance page
+        copy_entrance_page()
+
+        print(f"   Open: {BUILD_DIR}/entrance.html (Entry Page)")
+        print(f"   Open: {BUILD_DIR}/index.html (Documentation)")
         return True
     except subprocess.CalledProcessError as e:
         print("❌ Failed to build documentation")
@@ -143,10 +161,11 @@ def main():
 
     # Build documentation
     if build_documentation():
+        copy_entrance_page()
         print("\n" + "=" * 40)
         print("🎉 Documentation built successfully!")
-        print(
-            f"📖 View documentation: file://{BUILD_DIR.absolute()}/index.html")
+        print(f"🚪 Entry Page: file://{BUILD_DIR.absolute()}/entrance.html")
+        print(f"📖 Documentation: file://{BUILD_DIR.absolute()}/index.html")
     else:
         print("\n" + "=" * 40)
         print("⚠️  Build failed. Check the output above for details.")

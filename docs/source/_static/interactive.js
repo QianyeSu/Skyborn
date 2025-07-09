@@ -93,6 +93,74 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // ========== Fullscreen Animation =========
+    function addFullscreenAnimation() {
+        const fullscreenBtn = document.querySelector('.bd-header-fullscreen');
+
+        if (fullscreenBtn) {
+            fullscreenBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+
+                // Create loading state for button
+                const originalText = this.innerHTML;
+                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                this.style.pointerEvents = 'none';
+
+                // Create overlay for smooth transition
+                const overlay = document.createElement('div');
+                overlay.style.position = 'fixed';
+                overlay.style.top = '0';
+                overlay.style.left = '0';
+                overlay.style.width = '100%';
+                overlay.style.height = '100%';
+                overlay.style.background = 'rgba(0, 0, 0, 0.8)';
+                overlay.style.zIndex = '9998';
+                overlay.style.opacity = '0';
+                overlay.style.transition = 'opacity 0.3s ease';
+                document.body.appendChild(overlay);
+
+                // Animate overlay appearance
+                setTimeout(() => {
+                    overlay.style.opacity = '1';
+                }, 10);
+
+                // Scale animation for page content
+                const mainContent = document.querySelector('.bd-container');
+                if (mainContent) {
+                    mainContent.style.transition = 'transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+                    mainContent.style.transform = 'scale(0.95)';
+                }
+
+                // Simulate fullscreen toggle after animation
+                setTimeout(() => {
+                    // Remove overlay
+                    overlay.style.opacity = '0';
+                    setTimeout(() => {
+                        overlay.remove();
+                    }, 300);
+
+                    // Reset button state
+                    this.innerHTML = originalText;
+                    this.style.pointerEvents = 'auto';
+
+                    // Reset content scale
+                    if (mainContent) {
+                        mainContent.style.transform = 'scale(1)';
+                    }
+
+                    // Toggle actual fullscreen
+                    if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen().catch(err => {
+                            console.log('Fullscreen request failed:', err);
+                        });
+                    } else {
+                        document.exitFullscreen();
+                    }
+                }, 600);
+            });
+        }
+    }
+
     // ========== Enhanced Image Hover 3D Effects ==========
     function addImageEffects() {
         const images = document.querySelectorAll('.nboutput img, .cell_output img');
@@ -282,6 +350,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========== Initialize All Effects ==========
     function initializeEffects() {
         addButtonAnimation();
+        addFullscreenAnimation();
         addImageEffects();
         addNavigationEffects();
         addCodeBlockEffects();
