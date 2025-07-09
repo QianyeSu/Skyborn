@@ -51,6 +51,20 @@ jobs:
           echo "📚 Building documentation with custom script..."
           python build_docs.py
           echo "✅ Documentation build completed"
+          echo "📁 Checking final structure:"
+          ls -la build/html/
+          echo "📄 Checking if entrance.html became index.html:"
+          if [ -f "build/html/index.html" ]; then
+            echo "✅ index.html exists"
+            head -n 20 build/html/index.html
+          else
+            echo "❌ index.html not found"
+          fi
+          if [ -f "build/html/documentation.html" ]; then
+            echo "✅ documentation.html exists"
+          else
+            echo "❌ documentation.html not found"
+          fi
 
       - name: Prepare deployment structure 📁
         run: |
