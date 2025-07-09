@@ -1,4 +1,5 @@
 # -- Path setup --
+import datetime
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../../src'))
@@ -14,6 +15,10 @@ sys.path.insert(0, os.path.abspath('../../src'))
 project = 'Skyborn'
 copyright = '2025, Qianye Su'
 author = 'Qianye Su'
+
+# Add last updated date
+today = datetime.date.today()
+html_last_updated_fmt = '%Y-%m-%d'
 
 # Dynamic version import with fallback
 try:
@@ -89,13 +94,19 @@ html_theme_options = {
     "use_source_button": True,
     "use_issues_button": True,
     "use_download_button": True,
-    "path_to_docs": "docs",
+    "use_fullscreen_button": True,
+    "path_to_docs": "docs/source",
     "repository_branch": "main",
     "launch_buttons": {
         "notebook_interface": "jupyterlab",
         "binderhub_url": "https://mybinder.org"
     },
     "show_navbar_depth": 2,
+    "show_toc_level": 2,
+    "navigation_with_keys": False,
+    "collapse_navigation": False,
+    "use_sidenotes": True,
+    "show_last_updated": True,
 }
 
 # -- Extension configuration -------------------------------------------------
@@ -216,6 +227,10 @@ html_favicon = None
 # Show source links for notebooks
 html_show_sourcelink = True
 html_copy_source = True
+
+# Enable last updated date display
+html_show_sphinx = True
+html_show_copyright = True
 
 # Configure copy button
 copybutton_prompt_text = r">>> |\.\.\. |\$ |In \[\d*\]: | {2,5}\.\.\.: | {5,8}: "
