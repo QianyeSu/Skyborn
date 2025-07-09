@@ -83,7 +83,7 @@ html_js_files = [
 
 # Theme options for sphinx_book_theme
 html_theme_options = {
-    "repository_url": "https://github.com/yourusername/skyborn",
+    "repository_url": "https://github.com/QianyeSu/skyborn",
     "use_repository_button": True,
     "use_edit_page_button": True,
     "use_source_button": True,

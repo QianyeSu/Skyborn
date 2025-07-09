@@ -25,7 +25,7 @@ For development or to get the latest features:
 .. code-block:: bash
 
    # Clone the repository
-   git clone https://github.com/your-username/skyborn.git
+   git clone https://github.com/QianyeSu/skyborn.git
    cd skyborn
 
    # Install in development mode
@@ -38,7 +38,7 @@ Install directly from GitHub:
 
 .. code-block:: bash
 
-   pip install git+https://github.com/your-username/skyborn.git
+   pip install git+https://github.com/QianyeSu/skyborn.git
 
 With Optional Dependencies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
