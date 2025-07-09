@@ -1197,3 +1197,60 @@ code {
 }
 
 /* ========== Enhanced Button Styles ========== */
+
+/* ========== Header Logo/Title Click to Home ========== */
+/* 左上角标题点击回到首页功能 */
+.bd-header .navbar-brand,
+.bd-header .navbar-brand:hover,
+.bd-header .navbar-brand:focus,
+.bd-header .navbar-brand:active {
+    color: white !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+}
+
+/* 点击效果 */
+.bd-header .navbar-brand:hover {
+    transform: scale(1.05) !important;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.8) !important;
+}
+
+/* 添加JavaScript功能，让标题点击回到首页 */
+.bd-header .navbar-brand {
+    position: relative;
+}
+
+.bd-header .navbar-brand::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: white;
+    transition: width 0.3s ease;
+}
+
+.bd-header .navbar-brand:hover::after {
+    width: 100%;
+}
+
+/* 确保标题可点击 */
+.bd-header .navbar-brand {
+    pointer-events: auto !important;
+}
+
+/* 标题文字样式增强 */
+.bd-header .navbar-brand .navbar-text {
+    color: white !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.5px !important;
+}
+
+/* 响应式标题样式 */
+@media (max-width: 768px) {
+    .bd-header .navbar-brand {
+        font-size: 1.1rem !important;
+    }
+}

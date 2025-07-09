@@ -347,6 +347,36 @@ document.addEventListener('DOMContentLoaded', function() {
         document.head.appendChild(style);
     }
 
+    // ========== Header Logo Click to Home ==========
+    function addLogoClickToHome() {
+        const logo = document.querySelector('.bd-header .navbar-brand');
+
+        if (logo) {
+            logo.addEventListener('click', function(e) {
+                e.preventDefault();
+
+                // 添加点击动画
+                this.style.transform = 'scale(0.95)';
+                this.style.transition = 'transform 0.1s ease';
+
+                // 重置动画
+                setTimeout(() => {
+                    this.style.transform = 'scale(1)';
+                }, 100);
+
+                // 导航到首页
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 200);
+            });
+
+            // 添加鼠标悬停效果
+            logo.addEventListener('mouseenter', function() {
+                this.style.cursor = 'pointer';
+            });
+        }
+    }
+
     // ========== Initialize All Effects ==========
     function initializeEffects() {
         addButtonAnimation();
@@ -357,6 +387,7 @@ document.addEventListener('DOMContentLoaded', function() {
         addSmoothScrolling();
         addScrollProgress();
         addThemeTransitions();
+        addLogoClickToHome();
 
         console.log('🎉 Skyborn Documentation interactive effects loaded!');
     }
