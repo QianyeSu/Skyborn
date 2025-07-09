@@ -43,7 +43,7 @@ jobs:
         run: |
           cd docs
           echo "📚 Building documentation..."
-          sphinx-build -b html source/en build/html -v
+          sphinx-build -b html source build/html -v
           echo "✅ Documentation build completed"
           ls -la build/html/
 
@@ -51,22 +51,16 @@ jobs:
         run: |
           echo "🔍 Checking build structure..."
           pwd
-          find . -name "build" -type d 2>/dev/null || echo "No build directories found"
-          find . -name "*.html" | head -10 || echo "No HTML files found"
           ls -la docs/ || echo "docs directory not found"
           ls -la docs/build/ || echo "docs/build directory not found"
-          ls -la docs/build/en/ || echo "docs/build/en directory not found"
-          ls -la docs/build/en/html/ || echo "docs/build/en/html directory not found"
+          ls -la docs/build/html/ || echo "docs/build/html directory not found"
 
       - name: Prepare GitHub Pages
         run: |
           mkdir -p _site
-
-          # Copy documentation as main site
-          echo "✅ English documentation found"
+          echo "✅ Documentation found"
           cp -r docs/build/html/* _site/
           echo "✅ Documentation copied to site root"
-
           echo "📁 Final site structure:"
           find _site -type f -name "*.html" | head -10
           echo "📊 Site size:"
