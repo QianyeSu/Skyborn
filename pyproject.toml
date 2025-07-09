@@ -39,11 +39,8 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/QianyeSu/Skyborn"
 "Documentation" = "https://qianyesu.github.io/Skyborn/"
-"Documentation (English)" = "https://qianyesu.github.io/Skyborn/en/"
-"Documentation (Chinese)" = "https://qianyesu.github.io/Skyborn/zh_CN/"
 "Repository" = "https://github.com/QianyeSu/Skyborn"
 "Bug Tracker" = "https://github.com/QianyeSu/Skyborn/issues"
-"Changelog" = "https://qianyesu.github.io/Skyborn/en/changelog.html"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
