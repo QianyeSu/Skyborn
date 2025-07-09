@@ -48,8 +48,8 @@ jobs:
       - name: Build documentation 📚
         run: |
           cd docs
-          echo "📚 Building documentation..."
-          sphinx-build -b html source build/html -v
+          echo "📚 Building documentation with custom script..."
+          python build_docs.py
           echo "✅ Documentation build completed"
 
       - name: Prepare deployment structure 📁
