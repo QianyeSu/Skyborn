@@ -1,6 +1,8 @@
+# Documentation build dependencies for Skyborn
 sphinx>=5.0.0
-sphinx-rtd-theme>=1.0.0
-myst-parser>=0.18.0
+sphinx-book-theme>=1.0.0
+myst-nb>=0.17.0
 sphinx-autodoc-typehints>=1.0.0
-nbsphinx>=0.8.0
-sphinx-autosummary-accessors>=2023.4.0
+sphinx-copybutton>=0.5.0
+jupyter-book>=0.15.0
+toml>=0.10.0

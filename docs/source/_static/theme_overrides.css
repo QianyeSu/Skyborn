@@ -1,0 +1,8 @@
+/* Minimal RTD Theme overrides - just for wider content on large screens */
+
+/* Only increase max-width on very large screens */
+@media screen and (min-width: 1400px) {
+    .wy-nav-content {
+        max-width: 1200px;
+    }
+}

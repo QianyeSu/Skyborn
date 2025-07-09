@@ -1,0 +1,741 @@
+/* Custom CSS for Sphinx Book Theme - Blue theme with animations */
+
+/* ========== 主题颜色配置 ========== */
+:root {
+    --primary-color: #2563eb;      /* 蓝色主色调 */
+    --secondary-color: #1e40af;    /* 深蓝色 */
+    --accent-color: #3b82f6;       /* 亮蓝色 */
+    --light-blue: #dbeafe;         /* 浅蓝色背景 */
+    --dark-blue: #1e3a8a;          /* 深蓝色 */
+    --gradient-blue: linear-gradient(135deg, #2563eb, #3b82f6);
+    --gradient-blue-deep: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #3b82f6 100%);
+    --gradient-blue-light: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 50%, #93c5fd 100%);
+    --shadow-blue: rgba(37, 99, 235, 0.3);
+    --shadow-blue-light: rgba(37, 99, 235, 0.15);
+    --shadow-blue-hover: rgba(37, 99, 235, 0.5);
+}
+
+/* ========== 页面整体样式 ========== */
+.bd-main .bd-content .bd-article-container {
+    background: var(--gradient-blue-light);
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 8px 30px var(--shadow-blue-light),
+                0 2px 8px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.bd-main .bd-content .bd-article-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--gradient-blue-deep);
+    z-index: 1;
+}
+
+/* ========== 导航栏样式 ========== */
+.bd-header {
+    background: var(--gradient-blue-deep) !important;
+    border-bottom: 3px solid var(--dark-blue);
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 20px var(--shadow-blue);
+}
+
+.bd-header:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 35px var(--shadow-blue-hover);
+}
+
+/* ========== 头部按钮区域对齐 ========== */
+.bd-header .bd-header-article {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.bd-header .bd-header-article .bd-header-article__right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+    height: 100%;
+}
+
+/* 确保所有头部按钮垂直对齐 */
+.bd-navbar,
+.bd-navbar .navbar-nav,
+.bd-header .navbar-nav {
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+/* 头部按钮样式优化 */
+.bd-header .bd-header-article .btn,
+.bd-header .bd-header-article button,
+.bd-header .bd-header-article .bd-header-article__right > * {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 8px !important;
+    color: white !important;
+    padding: 0.4rem 0.8rem !important;
+    font-size: 0.9rem !important;
+    transition: all 0.3s ease !important;
+    backdrop-filter: blur(10px) !important;
+    display: flex !important;
+    align-items: center !important;
+    text-decoration: none !important;
+}
+
+/* 移除light/dark模式切换按钮 */
+.theme-switch-button,
+button[data-mode-switch],
+.bd-navbar .navbar-nav .theme-switcher,
+.navbar-nav .nav-item .theme-switch,
+.bd-navbar .btn[title*="light"],
+.bd-navbar .btn[title*="dark"],
+.bd-navbar .btn[title*="mode"],
+.bd-header .btn[title*="light"],
+.bd-header .btn[title*="dark"],
+.bd-header .btn[title*="mode"],
+button.btn[title*="theme"],
+button[class*="theme"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+.bd-header .bd-header-article .btn:hover,
+.bd-header .bd-header-article button:hover,
+.bd-header .bd-header-article .bd-header-article__right > *:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(255, 255, 255, 0.2) !important;
+    color: white !important;
+}
+
+/* ========== 侧边栏样式 ========== */
+.bd-sidebar-primary {
+    background: var(--gradient-blue-light);
+    border-right: 3px solid white;
+    box-shadow: 4px 0 15px var(--shadow-blue-light);
+    position: relative;
+}
+
+.bd-sidebar-primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 3px;
+    height: 100%;
+    background: white;
+    z-index: 1;
+}
+
+.bd-sidebar-primary .bd-sidebar {
+    background: transparent;
+}
+
+/* 侧边栏所有文字加粗 */
+.bd-sidebar-primary,
+.bd-sidebar-primary a,
+.bd-sidebar-primary .toctree-l1 > a,
+.bd-sidebar-primary .toctree-l2 > a,
+.bd-sidebar-primary .caption,
+.bd-sidebar-primary .caption-text,
+.bd-sidebar-primary li,
+.bd-sidebar-primary p,
+.bd-sidebar-primary span {
+    font-weight: 700 !important; /* 使用更粗的字体 */
+}
+
+/* 侧边栏链接悬停效果 */
+.bd-sidebar-primary .toctree-l1 > a {
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    border-radius: 8px;
+    margin: 4px 8px;
+    padding: 8px 16px;
+    position: relative;
+    overflow: hidden;
+}
+
+.bd-sidebar-primary .toctree-l1 > a::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: var(--gradient-blue);
+    transition: left 0.4s ease;
+    z-index: -1;
+}
+
+.bd-sidebar-primary .toctree-l1 > a:hover::before {
+    left: 0;
+}
+
+.bd-sidebar-primary .toctree-l1 > a:hover {
+    color: white !important;
+    transform: translateX(8px) scale(1.02);
+    box-shadow: 0 6px 20px var(--shadow-blue);
+}
+
+/* ========== Notebook图片优化 ========== */
+.nboutput img,
+.cell_output img {
+    max-width: 85% !important;
+    height: auto !important;
+    display: block !important;
+    margin: 1.5rem auto !important;
+    border: 3px solid var(--light-blue);
+    border-radius: 16px;
+    padding: 15px;
+    background: var(--gradient-blue-light);
+    box-shadow: 0 10px 40px var(--shadow-blue-light),
+                0 4px 15px rgba(0, 0, 0, 0.1);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+    cursor: pointer;
+}
+
+.nboutput img::before,
+.cell_output img::before {
+    content: '';
+    position: absolute;
+    top: -3px;
+    left: -3px;
+    right: -3px;
+    bottom: -3px;
+    background: var(--gradient-blue-deep);
+    border-radius: 16px;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.nboutput img:hover::before,
+.cell_output img:hover::before {
+    opacity: 1;
+}
+
+.nboutput img:hover,
+.cell_output img:hover {
+    transform: scale(1.03) translateY(-5px);
+    box-shadow: 0 20px 60px var(--shadow-blue),
+                0 8px 25px rgba(0, 0, 0, 0.15);
+    border-color: var(--primary-color);
+}
+
+/* ========== 代码块样式 ========== */
+.nbinput .highlight pre,
+.nboutput .highlight pre,
+.cell_input .highlight pre,
+.cell_output .highlight pre {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    border-left: 4px solid var(--primary-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 4px 15px var(--shadow-blue-light),
+                0 2px 8px rgba(0, 0, 0, 0.05);
+    position: relative;
+    overflow: hidden;
+}
+
+.nbinput .highlight pre::before,
+.cell_input .highlight pre::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--gradient-blue-deep);
+    transform: scaleY(0);
+    transform-origin: bottom;
+    transition: transform 0.3s ease;
+}
+
+.nbinput .highlight pre:hover::before,
+.cell_input .highlight pre:hover::before {
+    transform: scaleY(1);
+}
+
+.nbinput .highlight pre:hover,
+.cell_input .highlight pre:hover {
+    transform: translateX(8px) translateY(-2px);
+    box-shadow: 0 8px 30px var(--shadow-blue),
+                0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* 输入单元格：蓝色主题 */
+.cell_input {
+    background: var(--gradient-blue-light);
+    border-left: 4px solid var(--primary-color);
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 4px 15px var(--shadow-blue-light);
+    position: relative;
+    overflow: hidden;
+}
+
+.cell_input::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transition: left 0.6s ease;
+}
+
+.cell_input:hover::before {
+    left: 100%;
+}
+
+.cell_input:hover {
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 12px 40px var(--shadow-blue),
+                0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* 输出单元格：蓝绿色主题 */
+.cell_output {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%);
+    border-left: 4px solid #10b981;
+    border-radius: 12px;
+    margin-bottom: 1.2rem;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.cell_output::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.6s ease;
+}
+
+.cell_output:hover::before {
+    left: 100%;
+}
+
+.cell_output:hover {
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 12px 40px rgba(16, 185, 129, 0.3),
+                0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* ========== 按钮样式 ========== */
+.btn, .bd-button {
+    background: var(--gradient-blue-deep) !important;
+    border: none !important;
+    border-radius: 10px !important;
+    color: white !important;
+    padding: 0.6rem 1.2rem !important;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    box-shadow: 0 4px 15px var(--shadow-blue) !important;
+    font-weight: 500 !important;
+}
+
+.btn::before, .bd-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.6s ease;
+}
+
+.btn:hover::before, .bd-button:hover::before {
+    left: 100%;
+}
+
+.btn:hover, .bd-button:hover {
+    transform: translateY(-3px) scale(1.05) !important;
+    box-shadow: 0 12px 35px var(--shadow-blue-hover) !important;
+    color: white !important;
+}
+
+/* 按钮点击动画 */
+.btn:active, .bd-button:active {
+    transform: translateY(-1px) scale(1.02) !important;
+    box-shadow: 0 6px 20px var(--shadow-blue) !important;
+}
+
+/* ========== 链接样式 ========== */
+a {
+    color: var(--primary-color) !important;
+    text-decoration: none !important;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+    position: relative !important;
+}
+
+a::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--gradient-blue);
+    transition: width 0.3s ease;
+}
+
+a:hover::after {
+    width: 100%;
+}
+
+a:hover {
+    color: var(--secondary-color) !important;
+    text-shadow: 0 0 12px var(--shadow-blue) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* ========== 标题样式 ========== */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--secondary-color) !important;
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.1) !important;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+    position: relative !important;
+}
+
+h1::before, h2::before, h3::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 0;
+    background: var(--gradient-blue-deep);
+    transition: height 0.3s ease;
+    border-radius: 2px;
+}
+
+h1:hover::before, h2:hover::before, h3:hover::before {
+    height: 70%;
+}
+
+h1:hover, h2:hover, h3:hover {
+    transform: translateX(8px) !important;
+    color: var(--primary-color) !important;
+    text-shadow: 0 4px 12px var(--shadow-blue) !important;
+}
+
+/* ========== 响应式设计 ========== */
+@media (max-width: 768px) {
+    .nboutput img,
+    .cell_output img {
+        max-width: 95% !important;
+        margin: 0.5rem auto !important;
+    }
+
+    .bd-main .bd-content .bd-article-container {
+        padding: 1rem;
+    }
+}
+
+/* ========== 动画关键帧 ========== */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+/* 页面加载动画 */
+.bd-article {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+/* Notebook单元格出现动画 */
+.cell {
+    animation: fadeInUp 0.4s ease-out;
+    margin-bottom: 1.8rem;
+}
+
+/* ========== 滚动条样式 ========== */
+/* 整体滚动条 */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+/* 滚动条轨道 */
+::-webkit-scrollbar-track {
+    background: var(--light-blue);
+    border-radius: 6px;
+}
+
+/* 滚动条滑块 */
+::-webkit-scrollbar-thumb {
+    background: #6b7280 !important; /* 灰色滑块 */
+    border-radius: 6px;
+    border: 2px solid var(--light-blue);
+    transition: background 0.3s ease;
+}
+
+/* 滚动条滑块悬停效果 */
+::-webkit-scrollbar-thumb:hover {
+    background: #4b5563 !important; /* 深灰色悬停 */
+}
+
+/* 侧边栏专用滚动条 */
+.bd-sidebar-primary ::-webkit-scrollbar {
+    width: 8px;
+}
+
+.bd-sidebar-primary ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.bd-sidebar-primary ::-webkit-scrollbar-thumb {
+    background: #9ca3af !important; /* 浅灰色滑块 */
+    border-radius: 4px;
+    border: none;
+}
+
+.bd-sidebar-primary ::-webkit-scrollbar-thumb:hover {
+    background: #6b7280 !important; /* 深灰色悬停 */
+}
+
+/* Firefox 滚动条样式 */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #6b7280 var(--light-blue);
+}
+
+.bd-sidebar-primary * {
+    scrollbar-color: #9ca3af transparent;
+}
+
+/* ========== 文本溢出处理 ========== */
+/* 防止文本超出容器 */
+.bd-content {
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+}
+
+/* API文档和代码文档的文本处理 */
+.sig-name,
+.sig-prename,
+.highlight .n,
+.highlight .na,
+.highlight .nb,
+.highlight .nc,
+.highlight .no,
+.highlight .nd,
+.highlight .ni,
+.highlight .ne,
+.highlight .nf,
+.highlight .nl,
+.highlight .nn,
+.highlight .nt,
+.highlight .nv {
+    word-wrap: break-word !important;
+    word-break: break-all !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 函数签名和参数的处理 */
+.sig-param {
+    word-wrap: break-word !important;
+    word-break: break-all !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+    display: inline-block !important;
+}
+
+/* 代码块内的长行处理 */
+.highlight pre,
+.highlight code,
+pre,
+code {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    word-break: break-all !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    scrollbar-width: thin !important;
+}
+
+/* 表格内容的处理 */
+table {
+    table-layout: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    display: block !important;
+    white-space: nowrap !important;
+}
+
+table td,
+table th {
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    max-width: 200px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    vertical-align: top !important;
+    padding: 8px !important;
+}
+
+/* 长URL和链接的处理 */
+a[href] {
+    word-wrap: break-word !important;
+    word-break: break-all !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+}
+
+/* 文档标题和标签的处理 */
+.sig-prename,
+.descname {
+    word-wrap: break-word !important;
+    word-break: break-all !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+}
+
+/* 参数列表的处理 */
+.field-list,
+.field-list .field-name,
+.field-list .field-body {
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+}
+
+/* Notebook单元格内容的特殊处理 */
+.nbinput .highlight pre,
+.nboutput .highlight pre,
+.cell_input .highlight pre,
+.cell_output .highlight pre {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    word-break: break-all !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: var(--primary-color) var(--light-blue) !important;
+}
+
+/* 内联代码的处理 */
+code {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    word-break: break-all !important;
+    overflow-wrap: break-word !important;
+    background-color: #f8fafc !important;
+    padding: 2px 4px !important;
+    border-radius: 4px !important;
+    border: 1px solid var(--light-blue) !important;
+}
+
+/* 警告和提示框的文本处理 */
+.admonition,
+.attention,
+.caution,
+.danger,
+.error,
+.hint,
+.important,
+.note,
+.seealso,
+.tip,
+.warning {
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+}
+
+/* 修复API文档中的长函数名 */
+.signature {
+    word-wrap: break-word !important;
+    word-break: break-all !important;
+    overflow-wrap: break-word !important;
+    white-space: pre-wrap !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    padding: 10px !important;
+    border-radius: 6px !important;
+    border-left: 4px solid var(--primary-color) !important;
+    margin: 10px 0 !important;
+}
+
+/* 响应式表格 */
+.table-responsive {
+    display: block !important;
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+/* 确保容器不会超出视口 */
+.bd-article-container,
+.bd-content,
+.bd-main {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+}
+
+/* 移动设备上的特殊处理 */
+@media (max-width: 768px) {
+    table td,
+    table th {
+        max-width: 120px !important;
+        font-size: 0.9em !important;
+    }
+
+    .signature {
+        font-size: 0.8em !important;
+        padding: 8px !important;
+    }
+
+    code {
+        font-size: 0.85em !important;
+        padding: 1px 3px !important;
+    }
+}
