@@ -3,9 +3,9 @@
 [![PyPI version](https://badge.fury.io/py/skyborn.svg)](https://badge.fury.io/py/skyborn)
 [![License](https://img.shields.io/github/license/QianyeSu/Skyborn)](https://github.com/QianyeSu/Skyborn/blob/main/LICENSE)
 [![Tests](https://github.com/QianyeSu/Skyborn/actions/workflows/stable-ci.yml/badge.svg)](https://github.com/QianyeSu/Skyborn/actions/workflows/stable-ci.yml)
-[![Python versions](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)]
+[![Python versions](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)](https://pypi.org/project/skyborn/)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)](https://github.com/QianyeSu/Skyborn)
-[![Code style](https://img.shields.io/badge/code%20style-black-000000)](https://github.com/psf/black)
+[![Code style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://qianyesu.github.io/Skyborn/)
 
 Skyborn is a collection of functions I use in my general research, primarily for personal use.
