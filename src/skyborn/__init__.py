@@ -44,4 +44,4 @@ from . import ROF
 from . import conversion
 from . import calc
 
-__version__ = "0.3.7"  # Updated to version 0.3.6
+__version__ = "0.3.7"  # Updated to version 0.3.7
