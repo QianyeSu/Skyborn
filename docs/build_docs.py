@@ -120,6 +120,8 @@ def build_documentation():
             print(f"Output: {e.stdout}")
         if e.stderr:
             print(f"Error: {e.stderr}")
+
+
 def main():
     """Main build function."""
     parser = argparse.ArgumentParser(description='Build Skyborn documentation')
@@ -143,7 +145,8 @@ def main():
     if build_documentation():
         print("\n" + "=" * 40)
         print("🎉 Documentation built successfully!")
-        print(f"📖 View documentation: file://{BUILD_DIR.absolute()}/index.html")
+        print(
+            f"📖 View documentation: file://{BUILD_DIR.absolute()}/index.html")
     else:
         print("\n" + "=" * 40)
         print("⚠️  Build failed. Check the output above for details.")
