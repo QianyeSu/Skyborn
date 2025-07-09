@@ -1,0 +1,42 @@
+# GitHub language detection configuration
+
+# Ensure these files are properly recognized as code
+*.js linguist-language=JavaScript
+*.css linguist-language=CSS
+*.html linguist-language=HTML
+*.py linguist-language=Python
+
+# Include documentation code files in language statistics
+docs/**/*.js linguist-language=JavaScript
+docs/**/*.css linguist-language=CSS
+docs/**/*.html linguist-language=HTML
+
+# Exclude documentation files from language statistics
+*.md linguist-documentation
+*.rst linguist-language=reStructuredText
+*.txt linguist-documentation
+
+# Exclude generated files
+docs/build/** linguist-generated=true
+htmlcov/** linguist-generated=true
+*.egg-info/** linguist-generated=true
+__pycache__/** linguist-generated=true
+
+# Exclude test files from language statistics (optional)
+tests/** linguist-language=Python
+
+# Exclude configuration files
+*.yml linguist-language=YAML
+*.yaml linguist-language=YAML
+*.toml linguist-language=TOML
+*.json linguist-language=JSON
+*.ini linguist-language=INI
+
+# Exclude vendor/third-party files
+vendor/** linguist-vendored=true
+node_modules/** linguist-vendored=true
+
+# Set specific files as documentation
+LICENSE linguist-documentation
+CHANGELOG* linguist-documentation
+CONTRIBUTING* linguist-documentation
