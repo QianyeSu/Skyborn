@@ -6,9 +6,11 @@ dependencies:
   - python>=3.9
   - numpy
   - xarray
+  - matplotlib
+  - seaborn
   - pytest
   - pytest-cov
-  - eccodes  # For GRIB processing
+  - eccodes # For GRIB processing
   - pip
   - pip:
       - -e .
