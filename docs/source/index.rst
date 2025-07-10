@@ -7,7 +7,6 @@ Skyborn is a comprehensive Python package for climate data analysis, featuring a
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
 
    quickstart
    installation
