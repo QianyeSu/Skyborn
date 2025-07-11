@@ -17,10 +17,16 @@ build:
       - mkdir -p $READTHEDOCS_OUTPUT/html
       - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/ || echo "Copy failed, trying alternative structure"
       - ls -la docs/build/html/ || echo "Build directory listing failed"
-      - ls -la $READTHEDOCS_OUTPUT/html/ || echo "Output directopythry listing failed"
+      - ls -la $READTHEDOCS_OUTPUT/html/ || echo "Output directory listing failed"
 
 python:
   install:
     - requirements: requirements-docs.txt
     - method: pip
       path: .
+
+# sphinx configuration
+sphinx:
+  configuration: docs/source/conf.py
+  builder: html
+  fail_on_warning: false
