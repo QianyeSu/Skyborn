@@ -1248,15 +1248,68 @@ code {
     letter-spacing: 0.5px !important;
 }
 
-/* Logo图片样式 */
-.bd-header .navbar-brand img {
+/* Logo图片样式 - 增强悬停和点击效果 */
+.bd-header .navbar-brand img,
+.bd-sidebar-primary .navbar-brand img,
+.navbar-brand img {
+    cursor: pointer !important;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+    border-radius: 8px !important;
+}
+
+.bd-header .navbar-brand img:hover,
+.bd-sidebar-primary .navbar-brand img:hover,
+.navbar-brand img:hover {
+    transform: scale(1.02) translateY(-2px) !important;
+    filter: drop-shadow(0 1px 3px rgba(59, 130, 246, 0.3)) !important;
+    animation: logoGlow 0.6s ease-in-out !important;
+}
+
+.bd-header .navbar-brand img:active,
+.bd-sidebar-primary .navbar-brand img:active,
+.navbar-brand img:active {
+    transform: scale(0.95) !important;
+    transition: transform 0.1s ease !important;
+}
+
+/* 确保logo链接也可点击 */
+.bd-header .navbar-brand,
+.bd-sidebar-primary .navbar-brand,
+.navbar-brand {
     cursor: pointer !important;
     transition: all 0.3s ease !important;
 }
 
-.bd-header .navbar-brand img:hover {
-    transform: scale(1.1) !important;
-    filter: brightness(1.2) !important;
+.bd-header .navbar-brand:hover,
+.bd-sidebar-primary .navbar-brand:hover,
+.navbar-brand:hover {
+    transform: scale(1.05) !important;
+}
+
+/* Logo发光动画 - 渐变色光晕 */
+@keyframes logoGlow {
+    0%, 100% {
+        box-shadow: 0 0 0 rgba(59, 130, 246, 0),
+                    0 0 0 rgba(147, 197, 253, 0);
+    }
+    50% {
+        box-shadow: 0 0 2px rgba(59, 130, 246, 0.6),
+                    0 0 4px rgba(147, 197, 253, 0.3);
+    }
+}
+
+/* Logo点击涟漪动画 */
+@keyframes ripple {
+    to {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+/* 强制logo可点击样式 */
+.logo-clickable,
+.logo-clickable img {
+    cursor: pointer !important;
 }
 
 /* 响应式标题样式 */
