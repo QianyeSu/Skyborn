@@ -17,7 +17,7 @@ build:
       - mkdir -p $READTHEDOCS_OUTPUT/html
       - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/ || echo "Copy failed, trying alternative structure"
       - ls -la docs/build/html/ || echo "Build directory listing failed"
-      - ls -la $READTHEDOCS_OUTPUT/html/ || echo "Output directory listing failed"
+      - ls -la $READTHEDOCS_OUTPUT/html/ || echo "Output directopythry listing failed"
 
 python:
   install:
