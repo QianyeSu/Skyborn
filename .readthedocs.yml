@@ -22,7 +22,7 @@ python:
     - method: pip
       path: .
 
-# Required sphinx configuration (even for custom builds)
+# sphinx configuration
 sphinx:
   configuration: docs/source/conf.py
   builder: html
