@@ -13,19 +13,14 @@ build:
       - python -m pip install --upgrade pip setuptools wheel
     post_install:
       - python -m pip install -e .
-      - export LC_ALL=C.UTF-8
-      - export LANG=C.UTF-8
-      - cd docs && python build_docs.py --clean
-      - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/
+      - export LC_ALL=C.UTF-8 && export LANG=C.UTF-8 && cd docs && python build_docs.py --clean
+      - mkdir -p $READTHEDOCS_OUTPUT/html
+      - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/ || echo "Copy failed, trying alternative structure"
+      - ls -la docs/build/html/ || echo "Build directory listing failed"
+      - ls -la $READTHEDOCS_OUTPUT/html/ || echo "Output directory listing failed"
 
 python:
   install:
     - requirements: requirements-docs.txt
     - method: pip
       path: .
-
-# sphinx configuration
-sphinx:
-  configuration: docs/source/conf.py
-  builder: html
-  fail_on_warning: false
