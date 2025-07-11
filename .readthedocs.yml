@@ -4,30 +4,18 @@
 
 version: 2
 
-# Dummy sphinx configuration to satisfy Read the Docs requirements
-# But we set an invalid configuration path to prevent actual build
-sphinx:
-  configuration: docs/source/conf.py
-  builder: html
-  fail_on_warning: true
-
 build:
   os: ubuntu-22.04
   tools:
     python: "3.10"
-  jobs:
-    post_create_environment:
-      - python -m pip install --upgrade pip setuptools wheel
-    post_install:
-      - python -m pip install -e .
-      - export LC_ALL=C.UTF-8 && export LANG=C.UTF-8 && cd docs && python build_docs.py --clean
-      - mkdir -p $READTHEDOCS_OUTPUT/html
-      - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/ || echo "Copy failed, trying alternative structure"
-      - ls -la docs/build/html/ || echo "Build directory listing failed"
-      - ls -la $READTHEDOCS_OUTPUT/html/ || echo "Output directory listing failed"
-
-python:
-  install:
-    - requirements: requirements-docs.txt
-    - method: pip
-      path: .
+  commands:
+    # Install dependencies
+    - python -m pip install --upgrade pip setuptools wheel
+    - python -m pip install -r requirements-docs.txt
+    - python -m pip install -e .
+    # Build documentation with custom script
+    - export LC_ALL=C.UTF-8 && export LANG=C.UTF-8 && cd docs && python build_docs.py --clean
+    # Copy to output directory
+    - mkdir -p $READTHEDOCS_OUTPUT/html
+    - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/
+    - echo "✅ Custom build completed with particle effect homepage"
