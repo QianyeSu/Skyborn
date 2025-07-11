@@ -106,11 +106,33 @@ def setup_entrance_page():
     if entrance_source.exists():
         print("Setting up entrance page as main index...")
 
-        # 1. If the original index.html exists, rename it to documentation.html
+        # Check if the entrance page has already been set up (avoid duplicate processing)
+        if documentation_page.exists() and original_index.exists():
+            # Check if index.html is already the entrance page
+            try:
+                with open(original_index, 'r', encoding='utf-8') as f:
+                    index_content = f.read()
+                if 'particles-canvas' in index_content:  # entrance.html 的特征
+                    print("✅ Entrance page already set up properly, skipping...")
+                    return True
+            except Exception:
+                pass
+
+        # 1. If the original index.html exists and is not entrance page, rename it to documentation.html
         if original_index.exists():
-            print("Renaming original index.html to documentation.html...")
-            shutil.move(str(original_index), str(documentation_page))
-            print(f"✅ Original documentation moved to {documentation_page}")
+            try:
+                with open(original_index, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                # If index.html contains Sphinx documentation features (and not entrance.html), it needs to be moved
+                if 'particles-canvas' not in content:
+                    print("Renaming original index.html to documentation.html...")
+                    if documentation_page.exists():
+                        documentation_page.unlink()  # Remove existing documentation.html
+                    shutil.move(str(original_index), str(documentation_page))
+                    print(
+                        f"✅ Original documentation moved to {documentation_page}")
+            except Exception as e:
+                print(f"Error checking index.html content: {e}")
 
         # 2. Read entrance.html and update version information
         with open(entrance_source, 'r', encoding='utf-8') as f:
