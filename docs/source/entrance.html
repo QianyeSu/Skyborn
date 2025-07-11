@@ -138,23 +138,21 @@
         .entrance-container > *:nth-child(2) { animation-delay: 0.4s; }
         .entrance-container > *:nth-child(3) { animation-delay: 0.6s; }
 
-        /* Hide Read the Docs elements */
-        .rst-content, .rst-footer-buttons, .rst-versions,
-        .wy-nav-side, .wy-nav-content, .wy-nav-content-wrap,
-        .injected, [class*="rst"], [class*="wy-"],
-        .rtd-container, .readthedocs-container,
-        div[style*="position: fixed"][style*="bottom"],
-        div[style*="position: absolute"][style*="bottom"] {
+        /* Hide Read the Docs version switcher specifically */
+        .rst-versions, .rst-badge, .rst-current-version,
+        .rst-other-versions, .injected,
+        div[class*="rst-versions"], div[class*="rst-badge"],
+        .readthedocs-badge, .version-selector {
             display: none !important;
             visibility: hidden !important;
             opacity: 0 !important;
         }
 
-        /* Additional Read the Docs badge hiding */
-        .rtd-tooltip, .readthedocs-tooltip,
-        a[href*="readthedocs.org"],
-        img[alt*="Read the Docs"],
-        .badge-readthedocs {
+        /* Hide any fixed positioned elements that might be RTD components */
+        div[style*="position: fixed"][style*="bottom: 0"],
+        div[style*="position: fixed"][style*="bottom: 10px"],
+        div[style*="position: fixed"][style*="right: 0"],
+        div[style*="position: fixed"][style*="right: 10px"] {
             display: none !important;
         }
     </style>
