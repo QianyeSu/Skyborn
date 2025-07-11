@@ -1,4 +1,7 @@
-# Skyborn: A Collection of Tools for My Research
+
+<p align="center">
+  <img src="docs/source/_static/SkyBornLogo.svg" alt="Skyborn Logo" width="240"/>
+</p>
 
 [![PyPI version](https://badge.fury.io/py/skyborn.svg)](https://badge.fury.io/py/skyborn)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/skyborn)](https://pypi.org/project/skyborn/)
