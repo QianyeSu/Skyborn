@@ -15,7 +15,6 @@
 [![Code style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://qianyesu.github.io/Skyborn/)
 
-Skyborn is a collection of functions I use in my general research, primarily for personal use.
 
 ## System Requirements
 
