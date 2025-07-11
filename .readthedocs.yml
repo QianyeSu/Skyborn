@@ -18,11 +18,11 @@ build:
     # Copy to output directory
     - mkdir -p $READTHEDOCS_OUTPUT/html
     - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/
+    # Since Read the Docs might override index.html, let's ensure our particle effect page is accessible
+    # Copy particle effect page to entrance.html as backup
+    - cp $READTHEDOCS_OUTPUT/html/index.html $READTHEDOCS_OUTPUT/html/entrance.html
     - echo "✅ Custom build completed with particle effect homepage"
-    # Debug: Check what files were copied
-    # - echo "📁 Files in output directory:"
-    # - ls -la $READTHEDOCS_OUTPUT/html/
-    # - echo "🔍 Content of index.html (first 5 lines):"
-    # - head -5 $READTHEDOCS_OUTPUT/html/index.html
-    # - echo "🔍 Checking if particles-canvas exists in index.html:"
-    # - grep -c "particles-canvas" $READTHEDOCS_OUTPUT/html/index.html || echo "❌ particles-canvas not found"
+    - echo "🎯 Particle effect page: index.html"
+    - echo "🎯 Backup particle page: entrance.html"
+    - echo "📖 Documentation: documentation.html"
+s
