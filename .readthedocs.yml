@@ -18,6 +18,46 @@ build:
     # Copy to output directory
     - mkdir -p $READTHEDOCS_OUTPUT/html
     - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/
+    # Create a redirect index.html at root level if needed
+    - |
+      cat > $READTHEDOCS_OUTPUT/html/index.html << 'EOF'
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Skyborn Documentation</title>
+          <meta http-equiv="refresh" content="0; url=entrance.html">
+          <script>
+              // Immediate redirect for better user experience
+              window.location.href = 'entrance.html';
+          </script>
+      </head>
+      <body>
+          <p>Redirecting to <a href="entrance.html">Skyborn Documentation</a>...</p>
+      </body>
+      </html>
+      EOF
+    # Move the particle effect page to entrance.html
+    - mv $READTHEDOCS_OUTPUT/html/index.html $READTHEDOCS_OUTPUT/html/entrance.html || echo "Move failed"
+    - |
+      cat > $READTHEDOCS_OUTPUT/html/index.html << 'EOF'
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Skyborn Documentation</title>
+          <meta http-equiv="refresh" content="0; url=entrance.html">
+          <script>
+              window.location.href = 'entrance.html';
+          </script>
+      </head>
+      <body>
+          <p>Redirecting to <a href="entrance.html">Skyborn Documentation</a>...</p>
+      </body>
+      </html>
+      EOF
     - echo "✅ Custom build completed with particle effect homepage"
     # Debug: Check what files were copied
     - echo "📁 Files in output directory:"
@@ -26,5 +66,3 @@ build:
     - head -5 $READTHEDOCS_OUTPUT/html/index.html
     - echo "🔍 Checking if particles-canvas exists in index.html:"
     - grep -c "particles-canvas" $READTHEDOCS_OUTPUT/html/index.html || echo "❌ particles-canvas not found"
-    - echo "🔗 Checking documentation link in index.html:"
-    - grep -o 'href="[^"]*"' $READTHEDOCS_OUTPUT/html/index.html | head -3
