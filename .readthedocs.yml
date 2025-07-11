@@ -16,9 +16,9 @@ build:
     # Build documentation with custom script
     - export LC_ALL=C.UTF-8 && export LANG=C.UTF-8 && cd docs && python build_docs.py --clean
     # Copy to output directory
-    # - mkdir -p $READTHEDOCS_OUTPUT/html
-    # - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/
-    # - echo "✅ Custom build completed with particle effect homepage"
+    - mkdir -p $READTHEDOCS_OUTPUT/html
+    - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/
+    - echo "✅ Custom build completed with particle effect homepage"
     # Debug: Check what files were copied
     # - echo "📁 Files in output directory:"
     # - ls -la $READTHEDOCS_OUTPUT/html/
