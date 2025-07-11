@@ -594,37 +594,84 @@ document.addEventListener('DOMContentLoaded', function() {
             '.bd-header .navbar-brand',
             '.bd-header .navbar-brand img',
             '.bd-header img',
-            '.bd-header .logo'
+            '.bd-header .logo',
+            '.bd-sidebar-primary .navbar-brand',
+            '.bd-sidebar-primary .navbar-brand img',
+            '.navbar-brand',
+            '.navbar-brand img',
+            'a.navbar-brand.logo',
+            'a.navbar-brand.logo img'
         ];
 
         logoSelectors.forEach(selector => {
             const logos = document.querySelectorAll(selector);
             logos.forEach(logo => {
+                // 设置样式
                 logo.style.cursor = 'pointer';
-                logo.addEventListener('click', function(e) {
-                    e.preventDefault();
 
-                    // 添加点击动画
-                    this.style.transform = 'scale(0.95)';
-                    this.style.transition = 'transform 0.1s ease';
+                // 移除之前的事件监听器（防止重复绑定）
+                logo.removeEventListener('click', handleLogoClick);
 
-                    // 重置动画
-                    setTimeout(() => {
-                        this.style.transform = 'scale(1)';
-                    }, 100);
-
-                    // 导航到首页（粒子效果页面）
-                    setTimeout(() => {
-                        window.location.href = 'index.html';
-                    }, 200);
-                });
+                // 添加新的事件监听器
+                logo.addEventListener('click', handleLogoClick);
 
                 // 添加鼠标悬停效果
                 logo.addEventListener('mouseenter', function() {
                     this.style.cursor = 'pointer';
                 });
+
+                // 强制设置指针样式
+                logo.classList.add('logo-clickable');
             });
         });
+
+        // Logo点击处理函数
+        function handleLogoClick(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            console.log('Logo clicked! Navigating to index.html');
+
+            // 添加点击动画效果
+            this.style.transform = 'scale(0.9)';
+            this.style.transition = 'transform 0.15s ease';
+
+            // 添加涟漪效果
+            const ripple = document.createElement('div');
+            const rect = this.getBoundingClientRect();
+            const size = Math.min(rect.width, rect.height) * 0.8; // 缩小到0.8倍
+
+            ripple.style.cssText = `
+                position: fixed;
+                left: ${rect.left + rect.width/2 - size/2}px;
+                top: ${rect.top + rect.height/2 - size/2}px;
+                width: ${size}px;
+                height: ${size}px;
+                border-radius: 50%;
+                background: radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, rgba(147, 197, 253, 0.2) 50%, rgba(59, 130, 246, 0) 100%);
+                transform: scale(0);
+                animation: ripple 0.5s ease-out;
+                pointer-events: none;
+                z-index: 10000;
+            `;
+
+            document.body.appendChild(ripple);
+
+            // 动画完成后重置
+            setTimeout(() => {
+                this.style.transform = 'scale(1)';
+                if (ripple.parentNode) {
+                    ripple.remove();
+                }
+            }, 150);
+
+            // 导航到首页（粒子效果页面）
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 200);
+        }
+
+        console.log('🎯 Logo click handlers added successfully');
     }
 
     // ========== Initialize All Effects ==========
