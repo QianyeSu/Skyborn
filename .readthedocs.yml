@@ -13,6 +13,8 @@ build:
       - python -m pip install --upgrade pip setuptools wheel
     post_install:
       - python -m pip install -e .
+      - export LC_ALL=C.UTF-8
+      - export LANG=C.UTF-8
       - cd docs && python build_docs.py --clean
       - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/
 
