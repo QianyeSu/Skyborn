@@ -190,27 +190,32 @@ def build_documentation():
     # Create output directory
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Build command
-    cmd = f"sphinx-build -b html {SOURCE_DIR} {BUILD_DIR}"
-
-    # Set environment variables for proper encoding
-    env = os.environ.copy()
-    env['PYTHONIOENCODING'] = 'utf-8'
-    env['LANG'] = 'en_US.UTF-8'
-    env['LC_ALL'] = 'en_US.UTF-8'
-
     try:
-        # Run sphinx-build with proper encoding
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            cwd=DOCS_DIR,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            env=env,
-            check=True
-        )
+        # Use Sphinx Python API instead of command line to avoid locale issues
+        from sphinx.application import Sphinx
+        from sphinx.util.docutils import docutils_namespace
+
+        # Set up Sphinx application
+        with docutils_namespace():
+            app = Sphinx(
+                srcdir=str(SOURCE_DIR),
+                confdir=str(SOURCE_DIR),
+                outdir=str(BUILD_DIR),
+                doctreedir=str(BUILD_DIR.parent / '.doctrees'),
+                buildername='html',
+                confoverrides={},
+                status=sys.stdout,
+                warning=sys.stderr,
+                freshenv=True,
+                warningiserror=False,
+                tags=[],
+                verbosity=1,
+                parallel=1
+            )
+
+            # Build all documents
+            app.build(None)
+
         print("✅ Documentation built successfully!")
 
         # Setup entrance page as main index
@@ -219,13 +224,11 @@ def build_documentation():
         print(f"   Open: {BUILD_DIR}/index.html (Entry Page)")
         print(f"   Open: {BUILD_DIR}/documentation.html (Documentation)")
         return True
-    except subprocess.CalledProcessError as e:
+
+    except Exception as e:
         print("❌ Failed to build documentation")
-        print(f"Command: {cmd}")
-        if e.stdout:
-            print(f"Output: {e.stdout}")
-        if e.stderr:
-            print(f"Error: {e.stderr}")
+        print(f"Error: {e}")
+        return False
 
 
 def main():
