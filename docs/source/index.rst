@@ -1,7 +1,9 @@
 .. Skyborn documentation master file
 
-Skyborn Documentation
-=====================
+.. image:: _static/SkyBornLogo.svg
+   :align: center
+   :width: 600px
+   :alt: Skyborn Logo
 
 Skyborn is a comprehensive Python package for climate data analysis, featuring advanced statistical methods, emergent constraint techniques, and data conversion utilities.
 

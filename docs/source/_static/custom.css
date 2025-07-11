@@ -1248,6 +1248,17 @@ code {
     letter-spacing: 0.5px !important;
 }
 
+/* Logo图片样式 */
+.bd-header .navbar-brand img {
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+}
+
+.bd-header .navbar-brand img:hover {
+    transform: scale(1.1) !important;
+    filter: brightness(1.2) !important;
+}
+
 /* 响应式标题样式 */
 @media (max-width: 768px) {
     .bd-header .navbar-brand {
