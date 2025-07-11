@@ -22,5 +22,8 @@ python:
     - method: pip
       path: .
 
-# Skip default sphinx build since we use custom build_docs.py
-# The script will generate all necessary files including the particle effect homepage
+# Required sphinx configuration (even for custom builds)
+sphinx:
+  configuration: docs/source/conf.py
+  builder: html
+  fail_on_warning: false
