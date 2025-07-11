@@ -4,6 +4,13 @@
 
 version: 2
 
+# Dummy sphinx configuration to satisfy Read the Docs requirements
+# But we set an invalid configuration path to prevent actual build
+sphinx:
+  configuration: docs/source/conf.py
+  builder: html
+  fail_on_warning: true
+
 build:
   os: ubuntu-22.04
   tools:
@@ -24,10 +31,3 @@ python:
     - requirements: requirements-docs.txt
     - method: pip
       path: .
-
-# Dummy sphinx configuration to satisfy Read the Docs requirements
-# But we set an invalid configuration path to prevent actual build
-sphinx:
-  configuration: docs/source/conf.py
-  builder: html
-  fail_on_warning: true
