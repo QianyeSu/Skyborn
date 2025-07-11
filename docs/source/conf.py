@@ -17,7 +17,6 @@ copyright = '2025, Qianye Su'
 author = 'Qianye Su'
 
 # Add last updated date
-today = datetime.date.today()
 html_last_updated_fmt = '%Y-%m-%d'
 
 # Dynamic version import with fallback
@@ -106,8 +105,11 @@ html_theme_options = {
     "navigation_with_keys": False,
     "collapse_navigation": False,
     "use_sidenotes": True,
-    "show_last_updated": True,
+    "home_page_in_toc": False,
 }
+
+# Set the logo link manually
+html_logo_link = "index.html"
 
 # -- Extension configuration -------------------------------------------------
 # Autodoc configuration
@@ -221,7 +223,7 @@ nb_render_figure_options = {
 
 # -- HTML configuration for notebooks ---------------------------------------
 html_title = f"{project} v{release}"
-html_logo = None
+html_logo = "_static/SkyBornLogo.svg"
 html_favicon = None
 
 # Show source links for notebooks
