@@ -1,6 +1,8 @@
 
 <p align="center">
-  <img src="docs/source/_static/SkyBornLogo.svg" alt="Skyborn Logo" width="400"/>
+  <a href="https://github.com/QianyeSu/Skyborn" target="_blank">
+    <img src="docs/source/_static/SkyBornLogo.svg" alt="Skyborn Logo" width="400"/>
+  </a>
 </p>
 
 [![PyPI version](https://badge.fury.io/py/skyborn.svg)](https://badge.fury.io/py/skyborn)
