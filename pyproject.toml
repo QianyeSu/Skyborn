@@ -38,7 +38,7 @@ classifiers = [
 
 [project.urls]
 "Homepage" = "https://github.com/QianyeSu/Skyborn"
-"Documentation" = "https://qianyesu.github.io/Skyborn/"
+"Documentation" = "https://skyborn.readthedocs.io/"
 "Repository" = "https://github.com/QianyeSu/Skyborn"
 "Bug Tracker" = "https://github.com/QianyeSu/Skyborn/issues"
 
