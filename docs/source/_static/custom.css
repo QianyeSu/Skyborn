@@ -1318,3 +1318,104 @@ code {
         font-size: 1.1rem !important;
     }
 }
+
+/* ========== Hide Read the Docs Version Switcher ========== */
+/* 隐藏 Read the Docs 版本切换器和相关组件 */
+.rst-versions,
+.rst-badge,
+.rst-current-version,
+.rst-other-versions,
+.injected,
+div[class*="rst-versions"],
+div[class*="rst-badge"],
+.readthedocs-badge,
+.version-selector,
+.rtd__version-switcher,
+.rtd-version-switcher,
+.rtd__flyout,
+.rtd-flyout,
+.rtd__version-menu,
+.rtd-version-menu,
+.rtd__versions,
+.rtd-versions,
+.rtd__current-version,
+.rtd-current-version {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* 隐藏固定定位的RTD组件 */
+div[style*="position: fixed"][style*="bottom: 0"],
+div[style*="position: fixed"][style*="bottom: 10px"],
+div[style*="position: fixed"][style*="right: 0"],
+div[style*="position: fixed"][style*="right: 10px"],
+div[style*="position: absolute"][style*="bottom: 0"],
+div[style*="position: absolute"][style*="bottom: 10px"],
+div[style*="position: absolute"][style*="right: 0"],
+div[style*="position: absolute"][style*="right: 10px"] {
+    display: none !important;
+}
+
+/* 隐藏包含"Read the Docs"文本的元素 */
+div:contains("Read the Docs"),
+span:contains("Read the Docs"),
+a[href*="readthedocs.org"],
+img[alt*="Read the Docs"],
+.rtd-tooltip,
+.readthedocs-tooltip {
+    display: none !important;
+}
+
+/* 专门针对RTD注入的脚本生成的元素 */
+[data-readthedocs-project],
+[data-readthedocs-version],
+[data-readthedocs-language],
+.ethical-sidebar,
+.ethical-footer,
+.ethical-fixedfooter,
+.ethical-dark-theme {
+    display: none !important;
+}
+
+/* 隐藏RTD广告和促销元素 */
+.rtd-ad,
+.rtd-pro-callout,
+.rtd-footer-callout,
+.rtd-version-callout,
+.promotional-banner {
+    display: none !important;
+}
+
+/* 隐藏可能的z-index较高的RTD元素 */
+div[style*="z-index"][style*="9999"],
+div[style*="z-index"][style*="10000"],
+div[style*="z-index"][style*="99999"] {
+    display: none !important;
+}
+
+/* Dark模式下的RTD元素隐藏 */
+[data-theme="dark"] .rst-versions,
+[data-theme="dark"] .rst-badge,
+[data-theme="dark"] .rst-current-version,
+[data-theme="dark"] .rst-other-versions,
+[data-theme="dark"] .injected,
+[data-theme="dark"] div[class*="rst-versions"],
+[data-theme="dark"] div[class*="rst-badge"],
+[data-theme="dark"] .readthedocs-badge,
+[data-theme="dark"] .version-selector,
+[data-theme="dark"] .rtd__version-switcher,
+[data-theme="dark"] .rtd-version-switcher,
+[data-theme="dark"] .rtd__flyout,
+[data-theme="dark"] .rtd-flyout,
+[data-theme="dark"] .rtd__version-menu,
+[data-theme="dark"] .rtd-version-menu,
+[data-theme="dark"] .rtd__versions,
+[data-theme="dark"] .rtd-versions,
+[data-theme="dark"] .rtd__current-version,
+[data-theme="dark"] .rtd-current-version {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
