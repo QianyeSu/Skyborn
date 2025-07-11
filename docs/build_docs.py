@@ -14,8 +14,20 @@ import shutil
 import re
 from pathlib import Path
 
-# Set proper encoding for Windows
+# Set proper encoding for Windows and Read the Docs
 os.environ['PYTHONIOENCODING'] = 'utf-8'
+
+# Fix locale issues for Read the Docs
+try:
+    import locale
+    locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+except:
+    try:
+        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+    except:
+        # If both fail, set environment variables
+        os.environ['LC_ALL'] = 'C.UTF-8'
+        os.environ['LANG'] = 'C.UTF-8'
 
 # Configuration
 DOCS_DIR = Path(__file__).parent
@@ -42,7 +54,14 @@ def get_version_from_init():
 def run_command(cmd, cwd=None):
     """Run a shell command and return the result."""
     try:
-        # Set proper encoding for Windows
+        # Set proper encoding and environment for Read the Docs
+        env = os.environ.copy()
+        env.update({
+            'LC_ALL': 'C.UTF-8',
+            'LANG': 'C.UTF-8',
+            'PYTHONIOENCODING': 'utf-8'
+        })
+
         result = subprocess.run(
             cmd,
             shell=True,
@@ -50,6 +69,7 @@ def run_command(cmd, cwd=None):
             capture_output=True,
             text=True,
             encoding='utf-8',
+            env=env,
             check=True
         )
         return result.stdout
