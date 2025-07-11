@@ -13,6 +13,8 @@ build:
       - python -m pip install --upgrade pip setuptools wheel
     post_install:
       - python -m pip install -e .
+      - cd docs && python build_docs.py --clean
+      - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/
 
 python:
   install:
@@ -20,11 +22,5 @@ python:
     - method: pip
       path: .
 
-sphinx:
-  configuration: docs/source/conf.py
-  builder: html
-  fail_on_warning: false
-
-formats:
-  - pdf
-  - epub
+# Skip default sphinx build since we use custom build_docs.py
+# The script will generate all necessary files including the particle effect homepage
