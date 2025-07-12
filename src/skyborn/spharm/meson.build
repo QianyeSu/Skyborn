@@ -60,13 +60,24 @@ message('NumPy include directory: ' + incdir_numpy)
 message('F2PY include directory: ' + incdir_f2py)
 
 # Generate Fortran-Python interface with better error handling
-spherepack_source = custom_target('_spherepackmodule.c',
-    input: ['src/_spherepack.pyf'],
-    output: ['_spherepackmodule.c', '_spherepack-f2pywrappers.f'],
-    command: [py, '-m', 'numpy.f2py', '--lower', '@INPUT@', '--build-dir', '@OUTDIR@'],
-    build_by_default: true,
-    install: false
-)
+spherepack_sources = []
+try_f2py = run_command(py, '-c', 'import numpy.f2py; print("OK")', check: false)
+
+if try_f2py.returncode() == 0
+  spherepack_source = custom_target('_spherepackmodule.c',
+      input: ['src/_spherepack.pyf'],
+      output: ['_spherepackmodule.c', '_spherepack-f2pywrappers.f'],
+      command: [py, '-m', 'numpy.f2py', '--lower', '@INPUT@', '--build-dir', '@OUTDIR@'],
+      build_by_default: true,
+      install: false
+  )
+  spherepack_sources += spherepack_source
+  message('f2py interface generation: SUCCESS')
+else
+  warning('f2py not available, skipping interface generation')
+  # Skip building the extension if f2py fails
+  subdir_done()
+endif
 
 inc_np = include_directories(incdir_numpy, incdir_f2py)
 
@@ -119,7 +130,7 @@ py.extension_module('_spherepack',
         'src/vhsgc.f90',
         'src/ihgeod.f90',
         'src/alf.f90',
-        spherepack_source
+        spherepack_sources
     ],
     include_directories: inc_np,
     dependencies: py_dep,
