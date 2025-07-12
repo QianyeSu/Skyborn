@@ -43,7 +43,16 @@ from . import interp
 from . import ROF
 from . import conversion
 from . import calc
-from . import spharm  # Spherical harmonic transforms
+
+# spharm is optional - only import if successfully built
+try:
+    from . import spharm  # Spherical harmonic transforms
+except ImportError:
+    # spharm module not available (this is okay)
+    pass
 
 # Import version from single source of truth
-from ._version import __version__
+try:
+    from ._version import __version__
+except ImportError:
+    __version__ = "0.3.8"  # fallback version

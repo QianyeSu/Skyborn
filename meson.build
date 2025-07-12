@@ -42,19 +42,36 @@ subdir('src/skyborn/ROF')
 # Try to build spharm with better error handling
 spharm_enabled = get_option('spharm')
 if not spharm_enabled.disabled()
+  # Check if we can build spharm
+  can_build_spharm = true
+
+  # Test numpy/f2py availability
   try_spharm = run_command(py,
     ['-c', 'import numpy; import numpy.f2py; print("OK")'],
     check: false
   )
-  if try_spharm.returncode() == 0
+
+  if try_spharm.returncode() != 0
+    can_build_spharm = false
+    message('WARNING: numpy/f2py not available for spharm')
+  endif
+
+  # Test numpy headers
+  numpy_check = run_command(py,
+    ['-c', 'import numpy; import os; print("OK" if os.path.exists(os.path.join(numpy.get_include(), "numpy", "npy_os.h")) else "FAIL")'],
+    check: false
+  )
+
+  if numpy_check.stdout().strip() != 'OK'
+    can_build_spharm = false
+    message('WARNING: numpy headers not found for spharm')
+  endif
+
+  if can_build_spharm
     message('Building spharm module with numpy/f2py support')
     subdir('src/skyborn/spharm')
   else
-    if spharm_enabled.enabled()
-      warning('Failed to detect numpy/f2py for spharm module, but continuing...')
-    else
-      message('Skipping spharm module due to missing dependencies')
-    endif
+    message('Skipping spharm module due to missing dependencies')
   endif
 endif
 
