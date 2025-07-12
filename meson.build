@@ -38,7 +38,25 @@ subdir('src/skyborn/conversion')
 subdir('src/skyborn/interp')
 subdir('src/skyborn/plot')
 subdir('src/skyborn/ROF')
-subdir('src/skyborn/spharm')
+
+# Try to build spharm with better error handling
+spharm_enabled = get_option('spharm')
+if not spharm_enabled.disabled()
+  try_spharm = run_command(py,
+    ['-c', 'import numpy; import numpy.f2py; print("OK")'],
+    check: false
+  )
+  if try_spharm.returncode() == 0
+    message('Building spharm module with numpy/f2py support')
+    subdir('src/skyborn/spharm')
+  else
+    if spharm_enabled.enabled()
+      warning('Failed to detect numpy/f2py for spharm module, but continuing...')
+    else
+      message('Skipping spharm module due to missing dependencies')
+    endif
+  endif
+endif
 
 # Summary
 message('Skyborn configuration complete!')

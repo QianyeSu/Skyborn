@@ -1,0 +1,2 @@
+option('spharm', type: 'feature', value: 'auto',
+       description: 'Build spherical harmonic transforms module')

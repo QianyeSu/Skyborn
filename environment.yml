@@ -4,13 +4,14 @@ channels:
   - defaults
 dependencies:
   - python>=3.9
-  - numpy
+  - numpy>=1.21
   - xarray
   - matplotlib
   - seaborn
   - pytest
   - pytest-cov
   - eccodes # For GRIB processing
+  - gfortran_linux-64  # For Fortran compilation
+  - meson
+  - ninja
   - pip
-  - pip:
-      - -e .

@@ -14,30 +14,76 @@ py.install_sources([
   subdir: 'skyborn/spharm'
 )
 
-# Get numpy include directories
-incdir_numpy = run_command(py,
-  ['-c', 'import os; os.chdir(".."); import numpy; print(numpy.get_include())'],
+# Get numpy include directories with robust fallbacks
+incdir_numpy_cmd = run_command(py,
+  ['-c', '''
+import numpy
+import os
+# Try multiple potential paths
+paths = [
+    numpy.get_include(),
+    os.path.join(numpy.__path__[0], "core", "include"),
+    os.path.join(numpy.__path__[0], "_core", "include")
+]
+for path in paths:
+    if os.path.exists(os.path.join(path, "numpy", "npy_os.h")):
+        print(path)
+        break
+else:
+    print(numpy.get_include())  # fallback
+'''],
   check : true
-).stdout().strip()
+)
+incdir_numpy = incdir_numpy_cmd.stdout().strip()
 
-incdir_f2py = run_command(py,
-    ['-c', 'import os; os.chdir(".."); import numpy.f2py; print(numpy.f2py.get_include())'],
+# Try to get f2py include, with multiple fallbacks
+incdir_f2py_cmd = run_command(py,
+    ['-c', '''
+import numpy
+import os
+try:
+    import numpy.f2py
+    f2py_path = numpy.f2py.get_include()
+    if os.path.exists(f2py_path):
+        print(f2py_path)
+    else:
+        print(numpy.get_include())
+except:
+    print(numpy.get_include())
+'''],
     check : true
-).stdout().strip()
+)
+incdir_f2py = incdir_f2py_cmd.stdout().strip()
 
-# Generate Fortran-Python interface
+# Debug output for CI troubleshooting
+message('NumPy include directory: ' + incdir_numpy)
+message('F2PY include directory: ' + incdir_f2py)
+
+# Generate Fortran-Python interface with better error handling
 spherepack_source = custom_target('_spherepackmodule.c',
     input: ['src/_spherepack.pyf'],
     output: ['_spherepackmodule.c', '_spherepack-f2pywrappers.f'],
     command: [py, '-m', 'numpy.f2py', '--lower', '@INPUT@', '--build-dir', '@OUTDIR@'],
-    build_by_default: true
+    build_by_default: true,
+    install: false
 )
 
 inc_np = include_directories(incdir_numpy, incdir_f2py)
 
-# Simple fortran compilation flags
+# Verify numpy headers exist (for CI debugging)
+numpy_header_check = run_command(py,
+  ['-c', 'import os; import numpy; header_path = os.path.join(numpy.get_include(), "numpy", "npy_os.h"); print("✓" if os.path.exists(header_path) else "✗", header_path)'],
+  check: false
+)
+message('NumPy header check: ' + numpy_header_check.stdout().strip())
+
+# Robust fortran compilation flags for different environments
 fortran_args = ['-O3', '-fPIC', '-fno-second-underscore']
-c_args = ['-O3']
+c_args = ['-O3', '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION']
+
+# Additional debugging for CI
+message('Fortran args: ' + ' '.join(fortran_args))
+message('C args: ' + ' '.join(c_args))
 
 # Build the spherepack extension module
 py.extension_module('_spherepack',
