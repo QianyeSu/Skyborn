@@ -159,9 +159,9 @@ py.extension_module('_spherepack',
         'src/vhsgc.f90',
         'src/ihgeod.f90',
         'src/alf.f90',
-        spherepack_source
+        spherepack_source,
+        files(incdir_f2py / 'fortranobject.c')
     ],
-    incdir_f2py / 'fortranobject.c',
     include_directories: inc_np,
     dependencies: [py_dep, numpy_dep],
     fortran_args: fortran_args,
