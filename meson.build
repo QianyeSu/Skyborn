@@ -1,5 +1,5 @@
 project('skyborn', 'c', 'fortran',
-  version: '0.3.7',
+  version: '0.3.8',
   license: 'BSD-3-Clause',
   meson_version: '>= 0.64.0',
   default_options: [

@@ -36,7 +36,7 @@ fortran_args = []
 c_args = []
 
 # Get optimization mode from environment (portable vs native)
-optimization_mode = get_env('OPTIMIZATION_MODE', 'native')
+optimization_mode = environment().get('OPTIMIZATION_MODE', 'native')
 
 # GCC/gfortran optimizations
 if meson.get_compiler('fortran').get_id() == 'gcc'

@@ -42,6 +42,7 @@ jobs:
       with:
         activate-environment: build-env
         python-version: '3.11'
+        environment-file: environment.yml
 
     - name: Install Fortran compiler (Windows)
       if: runner.os == 'Windows'
@@ -53,15 +54,15 @@ jobs:
     - name: Build wheels
       uses: pypa/cibuildwheel@v2.21.3
       env:
-        # Build for Python 3.9+ as specified in pyproject.toml
-        CIBW_BUILD: cp39-* cp310-* cp311-* cp312-*
-        CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
+        # Build for Python 3.9-3.11 for better compatibility
+        CIBW_BUILD: cp39-* cp310-* cp311-*
+        CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux* cp312-*"
         CIBW_ARCHS: auto64
 
         # Install build dependencies
         CIBW_BEFORE_BUILD: |
           python -m pip install --upgrade pip
-          python -m pip install meson-python ninja numpy>=1.21.0 wheel
+          python -m pip install "meson-python>=0.12.0,<0.15.0" ninja "numpy>=1.21.0,<2.0" wheel setuptools
 
         # Test the wheel after building
         CIBW_TEST_COMMAND: 'python -c "from skyborn.spharm import Spharmt; sht = Spharmt(8,6); print(''SUCCESS: Wheel test passed'')"'
