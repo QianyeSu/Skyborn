@@ -153,8 +153,8 @@ else:
   # Add fortranobject.c if found, otherwise try to build without it
   if fortranobject_c != ''
     message('Found fortranobject.c: ' + fortranobject_c)
-    # Verify file actually exists before adding
-    fortran_obj_check = run_command('test', '-f', fortranobject_c, check: false)
+    # Use Python to check file existence (works on all platforms)
+    fortran_obj_check = run_command(py, '-c', 'import os; import sys; sys.exit(0 if os.path.exists(r"' + fortranobject_c + '") else 1)', check: false)
     if fortran_obj_check.returncode() == 0
       spherepack_sources += files(fortranobject_c)
       message('Added fortranobject.c to build')

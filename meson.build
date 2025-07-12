@@ -9,9 +9,17 @@ project('skyborn', 'c',
   ]
 )
 
-# Check for Fortran compiler availability
+# Check for Fortran compiler availability with better detection
 fortran_available = false
 fortran_compiler = find_program('gfortran', required: false)
+if not fortran_compiler.found()
+  # Try alternative Fortran compilers
+  fortran_compiler = find_program('ifort', required: false)
+  if not fortran_compiler.found()
+    fortran_compiler = find_program('ifx', required: false)
+  endif
+endif
+
 if fortran_compiler.found()
   # Try to add Fortran language support
   add_languages('fortran', required: false, native: false)
@@ -19,6 +27,7 @@ if fortran_compiler.found()
   message('Fortran compiler found: building with Fortran extensions')
 else
   message('Fortran compiler not found: building without Fortran extensions')
+  message('Users can still install skyborn, but spharm module will not be available')
 endif
 
 # Import Python functionality - explicitly use current python

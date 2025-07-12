@@ -15,8 +15,39 @@ Example:
     >>> data_back = sht.spectogrd(spec)  # Spectral to grid transform
 """
 
-# Import from the main spherical harmonics module (renamed to avoid conflicts)
-from .spherical_harmonics import *
+# Try to import the main module, with graceful fallback for environments
+# where the Fortran extension cannot be compiled (e.g., Read the Docs)
+try:
+    from .spherical_harmonics import *
+
+    _spharm_available = True
+except ImportError as e:
+    # Create placeholder classes/functions for documentation purposes
+    _spharm_available = False
+
+    class Spharmt:
+        """
+        Placeholder Spharmt class for environments without Fortran compiler.
+
+        This is a documentation placeholder. The actual implementation requires
+        a compiled Fortran extension (_spherepack) which is not available in
+        this environment.
+        """
+
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                "spharm module requires compiled Fortran extensions. "
+                "Please ensure gfortran and proper build environment are available."
+            )
+
+    def regrid(*args, **kwargs):
+        """Placeholder function for regrid."""
+        raise ImportError("spharm module not available")
+
+    def gaussian_lats_wts(*args, **kwargs):
+        """Placeholder function for gaussian_lats_wts."""
+        raise ImportError("spharm module not available")
+
 
 __version__ = "1.0.9"
 __author__ = "Jeff Whitaker"

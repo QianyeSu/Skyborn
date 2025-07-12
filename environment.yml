@@ -4,7 +4,7 @@ channels:
   - defaults
 dependencies:
   - python>=3.9
-  - numpy>=1.21
+  - numpy>=1.23  # Required for f2py without distutils
   - xarray
   - matplotlib
   - seaborn

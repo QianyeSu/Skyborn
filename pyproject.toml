@@ -3,7 +3,7 @@ requires = [
     "meson-python>=0.12.0",
     "meson>=0.64.0",
     "ninja>=1.8.2",
-    "numpy>=1.21.0",
+    "numpy>=1.23.0",  # Required for f2py without distutils
     "wheel",
     "setuptools"  # fallback for development
 ]
@@ -18,7 +18,7 @@ authors = [{ name = "Qianye Su", email = "suqianye2000@gmail.com" }]
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
 dependencies = [
-    "numpy>=1.21.0",
+    "numpy>=1.23.0",  # Required for f2py without distutils
     "xarray",
     "matplotlib",
     "seaborn",

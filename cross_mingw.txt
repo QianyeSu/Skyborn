@@ -1,0 +1,20 @@
+[binaries]
+c = 'gcc'
+cpp = 'g++'
+fortran = 'gfortran'
+ar = 'ar'
+strip = 'strip'
+# 使用PowerShell的测试命令
+test = ['powershell', '-Command', 'Test-Path']
+# 明确指定Python路径
+python = 'F:\\Anaconda3\\envs\\skyborn_dev\\python.EXE'
+
+[host_machine]
+system = 'windows'
+cpu_family = 'x86_64'
+cpu = 'x86_64'
+endian = 'little'
+
+[properties]
+# 强制使用conda环境路径
+python_sitepackages = 'F:\\Anaconda3\\envs\\skyborn_dev\\Lib\\site-packages'

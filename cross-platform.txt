@@ -1,0 +1,14 @@
+# Cross-compilation configuration for skyborn
+# This file provides fallback settings for various platforms
+# Usage: meson setup build --cross-file=cross-platform.txt
+
+[binaries]
+# These will be overridden by available compilers
+c = ['gcc', 'clang', 'cl']
+cpp = ['g++', 'clang++', 'cl']
+fortran = ['gfortran', 'ifort', 'ifx']
+
+# Cross-platform file operations
+[properties]
+# Ensure compatibility across platforms
+skip_sanity_check = false
