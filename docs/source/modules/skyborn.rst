@@ -14,6 +14,7 @@ The Skyborn package contains the following main modules:
 * **plot**: Specialized plotting and visualization tools
 * **gradients**: Spatial and temporal gradient calculations
 * **causality**: Causal analysis methods (Granger, Liang)
+* **spharm**: Spherical harmonic transforms using NCAR SPHEREPACK
 * **ROF**: Regularized Optimal Fingerprinting (ROF) method; currently under development and testing.
 
 Module Overview
@@ -37,6 +38,9 @@ Module Overview
 **causality**
    Granger and Liang causality analysis
 
+**spharm**
+   Spherical harmonic transforms using NCAR SPHEREPACK library
+
 **ROF**
    Regularized Optimal Fingerprinting (ROF) method; currently under development and testing.
 
@@ -57,5 +61,9 @@ To use any module, import Skyborn and access the module:
 
    # Create visualizations
    fig, ax = skb.plot.createFigure((10, 6), 1, 1)
+
+   # Spherical harmonic transforms
+   sht = skb.spharm.Spharmt(144, 72, gridtype='gaussian')
+   spec_coeffs = sht.grdtospec(grid_data)
 
 For detailed API documentation, see :doc:`../api/index`.

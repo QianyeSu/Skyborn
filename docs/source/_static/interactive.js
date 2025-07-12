@@ -349,31 +349,87 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ========== 中间Logo放大动画 ==========
     function addMainLogoAnimation() {
-        // 查找文档主要内容区域中的logo图片
-        const mainContentLogos = document.querySelectorAll('.bd-content img, .bd-article img, article img, .document img');
+        // 更全面的选择器来查找logo图片
+        const logoSelectors = [
+            '.bd-content img[src*="SkyBornLogo"]',
+            '.bd-article img[src*="SkyBornLogo"]',
+            'article img[src*="SkyBornLogo"]',
+            '.document img[src*="SkyBornLogo"]',
+            'img[alt*="logo" i]',
+            'img[alt*="Logo" i]',
+            'img[alt*="skyborn" i]',
+            'img[alt*="Skyborn" i]',
+            '.bd-content img',
+            '.bd-article img',
+            'article img',
+            '.document img'
+        ];
 
-        mainContentLogos.forEach(img => {
-            // 检查是否是logo图片（通过路径或alt文本判断）
-            if (img.src && (img.src.includes('SkyBornLogo') || img.alt.toLowerCase().includes('logo'))) {
-                img.style.cursor = 'pointer';
+        let logoFound = false;
 
-                // 移除默认的图片点击事件
-                img.onclick = null;
+        logoSelectors.forEach(selector => {
+            const logos = document.querySelectorAll(selector);
 
-                img.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
+            logos.forEach(img => {
+                // 检查是否是logo图片（通过路径或alt文本判断）
+                if (img.src && (
+                    img.src.includes('SkyBornLogo') ||
+                    img.alt.toLowerCase().includes('logo') ||
+                    img.alt.toLowerCase().includes('skyborn')
+                )) {
+                    logoFound = true;
+                    img.style.cursor = 'pointer';
+                    img.style.transition = 'all 0.3s ease';
 
-                    createLogoModal(this);
-                });
-            }
+                    console.log('🎯 Found main logo:', img.src, img.alt);
+
+                    // 移除默认的图片点击事件
+                    img.onclick = null;
+
+                    // 移除之前的事件监听器（如果有）
+                    img.removeEventListener('click', handleMainLogoClick);
+
+                    // 添加点击事件
+                    img.addEventListener('click', handleMainLogoClick);
+
+                    // 添加悬停效果
+                    img.addEventListener('mouseenter', function() {
+                        this.style.transform = 'scale(1.05)';
+                        this.style.filter = 'drop-shadow(0 10px 20px rgba(59, 130, 246, 0.3))';
+                    });
+
+                    img.addEventListener('mouseleave', function() {
+                        this.style.transform = 'scale(1)';
+                        this.style.filter = 'none';
+                    });
+                }
+            });
         });
+
+        if (logoFound) {
+            console.log('✅ Main logo animation handlers added successfully');
+        } else {
+            console.log('⚠️ No main logo found, retrying in 500ms...');
+            setTimeout(addMainLogoAnimation, 500);
+        }
+    }
+
+    // Logo点击处理函数
+    function handleMainLogoClick(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        console.log('🎊 Main logo clicked! Creating modal...');
+        createLogoModal(this);
     }
 
     // 创建Logo模态弹窗
     function createLogoModal(logoElement) {
+        console.log('🎨 Creating logo modal...');
+
         // 防止重复创建
         if (document.querySelector('.logo-modal')) {
+            console.log('⚠️ Modal already exists, skipping...');
             return;
         }
 
@@ -489,6 +545,7 @@ document.addEventListener('DOMContentLoaded', function() {
             overlay.style.opacity = '1';
             modal.style.transform = 'scale(1) rotate(0deg)';
             modal.style.opacity = '1';
+            console.log('✨ Logo modal displayed successfully!');
         });
 
         // 关闭功能
@@ -687,11 +744,6 @@ document.addEventListener('DOMContentLoaded', function() {
         addLogoClickToHome();
         addMainLogoAnimation(); // 添加中间logo动画
 
-        // Initialize RTD hiding functionality
-        hideReadTheDocsElements();
-        monitorRTDElements();
-        startPeriodicRTDCleanup();
-
         console.log('🎉 Skyborn Documentation interactive effects loaded!');
     }
 
@@ -699,29 +751,26 @@ document.addEventListener('DOMContentLoaded', function() {
     createMouseFollower();
     createScrollProgress();
 
-    // Immediate RTD cleanup
-    hideReadTheDocsElements();
-
     // Delayed initialization to ensure all elements are loaded
     setTimeout(initializeEffects, 100);
-
-    // Additional RTD cleanup attempts
-    setTimeout(hideReadTheDocsElements, 500);
-    setTimeout(hideReadTheDocsElements, 1000);
-    setTimeout(hideReadTheDocsElements, 2000);
 
     // 多次尝试添加logo点击事件，因为logo可能是动态加载的
     setTimeout(() => {
         addLogoClickToHome();
         addMainLogoAnimation(); // 也要重新添加中间logo事件
-        console.log('Logo click handlers re-added after 1 second');
+        console.log('🔄 Logo handlers re-added after 1 second');
     }, 1000);
 
     setTimeout(() => {
         addLogoClickToHome();
         addMainLogoAnimation(); // 也要重新添加中间logo事件
-        console.log('Logo click handlers re-added after 2 seconds');
+        console.log('🔄 Logo handlers re-added after 2 seconds');
     }, 2000);
+
+    setTimeout(() => {
+        addMainLogoAnimation(); // 最后一次尝试
+        console.log('🔄 Final logo handler attempt after 3 seconds');
+    }, 3000);
 
     // 监听页面变化，动态添加logo点击事件
     const observer = new MutationObserver(function(mutations) {
@@ -732,6 +781,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (node.nodeType === Node.ELEMENT_NODE) {
                         if (node.classList && (node.classList.contains('bd-header') ||
                             node.classList.contains('navbar-brand') ||
+                            node.classList.contains('bd-content') ||
+                            node.classList.contains('bd-article') ||
                             node.tagName === 'IMG')) {
                             shouldAddLogoHandler = true;
                         }
@@ -754,175 +805,6 @@ document.addEventListener('DOMContentLoaded', function() {
         subtree: true
     });
 
-    // ========== Hide Read the Docs Version Switcher ==========
-    function hideReadTheDocsElements() {
-        // 需要隐藏的 RTD 元素选择器
-        const rtdSelectors = [
-            '.rst-versions',
-            '.rst-badge',
-            '.rst-current-version',
-            '.rst-other-versions',
-            '.injected',
-            'div[class*="rst-versions"]',
-            'div[class*="rst-badge"]',
-            '.readthedocs-badge',
-            '.version-selector',
-            '.rtd__version-switcher',
-            '.rtd-version-switcher',
-            '.rtd__flyout',
-            '.rtd-flyout',
-            '.rtd__version-menu',
-            '.rtd-version-menu',
-            '.rtd__versions',
-            '.rtd-versions',
-            '.rtd__current-version',
-            '.rtd-current-version',
-            '[data-readthedocs-project]',
-            '[data-readthedocs-version]',
-            '[data-readthedocs-language]',
-            '.ethical-sidebar',
-            '.ethical-footer',
-            '.ethical-fixedfooter',
-            '.ethical-dark-theme',
-            '.rtd-ad',
-            '.rtd-pro-callout',
-            '.rtd-footer-callout',
-            '.rtd-version-callout',
-            '.promotional-banner'
-        ];
-
-        // 隐藏已存在的元素
-        rtdSelectors.forEach(selector => {
-            const elements = document.querySelectorAll(selector);
-            elements.forEach(element => {
-                element.style.display = 'none !important';
-                element.style.visibility = 'hidden !important';
-                element.style.opacity = '0 !important';
-                element.style.pointerEvents = 'none !important';
-                element.remove(); // 直接移除元素
-            });
-        });
-
-        // 隐藏包含特定文本的元素
-        const textSelectors = [
-            'div', 'span', 'a', 'button'
-        ];
-
-        textSelectors.forEach(tag => {
-            const elements = document.querySelectorAll(tag);
-            elements.forEach(element => {
-                const text = element.textContent || element.innerText || '';
-                if (text.toLowerCase().includes('read the docs') ||
-                    text.toLowerCase().includes('readthedocs') ||
-                    text.toLowerCase().includes('view page source') && element.href && element.href.includes('readthedocs')) {
-                    element.style.display = 'none !important';
-                    element.remove();
-                }
-            });
-        });
-
-        // 隐藏固定定位的元素（可能的 RTD 组件）
-        const fixedElements = document.querySelectorAll('div[style*="position: fixed"], div[style*="position: absolute"]');
-        fixedElements.forEach(element => {
-            const style = window.getComputedStyle(element);
-            const bottom = style.bottom;
-            const right = style.right;
-            const zIndex = style.zIndex;
-
-            // 如果是右下角的高层级元素，很可能是 RTD 组件
-            if ((bottom === '0px' || bottom === '10px') &&
-                (right === '0px' || right === '10px') &&
-                (parseInt(zIndex) > 1000 || zIndex === 'auto')) {
-                element.style.display = 'none !important';
-                element.remove();
-            }
-        });
-
-        console.log('🚫 Read the Docs elements hidden');
-    }
-
-    // ========== Monitor for Dynamic RTD Elements ==========
-    function monitorRTDElements() {
-        // 创建 MutationObserver 来监听动态添加的元素
-        const rtdObserver = new MutationObserver(function(mutations) {
-            let foundRTDElements = false;
-
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList') {
-                    mutation.addedNodes.forEach(function(node) {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            // 检查是否是 RTD 元素
-                            const classList = node.classList ? Array.from(node.classList) : [];
-                            const className = node.className || '';
-                            const id = node.id || '';
-
-                            const isRTDElement = classList.some(cls =>
-                                cls.includes('rst-') ||
-                                cls.includes('rtd') ||
-                                cls.includes('readthedocs') ||
-                                cls.includes('ethical-') ||
-                                cls.includes('injected')
-                            ) || className.includes('rst-') ||
-                                className.includes('rtd') ||
-                                id.includes('rtd') ||
-                                node.hasAttribute('data-readthedocs-project') ||
-                                node.hasAttribute('data-readthedocs-version');
-
-                            if (isRTDElement) {
-                                foundRTDElements = true;
-                                // 立即隐藏
-                                node.style.display = 'none !important';
-                                node.style.visibility = 'hidden !important';
-                                node.style.opacity = '0 !important';
-                                // 延迟移除以防止错误
-                                setTimeout(() => {
-                                    if (node.parentNode) {
-                                        node.remove();
-                                    }
-                                }, 10);
-                            }
-
-                            // 检查子元素是否包含 RTD 元素
-                            const rtdChildren = node.querySelectorAll ? node.querySelectorAll('[class*="rst-"], [class*="rtd"], [data-readthedocs-project], .injected, .ethical-sidebar, .ethical-footer') : [];
-                            if (rtdChildren.length > 0) {
-                                foundRTDElements = true;
-                                rtdChildren.forEach(child => {
-                                    child.style.display = 'none !important';
-                                    child.remove();
-                                });
-                            }
-                        }
-                    });
-                }
-            });
-
-            if (foundRTDElements) {
-                console.log('🚫 Dynamic RTD elements detected and hidden');
-                // 运行完整的隐藏函数以确保没有遗漏
-                setTimeout(hideReadTheDocsElements, 50);
-            }
-        });
-
-        // 开始观察
-        rtdObserver.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['class', 'id', 'style']
-        });
-
-        console.log('👁️ RTD element monitor started');
-    }
-
-    // ========== Periodic RTD Cleanup ==========
-    function startPeriodicRTDCleanup() {
-        // 每隔1秒检查一次
-        setInterval(() => {
-            hideReadTheDocsElements();
-        }, 1000);
-
-        console.log('🔄 Periodic RTD cleanup started');
-    }
 
     // ========== Additional CSS Animations ==========
     const style = document.createElement('style');

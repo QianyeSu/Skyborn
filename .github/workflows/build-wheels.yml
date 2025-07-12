@@ -1,0 +1,132 @@
+name: Build Wheels
+
+on:
+  push:
+    tags:
+      - v*
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'pyproject.toml'
+      - '.github/workflows/build-wheels.yml'
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-13, macos-latest]  # macos-13 for Intel, macos-latest for Apple Silicon
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install Fortran (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gfortran
+
+    - name: Install Fortran (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install gcc
+
+    - name: Install Fortran (Windows)
+      if: runner.os == 'Windows'
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        activate-environment: build-env
+        python-version: '3.11'
+
+    - name: Install Fortran compiler (Windows)
+      if: runner.os == 'Windows'
+      shell: bash -l {0}
+      run: |
+        conda install -c conda-forge fortran-compiler
+        conda install -c conda-forge flang
+
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v2.21.3
+      env:
+        # Build for Python 3.9+ as specified in pyproject.toml
+        CIBW_BUILD: cp39-* cp310-* cp311-* cp312-*
+        CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
+        CIBW_ARCHS: auto64
+
+        # Install build dependencies
+        CIBW_BEFORE_BUILD: |
+          python -m pip install --upgrade pip
+          python -m pip install meson-python ninja numpy>=1.21.0 wheel
+
+        # Test the wheel after building
+        CIBW_TEST_COMMAND: 'python -c "from skyborn.spharm import Spharmt; sht = Spharmt(8,6); print(''SUCCESS: Wheel test passed'')"'
+        CIBW_TEST_REQUIRES: numpy
+
+        # Use portable optimizations for wide compatibility
+        CIBW_ENVIRONMENT_LINUX: |
+          CFLAGS="-O3 -march=x86-64 -mtune=generic -fPIC"
+          FFLAGS="-O3 -march=x86-64 -mtune=generic -fPIC -fopenmp -fno-second-underscore"
+          LDFLAGS="-shared -fopenmp"
+          OPTIMIZATION_MODE="portable"
+        CIBW_ENVIRONMENT_MACOS: |
+          CFLAGS="-O3 -march=x86-64 -mtune=generic"
+          FFLAGS="-O3 -march=x86-64 -mtune=generic -fopenmp -fno-second-underscore"
+          MACOSX_DEPLOYMENT_TARGET="10.9"
+          OPTIMIZATION_MODE="portable"
+        CIBW_ENVIRONMENT_WINDOWS: |
+          CFLAGS="/O2"
+          FFLAGS="/O2"
+          OPTIMIZATION_MODE="portable"
+
+    - name: Show built wheels
+      run: ls -la wheelhouse/
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: wheels-${{ matrix.os }}
+        path: ./wheelhouse/*.whl
+
+  merge_wheels:
+    needs: [build_wheels]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: wheels-*
+        merge-multiple: true
+        path: dist
+
+    - name: Show all wheels
+      run: |
+        echo "🎯 Built wheels:"
+        ls -la dist/*.whl
+        echo
+        echo "📊 Total wheels: $(ls dist/*.whl | wc -l)"
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: all-wheels
+        path: dist/*.whl
+
+  upload_pypi:
+    needs: [merge_wheels]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    environment:
+      name: pypi
+      url: https://pypi.org/p/skyborn
+    permissions:
+      id-token: write  # for trusted publishing
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: all-wheels
+        path: dist
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1

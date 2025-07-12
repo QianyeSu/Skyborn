@@ -152,6 +152,7 @@ autodoc_mock_imports = [
     'seaborn',
     'xarray',
     'skyborn.ROF',  # ROF module is under development
+    'skyborn.spharm._spherepack',  # Compiled Fortran extension
 ]
 
 # -- MyST-NB configuration for Jupyter notebooks ---------------------------

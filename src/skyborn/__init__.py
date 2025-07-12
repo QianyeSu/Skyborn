@@ -43,5 +43,7 @@ from . import interp
 from . import ROF
 from . import conversion
 from . import calc
+from . import spharm  # Spherical harmonic transforms
 
-__version__ = "0.3.7"  # Updated to version 0.3.7
+# Import version from single source of truth
+from ._version import __version__

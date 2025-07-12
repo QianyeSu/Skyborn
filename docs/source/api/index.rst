@@ -10,6 +10,7 @@ API Reference
    interpolation
    gradients
    causality
+   spharm
 
 This section provides detailed API documentation for all Skyborn modules.
 
@@ -42,6 +43,11 @@ Causality Functions
 -------------------
 
 Causality analysis methods.
+
+Spherical Harmonics (spharm)
+-----------------------------
+
+Spherical harmonic transforms using the NCAR SPHEREPACK library. Adapted from the original pyspharm project.
 
 .. note::
    The ROF (Regularized Optimal Fingerprinting) module; currently under development and testing.

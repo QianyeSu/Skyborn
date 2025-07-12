@@ -211,15 +211,15 @@ if __name__ == "__main__":
 
     # Test module imports
     test_module_imports()
-    print("✅ Module import tests passed")
+    print("PASS: Module import tests passed")
 
     # Test tool checking
     # available = _check_grib_to_netcdf_available()
     # print(f"grib_to_netcdf tool availability: {available}")
 
     # if available:
-    #     print("✅ grib_to_netcdf tool is available, actual conversion is possible")
+    #     print("PASS: grib_to_netcdf tool is available, actual conversion is possible")
     # else:
-    #     print("⚠️  grib_to_netcdf tool is not available, please install eccodes")
+    #     print("WARNING: grib_to_netcdf tool is not available, please install eccodes")
 
     print("Tests completed!")

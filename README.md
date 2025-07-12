@@ -24,15 +24,51 @@ This package supports Windows, Linux, and macOS. However, it has been primarily 
 
 **Note:** While the package can be installed on different platforms, some Windows-specific features may not work on other operating systems.
 
-## Installation
+## 🚀 Installation
 
-To install the Skyborn package, you can use pip:
-
+### 📦 Quick Installation (Recommended)
 ```bash
 pip install skyborn
 ```
-or
+
+### ⚡ High-Performance Installation (Maximum Speed)
+
+If you need **maximum performance** and have a Fortran compiler:
 
 ```bash
-pip install -U --index-url https://pypi.org/simple/ skyborn
+# Source installation with native CPU optimization
+pip install --no-binary=skyborn skyborn
+
+# Or development installation
+git clone https://github.com/QianyeSu/Skyborn.git
+cd Skyborn
+pip install -e .
+```
+
+**Performance benefit**: Source installation can be **20-50% faster** as it compiles with `-march=native` optimization specifically for your CPU.
+
+### 🌐 Spherical Harmonics (spharm) Module Installation
+
+For users who need the **spherical harmonic transforms** functionality (adapted from [pyspharm](https://github.com/jswhit/pyspharm)), we recommend source installation for optimal performance:
+
+```bash
+# Recommended: Source installation for maximum performance
+pip install -U --index-url https://pypi.org/simple/ --no-binary=skyborn skyborn
+
+# Alternative: Standard installation (may have reduced performance for spharm)
+pip install -U skyborn
+```
+
+The `spharm` module requires Fortran compilation and benefits significantly from CPU-specific optimizations. Source installation ensures the SPHEREPACK library is compiled with optimal flags for your system.
+
+### 📋 Requirements for Source Installation
+```bash
+# Ubuntu/Debian
+sudo apt-get install gfortran
+
+# macOS
+brew install gcc
+
+# Windows (using conda)
+conda install -c conda-forge fortran-compiler
 ```
