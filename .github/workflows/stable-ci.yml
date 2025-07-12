@@ -29,9 +29,7 @@ jobs:
 
       - name: Install package in development mode
         shell: bash -l {0}
-        run: |
-          # Install with spharm disabled to avoid CI build issues
-          pip install -e . -C setup-args=-Dspharm=disabled
+        run: pip install -e .
 
       - name: List installed packages
         shell: bash -l {0}

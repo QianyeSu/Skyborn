@@ -15,8 +15,8 @@ Example:
     >>> data_back = sht.spectogrd(spec)  # Spectral to grid transform
 """
 
-# Import from the main spharm module (now in this directory)
-from .spharm import *
+# Import from the main spherical harmonics module (renamed to avoid conflicts)
+from .spherical_harmonics import *
 
 __version__ = "1.0.9"
 __author__ = "Jeff Whitaker"

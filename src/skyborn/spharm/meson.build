@@ -9,7 +9,7 @@ py_dep = py.dependency()
 # Install Python module files
 py.install_sources([
     '__init__.py',
-    'spharm.py',
+    'spherical_harmonics.py',  # Renamed from spharm.py to avoid naming conflicts
   ],
   subdir: 'skyborn/spharm'
 )
