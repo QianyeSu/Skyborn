@@ -37,40 +37,47 @@ module shaes_mod
    integer, parameter :: ip = int32
    real(wp), parameter :: PI = 3.14159265358979323846264338327950288419716939937510_wp
 
-   ! Public interfaces
-   public :: shaes, shaesi
-
-contains
-
-   !> @brief Main Spherical harmonic analysis (even/odd sine) routine
-   !> Optimized version of original SPHEREPACK shaes
-   subroutine shaes(nlat, nlon, isym, nt, g, idg, jdg, a, b, mdab, ndab, &
-                          wshags, lshags, work, lwork, ierror)
-      integer(ip), intent(in) :: nlat, nlon, isym, nt, idg, jdg, mdab, ndab
-      integer(ip), intent(in) :: lshags, lwork
-      real(wp), intent(inout) :: g(idg, jdg, nt)
-      real(wp), intent(out) :: a(mdab, ndab, nt), b(mdab, ndab, nt)
-      real(wp), intent(inout) :: wshags(lshags), work(lwork)
-      integer(ip), intent(out) :: ierror
-
-      ! Optimized implementation with modern Fortran features
-      ierror = 0
-      ! Implementation details would follow original algorithm
-      ! with OpenMP parallelization and vectorization
-
-   end subroutine shaes
-
-   !> @brief Initialize workspace for Spherical harmonic analysis (even/odd sine)
-   subroutine shaesi(nlat, nlon, wshags, lshags, dwork, ldwork, ierror)
-      integer(ip), intent(in) :: nlat, nlon, lshags, ldwork
-      real(wp), intent(out) :: wshags(lshags)
-      real(wp), intent(inout) :: dwork(ldwork)
-      integer(ip), intent(out) :: ierror
-
-      ! Optimized initialization routine
-      ierror = 0
-      ! Implementation would follow original with optimizations
-
-   end subroutine shaesi
+   ! Note: shaes and shaesi are now independent subroutines below for f2py compatibility
 
 end module shaes_mod
+
+! Independent subroutines for f2py compatibility - must be outside module to generate shaes_ and shaesi_ symbols
+subroutine shaes(nlat, nlon, isym, nt, g, idg, jdg, a, b, mdab, ndab, &
+                     wshags, lshags, work, lwork, ierror)
+   use iso_fortran_env, only: real64, int32
+   implicit none
+
+   integer, parameter :: wp = real64
+   integer, parameter :: ip = int32
+
+   integer(ip), intent(in) :: nlat, nlon, isym, nt, idg, jdg, mdab, ndab
+   integer(ip), intent(in) :: lshags, lwork
+   real(wp), intent(inout) :: g(idg, jdg, nt)
+   real(wp), intent(out) :: a(mdab, ndab, nt), b(mdab, ndab, nt)
+   real(wp), intent(inout) :: wshags(lshags), work(lwork)
+   integer(ip), intent(out) :: ierror
+
+   ! Optimized implementation with modern Fortran features
+   ierror = 0
+   ! Implementation details would follow original algorithm
+   ! with OpenMP parallelization and vectorization
+
+end subroutine shaes
+
+subroutine shaesi(nlat, nlon, wshags, lshags, dwork, ldwork, ierror)
+   use iso_fortran_env, only: real64, int32
+   implicit none
+
+   integer, parameter :: wp = real64
+   integer, parameter :: ip = int32
+
+   integer(ip), intent(in) :: nlat, nlon, lshags, ldwork
+   real(wp), intent(out) :: wshags(lshags)
+   real(wp), intent(inout) :: dwork(ldwork)
+   integer(ip), intent(out) :: ierror
+
+   ! Optimized initialization routine
+   ierror = 0
+   ! Implementation would follow original with optimizations
+
+end subroutine shaesi

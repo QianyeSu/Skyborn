@@ -12,6 +12,6 @@ dependencies:
   - pytest-cov
   - eccodes # For GRIB processing
   - gfortran_linux-64  # For Fortran compilation
-  - meson
+  - meson>=0.64
   - ninja
   - pip

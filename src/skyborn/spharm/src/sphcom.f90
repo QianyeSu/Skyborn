@@ -47,7 +47,7 @@ module sphcom_mod
    real(wp), parameter :: SC40 = SC20 * SC20
 
    ! Public interfaces - core computation routines
-   public :: dnlfk, dnlft, dnlftd
+   public :: dnlft, dnlftd
    public :: legin, legin1
    public :: zfin, zfin1, zfinit, zfini1
    public :: alin, alin1, alinit, alini1
@@ -65,102 +65,6 @@ module sphcom_mod
    public :: dvtk, dvtt, dwtk, dwtt
 
 contains
-
-   !> @brief Compute normalized Legendre function coefficients
-   !> @param[in] m Order of Legendre function
-   !> @param[in] n Degree of Legendre function
-   !> @param[out] cp Coefficient array (requires n/2+1 double precision locations)
-   subroutine dnlfk(m, n, cp)
-      integer(ip), intent(in) :: m, n
-      real(wp), intent(out) :: cp(:)
-
-      integer(ip) :: ma, nmms2, nex, i, l
-      real(wp) :: fnum, fden, fnmh, a1, b1, c1, cp2, fnnp1, fnmsq, fk
-      real(wp) :: t1, t2, pm1
-
-      cp(1) = 0.0_wp
-      ma = abs(m)
-      if (ma > n) return
-
-      select case (n)
-      case (0)
-         cp(1) = sqrt(2.0_wp)
-         return
-      case (1)
-         if (ma == 0) then
-            cp(1) = sqrt(1.5_wp)
-         else
-            cp(1) = sqrt(0.75_wp)
-            if (m == -1) cp(1) = -cp(1)
-         end if
-         return
-      end select
-
-      ! General case for n >= 2
-      if (mod(n + ma, 2) == 0) then
-         nmms2 = (n - ma) / 2
-         fnum = real(n + ma + 1, wp)
-         fnmh = real(n - ma + 1, wp)
-         pm1 = 1.0_wp
-      else
-         nmms2 = (n - ma - 1) / 2
-         fnum = real(n + ma + 2, wp)
-         fnmh = real(n - ma + 2, wp)
-         pm1 = -1.0_wp
-      end if
-
-      t1 = 1.0_wp / SC20
-      nex = 20
-      fden = 2.0_wp
-
-      if (nmms2 >= 1) then
-         do i = 1, nmms2
-            t1 = fnum * t1 / fden
-            if (t1 > SC20) then
-               t1 = t1 / SC40
-               nex = nex + 40
-            end if
-            fnum = fnum + 2.0_wp
-            fden = fden + 2.0_wp
-         end do
-      end if
-
-      t1 = t1 / (2.0_wp**(n - 1 - nex))
-      if (mod(ma/2, 2) /= 0) t1 = -t1
-
-      t2 = 1.0_wp
-      if (ma > 0) then
-         do i = 1, ma
-            t2 = fnmh * t2 / (fnmh + pm1)
-            fnmh = fnmh + 2.0_wp
-         end do
-      end if
-
-      cp2 = t1 * sqrt((real(n, wp) + 0.5_wp) * t2)
-      fnnp1 = real(n * (n + 1), wp)
-      fnmsq = fnnp1 - 2.0_wp * real(ma * ma, wp)
-      l = (n + 1) / 2
-      if (mod(n, 2) == 0 .and. mod(ma, 2) == 0) l = l + 1
-
-      cp(l) = cp2
-      if (m < 0 .and. mod(ma, 2) /= 0) cp(l) = -cp(l)
-
-      if (l <= 1) return
-
-      fk = real(n, wp)
-      a1 = (fk - 2.0_wp) * (fk - 1.0_wp) - fnnp1
-      b1 = 2.0_wp * (fk * fk - fnmsq)
-      cp(l - 1) = b1 * cp(l) / a1
-
-      do while (l > 2)
-         l = l - 1
-         fk = fk - 2.0_wp
-         a1 = (fk - 2.0_wp) * (fk - 1.0_wp) - fnnp1
-         b1 = -2.0_wp * (fk * fk - fnmsq)
-         c1 = (fk + 1.0_wp) * (fk + 2.0_wp) - fnnp1
-         cp(l - 1) = -(b1 * cp(l) + c1 * cp(l + 1)) / a1
-      end do
-   end subroutine dnlfk
 
    !> @brief Evaluate normalized Legendre function at given angle
    !> @param[in] m Order of function
@@ -1381,3 +1285,105 @@ contains
    end subroutine wbgit1
 
 end module sphcom_mod
+
+! Independent subroutine for f2py compatibility - must be outside module to generate dnlfk_ symbol
+subroutine dnlfk(m, n, cp)
+   use iso_fortran_env, only: real64, int32
+   implicit none
+
+   integer, parameter :: wp = real64
+   integer, parameter :: ip = int32
+   real(wp), parameter :: SC10 = 1024.0_wp
+   real(wp), parameter :: SC20 = SC10 * SC10
+   real(wp), parameter :: SC40 = SC20 * SC20
+
+   integer(ip), intent(in) :: m, n
+   real(wp), intent(out) :: cp(:)
+
+   integer(ip) :: ma, nmms2, nex, i, l
+   real(wp) :: fnum, fden, fnmh, a1, b1, c1, cp2, fnnp1, fnmsq, fk
+   real(wp) :: t1, t2, pm1
+
+   cp(1) = 0.0_wp
+   ma = abs(m)
+   if (ma > n) return
+
+   select case (n)
+   case (0)
+      cp(1) = sqrt(2.0_wp)
+      return
+   case (1)
+      if (ma == 0) then
+         cp(1) = sqrt(1.5_wp)
+      else
+         cp(1) = sqrt(0.75_wp)
+         if (m == -1) cp(1) = -cp(1)
+      end if
+      return
+   end select
+
+   ! General case for n >= 2
+   if (mod(n + ma, 2) == 0) then
+      nmms2 = (n - ma) / 2
+      fnum = real(n + ma + 1, wp)
+      fnmh = real(n - ma + 1, wp)
+      pm1 = 1.0_wp
+   else
+      nmms2 = (n - ma - 1) / 2
+      fnum = real(n + ma + 2, wp)
+      fnmh = real(n - ma + 2, wp)
+      pm1 = -1.0_wp
+   end if
+
+   t1 = 1.0_wp / SC20
+   nex = 20
+   fden = 2.0_wp
+
+   if (nmms2 >= 1) then
+      do i = 1, nmms2
+         t1 = fnum * t1 / fden
+         if (t1 > SC20) then
+            t1 = t1 / SC40
+            nex = nex + 40
+         end if
+         fnum = fnum + 2.0_wp
+         fden = fden + 2.0_wp
+      end do
+   end if
+
+   t1 = t1 / (2.0_wp**(n - 1 - nex))
+   if (mod(ma/2, 2) /= 0) t1 = -t1
+
+   t2 = 1.0_wp
+   if (ma > 0) then
+      do i = 1, ma
+         t2 = fnmh * t2 / (fnmh + pm1)
+         fnmh = fnmh + 2.0_wp
+      end do
+   end if
+
+   cp2 = t1 * sqrt((real(n, wp) + 0.5_wp) * t2)
+   fnnp1 = real(n * (n + 1), wp)
+   fnmsq = fnnp1 - 2.0_wp * real(ma * ma, wp)
+   l = (n + 1) / 2
+   if (mod(n, 2) == 0 .and. mod(ma, 2) == 0) l = l + 1
+
+   cp(l) = cp2
+   if (m < 0 .and. mod(ma, 2) /= 0) cp(l) = -cp(l)
+
+   if (l <= 1) return
+
+   fk = real(n, wp)
+   a1 = (fk - 2.0_wp) * (fk - 1.0_wp) - fnnp1
+   b1 = 2.0_wp * (fk * fk - fnmsq)
+   cp(l - 1) = b1 * cp(l) / a1
+
+   do while (l > 2)
+      l = l - 1
+      fk = fk - 2.0_wp
+      a1 = (fk - 2.0_wp) * (fk - 1.0_wp) - fnnp1
+      b1 = -2.0_wp * (fk * fk - fnmsq)
+      c1 = (fk + 1.0_wp) * (fk + 2.0_wp) - fnnp1
+      cp(l - 1) = -(b1 * cp(l) + c1 * cp(l + 1)) / a1
+   end do
+end subroutine dnlfk

@@ -9,9 +9,9 @@ project('skyborn', 'c', 'fortran',
   ]
 )
 
-# Import Python functionality
+# Import Python functionality - explicitly use current python
 py_mod = import('python')
-py = py_mod.find_installation(pure: false)
+py = py_mod.find_installation('python', pure: false)
 py_dep = py.dependency()
 
 # Check for required Python packages using run_command
