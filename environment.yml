@@ -14,4 +14,7 @@ dependencies:
   - gfortran_linux-64  # For Fortran compilation
   - meson>=0.64
   - ninja
+  - meson-python>=0.12  # Added for build system
+  - wheel
+  - setuptools
   - pip
