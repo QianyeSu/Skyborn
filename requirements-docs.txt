@@ -6,3 +6,11 @@ sphinx-autodoc-typehints>=1.0.0
 sphinx-copybutton>=0.5.0
 jupyter-book>=0.15.0
 toml>=0.10.0
+
+# Build system dependencies required for installing skyborn
+meson-python>=0.12.0
+meson>=0.64.0
+ninja>=1.8.2
+numpy>=1.23.0
+wheel
+setuptools

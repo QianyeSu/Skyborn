@@ -89,10 +89,13 @@ jobs:
           CFLAGS="-O3 -march=x86-64 -mtune=generic -fPIC"
           FFLAGS="-O3 -march=x86-64 -mtune=generic -fPIC -fopenmp -fno-second-underscore"
           LDFLAGS="-shared -fopenmp"
-        CIBW_ENVIRONMENT_MACOS: |
-          CFLAGS="-O3 -march=x86-64 -mtune=generic"
-          FFLAGS="-O3 -march=x86-64 -mtune=generic -fopenmp -fno-second-underscore"
+
+        # macOS environment: use native optimization for each architecture
+        CIBW_ENVIRONMENT_MACOS: >
+          CFLAGS="-O3 -fPIC -march=native"
+          FFLAGS="-O3 -fPIC -fopenmp -fno-second-underscore -march=native"
           MACOSX_DEPLOYMENT_TARGET="10.9"
+
         CIBW_ENVIRONMENT_WINDOWS: |
           PATH="C:\\tools\\mingw64\\bin;$PATH"
           CC=gcc

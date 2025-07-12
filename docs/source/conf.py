@@ -24,21 +24,21 @@ try:
     # Try to import skyborn to get version
     import skyborn
     release = skyborn.__version__
-except (ImportError, AttributeError) as e:
+    print(f"✅ Successfully imported skyborn version: {release}")
+except (ImportError, AttributeError, Exception) as e:
+    print(f"⚠️ Failed to import skyborn: {e}")
     # Fallback: read version from pyproject.toml or __init__.py
     try:
         import toml
         with open('../../pyproject.toml', 'r') as f:
             pyproject = toml.load(f)
             release = pyproject['project']['version']
-    except:
-        # Final fallback: read from __init__.py
-        import re
-        with open('../../src/skyborn/__init__.py', 'r') as f:
-            content = f.read()
-            match = re.search(
-                r'__version__\s*=\s*[\'"]([^\'"]+)[\'"]', content)
-            release = match.group(1) if match else '0.3.6'
+        print(f"✅ Got version from pyproject.toml: {release}")
+    except Exception as e2:
+        print(f"⚠️ Failed to read pyproject.toml: {e2}")
+        # Final fallback: hardcoded version
+        release = '0.3.8'
+        print(f"✅ Using fallback version: {release}")
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
