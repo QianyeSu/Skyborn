@@ -16,12 +16,18 @@ py.install_sources([
 
 # Get numpy include directories
 incdir_numpy = run_command(py,
-  ['-c', 'import os; os.chdir(".."); import numpy; print(numpy.get_include())'],
+  ['-c', 'import numpy; print(numpy.get_include())'],
   check : true
 ).stdout().strip()
 
 incdir_f2py = run_command(py,
-    ['-c', 'import os; os.chdir(".."); import numpy.f2py; print(numpy.f2py.get_include())'],
+    ['-c', 'import numpy.f2py; print(numpy.f2py.get_include())'],
+    check : true
+).stdout().strip()
+
+# Get fortranobject.c path
+fortranobject_c = run_command(py,
+    ['-c', 'import numpy.f2py; import os; print(os.path.join(numpy.f2py.get_include(), "fortranobject.c"))'],
     check : true
 ).stdout().strip()
 
@@ -96,7 +102,7 @@ py.extension_module('_spherepack',
         'src/ihgeod.f90',
         'src/alf.f90',
         spherepack_source,
-        files(incdir_f2py / 'fortranobject.c')
+        files(fortranobject_c)
     ],
     include_directories: inc_np,
     dependencies: py_dep,
