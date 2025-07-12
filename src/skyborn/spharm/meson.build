@@ -82,27 +82,59 @@ if try_f2py.returncode() == 0
   message('Fortran args: ' + ' '.join(fortran_args))
   message('C args: ' + ' '.join(c_args))
 
-  # Get fortranobject.c path
+  # Get fortranobject.c path with extensive fallbacks for CI environments
   fortranobject_cmd = run_command(py,
     ['-c', '''
 import numpy.f2py
+import numpy
 import os
-fo_path = os.path.join(numpy.f2py.get_include(), "fortranobject.c")
-if os.path.exists(fo_path):
-    print(fo_path)
+import sys
+
+# Try multiple potential paths for fortranobject.c
+candidates = []
+
+# Method 1: f2py.get_include()
+try:
+    fo_path = os.path.join(numpy.f2py.get_include(), "fortranobject.c")
+    candidates.append(fo_path)
+except:
+    pass
+
+# Method 2: numpy package paths
+numpy_base = numpy.__path__[0]
+candidates.extend([
+    os.path.join(numpy_base, "f2py", "src", "fortranobject.c"),
+    os.path.join(numpy_base, "f2py", "fortranobject.c"),
+    os.path.join(numpy_base, "_core", "src", "fortranobject.c"),
+])
+
+# Method 3: site-packages paths (for pip installs)
+try:
+    import site
+    for site_dir in site.getsitepackages() + [site.getusersitepackages()]:
+        if site_dir:
+            candidates.extend([
+                os.path.join(site_dir, "numpy", "f2py", "src", "fortranobject.c"),
+                os.path.join(site_dir, "numpy", "f2py", "fortranobject.c"),
+            ])
+except:
+    pass
+
+# Method 4: sys.path based search
+for path in sys.path:
+    if path and "numpy" in path:
+        candidates.extend([
+            os.path.join(path, "numpy", "f2py", "src", "fortranobject.c"),
+            os.path.join(path, "numpy", "f2py", "fortranobject.c"),
+        ])
+
+# Find first existing file
+for candidate in candidates:
+    if os.path.exists(candidate):
+        print(candidate)
+        break
 else:
-    # Fallback paths for different numpy versions
-    import numpy
-    base_paths = [
-        os.path.join(numpy.__path__[0], "f2py", "src", "fortranobject.c"),
-        os.path.join(numpy.__path__[0], "f2py", "fortranobject.c"),
-    ]
-    for path in base_paths:
-        if os.path.exists(path):
-            print(path)
-            break
-    else:
-        print("")  # empty if not found
+    print("")  # empty if not found
 '''],
     check: true
   )
@@ -118,12 +150,19 @@ else:
   )
   spherepack_sources += spherepack_source
 
-  # Add fortranobject.c if found
+  # Add fortranobject.c if found, otherwise try to build without it
   if fortranobject_c != ''
     message('Found fortranobject.c: ' + fortranobject_c)
-    spherepack_sources += files(fortranobject_c)
+    # Verify file actually exists before adding
+    fortran_obj_check = run_command('test', '-f', fortranobject_c, check: false)
+    if fortran_obj_check.returncode() == 0
+      spherepack_sources += files(fortranobject_c)
+      message('Added fortranobject.c to build')
+    else
+      warning('fortranobject.c path found but file does not exist: ' + fortranobject_c)
+    endif
   else
-    warning('fortranobject.c not found - may cause PyFortran_Type errors')
+    warning('fortranobject.c not found - trying to build without it (may cause issues)')
   endif
 
   message('f2py interface generation: SUCCESS')
