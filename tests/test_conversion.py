@@ -205,21 +205,21 @@ def test_module_imports():
     assert callable(convert_grib_to_nc)
 
 
-if __name__ == "__main__":
-    # Run simple tests
-    print("Running skyborn.conversion module tests...")
+# if __name__ == "__main__":
+#     # Run simple tests
+#     print("Running skyborn.conversion module tests...")
 
-    # Test module imports
-    test_module_imports()
-    print("PASS: Module import tests passed")
+#     # Test module imports
+#     test_module_imports()
+#     print("PASS: Module import tests passed")
 
-    # Test tool checking
-    # available = _check_grib_to_netcdf_available()
-    # print(f"grib_to_netcdf tool availability: {available}")
+#     # Test tool checking
+#     # available = _check_grib_to_netcdf_available()
+#     # print(f"grib_to_netcdf tool availability: {available}")
 
-    # if available:
-    #     print("PASS: grib_to_netcdf tool is available, actual conversion is possible")
-    # else:
-    #     print("WARNING: grib_to_netcdf tool is not available, please install eccodes")
+#     # if available:
+#     #     print("PASS: grib_to_netcdf tool is available, actual conversion is possible")
+#     # else:
+#     #     print("WARNING: grib_to_netcdf tool is not available, please install eccodes")
 
-    print("Tests completed!")
+#     print("Tests completed!")
