@@ -55,7 +55,7 @@ jobs:
         echo "FC=gfortran" >> $env:GITHUB_ENV
 
     - name: Build wheels
-      uses: pypa/cibuildwheel@v2.21.3
+      uses: pypa/cibuildwheel@v3.0.1
       env:
         # Build for Python 3.9+ as specified in pyproject.toml
         CIBW_BUILD: cp39-* cp310-* cp311-* cp312-*
