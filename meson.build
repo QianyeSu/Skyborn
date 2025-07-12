@@ -1,4 +1,4 @@
-project('skyborn', 'c', 'fortran',
+project('skyborn', 'c',
   version: '0.3.8',
   license: 'BSD-3-Clause',
   meson_version: '>= 0.64.0',
@@ -8,6 +8,18 @@ project('skyborn', 'c', 'fortran',
     'optimization=3',
   ]
 )
+
+# Check for Fortran compiler availability
+fortran_available = false
+fortran_compiler = find_program('gfortran', required: false)
+if fortran_compiler.found()
+  # Try to add Fortran language support
+  add_languages('fortran', required: false, native: false)
+  fortran_available = true
+  message('Fortran compiler found: building with Fortran extensions')
+else
+  message('Fortran compiler not found: building without Fortran extensions')
+endif
 
 # Import Python functionality - explicitly use current python
 py_mod = import('python')
@@ -41,7 +53,7 @@ subdir('src/skyborn/ROF')
 
 # Try to build spharm with better error handling
 spharm_enabled = get_option('spharm')
-if not spharm_enabled.disabled()
+if not spharm_enabled.disabled() and fortran_available
   # Check if we can build spharm
   can_build_spharm = true
 
@@ -73,6 +85,8 @@ if not spharm_enabled.disabled()
   else
     message('Skipping spharm module due to missing dependencies')
   endif
+elif not fortran_available
+  message('Skipping spharm module: Fortran compiler not available')
 endif
 
 # Summary

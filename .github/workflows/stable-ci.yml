@@ -27,6 +27,17 @@ jobs:
       - name: Check workspace
         run: echo ${{ github.workspace }}
 
+      - name: Install build dependencies
+        shell: bash -l {0}
+        run: |
+          # 确保构建工具在pip环境中可用
+          pip install meson ninja
+          # 验证安装
+          which meson
+          which ninja
+          meson --version
+          ninja --version
+
       - name: Install package in development mode
         shell: bash -l {0}
         run: pip install -e .
