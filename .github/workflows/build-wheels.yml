@@ -67,21 +67,18 @@ jobs:
         CIBW_TEST_COMMAND: 'python -c "from skyborn.spharm import Spharmt; sht = Spharmt(8,6); print(''SUCCESS: Wheel test passed'')"'
         CIBW_TEST_REQUIRES: numpy
 
-        # Use portable optimizations for wide compatibility
+        # Use portable optimizations for wide compatibility (default)
         CIBW_ENVIRONMENT_LINUX: |
           CFLAGS="-O3 -march=x86-64 -mtune=generic -fPIC"
           FFLAGS="-O3 -march=x86-64 -mtune=generic -fPIC -fopenmp -fno-second-underscore"
           LDFLAGS="-shared -fopenmp"
-          OPTIMIZATION_MODE="portable"
         CIBW_ENVIRONMENT_MACOS: |
           CFLAGS="-O3 -march=x86-64 -mtune=generic"
           FFLAGS="-O3 -march=x86-64 -mtune=generic -fopenmp -fno-second-underscore"
           MACOSX_DEPLOYMENT_TARGET="10.9"
-          OPTIMIZATION_MODE="portable"
         CIBW_ENVIRONMENT_WINDOWS: |
           CFLAGS="/O2"
           FFLAGS="/O2"
-          OPTIMIZATION_MODE="portable"
 
     - name: Show built wheels
       run: ls -la wheelhouse/

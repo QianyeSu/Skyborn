@@ -35,9 +35,31 @@ spherepack_source = custom_target('_spherepackmodule.c',
 
 inc_np = include_directories(incdir_numpy, incdir_f2py)
 
-# Simple fortran compilation flags
+# Simple fortran compilation flags with environment-based optimization
 fortran_args = ['-O3', '-fPIC', '-fno-second-underscore']
 c_args = ['-O3']
+
+# Get optimization mode from environment (portable vs native)
+optimization_mode = 'portable'  # Default to portable for better compatibility
+
+# Check for environment variable override
+env = environment()
+if env.get('OPTIMIZATION_MODE', '') != ''
+    optimization_mode = env.get('OPTIMIZATION_MODE')
+endif
+
+# Apply optimization based on mode
+if meson.get_compiler('fortran').get_id() == 'gcc'
+    if optimization_mode == 'native'
+        # Native optimization for source builds (opt-in)
+        fortran_args += ['-march=native', '-mtune=native', '-fopenmp', '-funroll-loops', '-ffast-math', '-ftree-vectorize']
+        c_args += ['-march=native', '-mtune=native', '-fopenmp', '-ffast-math']
+    else
+        # Portable optimization by default
+        fortran_args += ['-march=x86-64', '-mtune=generic', '-fopenmp']
+        c_args += ['-march=x86-64', '-mtune=generic', '-fopenmp']
+    endif
+endif
 
 # Build the spherepack extension module
 py.extension_module('_spherepack',
