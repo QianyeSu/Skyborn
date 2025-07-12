@@ -16,18 +16,12 @@ py.install_sources([
 
 # Get numpy include directories
 incdir_numpy = run_command(py,
-  ['-c', 'import numpy; print(numpy.get_include())'],
+  ['-c', 'import os; os.chdir(".."); import numpy; print(numpy.get_include())'],
   check : true
 ).stdout().strip()
 
 incdir_f2py = run_command(py,
-    ['-c', 'import numpy.f2py; print(numpy.f2py.get_include())'],
-    check : true
-).stdout().strip()
-
-# Get fortranobject.c path
-fortranobject_c = run_command(py,
-    ['-c', 'import numpy.f2py; import os; print(os.path.join(numpy.f2py.get_include(), "fortranobject.c"))'],
+    ['-c', 'import os; os.chdir(".."); import numpy.f2py; print(numpy.f2py.get_include())'],
     check : true
 ).stdout().strip()
 
@@ -41,31 +35,9 @@ spherepack_source = custom_target('_spherepackmodule.c',
 
 inc_np = include_directories(incdir_numpy, incdir_f2py)
 
-# Simple fortran compilation flags with environment-based optimization
+# Simple fortran compilation flags
 fortran_args = ['-O3', '-fPIC', '-fno-second-underscore']
 c_args = ['-O3']
-
-# Get optimization mode from environment (portable vs native)
-optimization_mode = 'portable'  # Default to portable for better compatibility
-
-# Check for environment variable override
-env = environment()
-if env.get('OPTIMIZATION_MODE', '') != ''
-    optimization_mode = env.get('OPTIMIZATION_MODE')
-endif
-
-# Apply optimization based on mode
-if meson.get_compiler('fortran').get_id() == 'gcc'
-    if optimization_mode == 'native'
-        # Native optimization for source builds (opt-in)
-        fortran_args += ['-march=native', '-mtune=native', '-fopenmp', '-funroll-loops', '-ffast-math', '-ftree-vectorize']
-        c_args += ['-march=native', '-mtune=native', '-fopenmp', '-ffast-math']
-    else
-        # Portable optimization by default
-        fortran_args += ['-march=x86-64', '-mtune=generic', '-fopenmp']
-        c_args += ['-march=x86-64', '-mtune=generic', '-fopenmp']
-    endif
-endif
 
 # Build the spherepack extension module
 py.extension_module('_spherepack',
@@ -102,7 +74,7 @@ py.extension_module('_spherepack',
         'src/ihgeod.f90',
         'src/alf.f90',
         spherepack_source,
-        files(fortranobject_c)
+        files(incdir_f2py / 'fortranobject.c')
     ],
     include_directories: inc_np,
     dependencies: py_dep,
