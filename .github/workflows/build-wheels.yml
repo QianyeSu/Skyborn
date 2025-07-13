@@ -114,7 +114,7 @@ jobs:
           output-dir: wheelhouse
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-          CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
+          CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_BEFORE_BUILD_WINDOWS: pip install meson ninja
           CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair -w {dest_dir} {wheel}
@@ -128,7 +128,7 @@ jobs:
           output-dir: wheelhouse
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-          CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
+          CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
@@ -140,9 +140,10 @@ jobs:
           output-dir: wheelhouse
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-          CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
+          CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
+          CIBW_BEFORE_BUILD_LINUX: yum install -y gcc-gfortran || dnf install -y gcc-gfortran || echo 'gfortran install failed'
           CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
