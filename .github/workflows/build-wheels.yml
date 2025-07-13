@@ -63,21 +63,29 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
 
-          # Install Fortran compiler before building
+          # Install Fortran compiler before building - use conda for cross-platform compatibility
           CIBW_BEFORE_BUILD_LINUX: |
-            yum install -y gcc-gfortran || (apt-get update && apt-get install -y gfortran)
+            curl -L https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o miniconda.sh
+            bash miniconda.sh -b -p $HOME/miniconda
+            export PATH="$HOME/miniconda/bin:$PATH"
+            conda install -y gfortran_linux-64
 
           CIBW_BEFORE_BUILD_MACOS: |
-            brew install gcc
+            curl -L https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -o miniconda.sh
+            bash miniconda.sh -b -p $HOME/miniconda
+            export PATH="$HOME/miniconda/bin:$PATH"
+            conda install -y gfortran_osx-64
 
           CIBW_BEFORE_BUILD_WINDOWS: |
-            choco install mingw --no-progress
+            powershell -Command "Invoke-WebRequest -Uri 'https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe' -OutFile 'miniconda.exe'"
+            powershell -Command "Start-Process 'miniconda.exe' -ArgumentList '/S /D=%USERPROFILE%\miniconda' -Wait"
+            powershell -Command "& '%USERPROFILE%\miniconda\Scripts\conda.exe' install -y m2w64-toolchain"
             pip install delvewheel
 
-          # Environment variables
-          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
-          CIBW_ENVIRONMENT_MACOS: FC=gfortran CC=gcc
-          CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc
+          # Environment variables - ensure conda gfortran is found
+          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PATH="$HOME/miniconda/bin:$PATH"
+          CIBW_ENVIRONMENT_MACOS: FC=gfortran CC=gcc PATH="$HOME/miniconda/bin:$PATH"
+          CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc PATH="%USERPROFILE%\\miniconda\\Scripts;%USERPROFILE%\\miniconda\\Library\\mingw-w64\\bin;%PATH%"
 
           # Test imports
           CIBW_TEST_COMMAND: python -c "import skyborn; from skyborn import spharm; print('✅ Import test passed')"
