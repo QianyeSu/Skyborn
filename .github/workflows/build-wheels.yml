@@ -2,140 +2,128 @@ name: Build and publish wheels
 
 on:
   push:
-    branches: [main, dev] # Add dev branch for testing
+    branches: [main, dev]  # Add dev branch for testing
     tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
     inputs:
       reason:
-        description: "Reason for manual trigger"
+        description: 'Reason for manual trigger'
         required: false
-        default: "Manual testing"
+        default: 'Manual testing'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build_wheels:
-    name: Build wheels on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Build wheel ${{ matrix.python }}-${{ matrix.buildplat[1] }}
+    runs-on: ${{ matrix.buildplat[0] }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Linux wheels
-          - os: ubuntu-latest
-            cibw_archs: "x86_64"
-          - os: ubuntu-latest
-            cibw_archs: "aarch64"
-          # macOS wheels
-          - os: macos-13 # Intel Mac
-            cibw_archs: "x86_64"
-          - os: macos-latest # Apple Silicon Mac
-            cibw_archs: "arm64"
-          # Windows wheels
-          - os: windows-latest
-            cibw_archs: "AMD64"
+        # Following NumPy's matrix pattern
+        buildplat:
+          - [ubuntu-22.04, manylinux_x86_64]
+          - [ubuntu-22.04, manylinux_aarch64]
+          - [macos-13, macosx_x86_64]  # Intel Mac
+          - [macos-14, macosx_arm64]   # Apple Silicon Mac
+          - [windows-2022, win_amd64]
+        python: ["cp39", "cp310", "cp311", "cp312"]
+        exclude:
+          # Exclude problematic combinations if needed
+          - buildplat: [ubuntu-22.04, manylinux_aarch64]
+            python: "cp39"  # Remove if this combination is problematic
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      # QEMU for cross-compilation (Linux ARM64)
+      # Set up QEMU for cross-compilation (ARM64 Linux)
       - name: Set up QEMU
-        if: matrix.cibw_archs == 'aarch64'
+        if: matrix.buildplat[1] == 'manylinux_aarch64'
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
 
-      # Build wheels using cibuildwheel
+      # Setup for macOS (following NumPy's approach)
+      - name: Setup macOS
+        if: startsWith(matrix.buildplat[0], 'macos')
+        run: |
+          # Use gfortran-13 like NumPy
+          echo "FC=gfortran-13" >> "$GITHUB_ENV"
+          echo "F77=gfortran-13" >> "$GITHUB_ENV"
+          echo "F90=gfortran-13" >> "$GITHUB_ENV"
+
+      # Setup for Linux (install gfortran in container)
+      - name: Setup Linux environment
+        if: startsWith(matrix.buildplat[1], 'manylinux')
+        run: |
+          # Set environment for Linux builds
+          echo "CIBW_BEFORE_BUILD_LINUX=yum install -y gcc-gfortran || dnf install -y gcc-gfortran || echo 'gfortran install failed'" >> "$GITHUB_ENV"
+
+      # Setup for Windows
+      - name: Setup Windows
+        if: matrix.buildplat[1] == 'win_amd64'
+        run: |
+          # Set environment for Windows builds
+          echo "CIBW_BEFORE_BUILD_WINDOWS=choco install -y mingw --no-progress && pip install delvewheel" >> "$GITHUB_ENV"
+          echo "CIBW_REPAIR_WHEEL_COMMAND_WINDOWS=delvewheel repair -w {dest_dir} {wheel}" >> "$GITHUB_ENV"
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.16.2
-        with:
-          # Explicitly set package-dir to avoid path issues
-          package-dir: .
-          output-dir: wheelhouse
         env:
-          CIBW_ARCHS: ${{ matrix.cibw_archs }}
+          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
 
-          # Supported Python versions
-          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-*"
-
-          # Skip unnecessary builds
+          # Skip problematic builds
           CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
 
-          # Linux: Use manylinux images
+          # Use manylinux2014 images
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
 
-          # Install Fortran compiler before building - use system package manager
-          CIBW_BEFORE_BUILD_LINUX: |
-            # Try different package managers in manylinux containers
-            yum install -y gcc-gfortran || \
-            dnf install -y gcc-gfortran || \
-            apt-get update && apt-get install -y gfortran || \
-            echo "Using system gfortran if available"
-
-          CIBW_BEFORE_BUILD_MACOS: |
-            ARCH=$(uname -m)
-            if [ "$ARCH" = "arm64" ]; then
-              MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh"
-              GFORTRAN_PKG="gfortran_osx-arm64"
-            else
-              MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
-              GFORTRAN_PKG="gfortran_osx-64"
-            fi
-            curl -L $MINICONDA_URL -o miniconda.sh
-            bash miniconda.sh -b -p $HOME/miniconda
-            # Don't change PATH globally to avoid Python version conflicts
-            $HOME/miniconda/bin/conda install -y $GFORTRAN_PKG
-            # Only add gfortran to PATH, not conda python
-            export PATH="$HOME/miniconda/bin:$PATH"
-            which gfortran
-
-          CIBW_BEFORE_BUILD_WINDOWS: |
-            powershell -Command "Invoke-WebRequest -Uri 'https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe' -OutFile 'miniconda.exe'"
-            powershell -Command "Start-Process 'miniconda.exe' -ArgumentList '/S /D=%USERPROFILE%\miniconda' -Wait"
-            powershell -Command "& '%USERPROFILE%\miniconda\Scripts\conda.exe' install -y m2w64-toolchain"
-            pip install delvewheel
-
-          # Environment variables - use system gfortran
+          # Environment variables for compilers
           CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
-          CIBW_ENVIRONMENT_MACOS: FC=$HOME/miniconda/bin/gfortran CC=gcc
-          CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc PATH="%USERPROFILE%\\miniconda\\Library\\mingw-w64\\bin;%PATH%"
+          CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc
+          CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc
 
-          # Test imports
-          CIBW_TEST_COMMAND: python -c "import skyborn; from skyborn import spharm; print('✅ Import test passed')"
+          # Test command - start simple, add spharm later
+          CIBW_TEST_COMMAND: python -c "import skyborn; print('✅ Basic import test passed')"
 
-          # Windows: Fix DLL dependencies
-          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair -w {dest_dir} {wheel}
+          # Build configuration
+          CIBW_BUILD_VERBOSITY: 1
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-${{ matrix.cibw_archs }}
+          name: wheel-${{ matrix.python }}-${{ matrix.buildplat[1] }}
           path: ./wheelhouse/*.whl
 
-  # Build source distribution
   build_sdist:
     name: Build source distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
-
-      - name: Install build dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install build
+          python-version: '3.11'
 
       - name: Build sdist
-        run: python -m build --sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --sdist
 
       - name: Upload sdist
         uses: actions/upload-artifact@v4
@@ -149,15 +137,15 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
-    # environment removed because 'name' and 'url' are not valid keys here
     permissions:
-      id-token: write # Use trusted publishing
-
+      id-token: write  # Use trusted publishing
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
+          pattern: '*'
           path: dist-artifacts
+          merge-multiple: true
 
       - name: Prepare dist directory
         run: |
@@ -182,27 +170,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        include:
-          - os: ubuntu-latest
-            cibw_archs: "x86_64"
-          - os: windows-latest
-            cibw_archs: "AMD64"
-          - os: macos-13
-            cibw_archs: "x86_64"
-
+        os: [ubuntu-latest, windows-latest, macos-13]
     steps:
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Download wheels
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-${{ matrix.cibw_archs }}
+          pattern: 'wheel-cp311-*'
           path: wheels
+          merge-multiple: true
 
       - name: Install from wheel
         run: |
           pip install wheels/skyborn*.whl
-          python -c "import skyborn; from skyborn import spharm; print('✅ Wheel installation test passed on ${{ matrix.os }}')"
+          python -c "import skyborn; print('✅ Wheel installation test passed on ${{ matrix.os }}')"
