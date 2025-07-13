@@ -65,16 +65,35 @@ jobs:
 
           # Install Fortran compiler before building - use conda for cross-platform compatibility
           CIBW_BEFORE_BUILD_LINUX: |
-            curl -L https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o miniconda.sh
+            ARCH=$(uname -m)
+            if [ "$ARCH" = "aarch64" ]; then
+              MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh"
+              GFORTRAN_PKG="gfortran_linux-aarch64"
+            else
+              MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+              GFORTRAN_PKG="gfortran_linux-64"
+            fi
+            curl -L $MINICONDA_URL -o miniconda.sh
             bash miniconda.sh -b -p $HOME/miniconda
             export PATH="$HOME/miniconda/bin:$PATH"
-            conda install -y gfortran_linux-64
+            conda install -y $GFORTRAN_PKG
 
           CIBW_BEFORE_BUILD_MACOS: |
-            curl -L https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -o miniconda.sh
+            ARCH=$(uname -m)
+            if [ "$ARCH" = "arm64" ]; then
+              MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh"
+              GFORTRAN_PKG="gfortran_osx-arm64"
+            else
+              MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
+              GFORTRAN_PKG="gfortran_osx-64"
+            fi
+            curl -L $MINICONDA_URL -o miniconda.sh
             bash miniconda.sh -b -p $HOME/miniconda
+            # Don't change PATH globally to avoid Python version conflicts
+            $HOME/miniconda/bin/conda install -y $GFORTRAN_PKG
+            # Only add gfortran to PATH, not conda python
             export PATH="$HOME/miniconda/bin:$PATH"
-            conda install -y gfortran_osx-64
+            which gfortran
 
           CIBW_BEFORE_BUILD_WINDOWS: |
             powershell -Command "Invoke-WebRequest -Uri 'https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe' -OutFile 'miniconda.exe'"
@@ -82,10 +101,10 @@ jobs:
             powershell -Command "& '%USERPROFILE%\miniconda\Scripts\conda.exe' install -y m2w64-toolchain"
             pip install delvewheel
 
-          # Environment variables - ensure conda gfortran is found
-          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PATH="$HOME/miniconda/bin:$PATH"
-          CIBW_ENVIRONMENT_MACOS: FC=gfortran CC=gcc PATH="$HOME/miniconda/bin:$PATH"
-          CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc PATH="%USERPROFILE%\\miniconda\\Scripts;%USERPROFILE%\\miniconda\\Library\\mingw-w64\\bin;%PATH%"
+          # Environment variables - only expose gfortran, not conda python
+          CIBW_ENVIRONMENT_LINUX: FC=$HOME/miniconda/bin/gfortran CC=gcc
+          CIBW_ENVIRONMENT_MACOS: FC=$HOME/miniconda/bin/gfortran CC=gcc
+          CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc PATH="%USERPROFILE%\\miniconda\\Library\\mingw-w64\\bin;%PATH%"
 
           # Test imports
           CIBW_TEST_COMMAND: python -c "import skyborn; from skyborn import spharm; print('✅ Import test passed')"
