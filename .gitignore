@@ -1,7 +1,12 @@
-# Byte-compiled / optimized / DLL files
+ # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
+*.so
+*.dylib
+*.dll
 
 # Distribution / packaging
 .Python
@@ -20,6 +25,11 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# Meson build directories
+**/build/
+**/builddir/
+**/.mesonbuild/
 
 # Installer logs
 pip-log.txt
@@ -47,6 +57,7 @@ env.bak/
 venv.bak/
 
 # IDE
+.claude/
 .vscode/
 .idea/
 *.swp
