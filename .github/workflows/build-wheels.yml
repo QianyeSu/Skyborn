@@ -2,16 +2,16 @@ name: Build and publish wheels
 
 on:
   push:
-    branches: [main, dev]  # Add dev branch for testing
+    branches: [main, dev] # Add dev branch for testing
     tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
     inputs:
       reason:
-        description: 'Reason for manual trigger'
+        description: "Reason for manual trigger"
         required: false
-        default: 'Manual testing'
+        default: "Manual testing"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -31,14 +31,14 @@ jobs:
         buildplat:
           - [ubuntu-22.04, manylinux_x86_64]
           - [ubuntu-22.04, manylinux_aarch64]
-          - [macos-13, macosx_x86_64]  # Intel Mac
-          - [macos-14, macosx_arm64]   # Apple Silicon Mac
+          - [macos-13, macosx_x86_64] # Intel Mac
+          - [macos-14, macosx_arm64] # Apple Silicon Mac
           - [windows-2022, win_amd64]
         python: ["cp39", "cp310", "cp311", "cp312"]
         exclude:
           # Exclude problematic combinations if needed
           - buildplat: [ubuntu-22.04, manylinux_aarch64]
-            python: "cp39"  # Remove if this combination is problematic
+            python: "cp39" # Remove if this combination is problematic
 
     steps:
       - name: Checkout
@@ -70,13 +70,27 @@ jobs:
           echo "CIBW_BEFORE_BUILD_LINUX=yum install -y gcc-gfortran || dnf install -y gcc-gfortran || echo 'gfortran install failed'" >> "$GITHUB_ENV"
 
       # Setup for Windows
-      - name: Setup Windows
+      # - name: Setup Windows
+      #   if: matrix.buildplat[1] == 'win_amd64'
+      #   run: |
+      #     # Set environment for Windows builds
+      #     echo "CIBW_BEFORE_BUILD_WINDOWS=choco install -y mingw --no-progress && pip install delvewheel" >> "$GITHUB_ENV"
+      #     echo "CIBW_REPAIR_WHEEL_COMMAND_WINDOWS=delvewheel repair -w {dest_dir} {wheel}" >> "$GITHUB_ENV"
+      # Install delvewheel for Windows builds
+      - name: Setup Windows Fortran (msys2)
         if: matrix.buildplat[1] == 'win_amd64'
         run: |
-          # Set environment for Windows builds
-          echo "CIBW_BEFORE_BUILD_WINDOWS=choco install -y mingw --no-progress && pip install delvewheel" >> "$GITHUB_ENV"
-          echo "CIBW_REPAIR_WHEEL_COMMAND_WINDOWS=delvewheel repair -w {dest_dir} {wheel}" >> "$GITHUB_ENV"
+          choco install -y msys2
+          C:\tools\msys64\usr\bin\bash -lc "pacman -Sy --noconfirm mingw-w64-x86_64-gcc-fortran"
+          echo "C:\tools\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          pip install delvewheel
 
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.16.2
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
+          CIBW_BEFORE_BUILD_WINDOWS: ""
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: "delvewheel repair -w {dest_dir} {wheel}"
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.16.2
         env:
@@ -118,7 +132,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Build sdist
         run: |
@@ -138,12 +152,12 @@ jobs:
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # Use trusted publishing
+      id-token: write # Use trusted publishing
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: '*'
+          pattern: "*"
           path: dist-artifacts
           merge-multiple: true
 
@@ -175,12 +189,12 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Download wheels
         uses: actions/download-artifact@v4
         with:
-          pattern: 'wheel-cp311-*'
+          pattern: "wheel-cp311-*"
           path: wheels
           merge-multiple: true
 
