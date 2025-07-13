@@ -1,0 +1,181 @@
+name: Build and publish wheels
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux wheels
+          - os: ubuntu-latest
+            cibw_archs: "x86_64"
+          - os: ubuntu-latest
+            cibw_archs: "aarch64"
+          # macOS wheels
+          - os: macos-13 # Intel Mac
+            cibw_archs: "x86_64"
+          - os: macos-latest # Apple Silicon Mac
+            cibw_archs: "arm64"
+          # Windows wheels
+          - os: windows-latest
+            cibw_archs: "AMD64"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # QEMU for cross-compilation (Linux ARM64)
+      - name: Set up QEMU
+        if: matrix.cibw_archs == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      # Build wheels using cibuildwheel
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.16.2
+        env:
+          CIBW_ARCHS: ${{ matrix.cibw_archs }}
+
+          # Supported Python versions
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-*"
+
+          # Skip unnecessary builds
+          CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
+
+          # Linux: Use manylinux images
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
+
+          # Install Fortran compiler before building
+          CIBW_BEFORE_BUILD_LINUX: |
+            yum install -y gcc-gfortran || (apt-get update && apt-get install -y gfortran)
+
+          CIBW_BEFORE_BUILD_MACOS: |
+            brew install gcc
+
+          CIBW_BEFORE_BUILD_WINDOWS: |
+            choco install mingw --no-progress
+            pip install delvewheel
+
+          # Environment variables
+          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
+          CIBW_ENVIRONMENT_MACOS: FC=gfortran CC=gcc
+          CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc
+
+          # Test imports
+          CIBW_TEST_COMMAND: python -c "import skyborn; from skyborn import spharm; print('✅ Import test passed')"
+
+          # Windows: Fix DLL dependencies
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair -w {dest_dir} {wheel}
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels-${{ matrix.os }}-${{ matrix.cibw_archs }}
+          path: ./wheelhouse/*.whl
+
+  # Build source distribution
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Build sdist
+        run: python -m build --sdist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v3
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  # Publish to PyPI (only on tags)
+  publish:
+    name: Publish to PyPI
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/skyborn
+    permissions:
+      id-token: write # Use trusted publishing
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: dist-artifacts
+
+      - name: Prepare dist directory
+        run: |
+          mkdir -p dist
+          find dist-artifacts -name "*.whl" -exec cp {} dist/ \;
+          find dist-artifacts -name "*.tar.gz" -exec cp {} dist/ \;
+          ls -la dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Option 1: Use API Token (set PYPI_API_TOKEN in GitHub Secrets)
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+          # Option 2: Use Trusted Publishing (pre-configure project trust on PyPI)
+          # If using Trusted Publishing, remove the password line above
+
+  # Test installation (multi-platform verification)
+  test_install:
+    name: Test installation on ${{ matrix.os }}
+    needs: [build_wheels]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            cibw_archs: "x86_64"
+          - os: windows-latest
+            cibw_archs: "AMD64"
+          - os: macos-13
+            cibw_archs: "x86_64"
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Download wheels
+        uses: actions/download-artifact@v3
+        with:
+          name: wheels-${{ matrix.os }}-${{ matrix.cibw_archs }}
+          path: wheels
+
+      - name: Install from wheel
+        run: |
+          pip install wheels/skyborn*.whl
+          python -c "import skyborn; from skyborn import spharm; print('✅ Wheel installation test passed on ${{ matrix.os }}')"
