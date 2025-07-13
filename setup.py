@@ -155,7 +155,8 @@ setup_config = {
         "develop": CustomDevelop,
         "install": CustomInstall,
     },
-    # No ext_modules needed - f2py handles the extension building
+    # Add a dummy extension to force platform wheel generation
+    "ext_modules": [Extension("skyborn._dummy", sources=[], optional=True)],
 }
 
 if __name__ == "__main__":
