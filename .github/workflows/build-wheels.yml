@@ -115,6 +115,7 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
+          CIBW_BEFORE_BUILD_WINDOWS: pip install meson ninja
           CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair -w {dest_dir} {wheel}
           CIBW_TEST_COMMAND: python -c "import skyborn; print('✅ Basic import test passed')"
