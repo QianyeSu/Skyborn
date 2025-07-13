@@ -2,7 +2,7 @@ name: Build and publish wheels
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]  # Add dev branch for testing
     tags: ["v*"]
   pull_request:
     branches: [main]
