@@ -105,6 +105,12 @@ class MesonBuildExt(build_ext):
             f_files = list(src_dir.glob("*.f"))
             pyf_file = src_dir / "_spherepack.pyf"
 
+            # Debug: Print all found files
+            print(f"Found {len(f_files)} .f files:")
+            for f in sorted(f_files):
+                print(f"  - {f.name}")
+            print(f"Using pyf file: {pyf_file.name}")
+
             # Build file list
             build_files = [str(pyf_file)] + [str(f) for f in f_files]
 
