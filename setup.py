@@ -112,7 +112,27 @@ class MesonBuildExt(build_ext):
             print(f"Using pyf file: {pyf_file.name}")
 
             # Build file list
-            build_files = [str(pyf_file)] + [str(f) for f in f_files]
+            # 1. First, use f2py --lower to generate glue files
+            print("Generating f2py glue files...")
+            subprocess.run(
+                [sys.executable, "-m", "numpy.f2py", "--lower", str(pyf_file)],
+                cwd=str(src_dir),
+                check=True,
+            )
+            glue_c = src_dir / "_spherepackmodule.c"
+            glue_f = src_dir / "_spherepack-f2pywrappers.f"
+            if not (glue_c.exists() and glue_f.exists()):
+                raise RuntimeError("f2py glue files not generated!")
+
+            # 2. Build the build_files list
+            build_files = (
+                [str(pyf_file)]
+                + [str(f) for f in f_files]
+                + [
+                    str(glue_c),
+                    str(glue_f),
+                ]
+            )
 
             # Run f2py with explicit output directory and compiler flags
             f2py_cmd = (
