@@ -93,18 +93,18 @@ jobs:
           echo "CIBW_BUILD would be: ${{ matrix.python }}-${{ matrix.buildplat[1] }}"
 
           if [ -z "${{ matrix.python }}" ] || [ -z "${{ matrix.buildplat[1] }}" ]; then
-            echo "❌ Invalid matrix combination: python='${{ matrix.python }}', plat='${{ matrix.buildplat[1] }}'"
+            echo "Invalid matrix combination: python='${{ matrix.python }}', plat='${{ matrix.buildplat[1] }}'"
             exit 1
           fi
 
           # Check if the combination makes sense
           CIBW_BUILD="${{ matrix.python }}-${{ matrix.buildplat[1] }}"
           if [ "$CIBW_BUILD" = "-" ] || [ "$CIBW_BUILD" = "" ]; then
-            echo "❌ CIBW_BUILD would be empty or invalid: '$CIBW_BUILD'"
+            echo "CIBW_BUILD would be empty or invalid: '$CIBW_BUILD'"
             exit 1
           fi
 
-          echo "✅ Matrix combination is valid"
+          echo "Matrix combination is valid"
 
       # Use different cibuildwheel versions for different platforms
       - name: Build wheels (Windows)
@@ -118,7 +118,7 @@ jobs:
           CIBW_BEFORE_BUILD_WINDOWS: pip install meson ninja
           CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair -w {dest_dir} {wheel}
-          CIBW_TEST_COMMAND: python -c "import skyborn; print('✅ Basic import test passed')"
+          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
       - name: Build wheels (macOS)
@@ -130,7 +130,7 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
           CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc
-          CIBW_TEST_COMMAND: python -c "import skyborn; print('✅ Basic import test passed')"
+          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
       - name: Build wheels (Linux)
@@ -144,7 +144,7 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
           CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
-          CIBW_TEST_COMMAND: python -c "import skyborn; print('✅ Basic import test passed')"
+          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
       - name: Upload wheels
@@ -234,4 +234,4 @@ jobs:
       - name: Install from wheel
         run: |
           pip install wheels/skyborn*.whl
-          python -c "import skyborn; print('✅ Wheel installation test passed on ${{ matrix.os }}')"
+          python -c "import skyborn; print('Wheel installation test passed on ${{ matrix.os }}')"

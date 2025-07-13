@@ -119,7 +119,7 @@ class MesonBuildExt(build_ext):
                 check=True,
             )
 
-            print(f"✅ {module['name']} compilation successful!")
+            print(f"spharm compilation successful!")
 
             # Mark that we successfully built this module
             self._built_modules = getattr(self, "_built_modules", set())
