@@ -109,12 +109,27 @@ class MesonBuildExt(build_ext):
             build_files = [str(pyf_file)] + [str(f) for f in f_files]
 
             # Run f2py with explicit output directory and compiler flags
-            subprocess.run(
+            f2py_cmd = (
                 ["python", "-m", "numpy.f2py", "-c"]
                 + build_files
                 + ["--build-dir", str(module_path)]
-                + ["--fcompiler=gnu95"]  # Force gfortran usage
-                + ["--compiler=unix"],  # Force gcc usage
+            )
+
+            # Add platform-specific compiler flags
+            import platform
+
+            if platform.system() == "Windows":
+                f2py_cmd += [
+                    "--fcompiler=gnu95"
+                ]  # Only specify Fortran compiler on Windows
+            else:
+                f2py_cmd += [
+                    "--fcompiler=gnu95",
+                    "--compiler=unix",
+                ]  # Full flags for Unix systems
+
+            subprocess.run(
+                f2py_cmd,
                 cwd=str(module_path.parent.parent.parent),  # Run from project root
                 check=True,
             )
