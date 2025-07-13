@@ -19,11 +19,11 @@ from pathlib import Path
 
 def find_all_f90_files(src_dir):
     """Find all .f90 files in the source directory"""
-    f90_files = list(Path(src_dir).glob("*.f90"))
+    f90_files = list(Path(src_dir).glob("*.f"))
     return sorted(f90_files)
 
 
-def generate_pyf_signature(src_dir, output_file="spherepack_f90.pyf"):
+def generate_pyf_signature(src_dir, output_file="spherepack.pyf"):
     """Generate .pyf signature file for all .f90 files"""
     f90_files = find_all_f90_files(src_dir)
 
@@ -44,7 +44,7 @@ def generate_pyf_signature(src_dir, output_file="spherepack_f90.pyf"):
         "-h",
         str(output_path),
         "-m",
-        "spherepack_f90",
+        "spherepack",
     ]
 
     # Add all .f90 files to the command
@@ -131,7 +131,7 @@ def main():
     print(f"📁 Source directory: {src_dir}")
 
     # Generate the .pyf signature file
-    output_file = "spherepack_f90.pyf"
+    output_file = "spherepack.pyf"
     success = generate_pyf_signature(src_dir, output_file)
 
     if success:
