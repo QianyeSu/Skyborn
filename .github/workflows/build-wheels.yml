@@ -87,6 +87,11 @@ jobs:
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.16.2
+        with:
+          # Explicitly specify parameters to avoid auto-generated --only ""
+          package-dir: .
+          output-dir: wheelhouse
+          config-file: ""
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
 
