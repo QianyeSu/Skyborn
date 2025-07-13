@@ -155,8 +155,10 @@ setup_config = {
         "develop": CustomDevelop,
         "install": CustomInstall,
     },
-    # Add a dummy extension to force platform wheel generation
-    "ext_modules": [Extension("skyborn._dummy", sources=[], optional=True)],
+    # Add a dummy extension to force platform wheel generation - Windows compatible
+    "ext_modules": [
+        Extension("skyborn._dummy", sources=["src/skyborn/_dummy.c"], optional=True)
+    ],
 }
 
 if __name__ == "__main__":
