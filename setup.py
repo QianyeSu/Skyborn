@@ -121,6 +121,13 @@ class MesonBuildExt(build_ext):
                 + ["--build-dir", str(module_path)]
             )
 
+            fortran_optim_flags = "-O3 -fPIC -fno-second-underscore -funroll-loops -finline-functions -ftree-vectorize -ffinite-math-only"
+            c_optim_flags = "-O3 -DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"
+            f2py_cmd += [
+                "--opt=" + fortran_optim_flags,
+                "--f90flags=" + fortran_optim_flags,
+                "--cflags=" + c_optim_flags,
+            ]
             # Add platform-specific compiler flags
             import platform
 
@@ -136,7 +143,8 @@ class MesonBuildExt(build_ext):
 
             subprocess.run(
                 f2py_cmd,
-                cwd=str(module_path.parent.parent.parent),  # Run from project root
+                # Run from project root
+                cwd=str(module_path.parent.parent.parent),
                 check=True,
             )
 
