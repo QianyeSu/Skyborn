@@ -87,7 +87,8 @@ if try_f2py.returncode() == 0
     message('NumPy header check: ' + numpy_header_check.stdout().strip())
 
     # Robust fortran compilation flags for different environments
-    fortran_args = ['-O3', '-fPIC', '-fno-second-underscore']
+    # Optimized for wheel distribution (portable across CPUs)
+    fortran_args = ['-O3', '-fPIC', '-fno-second-underscore', '-funroll-loops']
     c_args = ['-O3', '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION']
 
     # Additional debugging for CI
