@@ -67,20 +67,13 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
 
-          # Install Fortran compiler before building - use conda for cross-platform compatibility
+          # Install Fortran compiler before building - use system package manager
           CIBW_BEFORE_BUILD_LINUX: |
-            ARCH=$(uname -m)
-            if [ "$ARCH" = "aarch64" ]; then
-              MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh"
-              GFORTRAN_PKG="gfortran_linux-aarch64"
-            else
-              MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
-              GFORTRAN_PKG="gfortran_linux-64"
-            fi
-            curl -L $MINICONDA_URL -o miniconda.sh
-            bash miniconda.sh -b -p $HOME/miniconda
-            export PATH="$HOME/miniconda/bin:$PATH"
-            conda install -y $GFORTRAN_PKG
+            # Try different package managers in manylinux containers
+            yum install -y gcc-gfortran || \
+            dnf install -y gcc-gfortran || \
+            apt-get update && apt-get install -y gfortran || \
+            echo "Using system gfortran if available"
 
           CIBW_BEFORE_BUILD_MACOS: |
             ARCH=$(uname -m)
@@ -105,8 +98,8 @@ jobs:
             powershell -Command "& '%USERPROFILE%\miniconda\Scripts\conda.exe' install -y m2w64-toolchain"
             pip install delvewheel
 
-          # Environment variables - only expose gfortran, not conda python
-          CIBW_ENVIRONMENT_LINUX: FC=$HOME/miniconda/bin/gfortran CC=gcc
+          # Environment variables - use system gfortran
+          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
           CIBW_ENVIRONMENT_MACOS: FC=$HOME/miniconda/bin/gfortran CC=gcc
           CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc PATH="%USERPROFILE%\\miniconda\\Library\\mingw-w64\\bin;%PATH%"
 
