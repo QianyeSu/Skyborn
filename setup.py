@@ -80,7 +80,7 @@ class MesonBuildExt(build_ext):
                 ["python", "-m", "numpy.f2py", "-c"]
                 + build_files
                 + ["--build-dir", str(module_path)],
-                cwd=module_path,
+                cwd=str(module_path.parent.parent.parent),  # Run from project root
                 check=True,
             )
 
