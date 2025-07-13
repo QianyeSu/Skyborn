@@ -86,6 +86,7 @@ jobs:
           pip install delvewheel
 
       - name: Validate matrix combination
+        shell: bash
         run: |
           echo "Python: ${{ matrix.python }}"
           echo "Build platform: ${{ matrix.buildplat[1] }}"
