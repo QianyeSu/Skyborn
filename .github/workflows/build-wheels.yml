@@ -43,7 +43,7 @@ jobs:
       # QEMU for cross-compilation (Linux ARM64)
       - name: Set up QEMU
         if: matrix.cibw_archs == 'aarch64'
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
 
