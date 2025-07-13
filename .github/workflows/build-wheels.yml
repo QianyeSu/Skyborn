@@ -85,6 +85,26 @@ jobs:
           echo "C:\tools\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           pip install delvewheel
 
+      - name: Validate matrix combination
+        run: |
+          echo "Python: ${{ matrix.python }}"
+          echo "Build platform: ${{ matrix.buildplat[1] }}"
+          echo "CIBW_BUILD would be: ${{ matrix.python }}-${{ matrix.buildplat[1] }}"
+
+          if [ -z "${{ matrix.python }}" ] || [ -z "${{ matrix.buildplat[1] }}" ]; then
+            echo "❌ Invalid matrix combination: python='${{ matrix.python }}', plat='${{ matrix.buildplat[1] }}'"
+            exit 1
+          fi
+
+          # Check if the combination makes sense
+          CIBW_BUILD="${{ matrix.python }}-${{ matrix.buildplat[1] }}"
+          if [ "$CIBW_BUILD" = "-" ] || [ "$CIBW_BUILD" = "" ]; then
+            echo "❌ CIBW_BUILD would be empty or invalid: '$CIBW_BUILD'"
+            exit 1
+          fi
+
+          echo "✅ Matrix combination is valid"
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.16.2
         env:
