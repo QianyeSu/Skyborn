@@ -687,11 +687,6 @@ document.addEventListener('DOMContentLoaded', function() {
         addLogoClickToHome();
         addMainLogoAnimation(); // 添加中间logo动画
 
-        // Initialize RTD hiding functionality
-        hideReadTheDocsElements();
-        monitorRTDElements();
-        startPeriodicRTDCleanup();
-
         console.log('🎉 Skyborn Documentation interactive effects loaded!');
     }
 
@@ -699,16 +694,8 @@ document.addEventListener('DOMContentLoaded', function() {
     createMouseFollower();
     createScrollProgress();
 
-    // Immediate RTD cleanup
-    hideReadTheDocsElements();
-
     // Delayed initialization to ensure all elements are loaded
     setTimeout(initializeEffects, 100);
-
-    // Additional RTD cleanup attempts
-    setTimeout(hideReadTheDocsElements, 500);
-    setTimeout(hideReadTheDocsElements, 1000);
-    setTimeout(hideReadTheDocsElements, 2000);
 
     // 多次尝试添加logo点击事件，因为logo可能是动态加载的
     setTimeout(() => {
@@ -754,175 +741,6 @@ document.addEventListener('DOMContentLoaded', function() {
         subtree: true
     });
 
-    // ========== Hide Read the Docs Version Switcher ==========
-    function hideReadTheDocsElements() {
-        // 需要隐藏的 RTD 元素选择器
-        const rtdSelectors = [
-            '.rst-versions',
-            '.rst-badge',
-            '.rst-current-version',
-            '.rst-other-versions',
-            '.injected',
-            'div[class*="rst-versions"]',
-            'div[class*="rst-badge"]',
-            '.readthedocs-badge',
-            '.version-selector',
-            '.rtd__version-switcher',
-            '.rtd-version-switcher',
-            '.rtd__flyout',
-            '.rtd-flyout',
-            '.rtd__version-menu',
-            '.rtd-version-menu',
-            '.rtd__versions',
-            '.rtd-versions',
-            '.rtd__current-version',
-            '.rtd-current-version',
-            '[data-readthedocs-project]',
-            '[data-readthedocs-version]',
-            '[data-readthedocs-language]',
-            '.ethical-sidebar',
-            '.ethical-footer',
-            '.ethical-fixedfooter',
-            '.ethical-dark-theme',
-            '.rtd-ad',
-            '.rtd-pro-callout',
-            '.rtd-footer-callout',
-            '.rtd-version-callout',
-            '.promotional-banner'
-        ];
-
-        // 隐藏已存在的元素
-        rtdSelectors.forEach(selector => {
-            const elements = document.querySelectorAll(selector);
-            elements.forEach(element => {
-                element.style.display = 'none !important';
-                element.style.visibility = 'hidden !important';
-                element.style.opacity = '0 !important';
-                element.style.pointerEvents = 'none !important';
-                element.remove(); // 直接移除元素
-            });
-        });
-
-        // 隐藏包含特定文本的元素
-        const textSelectors = [
-            'div', 'span', 'a', 'button'
-        ];
-
-        textSelectors.forEach(tag => {
-            const elements = document.querySelectorAll(tag);
-            elements.forEach(element => {
-                const text = element.textContent || element.innerText || '';
-                if (text.toLowerCase().includes('read the docs') ||
-                    text.toLowerCase().includes('readthedocs') ||
-                    text.toLowerCase().includes('view page source') && element.href && element.href.includes('readthedocs')) {
-                    element.style.display = 'none !important';
-                    element.remove();
-                }
-            });
-        });
-
-        // 隐藏固定定位的元素（可能的 RTD 组件）
-        const fixedElements = document.querySelectorAll('div[style*="position: fixed"], div[style*="position: absolute"]');
-        fixedElements.forEach(element => {
-            const style = window.getComputedStyle(element);
-            const bottom = style.bottom;
-            const right = style.right;
-            const zIndex = style.zIndex;
-
-            // 如果是右下角的高层级元素，很可能是 RTD 组件
-            if ((bottom === '0px' || bottom === '10px') &&
-                (right === '0px' || right === '10px') &&
-                (parseInt(zIndex) > 1000 || zIndex === 'auto')) {
-                element.style.display = 'none !important';
-                element.remove();
-            }
-        });
-
-        console.log('🚫 Read the Docs elements hidden');
-    }
-
-    // ========== Monitor for Dynamic RTD Elements ==========
-    function monitorRTDElements() {
-        // 创建 MutationObserver 来监听动态添加的元素
-        const rtdObserver = new MutationObserver(function(mutations) {
-            let foundRTDElements = false;
-
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList') {
-                    mutation.addedNodes.forEach(function(node) {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            // 检查是否是 RTD 元素
-                            const classList = node.classList ? Array.from(node.classList) : [];
-                            const className = node.className || '';
-                            const id = node.id || '';
-
-                            const isRTDElement = classList.some(cls =>
-                                cls.includes('rst-') ||
-                                cls.includes('rtd') ||
-                                cls.includes('readthedocs') ||
-                                cls.includes('ethical-') ||
-                                cls.includes('injected')
-                            ) || className.includes('rst-') ||
-                                className.includes('rtd') ||
-                                id.includes('rtd') ||
-                                node.hasAttribute('data-readthedocs-project') ||
-                                node.hasAttribute('data-readthedocs-version');
-
-                            if (isRTDElement) {
-                                foundRTDElements = true;
-                                // 立即隐藏
-                                node.style.display = 'none !important';
-                                node.style.visibility = 'hidden !important';
-                                node.style.opacity = '0 !important';
-                                // 延迟移除以防止错误
-                                setTimeout(() => {
-                                    if (node.parentNode) {
-                                        node.remove();
-                                    }
-                                }, 10);
-                            }
-
-                            // 检查子元素是否包含 RTD 元素
-                            const rtdChildren = node.querySelectorAll ? node.querySelectorAll('[class*="rst-"], [class*="rtd"], [data-readthedocs-project], .injected, .ethical-sidebar, .ethical-footer') : [];
-                            if (rtdChildren.length > 0) {
-                                foundRTDElements = true;
-                                rtdChildren.forEach(child => {
-                                    child.style.display = 'none !important';
-                                    child.remove();
-                                });
-                            }
-                        }
-                    });
-                }
-            });
-
-            if (foundRTDElements) {
-                console.log('🚫 Dynamic RTD elements detected and hidden');
-                // 运行完整的隐藏函数以确保没有遗漏
-                setTimeout(hideReadTheDocsElements, 50);
-            }
-        });
-
-        // 开始观察
-        rtdObserver.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['class', 'id', 'style']
-        });
-
-        console.log('👁️ RTD element monitor started');
-    }
-
-    // ========== Periodic RTD Cleanup ==========
-    function startPeriodicRTDCleanup() {
-        // 每隔1秒检查一次
-        setInterval(() => {
-            hideReadTheDocsElements();
-        }, 1000);
-
-        console.log('🔄 Periodic RTD cleanup started');
-    }
 
     // ========== Additional CSS Animations ==========
     const style = document.createElement('style');

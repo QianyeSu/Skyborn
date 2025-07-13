@@ -138,23 +138,6 @@
         .entrance-container > *:nth-child(2) { animation-delay: 0.4s; }
         .entrance-container > *:nth-child(3) { animation-delay: 0.6s; }
 
-        /* Hide Read the Docs version switcher specifically */
-        .rst-versions, .rst-badge, .rst-current-version,
-        .rst-other-versions, .injected,
-        div[class*="rst-versions"], div[class*="rst-badge"],
-        .readthedocs-badge, .version-selector {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-        }
-
-        /* Hide any fixed positioned elements that might be RTD components */
-        div[style*="position: fixed"][style*="bottom: 0"],
-        div[style*="position: fixed"][style*="bottom: 10px"],
-        div[style*="position: fixed"][style*="right: 0"],
-        div[style*="position: fixed"][style*="right: 10px"] {
-            display: none !important;
-        }
     </style>
 </head>
 <body>
