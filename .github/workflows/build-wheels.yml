@@ -2,16 +2,16 @@ name: Build and publish wheels
 
 on:
   push:
-    branches: [main, dev]  # Add dev branch for testing
+    branches: [main, dev] # Add dev branch for testing
     tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
     inputs:
       reason:
-        description: 'Reason for manual trigger'
+        description: "Reason for manual trigger"
         required: false
-        default: 'Manual testing'
+        default: "Manual testing"
 
 jobs:
   build_wheels:
@@ -43,7 +43,7 @@ jobs:
       # QEMU for cross-compilation (Linux ARM64)
       - name: Set up QEMU
         if: matrix.cibw_archs == 'aarch64'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
 
@@ -86,7 +86,7 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair -w {dest_dir} {wheel}
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.cibw_archs }}
           path: ./wheelhouse/*.whl
@@ -114,7 +114,7 @@ jobs:
         run: python -m build --sdist
 
       - name: Upload sdist
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: sdist
           path: dist/*.tar.gz
