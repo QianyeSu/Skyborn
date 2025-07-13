@@ -1,0 +1,615 @@
+<?xml version="1.0" encoding="ascii"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+          "DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+  <title>spharm.spharm</title>
+  <link rel="stylesheet" href="epydoc.css" type="text/css" />
+  <script type="text/javascript" src="epydoc.js"></script>
+</head>
+
+<body bgcolor="white" text="black" link="blue" vlink="#204080"
+      alink="#204080">
+<!-- ==================== NAVIGATION BAR ==================== -->
+<table class="navbar" border="0" width="100%" cellpadding="0"
+       bgcolor="#a0c0ff" cellspacing="0">
+  <tr valign="middle">
+  <!-- Home link -->
+      <th bgcolor="#70b0f0" class="navbar-select"
+          >&nbsp;&nbsp;&nbsp;Home&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Tree link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="module-tree.html">Trees</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Index link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="identifier-index.html">Indices</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Help link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="help.html">Help</a>&nbsp;&nbsp;&nbsp;</th>
+
+      <th class="navbar" width="100%"></th>
+  </tr>
+</table>
+<table width="100%" cellpadding="0" cellspacing="0">
+  <tr valign="top">
+    <td width="100%">
+      <span class="breadcrumbs">
+        Package&nbsp;spharm ::
+        Module&nbsp;spharm
+      </span>
+    </td>
+    <td>
+      <table cellpadding="0" cellspacing="0">
+        <!-- hide/show private -->
+      </table>
+    </td>
+  </tr>
+</table>
+<!-- ==================== MODULE DESCRIPTION ==================== -->
+<h1 class="epydoc">Module spharm</h1><p class="nomargin-top"><span class="codelink"><a href="spharm.spharm-pysrc.html">source&nbsp;code</a></span></p>
+<h1 class="heading">Introduction</h1>
+    <p>This module provides a python interface to the NCAR <a
+    href="https://www2.cisl.ucar.edu/resources/legacy/spherepack"
+    target="_top">SPHEREPACK</a> library. It is not a one-to-one wrapper
+    for the SPHEREPACK routines, rather it provides a simple interface
+    oriented toward working with atmospheric general circulation model
+    (GCM) data.</p>
+  <h1 class="heading">Requirements</h1>
+    <ul>
+      <li>
+        <a href="http://numeric.scipy.org" target="_top">numpy</a>, and a
+        fortran compiler supported by numpy.f2py.
+      </li>
+    </ul>
+  <h1 class="heading">Installation</h1>
+    <ul>
+      <li>
+        <a href="http://code.google.com/p/pyspharm/downloads/list"
+        target="_top">Download</a> module source, untar.
+      </li>
+      <li>
+        run <code>python setup.py install</code> (as root if necessary).
+        The SPHERPACK fortran source files will be downloaded automatically
+        by the setup.py script, since the SPHEREPACK license prohibits
+        redistribution. To specify the fortran compiler to use (e.g. g95)
+        run <code>python setup.py config_fc --fcompiler=g95 install</code>.
+        <code>f2py -c --help-fcompiler</code> will show you what fortran
+        compilers are available.
+      </li>
+    </ul>
+  <h1 class="heading">Usage</h1>
+<pre class="py-doctest">
+<span class="py-prompt">&gt;&gt;&gt; </span><span class="py-keyword">import</span> spharm
+<span class="py-prompt">&gt;&gt;&gt; </span>x=spharm.Spharmt(144,72,rsphere=8e6,gridtype=<span class="py-string">'gaussian'</span>,legfunc=<span class="py-string">'computed'</span>)</pre>
+    <p>creates a class instance for spherical harmonic calculations on a
+    144x72 gaussian grid on a sphere with radius 8000 km. The associated
+    legendre functions are recomputed on the fly (instead of pre-computed
+    and stored). Default values of rsphere, gridtype and legfunc are
+    6.3712e6, 'regular' and 'stored'. Real-world examples are included in
+    the source distribution.</p>
+  <h1 class="heading">Class methods</h1>
+    <ul>
+      <li>
+        grdtospec: grid to spectral transform (spherical harmonic
+        analysis).
+      </li>
+      <li>
+        spectogrd: spectral to grid transform (spherical harmonic
+        synthesis).
+      </li>
+      <li>
+        getuv:  compute u and v winds from spectral coefficients of
+        vorticity and divergence.
+      </li>
+      <li>
+        getvrtdivspec: get spectral coefficients of vorticity and
+        divergence from u and v winds.
+      </li>
+      <li>
+        getgrad: compute the vector gradient given spectral coefficients.
+      </li>
+      <li>
+        getpsichi: compute streamfunction and velocity potential from
+        winds.
+      </li>
+      <li>
+        specsmooth:  isotropic spectral smoothing.
+      </li>
+    </ul>
+  <h1 class="heading">Functions</h1>
+    <ul>
+      <li>
+        regrid:  spectral re-gridding, with optional spectral smoothing
+        and/or truncation.
+      </li>
+      <li>
+        gaussian_lats_wts: compute gaussian latitudes and weights.
+      </li>
+      <li>
+        getspecindx: compute indices of zonal wavenumber and degree for
+        complex spherical harmonic coefficients.
+      </li>
+      <li>
+        legendre: compute associated legendre functions.
+      </li>
+      <li>
+        getgeodesicpts: computes the points on the surface of the sphere
+        corresponding to a twenty-sided (icosahedral) geodesic.
+      </li>
+      <li>
+        specintrp: spectral interpolation to an arbitrary point on the
+        sphere.
+      </li>
+    </ul>
+  <h1 class="heading">Conventions</h1>
+    <p>The gridded data is assumed to be oriented such that i=1 is the
+    Greenwich meridian and j=1 is the northernmost point. Grid indices
+    increase eastward and southward. If nlat is odd the equator is
+    included. If nlat is even the equator will lie half way between points
+    nlat/2 and (nlat/2)+1. nlat must be at least 3. For regular grids
+    (gridtype='regular') the poles will be included when nlat is odd. The
+    grid increment in longitude is 2*pi/nlon radians. For example, nlon =
+    72 for a five degree grid. nlon must be greater than or equal to 4. The
+    efficiency of the computation is improved when nlon is a product of
+    small prime numbers.</p>
+    <p>The spectral data is assumed to be in a complex array of dimension
+    (ntrunc+1)*(ntrunc+2)/2. ntrunc is the triangular truncation limit
+    (ntrunc = 42 for T42). ntrunc must be &lt;= nlat-1. Coefficients are
+    ordered so that first (nm=0) is m=0,n=0, second is m=0,n=1, nm=ntrunc
+    is m=0,n=ntrunc, nm=ntrunc+1 is m=1,n=1, etc. The values of m (degree)
+    and n (order) as a function of the index nm are given by the arrays
+    indxm, indxn returned by getspecindx.</p>
+    <p>The associated legendre polynomials are normalized so that the
+    integral (pbar(n,m,theta)**2)*sin(theta) on the interval theta=0 to pi
+    is 1, where
+    pbar(m,n,theta)=sqrt((2*n+1)*factorial(n-m)/(2*factorial(n+m)))*
+    sin(theta)**m/(2**n*factorial(n)) times the (n+m)th derivative of
+    (x**2-1)**n with respect to x=cos(theta). theta = pi/2 - phi, where phi
+    is latitude and theta is colatitude. Therefore, cos(theta) = sin(phi)
+    and sin(theta) = cos(phi). Note that pbar(0,0,theta)=sqrt(2)/2, and
+    pbar(1,0,theta)=.5*sqrt(6)*sin(lat).</p>
+    <p>The default grid type is regular (equally spaced latitude points).
+    Set gridtype='gaussian' when creating a class instance for gaussian
+    latitude points.</p>
+    <p>Quantities needed to compute spherical harmonics are precomputed and
+    stored when the class instance is created with legfunc='stored' (the
+    default). If legfunc='computed', they are recomputed on the fly on each
+    method call. The storage requirements for legfunc=&quot;stored&quot;
+    increase like nlat**2, while those for legfunc='stored' increase like
+    nlat**3.  However, for repeated method invocations on a single class
+    instance, legfunc=&quot;stored&quot; will always be faster.</p>
+
+<hr />
+<div class="fields">      <p><strong>Contact:</strong>
+        <a href="mailto:jeffrey.s.whitaker@noaa.gov" target="_top">Jeff
+        Whitaker</a>
+      </p>
+      <p><strong>Version:</strong>
+        1.0.7
+      </p>
+      <p><strong>License:</strong>
+        Permission to use, copy, modify, and distribute this software and
+        its documentation for any purpose and without fee is hereby
+        granted, provided that the above copyright notice appear in all
+        copies and that both that copyright notice and this permission
+        notice appear in supporting documentation. THE AUTHOR DISCLAIMS ALL
+        WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING ALL IMPLIED
+        WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+        AUTHOR BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES
+        OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
+        PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+        TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+        PERFORMANCE OF THIS SOFTWARE.
+      </p>
+</div><!-- ==================== CLASSES ==================== -->
+<a name="section-Classes"></a>
+<table class="summary" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr bgcolor="#70b0f0" class="table-header">
+  <td align="left" colspan="2" class="table-header">
+    <span class="table-header">Classes</span></td>
+</tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a href="spharm.spharm.Spharmt-class.html" class="summary-name">Spharmt</a><br />
+      spherical harmonic transform class.
+    </td>
+  </tr>
+</table>
+<!-- ==================== FUNCTIONS ==================== -->
+<a name="section-Functions"></a>
+<table class="summary" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr bgcolor="#70b0f0" class="table-header">
+  <td align="left" colspan="2" class="table-header">
+    <span class="table-header">Functions</span></td>
+</tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td><span class="summary-sig"><a href="spharm.spharm-module.html#gaussian_lats_wts" class="summary-sig-name">gaussian_lats_wts</a>(<span class="summary-sig-arg">nlat</span>)</span><br />
+      compute the gaussian latitudes (in degrees) and quadrature weights.</td>
+          <td align="right" valign="top">
+            <span class="codelink"><a href="spharm.spharm-pysrc.html#gaussian_lats_wts">source&nbsp;code</a></span>
+
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td><span class="summary-sig"><a href="spharm.spharm-module.html#getgeodesicpts" class="summary-sig-name">getgeodesicpts</a>(<span class="summary-sig-arg">m</span>)</span><br />
+      computes the lat/lon values of the points on the surface of the
+      sphere corresponding to a twenty-sided (icosahedral) geodesic.</td>
+          <td align="right" valign="top">
+            <span class="codelink"><a href="spharm.spharm-pysrc.html#getgeodesicpts">source&nbsp;code</a></span>
+
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td><span class="summary-sig"><a href="spharm.spharm-module.html#getspecindx" class="summary-sig-name">getspecindx</a>(<span class="summary-sig-arg">ntrunc</span>)</span><br />
+      compute indices of zonal wavenumber (indxm) and degree (indxn) for
+      complex spherical harmonic coefficients.</td>
+          <td align="right" valign="top">
+            <span class="codelink"><a href="spharm.spharm-pysrc.html#getspecindx">source&nbsp;code</a></span>
+
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td><span class="summary-sig"><a href="spharm.spharm-module.html#legendre" class="summary-sig-name">legendre</a>(<span class="summary-sig-arg">lat</span>,
+        <span class="summary-sig-arg">ntrunc</span>)</span><br />
+      calculate associated legendre functions for triangular truncation
+      T(ntrunc), at a given latitude.</td>
+          <td align="right" valign="top">
+            <span class="codelink"><a href="spharm.spharm-pysrc.html#legendre">source&nbsp;code</a></span>
+
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td><span class="summary-sig"><a href="spharm.spharm-module.html#regrid" class="summary-sig-name">regrid</a>(<span class="summary-sig-arg">grdin</span>,
+        <span class="summary-sig-arg">grdout</span>,
+        <span class="summary-sig-arg">datagrid</span>,
+        <span class="summary-sig-arg">ntrunc</span>=<span class="summary-sig-default">None</span>,
+        <span class="summary-sig-arg">smooth</span>=<span class="summary-sig-default">None</span>)</span><br />
+      regrid data using spectral interpolation, while performing optional
+      spectral smoothing and/or truncation.</td>
+          <td align="right" valign="top">
+            <span class="codelink"><a href="spharm.spharm-pysrc.html#regrid">source&nbsp;code</a></span>
+
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td><span class="summary-sig"><a href="spharm.spharm-module.html#specintrp" class="summary-sig-name">specintrp</a>(<span class="summary-sig-arg">lon</span>,
+        <span class="summary-sig-arg">dataspec</span>,
+        <span class="summary-sig-arg">legfuncs</span>)</span><br />
+      spectral interpolation given spherical harmonic coefficients.</td>
+          <td align="right" valign="top">
+            <span class="codelink"><a href="spharm.spharm-pysrc.html#specintrp">source&nbsp;code</a></span>
+
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+</table>
+<!-- ==================== VARIABLES ==================== -->
+<a name="section-Variables"></a>
+<table class="summary" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr bgcolor="#70b0f0" class="table-header">
+  <td align="left" colspan="2" class="table-header">
+    <span class="table-header">Variables</span></td>
+</tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="__package__"></a><span class="summary-name">__package__</span> = <code title="'spharm'"><code class="variable-quote">'</code><code class="variable-string">spharm</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="__version__"></a><span class="summary-name">__version__</span> = <code title="'1.0.9'"><code class="variable-quote">'</code><code class="variable-string">1.0.9</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+</table>
+<!-- ==================== FUNCTION DETAILS ==================== -->
+<a name="section-FunctionDetails"></a>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr bgcolor="#70b0f0" class="table-header">
+  <td align="left" colspan="2" class="table-header">
+    <span class="table-header">Function Details</span></td>
+</tr>
+</table>
+<a name="gaussian_lats_wts"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr valign="top"><td>
+  <h3 class="epydoc"><span class="sig"><span class="sig-name">gaussian_lats_wts</span>(<span class="sig-arg">nlat</span>)</span>
+  </h3>
+  </td><td align="right" valign="top"
+    ><span class="codelink"><a href="spharm.spharm-pysrc.html#gaussian_lats_wts">source&nbsp;code</a></span>&nbsp;
+    </td>
+  </tr></table>
+
+  <p>compute the gaussian latitudes (in degrees) and quadrature
+  weights.</p>
+  <dl class="fields">
+    <dt>Parameters:</dt>
+    <dd><ul class="nomargin-top">
+        <li><strong class="pname"><code>nlat</code></strong> - number of gaussian latitudes desired.</li>
+    </ul></dd>
+    <dt>Returns:</dt>
+        <dd><code><b>lats, wts</b></code> - rank 1 numpy float64 arrays
+          containing gaussian latitudes (in degrees north) and gaussian
+          quadrature weights.</dd>
+  </dl>
+</td></tr></table>
+</div>
+<a name="getgeodesicpts"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr valign="top"><td>
+  <h3 class="epydoc"><span class="sig"><span class="sig-name">getgeodesicpts</span>(<span class="sig-arg">m</span>)</span>
+  </h3>
+  </td><td align="right" valign="top"
+    ><span class="codelink"><a href="spharm.spharm-pysrc.html#getgeodesicpts">source&nbsp;code</a></span>&nbsp;
+    </td>
+  </tr></table>
+
+  <p>computes the lat/lon values of the points on the surface of the sphere
+  corresponding to a twenty-sided (icosahedral) geodesic.</p>
+  <dl class="fields">
+    <dt>Parameters:</dt>
+    <dd><ul class="nomargin-top">
+        <li><strong class="pname"><code>m</code></strong> - the number of points on the edge of a single geodesic triangle.
+          There are 10*(m-1)**2+2 total geodesic points, including the
+          poles.</li>
+    </ul></dd>
+    <dt>Returns:</dt>
+        <dd><code><b>lats, lons</b></code> - rank 1 numpy float32 arrays
+          containing the latitudes and longitudes of the geodesic points
+          (in degrees). These points are nearly evenly distributed on the
+          surface of the sphere.</dd>
+  </dl>
+</td></tr></table>
+</div>
+<a name="getspecindx"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr valign="top"><td>
+  <h3 class="epydoc"><span class="sig"><span class="sig-name">getspecindx</span>(<span class="sig-arg">ntrunc</span>)</span>
+  </h3>
+  </td><td align="right" valign="top"
+    ><span class="codelink"><a href="spharm.spharm-pysrc.html#getspecindx">source&nbsp;code</a></span>&nbsp;
+    </td>
+  </tr></table>
+
+  <p>compute indices of zonal wavenumber (indxm) and degree (indxn) for
+  complex spherical harmonic coefficients.</p>
+  <dl class="fields">
+    <dt>Parameters:</dt>
+    <dd><ul class="nomargin-top">
+        <li><strong class="pname"><code>ntrunc</code></strong> - spherical harmonic triangular truncation limit.</li>
+    </ul></dd>
+    <dt>Returns:</dt>
+        <dd><code><b>indxm, indxn</b></code> - rank 1 numpy Int32 arrays
+          containing zonal wavenumber (indxm) and degree (indxn) of
+          spherical harmonic coefficients.</dd>
+  </dl>
+</td></tr></table>
+</div>
+<a name="legendre"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr valign="top"><td>
+  <h3 class="epydoc"><span class="sig"><span class="sig-name">legendre</span>(<span class="sig-arg">lat</span>,
+        <span class="sig-arg">ntrunc</span>)</span>
+  </h3>
+  </td><td align="right" valign="top"
+    ><span class="codelink"><a href="spharm.spharm-pysrc.html#legendre">source&nbsp;code</a></span>&nbsp;
+    </td>
+  </tr></table>
+
+  <p>calculate associated legendre functions for triangular truncation
+  T(ntrunc), at a given latitude.</p>
+  <dl class="fields">
+    <dt>Parameters:</dt>
+    <dd><ul class="nomargin-top">
+        <li><strong class="pname"><code>lat</code></strong> - the latitude (in degrees) to compute the associate legendre
+          functions.</li>
+        <li><strong class="pname"><code>ntrunc</code></strong> - the triangular truncation limit.</li>
+    </ul></dd>
+    <dt>Returns:</dt>
+        <dd><code><b>pnm</b></code> - rank 1 numpy float32 array containing
+          the
+          (<code><b>ntrunc</b></code>+1)*(<code><b>ntrunc</b></code>+2)/2
+          associated legendre functions at latitude
+          <code><b>lat</b></code>.</dd>
+  </dl>
+</td></tr></table>
+</div>
+<a name="regrid"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr valign="top"><td>
+  <h3 class="epydoc"><span class="sig"><span class="sig-name">regrid</span>(<span class="sig-arg">grdin</span>,
+        <span class="sig-arg">grdout</span>,
+        <span class="sig-arg">datagrid</span>,
+        <span class="sig-arg">ntrunc</span>=<span class="sig-default">None</span>,
+        <span class="sig-arg">smooth</span>=<span class="sig-default">None</span>)</span>
+  </h3>
+  </td><td align="right" valign="top"
+    ><span class="codelink"><a href="spharm.spharm-pysrc.html#regrid">source&nbsp;code</a></span>&nbsp;
+    </td>
+  </tr></table>
+
+  <p>regrid data using spectral interpolation, while performing optional
+  spectral smoothing and/or truncation.</p>
+  <dl class="fields">
+    <dt>Parameters:</dt>
+    <dd><ul class="nomargin-top">
+        <li><strong class="pname"><code>grdin</code></strong> - Spharmt class instance describing input grid.</li>
+        <li><strong class="pname"><code>grdout</code></strong> - Spharmt class instance describing output grid.</li>
+        <li><strong class="pname"><code>datagrid</code></strong> - data on input grid (grdin.nlat x grdin.nlon). If datagrid is rank
+          3, last dimension is the number of grids to interpolate.</li>
+        <li><strong class="pname"><code>ntrunc</code></strong> - optional spectral truncation limit for datagrid (default
+          min(grdin.nlat-1,grdout.nlat-1)).</li>
+        <li><strong class="pname"><code>smooth</code></strong> - rank 1 array of length grdout.nlat containing smoothing factors
+          as a function of total wavenumber (default is no smoothing).</li>
+    </ul></dd>
+    <dt>Returns:</dt>
+        <dd><code><b>datagrid</b></code> - interpolated (and optionally
+          smoothed) array(s) on grdout.nlon x grdout.nlat grid.</dd>
+  </dl>
+</td></tr></table>
+</div>
+<a name="specintrp"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr valign="top"><td>
+  <h3 class="epydoc"><span class="sig"><span class="sig-name">specintrp</span>(<span class="sig-arg">lon</span>,
+        <span class="sig-arg">dataspec</span>,
+        <span class="sig-arg">legfuncs</span>)</span>
+  </h3>
+  </td><td align="right" valign="top"
+    ><span class="codelink"><a href="spharm.spharm-pysrc.html#specintrp">source&nbsp;code</a></span>&nbsp;
+    </td>
+  </tr></table>
+
+  <p>spectral interpolation given spherical harmonic coefficients.</p>
+  <dl class="fields">
+    <dt>Parameters:</dt>
+    <dd><ul class="nomargin-top">
+        <li><strong class="pname"><code>lon</code></strong> - longitude (in degrees) of point on a sphere to interpolate to.</li>
+        <li><strong class="pname"><code>dataspec</code></strong> - spectral coefficients of function to interpolate.</li>
+        <li><strong class="pname"><code>legfuncs</code></strong> - associated legendre functions with same triangular truncation as
+          <code><b>dataspec</b></code> (computed using <a
+          href="spharm.spharm-module.html#legendre"
+          class="link">legendre</a>), computed at latitude of interpolation
+          point.</li>
+    </ul></dd>
+    <dt>Returns:</dt>
+        <dd><code><b>ob</b></code> - interpolated value.</dd>
+  </dl>
+</td></tr></table>
+</div>
+<br />
+<!-- ==================== NAVIGATION BAR ==================== -->
+<table class="navbar" border="0" width="100%" cellpadding="0"
+       bgcolor="#a0c0ff" cellspacing="0">
+  <tr valign="middle">
+  <!-- Home link -->
+      <th bgcolor="#70b0f0" class="navbar-select"
+          >&nbsp;&nbsp;&nbsp;Home&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Tree link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="module-tree.html">Trees</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Index link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="identifier-index.html">Indices</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Help link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="help.html">Help</a>&nbsp;&nbsp;&nbsp;</th>
+
+      <th class="navbar" width="100%"></th>
+  </tr>
+</table>
+<table border="0" cellpadding="0" cellspacing="0" width="100%%">
+  <tr>
+    <td align="left" class="footer">
+    Generated by Epydoc 3.0.1 on Tue Sep  9 10:06:01 2014
+    </td>
+    <td align="right" class="footer">
+      <a target="mainFrame" href="http://epydoc.sourceforge.net"
+        >http://epydoc.sourceforge.net</a>
+    </td>
+  </tr>
+</table>
+
+<script type="text/javascript">
+  <!--
+  // Private objects are initially displayed (because if
+  // javascript is turned off then we want them to be
+  // visible); but by default, we want to hide them.  So hide
+  // them unless we have a cookie that says to show them.
+  checkCookie();
+  // -->
+</script>
+</body>
+</html>

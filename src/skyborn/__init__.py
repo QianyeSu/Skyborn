@@ -43,5 +43,6 @@ from . import interp
 from . import ROF
 from . import conversion
 from . import calc
+from . import spharm
 
 __version__ = "0.3.7"  # Updated to version 0.3.7

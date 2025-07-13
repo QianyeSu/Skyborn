@@ -1,0 +1,623 @@
+!    -*- f90 -*-
+python module _spherepack ! in
+    interface  ! in :_spherepack
+
+! utility routines (not part of spherepack)
+
+        subroutine invlap(dataspec,dataspec_ilap,nmdim,nt,rsphere) ! in :_spherepack:invlap.f90
+            complex dimension(nmdim,nt) :: dataspec
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: dataspec_ilap
+            integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
+            integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
+            real :: rsphere
+        end subroutine invlap
+        subroutine lap(dataspec,dataspec_lap,nmdim,nt,rsphere) ! in :_spherepack:lap.f90
+            complex dimension(nmdim,nt) :: dataspec
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: dataspec_lap
+            integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
+            integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
+            real :: rsphere
+        end subroutine lap
+        subroutine multsmoothfact(dataspec,dataspec_smooth,smooth,nlat,nmdim,nt) ! in :_spherepack:multsmoothfact.f90
+            complex dimension(nmdim,nt) :: dataspec
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: dataspec_smooth
+            real dimension(nlat) :: smooth
+            integer optional,check(len(smooth)==nlat),depend(smooth) :: nlat=len(smooth)
+            integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
+            integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
+        end subroutine multsmoothfact
+        subroutine onedtotwod(dataspec,a,b,nlat,nmdim,nt) ! in :_spherepack:onedtotwod.f90
+            complex dimension(nmdim,nt) :: dataspec
+            integer, required, intent(in) :: nlat
+            real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: a
+            real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: b
+            integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
+            integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
+        end subroutine onedtotwod
+        subroutine onedtotwod_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,nmdim,nt,rsphere) ! in :_spherepack:onedtotwod_vrtdiv.f90
+            complex dimension(nmdim,nt) :: vrtspec
+            complex dimension(nmdim,nt) :: divspec
+            integer, required, intent(in) :: nlat
+            real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: br
+            real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: bi
+            real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: cr
+            real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: ci
+            integer optional,check(shape(vrtspec,0)==nmdim),depend(vrtspec) :: nmdim=shape(vrtspec,0)
+            integer optional,check(shape(vrtspec,1)==nt),depend(vrtspec) :: nt=shape(vrtspec,1)
+            real :: rsphere
+        end subroutine onedtotwod_vrtdiv
+        subroutine twodtooned(dataspec,a,b,nlat,ntrunc,nt) ! in :_spherepack:twodtooned.f90
+            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: dataspec
+            real dimension(nlat,nlat,nt) :: a
+            real dimension(nlat,nlat,nt) :: b
+            integer optional,check(shape(a,0)==nlat),depend(a) :: nlat=shape(a,0)
+            integer optional,check(shape(a,2)==nt),depend(a) :: nt=shape(a,2)
+            integer :: ntrunc
+        end subroutine twodtooned
+        subroutine twodtooned_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned_vrtdiv.f90
+            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
+            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
+            real dimension(nlat,nlat,nt) :: br
+            real dimension(nlat,nlat,nt) :: bi
+            real dimension(nlat,nlat,nt) :: cr
+            real dimension(nlat,nlat,nt) :: ci
+            integer optional,check(shape(br,0)==nlat),depend(br) :: nlat=shape(br,0)
+            integer optional,check(shape(br,2)==nt),depend(br) :: nt=shape(br,2)
+            integer :: ntrunc
+            real :: rsphere
+        end subroutine twodtooned_vrtdiv
+
+! gaqd - computing gaussian lats and weights.
+
+        subroutine gaqd(nlat,theta,wts,dwork,ldwork,ierror) ! in :_spherepack:gaqd.f90
+            integer, required, intent(in) :: nlat
+            integer, intent(hide) :: ldwork=nlat*(nlat+2)
+            double precision, intent(out), dimension(nlat), depend(nlat) :: theta
+            double precision, intent(out), dimension(nlat), depend(nlat) :: wts
+            double precision, intent(cache,hide), dimension(ldwork), depend(ldwork) :: dwork
+            integer, intent(out) :: ierror
+        end subroutine gaqd
+
+! spherepack core subroutines - simplified interface
+
+        subroutine dnlfk(m,n,cp) ! in :_spherepack:sphcom.f90
+            integer intent(in) :: m
+            integer intent(in) :: n
+            real dimension(:),intent(out) :: cp
+        end subroutine dnlfk
+
+        subroutine getlegfunc(legfunc,lat,ntrunc) ! in :_spherepack:getlegfunc.f90
+            integer, intent(in), required :: ntrunc
+            real, intent(in), required :: lat
+            real, intent(out), dimension((ntrunc+1)*(ntrunc+2)/2), depend(ntrunc) :: legfunc
+        end subroutine getlegfunc
+
+        subroutine specintrp(rlon,ntrunc,datnm,scrm,pnm,ob) ! in :_spherepack:specintrp.f90
+            integer, intent(in), required :: ntrunc
+            real, intent(in), required :: rlon
+            real, intent(in), dimension((ntrunc+1)*(ntrunc+2)/2), depend(ntrunc) :: pnm
+            complex, intent(in), dimension((ntrunc+1)*(ntrunc+2)/2), depend(ntrunc) :: datnm
+	    complex, intent(cache,hide), depend(ntrunc) :: scrm(ntrunc+1)
+	    real, intent(out) :: ob
+        end subroutine specintrp
+
+        subroutine ihgeod(m,idp,jdp,x,y,z) ! in :_spherepack:ihgeod.f90
+            integer, required, intent(in) :: m
+            integer, intent(hide), depend(m) :: idp=m+m-1
+            integer, intent(hide), depend(m) :: jdp=m
+            real, intent(out), dimension(idp,jdp,5), depend(idp,jdp) :: x,y,z
+        end subroutine ihgeod
+
+! Spherical Harmonic Analysis Functions (SHA*)
+
+        subroutine shaes(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshaes,lshaes,work,lwork,ierror) ! in :_spherepack:shaes.f90
+            integer, intent(hide) :: isym=0
+            integer, intent(hide) :: idg=nlat
+            integer, intent(hide) :: jdg=nlon
+            real dimension(nlat,nlon,nt) :: g
+            integer optional,check(shape(g,0)==nlat),depend(g) :: nlat=shape(g,0)
+            integer optional,check(shape(g,1)==nlon),depend(g) :: nlon=shape(g,1)
+            integer optional,check(shape(g,2)==nt),depend(g) :: nt=shape(g,2)
+            real dimension(nlat,nlat,nt),intent(out) :: a
+            real dimension(nlat,nlat,nt),intent(out) :: b
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            real dimension(lshaes), intent(in) :: wshaes
+            integer optional,check(shape(wshaes,0)==lshaes),depend(wshaes) :: lshaes=shape(wshaes,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine shaes
+
+        subroutine shaesi(nlat,nlon,wshaes,lshaes,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:shaes.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lshaes
+            real dimension(lshaes),depend(lshaes),intent(out) :: wshaes
+            integer, required :: lwork
+            integer, required :: ldwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine shaesi
+
+        subroutine shags(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshags,lshags,work,lwork,ierror) ! in :_spherepack:shags.f90
+            integer, intent(hide) :: isym=0
+            real dimension(nlat,nlon,nt) :: g
+            integer optional,check(shape(g,0)==nlat),depend(g) :: nlat=shape(g,0)
+            integer optional,check(shape(g,1)==nlon),depend(g) :: nlon=shape(g,1)
+            integer optional,check(shape(g,2)==nt),depend(g) :: nt=shape(g,2)
+            real dimension(nlat,nlat,nt), intent(out) :: a
+            real dimension(nlat,nlat,nt), intent(out) :: b
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: idg=nlat
+            integer, intent(hide) :: jdg=nlon
+            real dimension(lshags) :: wshags
+            integer optional,check(len(wshags)==lshags),depend(wshags) :: lshags=len(wshags)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine shags
+
+        subroutine shagsi(nlat,nlon,wshags,lshags,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:shags.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lshags
+            real dimension(lshags), depend(lshags), intent(out) :: wshags
+            integer, required :: lwork
+            integer, required :: ldwork
+            real dimension(lwork), depend(lwork), intent(cache, hide) :: work
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer, intent(out) :: ierror
+        end subroutine shagsi
+
+        subroutine shaec(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshaec,lshaec,work,lwork,ierror) ! in :_spherepack:shaec.f90
+            integer, intent(hide) :: isym=0
+            integer, intent(hide) :: idg=nlat
+            integer, intent(hide) :: jdg=nlon
+            real dimension(nlat,nlon,nt) :: g
+            integer optional,check(shape(g,0)==nlat),depend(g) :: nlat=shape(g,0)
+            integer optional,check(shape(g,1)==nlon),depend(g) :: nlon=shape(g,1)
+            integer optional,check(shape(g,2)==nt),depend(g) :: nt=shape(g,2)
+            real dimension(nlat,nlat,nt),intent(out) :: a
+            real dimension(nlat,nlat,nt),intent(out) :: b
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            real dimension(lshaec), intent(in) :: wshaec
+            integer optional,check(shape(wshaec,0)==lshaec),depend(wshaec) :: lshaec=shape(wshaec,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine shaec
+
+        subroutine shaeci(nlat,nlon,wshaec,lshaec,dwork,ldwork,ierror) ! in :_spherepack:shaec.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lshaec
+            real dimension(lshaec),depend(lshaec),intent(out) :: wshaec
+            integer, required :: ldwork
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine shaeci
+
+        subroutine shagc(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshagc,lshagc,work,lwork,ierror) ! in :_spherepack:shagc.f90
+            integer, intent(hide) :: isym=0
+            integer, intent(hide) :: idg=nlat
+            integer, intent(hide) :: jdg=nlon
+            real dimension(nlat,nlon,nt) :: g
+            integer optional,check(shape(g,0)==nlat),depend(g) :: nlat=shape(g,0)
+            integer optional,check(shape(g,1)==nlon),depend(g) :: nlon=shape(g,1)
+            integer optional,check(shape(g,2)==nt),depend(g) :: nt=shape(g,2)
+            real dimension(nlat,nlat,nt),intent(out) :: a
+            real dimension(nlat,nlat,nt),intent(out) :: b
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            real dimension(lshagc), intent(in) :: wshagc
+            integer optional,check(shape(wshagc,0)==lshagc),depend(wshagc) :: lshagc=shape(wshagc,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine shagc
+
+        subroutine shagci(nlat,nlon,wshagc,lshagc,dwork,ldwork,ierror) ! in :_spherepack:shagc.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lshagc
+            real dimension(lshagc),depend(lshagc),intent(out) :: wshagc
+            integer, required :: ldwork
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine shagci
+
+! Spherical Harmonic Synthesis Functions (SHS*)
+
+        subroutine shses(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshses,lshses,work,lwork,ierror) ! in :_spherepack:shses.f90
+            integer, required, intent(in) :: nlon
+            integer, hide :: isym=0
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: g
+            real dimension(nlat,nlat,nt) :: a
+            real dimension(nlat,nlat,nt) :: b
+            integer optional,check(shape(a,0)==nlat),depend(a) :: nlat=shape(a,0)
+            integer optional,check(shape(a,2)==nt),depend(a) :: nt=shape(a,2)
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: idg=nlat
+            integer, intent(hide) :: jdg=nlon
+            real dimension(lshses), intent(in) :: wshses
+            integer optional,check(shape(wshses,0)==lshses),depend(wshses) :: lshses=shape(wshses,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine shses
+
+        subroutine shsesi(nlat,nlon,wshses,lshses,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:shses.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lshses
+            real dimension(lshses),depend(lshses),intent(out) :: wshses
+            integer, required :: lwork
+            integer, required :: ldwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine shsesi
+
+        subroutine shsgs(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshsgs,lshsgs,work,lwork,ierror) ! in :_spherepack:shsgs.f90
+            integer, required, intent(in) :: nlon
+            integer, hide :: isym=0
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: g
+            real dimension(nlat,nlat,nt) :: a
+            real dimension(nlat,nlat,nt) :: b
+            integer optional,check(shape(a,0)==nlat),depend(a) :: nlat=shape(a,0)
+            integer optional,check(shape(a,2)==nt),depend(a) :: nt=shape(a,2)
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: idg=nlat
+            integer, intent(hide) :: jdg=nlon
+            real dimension(lshsgs), intent(in) :: wshsgs
+            integer optional,check(shape(wshsgs,0)==lshsgs),depend(wshsgs) :: lshsgs=shape(wshsgs,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine shsgs
+
+        subroutine shsgsi(nlat,nlon,wshsgs,lshsgs,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:shsgs.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lshsgs
+            real dimension(lshsgs),depend(lshsgs),intent(out) :: wshsgs
+            integer, required :: lwork
+            integer, required :: ldwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine shsgsi
+
+        subroutine shsec(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshsec,lshsec,work,lwork,ierror) ! in :_spherepack:shsec.f90
+            integer, required, intent(in) :: nlon
+            integer, hide :: isym=0
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: g
+            real dimension(nlat,nlat,nt) :: a
+            real dimension(nlat,nlat,nt) :: b
+            integer optional,check(shape(a,0)==nlat),depend(a) :: nlat=shape(a,0)
+            integer optional,check(shape(a,2)==nt),depend(a) :: nt=shape(a,2)
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: idg=nlat
+            integer, intent(hide) :: jdg=nlon
+            real dimension(lshsec), intent(in) :: wshsec
+            integer optional,check(shape(wshsec,0)==lshsec),depend(wshsec) :: lshsec=shape(wshsec,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine shsec
+
+        subroutine shseci(nlat,nlon,wshsec,lshsec,dwork,ldwork,ierror) ! in :_spherepack:shsec.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lshsec
+            real dimension(lshsec),depend(lshsec),intent(out) :: wshsec
+            integer, required :: ldwork
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine shseci
+
+        subroutine shsgc(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshsgc,lshsgc,work,lwork,ierror) ! in :_spherepack:shsgc.f90
+            integer, required, intent(in) :: nlon
+            integer, hide :: isym=0
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: g
+            real dimension(nlat,nlat,nt) :: a
+            real dimension(nlat,nlat,nt) :: b
+            integer optional,check(shape(a,0)==nlat),depend(a) :: nlat=shape(a,0)
+            integer optional,check(shape(a,2)==nt),depend(a) :: nt=shape(a,2)
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: idg=nlat
+            integer, intent(hide) :: jdg=nlon
+            real dimension(lshsgc), intent(in) :: wshsgc
+            integer optional,check(shape(wshsgc,0)==lshsgc),depend(wshsgc) :: lshsgc=shape(wshsgc,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine shsgc
+
+        subroutine shsgci(nlat,nlon,wshsgc,lshsgc,dwork,ldwork,ierror) ! in :_spherepack:shsgc.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lshsgc
+            real dimension(lshsgc),depend(lshsgc),intent(out) :: wshsgc
+            integer, required :: ldwork
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine shsgci
+
+! Vector Harmonic Analysis Functions (VHA*)
+
+        subroutine vhaes(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaes,lvhaes,work,lwork,ierror) ! in :_spherepack:vhaes.f90
+            integer, intent(hide) :: ityp=0
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(nlat,nlat,nt),intent(out) :: br
+            real dimension(nlat,nlat,nt),intent(out) :: bi
+            real dimension(nlat,nlat,nt),intent(out) :: cr
+            real dimension(nlat,nlat,nt),intent(out) :: ci
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            real dimension(lvhaes), intent(in) :: wvhaes
+            integer optional,check(shape(wvhaes,0)==lvhaes),depend(wvhaes) :: lvhaes=shape(wvhaes,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhaes
+
+        subroutine vhaesi(nlat,nlon,wvhaes,lvhaes,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:vhaes.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lvhaes
+            real dimension(lvhaes),depend(lvhaes),intent(out) :: wvhaes
+            integer, required :: lwork
+            integer, required :: ldwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine vhaesi
+
+        subroutine vhags(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhags,lvhags,work,lwork,ierror) ! in :_spherepack:vhags.f90
+            integer, intent(hide) :: ityp=0
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(nlat,nlat,nt),intent(out) :: br
+            real dimension(nlat,nlat,nt),intent(out) :: bi
+            real dimension(nlat,nlat,nt),intent(out) :: cr
+            real dimension(nlat,nlat,nt),intent(out) :: ci
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            real dimension(lvhags), intent(in) :: wvhags
+            integer optional,check(shape(wvhags,0)==lvhags),depend(wvhags) :: lvhags=shape(wvhags,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhags
+
+        subroutine vhagsi(nlat,nlon,wvhags,lvhags,dwork,ldwork,ierror) ! in :_spherepack:vhags.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lvhags
+            real dimension(lvhags),depend(lvhags),intent(out) :: wvhags
+            integer, required :: ldwork
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine vhagsi
+
+        subroutine vhaec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaec,lvhaec,work,lwork,ierror) ! in :_spherepack:vhaec.f90
+            integer, intent(hide) :: ityp=0
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(nlat,nlat,nt),intent(out) :: br
+            real dimension(nlat,nlat,nt),intent(out) :: bi
+            real dimension(nlat,nlat,nt),intent(out) :: cr
+            real dimension(nlat,nlat,nt),intent(out) :: ci
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            real dimension(lvhaec), intent(in) :: wvhaec
+            integer optional,check(shape(wvhaec,0)==lvhaec),depend(wvhaec) :: lvhaec=shape(wvhaec,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhaec
+
+        subroutine vhaeci(nlat,nlon,wvhaec,lvhaec,dwork,ldwork,ierror) ! in :_spherepack:vhaec.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lvhaec
+            real dimension(lvhaec),depend(lvhaec),intent(out) :: wvhaec
+            integer, required :: ldwork
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine vhaeci
+
+        subroutine vhagc(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhagc,lvhagc,work,lwork,ierror) ! in :_spherepack:vhagc.f90
+            integer, intent(hide) :: ityp=0
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(nlat,nlat,nt),intent(out) :: br
+            real dimension(nlat,nlat,nt),intent(out) :: bi
+            real dimension(nlat,nlat,nt),intent(out) :: cr
+            real dimension(nlat,nlat,nt),intent(out) :: ci
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            real dimension(lvhagc), intent(in) :: wvhagc
+            integer optional,check(shape(wvhagc,0)==lvhagc),depend(wvhagc) :: lvhagc=shape(wvhagc,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhagc
+
+        subroutine vhagci(nlat,nlon,wvhagc,lvhagc,dwork,ldwork,ierror) ! in :_spherepack:vhagc.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lvhagc
+            real dimension(lvhagc),depend(lvhagc),intent(out) :: wvhagc
+            integer, required :: ldwork
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine vhagci
+
+! Vector Harmonic Synthesis Functions (VHS*)
+
+        subroutine vhses(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhses,lvhses,work,lwork,ierror) ! in :_spherepack:vhses.f90
+            integer, required, intent(in) :: nlon
+            integer, hide :: ityp=0
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            real dimension(nlat,nlat,nt) :: br
+            real dimension(nlat,nlat,nt) :: bi
+            real dimension(nlat,nlat,nt) :: cr
+            real dimension(nlat,nlat,nt) :: ci
+            integer optional,check(shape(br,0)==nlat),depend(br) :: nlat=shape(br,0)
+            integer optional,check(shape(br,2)==nt),depend(br) :: nt=shape(br,2)
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(lvhses), intent(in) :: wvhses
+            integer optional,check(shape(wvhses,0)==lvhses),depend(wvhses) :: lvhses=shape(wvhses,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhses
+
+        subroutine vhsesi(nlat,nlon,wvhses,lvhses,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:vhses.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lvhses
+            real dimension(lvhses),depend(lvhses),intent(out) :: wvhses
+            integer, required :: lwork
+            integer, required :: ldwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine vhsesi
+
+        subroutine vhsgs(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgs,lvhsgs,work,lwork,ierror) ! in :_spherepack:vhsgs.f90
+            integer, required, intent(in) :: nlon
+            integer, hide :: ityp=0
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            real dimension(nlat,nlat,nt) :: br
+            real dimension(nlat,nlat,nt) :: bi
+            real dimension(nlat,nlat,nt) :: cr
+            real dimension(nlat,nlat,nt) :: ci
+            integer optional,check(shape(br,0)==nlat),depend(br) :: nlat=shape(br,0)
+            integer optional,check(shape(br,2)==nt),depend(br) :: nt=shape(br,2)
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(lvhsgs), intent(in) :: wvhsgs
+            integer optional,check(shape(wvhsgs,0)==lvhsgs),depend(wvhsgs) :: lvhsgs=shape(wvhsgs,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhsgs
+
+        subroutine vhsgsi(nlat,nlon,wvhsgs,lvhsgs,dwork,ldwork,ierror) ! in :_spherepack:vhsgs.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lvhsgs
+            real dimension(lvhsgs),depend(lvhsgs),intent(out) :: wvhsgs
+            integer, required :: ldwork
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine vhsgsi
+
+        subroutine vhsec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsec,lvhsec,work,lwork,ierror) ! in :_spherepack:vhsec.f90
+            integer, required, intent(in) :: nlon
+            integer, hide :: ityp=0
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            real dimension(nlat,nlat,nt) :: br
+            real dimension(nlat,nlat,nt) :: bi
+            real dimension(nlat,nlat,nt) :: cr
+            real dimension(nlat,nlat,nt) :: ci
+            integer optional,check(shape(br,0)==nlat),depend(br) :: nlat=shape(br,0)
+            integer optional,check(shape(br,2)==nt),depend(br) :: nt=shape(br,2)
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(lvhsec), intent(in) :: wvhsec
+            integer optional,check(shape(wvhsec,0)==lvhsec),depend(wvhsec) :: lvhsec=shape(wvhsec,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhsec
+
+        subroutine vhseci(nlat,nlon,wvhsec,lvhsec,dwork,ldwork,ierror) ! in :_spherepack:vhsec.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lvhsec
+            real dimension(lvhsec),depend(lvhsec),intent(out) :: wvhsec
+            integer, required :: ldwork
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine vhseci
+
+        subroutine vhsgc(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgc,lvhsgc,work,lwork,ierror) ! in :_spherepack:vhsgc.f90
+            integer, required, intent(in) :: nlon
+            integer, hide :: ityp=0
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            real dimension(nlat,nlat,nt) :: br
+            real dimension(nlat,nlat,nt) :: bi
+            real dimension(nlat,nlat,nt) :: cr
+            real dimension(nlat,nlat,nt) :: ci
+            integer optional,check(shape(br,0)==nlat),depend(br) :: nlat=shape(br,0)
+            integer optional,check(shape(br,2)==nt),depend(br) :: nt=shape(br,2)
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(lvhsgc), intent(in) :: wvhsgc
+            integer optional,check(shape(wvhsgc,0)==lvhsgc),depend(wvhsgc) :: lvhsgc=shape(wvhsgc,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhsgc
+
+        subroutine vhsgci(nlat,nlon,wvhsgc,lvhsgc,dwork,ldwork,ierror) ! in :_spherepack:vhsgc.f90
+            integer :: nlat
+            integer :: nlon
+            integer, required :: lvhsgc
+            real dimension(lvhsgc),depend(lvhsgc),intent(out) :: wvhsgc
+            integer, required :: ldwork
+            double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
+            integer,intent(out) :: ierror
+        end subroutine vhsgci
+
+    end interface
+end python module _spherepack
+
+! This file was auto-generated with f2py (version:1.26.4).
+! See: https://web.archive.org/web/20140822061353/http://cens.ioc.ee/projects/f2py2e
