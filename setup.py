@@ -12,6 +12,39 @@ from setuptools.command.build_ext import build_ext
 from setuptools.command.develop import develop
 from setuptools.command.install import install
 
+# Force gfortran compiler usage
+os.environ["FC"] = os.environ.get("FC", "gfortran")
+os.environ["F77"] = os.environ.get("F77", "gfortran")
+os.environ["F90"] = os.environ.get("F90", "gfortran")
+os.environ["CC"] = os.environ.get("CC", "gcc")
+
+
+# Check if gfortran is available
+def check_gfortran():
+    """Check if gfortran is available"""
+    try:
+        result = subprocess.run(
+            ["gfortran", "--version"], capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            print(
+                f"Found gfortran: {result.stdout.split()[4] if len(result.stdout.split()) > 4 else 'unknown version'}"
+            )
+            return True
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+        pass
+
+    print("Warning: gfortran not found. Fortran extensions may not build correctly.")
+    print("Please install gfortran:")
+    print("  Linux: sudo apt-get install gfortran")
+    print("  macOS: brew install gcc")
+    print("  Windows: conda install m2w64-toolchain")
+    return False
+
+
+# Check gfortran availability at setup time
+check_gfortran()
+
 
 class MesonBuildExt(build_ext):
     """Custom build extension to handle meson builds for Fortran modules"""
@@ -75,16 +108,22 @@ class MesonBuildExt(build_ext):
             # Build file list
             build_files = [str(pyf_file)] + [str(f) for f in f_files]
 
-            # Run f2py with explicit output directory
+            # Run f2py with explicit output directory and compiler flags
             subprocess.run(
                 ["python", "-m", "numpy.f2py", "-c"]
                 + build_files
-                + ["--build-dir", str(module_path)],
+                + ["--build-dir", str(module_path)]
+                + ["--fcompiler=gnu95"]  # Force gfortran usage
+                + ["--compiler=unix"],  # Force gcc usage
                 cwd=str(module_path.parent.parent.parent),  # Run from project root
                 check=True,
             )
 
             print(f"✅ {module['name']} compilation successful!")
+
+            # Mark that we successfully built this module
+            self._built_modules = getattr(self, "_built_modules", set())
+            self._built_modules.add(module["name"])
 
         except subprocess.CalledProcessError as e:
             print(f"Warning: Failed to build {module['name']}: {e}")
@@ -116,8 +155,7 @@ setup_config = {
         "develop": CustomDevelop,
         "install": CustomInstall,
     },
-    # Add empty Extension for spharm to trigger build_ext
-    "ext_modules": [Extension("skyborn.spharm._spherepack", sources=[])],
+    # No ext_modules needed - f2py handles the extension building
 }
 
 if __name__ == "__main__":
