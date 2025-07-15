@@ -1,14 +1,14 @@
 !    -*- f90 -*-
 ! Note: the context of this file is case sensitive.
 
-python module spherepack ! in
-    interface  ! in :spherepack
-        subroutine alfk(n,m,cp) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
+python module _spherepack ! in
+    interface  ! in :_spherepack
+        subroutine alfk(n,m,cp) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
             integer, optional,check(shape(cp, 0) == 1 + n / 2),depend(cp) :: n=(-2 + 2 * shape(cp, 0)) / 1
             integer :: m
             real dimension(1 + n / 2) :: cp
         end subroutine alfk
-        subroutine lfim(init,theta,l,n,nm,pb,id,wlfim) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
+        subroutine lfim(init,theta,l,n,nm,pb,id,wlfim) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
             integer :: init
             real dimension(l) :: theta
             integer, optional,check(shape(theta, 0) == l),depend(theta) :: l=shape(theta, 0)
@@ -18,7 +18,7 @@ python module spherepack ! in
             integer :: id
             real dimension(1) :: wlfim
         end subroutine lfim
-        subroutine lfim1(init,theta,l,n,nm,id,p3,phz,ph1,p1,p2,cp) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
+        subroutine lfim1(init,theta,l,n,nm,id,p3,phz,ph1,p1,p2,cp) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
             integer :: init
             real dimension(l) :: theta
             integer, optional,check(shape(theta, 0) == l),depend(theta) :: l=shape(theta, 0)
@@ -32,7 +32,7 @@ python module spherepack ! in
             real dimension(l,1),depend(l) :: p2
             real dimension(1) :: cp
         end subroutine lfim1
-        subroutine lfin(init,theta,l,m,nm,pb,id,wlfin) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
+        subroutine lfin(init,theta,l,m,nm,pb,id,wlfin) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
             integer :: init
             real dimension(l) :: theta
             integer, optional,check(shape(theta, 0) == l),depend(theta) :: l=shape(theta, 0)
@@ -42,7 +42,7 @@ python module spherepack ! in
             integer :: id
             real dimension(1) :: wlfin
         end subroutine lfin
-        subroutine lfin1(init,theta,l,m,nm,id,p3,phz,ph1,p1,p2,cp) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
+        subroutine lfin1(init,theta,l,m,nm,id,p3,phz,ph1,p1,p2,cp) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
             integer :: init
             real dimension(l) :: theta
             integer, optional,check(shape(theta, 0) == l),depend(theta) :: l=shape(theta, 0)
@@ -56,14 +56,14 @@ python module spherepack ! in
             real dimension(l,1),depend(l) :: p2
             real dimension(1) :: cp
         end subroutine lfin1
-        subroutine lfpt(n,m,theta,cp,pb) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
+        subroutine lfpt(n,m,theta,cp,pb) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\alf.f
             integer :: n
             integer :: m
             real :: theta
             real dimension(1) :: cp
             real :: pb
         end subroutine lfpt
-        subroutine gaqd(nlat,theta,wts,w,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\gaqd.f
+        subroutine gaqd(nlat,theta,wts,w,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\gaqd.f
             integer, optional,check(shape(theta, 0) == nlat),depend(theta) :: nlat=shape(theta, 0)
             double precision dimension(nlat) :: theta
             double precision dimension(nlat),depend(nlat) :: wts
@@ -71,13 +71,13 @@ python module spherepack ! in
             integer :: lwork
             integer :: ierror
         end subroutine gaqd
-        subroutine cpdp(n,cz,cp,dcp) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\gaqd.f
+        subroutine cpdp(n,cz,cp,dcp) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\gaqd.f
             integer, optional,check(shape(cp, 0) == 1 + n / 2),depend(cp) :: n=(-2 + 2 * shape(cp, 0)) / 1
             double precision :: cz
             double precision dimension(1 + n / 2) :: cp
             double precision dimension(1 + n / 2),depend(n) :: dcp
         end subroutine cpdp
-        subroutine tpdp(n,theta,cz,cp,dcp,pb,dpb) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\gaqd.f
+        subroutine tpdp(n,theta,cz,cp,dcp,pb,dpb) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\gaqd.f
             integer, optional,check(shape(cp, 0) == 1 + n / 2),depend(cp) :: n=(-2 + 2 * shape(cp, 0)) / 1
             double precision :: theta
             double precision :: cz
@@ -86,27 +86,27 @@ python module spherepack ! in
             double precision :: pb
             double precision :: dpb
         end subroutine tpdp
-        function dzeps(x) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\gaqd.f
+        function dzeps(x) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\gaqd.f
             double precision :: x
             real :: dzeps
         end function dzeps
-        subroutine getlegfunc(legfunc,lat,ntrunc) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\getlegfunc.f
+        subroutine getlegfunc(legfunc,lat,ntrunc) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\getlegfunc.f
             real dimension((2 + 3 * ntrunc + ntrunc * ntrunc) / 2),check(shape(legfunc, 0) == (2 + 3 * ntrunc + ntrunc * ntrunc) / 2),depend(ntrunc) :: legfunc
             real :: lat
             integer, required,intent(in) :: ntrunc
         end subroutine getlegfunc
-        subroutine hrffti(n,wsave) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hrffti(n,wsave) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer, optional,check(shape(wsave, 0) == 15 + n),depend(wsave) :: n=-15 + shape(wsave, 0)
             real dimension(15 + n) :: wsave
             real :: tfft
             common /hrf/ tfft
         end subroutine hrffti
-        subroutine hrfti1(n,wa,fac) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hrfti1(n,wa,fac) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer, optional,check(shape(wa, 0) == n),depend(wa) :: n=shape(wa, 0)
             real dimension(n) :: wa
             real dimension(15) :: fac
         end subroutine hrfti1
-        subroutine hrfftf(m,n,r,mdimr,whrfft,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hrfftf(m,n,r,mdimr,whrfft,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: m
             integer, optional,check(shape(r, 1) == n),depend(r) :: n=shape(r, 1)
             real dimension(mdimr,n) :: r
@@ -116,7 +116,7 @@ python module spherepack ! in
             real :: tfft
             common /hrf/ tfft
         end subroutine hrfftf
-        subroutine hrftf1(m,n,c,mdimc,ch,wa,fac) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hrftf1(m,n,c,mdimc,ch,wa,fac) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer, optional,check(shape(ch, 0) == m),depend(ch) :: m=shape(ch, 0)
             integer, optional,check(shape(c, 1) == n),depend(c) :: n=shape(c, 1)
             real dimension(mdimc,n) :: c
@@ -125,7 +125,7 @@ python module spherepack ! in
             real dimension(n),depend(n) :: wa
             real dimension(15) :: fac
         end subroutine hrftf1
-        subroutine hradf4(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2,wa3) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hradf4(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2,wa3) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: mp
             integer, optional,check(shape(cc, 1) == ido),depend(cc) :: ido=shape(cc, 1)
             integer, optional,check(shape(cc, 2) == l1),depend(cc) :: l1=shape(cc, 2)
@@ -137,7 +137,7 @@ python module spherepack ! in
             real dimension(ido),depend(ido) :: wa2
             real dimension(ido),depend(ido) :: wa3
         end subroutine hradf4
-        subroutine hradf2(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hradf2(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: mp
             integer, optional,check(shape(cc, 1) == ido),depend(cc) :: ido=shape(cc, 1)
             integer, optional,check(shape(cc, 2) == l1),depend(cc) :: l1=shape(cc, 2)
@@ -147,7 +147,7 @@ python module spherepack ! in
             integer, optional,check(shape(ch, 0) == mdimch),depend(ch) :: mdimch=shape(ch, 0)
             real dimension(ido),depend(ido) :: wa1
         end subroutine hradf2
-        subroutine hradf3(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hradf3(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: mp
             integer, optional,check(shape(cc, 1) == ido),depend(cc) :: ido=shape(cc, 1)
             integer, optional,check(shape(cc, 2) == l1),depend(cc) :: l1=shape(cc, 2)
@@ -158,7 +158,7 @@ python module spherepack ! in
             real dimension(ido),depend(ido) :: wa1
             real dimension(ido),depend(ido) :: wa2
         end subroutine hradf3
-        subroutine hradf5(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2,wa3,wa4) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hradf5(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2,wa3,wa4) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: mp
             integer, optional,check(shape(cc, 1) == ido),depend(cc) :: ido=shape(cc, 1)
             integer, optional,check(shape(cc, 2) == l1),depend(cc) :: l1=shape(cc, 2)
@@ -171,7 +171,7 @@ python module spherepack ! in
             real dimension(ido),depend(ido) :: wa3
             real dimension(ido),depend(ido) :: wa4
         end subroutine hradf5
-        subroutine hradfg(mp,ido,ip,l1,idl1,cc,c1,c2,mdimcc,ch,ch2,mdimch,wa) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hradfg(mp,ido,ip,l1,idl1,cc,c1,c2,mdimcc,ch,ch2,mdimch,wa) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: mp
             integer, optional,check(shape(cc, 1) == ido),depend(cc) :: ido=shape(cc, 1)
             integer, optional,check(shape(cc, 2) == ip),depend(cc) :: ip=shape(cc, 2)
@@ -186,10 +186,10 @@ python module spherepack ! in
             integer, optional,check(shape(ch, 0) == mdimch),depend(ch) :: mdimch=shape(ch, 0)
             real dimension(ido),depend(ido) :: wa
         end subroutine hradfg
-        function pimach() ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        function pimach() ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             real :: pimach
         end function pimach
-        subroutine hrfftb(m,n,r,mdimr,whrfft,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hrfftb(m,n,r,mdimr,whrfft,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: m
             integer, optional,check(shape(r, 1) == n),depend(r) :: n=shape(r, 1)
             real dimension(mdimr,n) :: r
@@ -199,7 +199,7 @@ python module spherepack ! in
             real :: tfft
             common /hrf/ tfft
         end subroutine hrfftb
-        subroutine hrftb1(m,n,c,mdimc,ch,wa,fac) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hrftb1(m,n,c,mdimc,ch,wa,fac) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer, optional,check(shape(ch, 0) == m),depend(ch) :: m=shape(ch, 0)
             integer, optional,check(shape(c, 1) == n),depend(c) :: n=shape(c, 1)
             real dimension(mdimc,n) :: c
@@ -208,7 +208,7 @@ python module spherepack ! in
             real dimension(n),depend(n) :: wa
             real dimension(15) :: fac
         end subroutine hrftb1
-        subroutine hradbg(mp,ido,ip,l1,idl1,cc,c1,c2,mdimcc,ch,ch2,mdimch,wa) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hradbg(mp,ido,ip,l1,idl1,cc,c1,c2,mdimcc,ch,ch2,mdimch,wa) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: mp
             integer, optional,check(shape(cc, 1) == ido),depend(cc) :: ido=shape(cc, 1)
             integer, optional,check(shape(cc, 2) == ip),depend(cc) :: ip=shape(cc, 2)
@@ -223,7 +223,7 @@ python module spherepack ! in
             integer, optional,check(shape(ch, 0) == mdimch),depend(ch) :: mdimch=shape(ch, 0)
             real dimension(ido),depend(ido) :: wa
         end subroutine hradbg
-        subroutine hradb4(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2,wa3) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hradb4(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2,wa3) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: mp
             integer, optional,check(shape(cc, 1) == ido),depend(cc) :: ido=shape(cc, 1)
             integer, optional,check(shape(cc, 3) == l1),depend(cc) :: l1=shape(cc, 3)
@@ -235,7 +235,7 @@ python module spherepack ! in
             real dimension(ido),depend(ido) :: wa2
             real dimension(ido),depend(ido) :: wa3
         end subroutine hradb4
-        subroutine hradb2(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hradb2(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: mp
             integer, optional,check(shape(cc, 1) == ido),depend(cc) :: ido=shape(cc, 1)
             integer, optional,check(shape(cc, 3) == l1),depend(cc) :: l1=shape(cc, 3)
@@ -245,7 +245,7 @@ python module spherepack ! in
             integer, optional,check(shape(ch, 0) == mdimch),depend(ch) :: mdimch=shape(ch, 0)
             real dimension(ido),depend(ido) :: wa1
         end subroutine hradb2
-        subroutine hradb3(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hradb3(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: mp
             integer, optional,check(shape(cc, 1) == ido),depend(cc) :: ido=shape(cc, 1)
             integer, optional,check(shape(cc, 3) == l1),depend(cc) :: l1=shape(cc, 3)
@@ -256,7 +256,7 @@ python module spherepack ! in
             real dimension(ido),depend(ido) :: wa1
             real dimension(ido),depend(ido) :: wa2
         end subroutine hradb3
-        subroutine hradb5(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2,wa3,wa4) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
+        subroutine hradb5(mp,ido,l1,cc,mdimcc,ch,mdimch,wa1,wa2,wa3,wa4) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\hrfft.f
             integer :: mp
             integer, optional,check(shape(cc, 1) == ido),depend(cc) :: ido=shape(cc, 1)
             integer, optional,check(shape(cc, 3) == l1),depend(cc) :: l1=shape(cc, 3)
@@ -269,7 +269,7 @@ python module spherepack ! in
             real dimension(ido),depend(ido) :: wa3
             real dimension(ido),depend(ido) :: wa4
         end subroutine hradb5
-        subroutine ihgeod(m,idp,jdp,x,y,z) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\ihgeod.f
+        subroutine ihgeod(m,idp,jdp,x,y,z) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\ihgeod.f
             integer :: m
             integer, optional,check(shape(x, 0) == idp),depend(x) :: idp=shape(x, 0)
             integer, optional,check(shape(x, 1) == jdp),depend(x) :: jdp=shape(x, 1)
@@ -277,7 +277,7 @@ python module spherepack ! in
             real dimension(idp,jdp,5),depend(jdp,idp) :: y
             real dimension(idp,jdp,5),depend(jdp,idp) :: z
         end subroutine ihgeod
-        subroutine ctos(x,y,z,r,theta,phi) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\ihgeod.f
+        subroutine ctos(x,y,z,r,theta,phi) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\ihgeod.f
             real :: x
             real :: y
             real :: z
@@ -285,7 +285,7 @@ python module spherepack ! in
             real :: theta
             real :: phi
         end subroutine ctos
-        subroutine stoc(r,theta,phi,x,y,z) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\ihgeod.f
+        subroutine stoc(r,theta,phi,x,y,z) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\ihgeod.f
             real :: r
             real :: theta
             real :: phi
@@ -293,21 +293,21 @@ python module spherepack ! in
             real :: y
             real :: z
         end subroutine stoc
-        subroutine invlap(dataspec,dataspec_ilap,nmdim,nt,rsphere) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\invlap.f
+        subroutine invlap(dataspec,dataspec_ilap,nmdim,nt,rsphere) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\invlap.f
             complex dimension(nmdim,nt) :: dataspec
             complex dimension(nmdim,nt),depend(nmdim,nt) :: dataspec_ilap
             integer, optional,check(shape(dataspec, 0) == nmdim),depend(dataspec) :: nmdim=shape(dataspec, 0)
             integer, optional,check(shape(dataspec, 1) == nt),depend(dataspec) :: nt=shape(dataspec, 1)
             real :: rsphere
         end subroutine invlap
-        subroutine lap(dataspec,dataspec_lap,nmdim,nt,rsphere) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\lap.f
+        subroutine lap(dataspec,dataspec_lap,nmdim,nt,rsphere) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\lap.f
             complex dimension(nmdim,nt) :: dataspec
             complex dimension(nmdim,nt),depend(nmdim,nt) :: dataspec_lap
             integer, optional,check(shape(dataspec, 0) == nmdim),depend(dataspec) :: nmdim=shape(dataspec, 0)
             integer, optional,check(shape(dataspec, 1) == nt),depend(dataspec) :: nt=shape(dataspec, 1)
             real :: rsphere
         end subroutine lap
-        subroutine multsmoothfact(dataspec,dataspec_smooth,smooth,nlat,nmdim,nt) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\multsmoothfact.f
+        subroutine multsmoothfact(dataspec,dataspec_smooth,smooth,nlat,nmdim,nt) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\multsmoothfact.f
             complex dimension(nmdim,nt) :: dataspec
             complex dimension(nmdim,nt),depend(nmdim,nt) :: dataspec_smooth
             real dimension(nlat) :: smooth
@@ -315,7 +315,7 @@ python module spherepack ! in
             integer, optional,check(shape(dataspec, 0) == nmdim),depend(dataspec) :: nmdim=shape(dataspec, 0)
             integer, optional,check(shape(dataspec, 1) == nt),depend(dataspec) :: nt=shape(dataspec, 1)
         end subroutine multsmoothfact
-        subroutine onedtotwod(dataspec,a,b,nlat,nmdim,nt) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\onedtotwod.f
+        subroutine onedtotwod(dataspec,a,b,nlat,nmdim,nt) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\onedtotwod.f
             complex dimension(nmdim,nt) :: dataspec
             real dimension(nlat,nlat,nt),depend(nt) :: a
             real dimension(nlat,nlat,nt),depend(nlat,nt) :: b
@@ -323,7 +323,7 @@ python module spherepack ! in
             integer, optional,check(shape(dataspec, 0) == nmdim),depend(dataspec) :: nmdim=shape(dataspec, 0)
             integer, optional,check(shape(dataspec, 1) == nt),depend(dataspec) :: nt=shape(dataspec, 1)
         end subroutine onedtotwod
-        subroutine onedtotwod_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,nmdim,nt,rsphere) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\onedtotwod_vrtdiv.f
+        subroutine onedtotwod_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,nmdim,nt,rsphere) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\onedtotwod_vrtdiv.f
             complex dimension(nmdim,nt) :: vrtspec
             complex dimension(nmdim,nt),depend(nmdim,nt) :: divspec
             real dimension(nlat,nlat,nt),depend(nt) :: br
@@ -335,7 +335,7 @@ python module spherepack ! in
             integer, optional,check(shape(vrtspec, 1) == nt),depend(vrtspec) :: nt=shape(vrtspec, 1)
             real :: rsphere
         end subroutine onedtotwod_vrtdiv
-        subroutine shaec(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshaec,lshaec,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shaec.f
+        subroutine shaec(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshaec,lshaec,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shaec.f
             integer :: nlat
             integer :: nlon
             integer :: isym
@@ -353,7 +353,7 @@ python module spherepack ! in
             integer :: lwork
             integer :: ierror
         end subroutine shaec
-        subroutine shaec1(nlat,isym,nt,g,idgs,jdgs,a,b,mdab,ndab,imid,idg,jdg,ge,go,work,zb,wzfin,whrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shaec.f
+        subroutine shaec1(nlat,isym,nt,g,idgs,jdgs,a,b,mdab,ndab,imid,idg,jdg,ge,go,work,zb,wzfin,whrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shaec.f
             integer, optional,check(shape(zb, 1) == nlat),depend(zb) :: nlat=shape(zb, 1)
             integer :: isym
             integer :: nt
@@ -374,7 +374,7 @@ python module spherepack ! in
             real dimension(1) :: wzfin
             real dimension(1) :: whrfft
         end subroutine shaec1
-        subroutine shaeci(nlat,nlon,wshaec,lshaec,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shaec.f
+        subroutine shaeci(nlat,nlon,wshaec,lshaec,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shaec.f
             integer :: nlat
             integer :: nlon
             real dimension(lshaec) :: wshaec
@@ -383,7 +383,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine shaeci
-        subroutine shaes(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshaes,lshaes,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shaes.f
+        subroutine shaes(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshaes,lshaes,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shaes.f
             integer :: nlat
             integer :: nlon
             integer :: isym
@@ -395,13 +395,13 @@ python module spherepack ! in
             real dimension(mdab,ndab,1),depend(ndab,mdab) :: b
             integer, optional,check(shape(a, 0) == mdab),depend(a) :: mdab=shape(a, 0)
             integer, optional,check(shape(a, 1) == ndab),depend(a) :: ndab=shape(a, 1)
-            real dimension(1) :: wshaes
+            real dimension(lshaes) :: wshaes
             integer :: lshaes
-            real dimension(1) :: work
+            real dimension(lwork) :: work
             integer :: lwork
             integer :: ierror
         end subroutine shaes
-        subroutine shaes1(nlat,isym,nt,g,idgs,jdgs,a,b,mdab,ndab,z,idz,idg,jdg,ge,go,work,whrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shaes.f
+        subroutine shaes1(nlat,isym,nt,g,idgs,jdgs,a,b,mdab,ndab,z,idz,idg,jdg,ge,go,work,whrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shaes.f
             integer :: nlat
             integer :: isym
             integer :: nt
@@ -421,7 +421,7 @@ python module spherepack ! in
             real dimension(1) :: work
             real dimension(1) :: whrfft
         end subroutine shaes1
-        subroutine shaesi(nlat,nlon,wshaes,lshaes,work,lwork,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shaes.f
+        subroutine shaesi(nlat,nlon,wshaes,lshaes,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shaes.f
             integer :: nlat
             integer :: nlon
             real dimension(*) :: wshaes
@@ -432,7 +432,7 @@ python module spherepack ! in
             integer :: ldwork
             integer :: ierror
         end subroutine shaesi
-        subroutine shagc(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshagc,lshagc,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shagc.f
+        subroutine shagc(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshagc,lshagc,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shagc.f
             integer :: nlat
             integer :: nlon
             integer :: isym
@@ -450,7 +450,7 @@ python module spherepack ! in
             integer, optional,check(shape(work, 0) == lwork),depend(work) :: lwork=shape(work, 0)
             integer :: ierror
         end subroutine shagc
-        subroutine shagc1(nlat,nlon,l,lat,mode,gs,idg,jdg,nt,a,b,mdab,ndab,w,wts,wfft,late,pmn,g) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shagc.f
+        subroutine shagc1(nlat,nlon,l,lat,mode,gs,idg,jdg,nt,a,b,mdab,ndab,w,wts,wfft,late,pmn,g) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shagc.f
             integer, optional,check(shape(wts, 0) == nlat),depend(wts) :: nlat=shape(wts, 0)
             integer, optional,check(shape(g, 1) == nlon),depend(g) :: nlon=shape(g, 1)
             integer :: l
@@ -471,7 +471,7 @@ python module spherepack ! in
             real dimension(nlat,late,3),depend(nlat) :: pmn
             real dimension(lat,nlon,nt),depend(nt) :: g
         end subroutine shagc1
-        subroutine shagci(nlat,nlon,wshagc,lshagc,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shagc.f
+        subroutine shagci(nlat,nlon,wshagc,lshagc,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shagc.f
             integer :: nlat
             integer :: nlon
             real dimension(lshagc) :: wshagc
@@ -480,7 +480,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine shagci
-        subroutine shagci1(nlat,nlon,l,late,wts,p0n,p1n,abel,bbel,cbel,wfft,dtheta,dwts,work,ier) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shagc.f
+        subroutine shagci1(nlat,nlon,l,late,wts,p0n,p1n,abel,bbel,cbel,wfft,dtheta,dwts,work,ier) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shagc.f
             integer, optional,check(shape(wts, 0) == nlat),depend(wts) :: nlat=shape(wts, 0)
             integer :: nlon
             integer :: l
@@ -497,7 +497,7 @@ python module spherepack ! in
             double precision dimension(*) :: work
             integer :: ier
         end subroutine shagci1
-        subroutine shags(nlat,nlon,mode,nt,g,idg,jdg,a,b,mdab,ndab,wshags,lshags,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
+        subroutine shags(nlat,nlon,mode,nt,g,idg,jdg,a,b,mdab,ndab,wshags,lshags,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
             integer :: nlat
             integer :: nlon
             integer :: mode
@@ -515,7 +515,7 @@ python module spherepack ! in
             integer, optional,check(shape(work, 0) == lwork),depend(work) :: lwork=shape(work, 0)
             integer :: ierror
         end subroutine shags
-        subroutine shags1(nlat,nlon,l,lat,mode,gs,idg,jdg,nt,a,b,mdab,ndab,wts,wfft,pmn,late,g,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
+        subroutine shags1(nlat,nlon,l,lat,mode,gs,idg,jdg,nt,a,b,mdab,ndab,wts,wfft,pmn,late,g,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
             integer, optional,check(shape(wts, 0) == nlat),depend(wts) :: nlat=shape(wts, 0)
             integer, optional,check(shape(g, 1) == nlon),depend(g) :: nlon=shape(g, 1)
             integer :: l
@@ -536,7 +536,7 @@ python module spherepack ! in
             real dimension(lat,nlon,nt),depend(nt) :: g
             real dimension(1) :: work
         end subroutine shags1
-        subroutine shagsi(nlat,nlon,wshags,lshags,work,lwork,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
+        subroutine shagsi(nlat,nlon,wshags,lshags,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
             integer :: nlat
             integer :: nlon
             real dimension(lshags) :: wshags
@@ -547,7 +547,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine shagsi
-        subroutine shagss1(nlat,l,late,w,pmn,pmnf) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
+        subroutine shagss1(nlat,l,late,w,pmn,pmnf) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
             integer, optional,check(shape(pmn, 0) == nlat),depend(pmn) :: nlat=shape(pmn, 0)
             integer :: l
             integer, optional,check(shape(pmn, 1) == late),depend(pmn) :: late=shape(pmn, 1)
@@ -555,7 +555,7 @@ python module spherepack ! in
             real dimension(nlat,late,3) :: pmn
             real dimension(late,1),depend(late) :: pmnf
         end subroutine shagss1
-        subroutine shagsp(nlat,nlon,wshags,lshags,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
+        subroutine shagsp(nlat,nlon,wshags,lshags,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
             integer :: nlat
             integer :: nlon
             real dimension(lshags) :: wshags
@@ -564,7 +564,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine shagsp
-        subroutine shagsp1(nlat,nlon,l,late,wts,p0n,p1n,abel,bbel,cbel,wfft,dtheta,dwts,work,ier) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
+        subroutine shagsp1(nlat,nlon,l,late,wts,p0n,p1n,abel,bbel,cbel,wfft,dtheta,dwts,work,ier) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shags.f
             integer, optional,check(shape(wts, 0) == nlat),depend(wts) :: nlat=shape(wts, 0)
             integer :: nlon
             integer :: l
@@ -581,7 +581,7 @@ python module spherepack ! in
             double precision dimension(*) :: work
             integer :: ier
         end subroutine shagsp1
-        subroutine shsec(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshsec,lshsec,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsec.f
+        subroutine shsec(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshsec,lshsec,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsec.f
             integer :: nlat
             integer :: nlon
             integer :: isym
@@ -593,13 +593,13 @@ python module spherepack ! in
             real dimension(mdab,ndab,1),depend(ndab,mdab) :: b
             integer, optional,check(shape(a, 0) == mdab),depend(a) :: mdab=shape(a, 0)
             integer, optional,check(shape(a, 1) == ndab),depend(a) :: ndab=shape(a, 1)
-            real dimension(1) :: wshsec
+            real dimension(lshsec) :: wshsec
             integer :: lshsec
-            real dimension(1) :: work
+            real dimension(lwork) :: work
             integer :: lwork
             integer :: ierror
         end subroutine shsec
-        subroutine shsec1(nlat,isym,nt,g,idgs,jdgs,a,b,mdab,ndab,imid,idg,jdg,ge,go,work,pb,walin,whrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsec.f
+        subroutine shsec1(nlat,isym,nt,g,idgs,jdgs,a,b,mdab,ndab,imid,idg,jdg,ge,go,work,pb,walin,whrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsec.f
             integer, optional,check(shape(pb, 1) == nlat),depend(pb) :: nlat=shape(pb, 1)
             integer :: isym
             integer :: nt
@@ -620,7 +620,7 @@ python module spherepack ! in
             real dimension(1) :: walin
             real dimension(1) :: whrfft
         end subroutine shsec1
-        subroutine shseci(nlat,nlon,wshsec,lshsec,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsec.f
+        subroutine shseci(nlat,nlon,wshsec,lshsec,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsec.f
             integer :: nlat
             integer :: nlon
             real dimension(*) :: wshsec
@@ -629,7 +629,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine shseci
-        subroutine shses(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshses,lshses,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shses.f
+        subroutine shses(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshses,lshses,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shses.f
             integer :: nlat
             integer :: nlon
             integer :: isym
@@ -641,13 +641,13 @@ python module spherepack ! in
             real dimension(mdab,ndab,1),depend(ndab,mdab) :: b
             integer, optional,check(shape(a, 0) == mdab),depend(a) :: mdab=shape(a, 0)
             integer, optional,check(shape(a, 1) == ndab),depend(a) :: ndab=shape(a, 1)
-            real dimension(1) :: wshses
+            real dimension(lshses) :: wshses
             integer :: lshses
-            real dimension(1) :: work
+            real dimension(lwork) :: work
             integer :: lwork
             integer :: ierror
         end subroutine shses
-        subroutine shses1(nlat,isym,nt,g,idgs,jdgs,a,b,mdab,ndab,p,imid,idg,jdg,ge,go,work,whrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shses.f
+        subroutine shses1(nlat,isym,nt,g,idgs,jdgs,a,b,mdab,ndab,p,imid,idg,jdg,ge,go,work,whrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shses.f
             integer :: nlat
             integer :: isym
             integer :: nt
@@ -667,7 +667,7 @@ python module spherepack ! in
             real dimension(1) :: work
             real dimension(1) :: whrfft
         end subroutine shses1
-        subroutine shsesi(nlat,nlon,wshses,lshses,work,lwork,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shses.f
+        subroutine shsesi(nlat,nlon,wshses,lshses,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shses.f
             integer :: nlat
             integer :: nlon
             real dimension(*) :: wshses
@@ -678,7 +678,7 @@ python module spherepack ! in
             integer :: ldwork
             integer :: ierror
         end subroutine shsesi
-        subroutine shsgc(nlat,nlon,mode,nt,g,idg,jdg,a,b,mdab,ndab,wshsgc,lshsgc,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsgc.f
+        subroutine shsgc(nlat,nlon,mode,nt,g,idg,jdg,a,b,mdab,ndab,wshsgc,lshsgc,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsgc.f
             integer :: nlat
             integer :: nlon
             integer :: mode
@@ -696,7 +696,7 @@ python module spherepack ! in
             integer, optional,check(shape(work, 0) == lwork),depend(work) :: lwork=shape(work, 0)
             integer :: ierror
         end subroutine shsgc
-        subroutine shsgc1(nlat,nlon,l,lat,mode,gs,idg,jdg,nt,a,b,mdab,ndab,w,wfft,late,pmn,g) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsgc.f
+        subroutine shsgc1(nlat,nlon,l,lat,mode,gs,idg,jdg,nt,a,b,mdab,ndab,w,wfft,late,pmn,g) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsgc.f
             integer, optional,check(shape(pmn, 0) == nlat),depend(pmn) :: nlat=shape(pmn, 0)
             integer, optional,check(shape(g, 1) == nlon),depend(g) :: nlon=shape(g, 1)
             integer :: l
@@ -716,7 +716,7 @@ python module spherepack ! in
             real dimension(nlat,late,3) :: pmn
             real dimension(lat,nlon,nt),depend(nt) :: g
         end subroutine shsgc1
-        subroutine shsgci(nlat,nlon,wshsgc,lshsgc,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsgc.f
+        subroutine shsgci(nlat,nlon,wshsgc,lshsgc,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsgc.f
             integer :: nlat
             integer :: nlon
             real dimension(lshsgc) :: wshsgc
@@ -725,7 +725,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine shsgci
-        subroutine shsgci1(nlat,nlon,l,late,wts,p0n,p1n,abel,bbel,cbel,wfft,dtheta,dwts,work,ier) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsgc.f
+        subroutine shsgci1(nlat,nlon,l,late,wts,p0n,p1n,abel,bbel,cbel,wfft,dtheta,dwts,work,ier) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsgc.f
             integer, optional,check(shape(wts, 0) == nlat),depend(wts) :: nlat=shape(wts, 0)
             integer :: nlon
             integer :: l
@@ -742,7 +742,7 @@ python module spherepack ! in
             double precision dimension(*) :: work
             integer :: ier
         end subroutine shsgci1
-        subroutine shsgs(nlat,nlon,mode,nt,g,idg,jdg,a,b,mdab,ndab,wshsgs,lshsgs,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
+        subroutine shsgs(nlat,nlon,mode,nt,g,idg,jdg,a,b,mdab,ndab,wshsgs,lshsgs,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
             integer :: nlat
             integer :: nlon
             integer :: mode
@@ -760,7 +760,7 @@ python module spherepack ! in
             integer, optional,check(shape(work, 0) == lwork),depend(work) :: lwork=shape(work, 0)
             integer :: ierror
         end subroutine shsgs
-        subroutine shsgs1(nlat,nlon,l,lat,mode,gs,idg,jdg,nt,a,b,mdab,ndab,wfft,pmn,late,g,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
+        subroutine shsgs1(nlat,nlon,l,lat,mode,gs,idg,jdg,nt,a,b,mdab,ndab,wfft,pmn,late,g,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
             integer :: nlat
             integer, optional,check(shape(g, 1) == nlon),depend(g) :: nlon=shape(g, 1)
             integer :: l
@@ -780,7 +780,7 @@ python module spherepack ! in
             real dimension(lat,nlon,nt),depend(nt) :: g
             real dimension(1) :: work
         end subroutine shsgs1
-        subroutine shsgsi(nlat,nlon,wshsgs,lshsgs,work,lwork,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
+        subroutine shsgsi(nlat,nlon,wshsgs,lshsgs,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
             integer :: nlat
             integer :: nlon
             real dimension(lshsgs) :: wshsgs
@@ -791,7 +791,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine shsgsi
-        subroutine shsgss1(nlat,l,late,w,pmn,pmnf) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
+        subroutine shsgss1(nlat,l,late,w,pmn,pmnf) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
             integer, optional,check(shape(pmn, 0) == nlat),depend(pmn) :: nlat=shape(pmn, 0)
             integer :: l
             integer, optional,check(shape(pmn, 1) == late),depend(pmn) :: late=shape(pmn, 1)
@@ -799,7 +799,7 @@ python module spherepack ! in
             real dimension(nlat,late,3) :: pmn
             real dimension(late,1),depend(late) :: pmnf
         end subroutine shsgss1
-        subroutine shsgsp(nlat,nlon,wshsgs,lshsgs,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
+        subroutine shsgsp(nlat,nlon,wshsgs,lshsgs,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
             integer :: nlat
             integer :: nlon
             real dimension(lshsgs) :: wshsgs
@@ -808,7 +808,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine shsgsp
-        subroutine shsgsp1(nlat,nlon,l,late,wts,p0n,p1n,abel,bbel,cbel,wfft,dtheta,dwts,work,ier) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
+        subroutine shsgsp1(nlat,nlon,l,late,wts,p0n,p1n,abel,bbel,cbel,wfft,dtheta,dwts,work,ier) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\shsgs.f
             integer, optional,check(shape(wts, 0) == nlat),depend(wts) :: nlat=shape(wts, 0)
             integer :: nlon
             integer :: l
@@ -825,7 +825,7 @@ python module spherepack ! in
             double precision dimension(*) :: work
             integer :: ier
         end subroutine shsgsp1
-        subroutine specintrp(rlon,ntrunc,datnm,scrm,pnm,ob) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\specintrp.f
+        subroutine specintrp(rlon,ntrunc,datnm,scrm,pnm,ob) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\specintrp.f
             real :: rlon
             integer, required,intent(in),check(shape(scrm, 0) == 1 + ntrunc),depend(scrm) :: ntrunc=-1 + shape(scrm, 0)
             complex dimension((2 + 3 * ntrunc + ntrunc * ntrunc) / 2),check(shape(datnm, 0) == (2 + 3 * ntrunc + ntrunc * ntrunc) / 2),depend(ntrunc) :: datnm
@@ -833,26 +833,26 @@ python module spherepack ! in
             real dimension((2 + 3 * ntrunc + ntrunc * ntrunc) / 2),depend(ntrunc) :: pnm
             real :: ob
         end subroutine specintrp
-        subroutine dnlfk(m,n,cp) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dnlfk(m,n,cp) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: m
             integer :: n
             double precision dimension(1) :: cp
         end subroutine dnlfk
-        subroutine dnlft(m,n,theta,cp,pb) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dnlft(m,n,theta,cp,pb) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: m
             integer :: n
             double precision :: theta
             double precision dimension(*) :: cp
             double precision :: pb
         end subroutine dnlft
-        subroutine dnlftd(m,n,theta,cp,pb) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dnlftd(m,n,theta,cp,pb) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: m
             integer :: n
             double precision :: theta
             double precision dimension(1) :: cp
             double precision :: pb
         end subroutine dnlftd
-        subroutine legin(mode,l,nlat,m,w,pmn,km) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine legin(mode,l,nlat,m,w,pmn,km) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: mode
             integer :: l
             integer :: nlat
@@ -861,7 +861,7 @@ python module spherepack ! in
             real dimension(1) :: pmn
             integer :: km
         end subroutine legin
-        subroutine legin1(mode,l,nlat,late,m,p0n,p1n,abel,bbel,cbel,pmn,km) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine legin1(mode,l,nlat,late,m,p0n,p1n,abel,bbel,cbel,pmn,km) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: mode
             integer :: l
             integer, optional,check(shape(p0n, 0) == nlat),depend(p0n) :: nlat=shape(p0n, 0)
@@ -875,7 +875,7 @@ python module spherepack ! in
             real dimension(nlat,late,3),depend(late,nlat) :: pmn
             integer :: km
         end subroutine legin1
-        subroutine zfin(isym,nlat,nlon,m,z,i3,wzfin) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zfin(isym,nlat,nlon,m,z,i3,wzfin) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: isym
             integer :: nlat
             integer :: nlon
@@ -884,7 +884,7 @@ python module spherepack ! in
             integer :: i3
             real dimension(1) :: wzfin
         end subroutine zfin
-        subroutine zfin1(isym,nlat,m,z,imid,i3,zz,z1,a,b,c) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zfin1(isym,nlat,m,z,imid,i3,zz,z1,a,b,c) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: isym
             integer, optional,check(shape(z, 1) == nlat),depend(z) :: nlat=shape(z, 1)
             integer :: m
@@ -897,13 +897,13 @@ python module spherepack ! in
             real dimension(1) :: b
             real dimension(1) :: c
         end subroutine zfin1
-        subroutine zfinit(nlat,nlon,wzfin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zfinit(nlat,nlon,wzfin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(*) :: wzfin
             double precision dimension(*) :: dwork
         end subroutine zfinit
-        subroutine zfini1(nlat,nlon,imid,z,abc,cz,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zfini1(nlat,nlon,imid,z,abc,cz,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(z, 1) == nlat),depend(z) :: nlat=shape(z, 1)
             integer :: nlon
             integer, optional,check(shape(z, 0) == imid),depend(z) :: imid=shape(z, 0)
@@ -912,14 +912,14 @@ python module spherepack ! in
             double precision dimension(*) :: cz
             double precision dimension(*) :: work
         end subroutine zfini1
-        subroutine dnzfk(nlat,m,n,cz,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dnzfk(nlat,m,n,cz,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: m
             integer :: n
             double precision dimension(1) :: cz
             double precision dimension(1) :: work
         end subroutine dnzfk
-        subroutine dnzft(nlat,m,n,th,cz,zh) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dnzft(nlat,m,n,th,cz,zh) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: m
             integer :: n
@@ -927,7 +927,7 @@ python module spherepack ! in
             double precision dimension(1) :: cz
             double precision :: zh
         end subroutine dnzft
-        subroutine alin(isym,nlat,nlon,m,p,i3,walin) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine alin(isym,nlat,nlon,m,p,i3,walin) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: isym
             integer :: nlat
             integer :: nlon
@@ -936,7 +936,7 @@ python module spherepack ! in
             integer :: i3
             real dimension(1) :: walin
         end subroutine alin
-        subroutine alin1(isym,nlat,m,p,imid,i3,pz,p1,a,b,c) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine alin1(isym,nlat,m,p,imid,i3,pz,p1,a,b,c) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: isym
             integer, optional,check(shape(p, 1) == nlat),depend(p) :: nlat=shape(p, 1)
             integer :: m
@@ -949,13 +949,13 @@ python module spherepack ! in
             real dimension(1) :: b
             real dimension(1) :: c
         end subroutine alin1
-        subroutine alinit(nlat,nlon,walin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine alinit(nlat,nlon,walin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(*) :: walin
             double precision dimension(*) :: dwork
         end subroutine alinit
-        subroutine alini1(nlat,nlon,imid,p,abc,cp) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine alini1(nlat,nlon,imid,p,abc,cp) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(p, 1) == nlat),depend(p) :: nlat=shape(p, 1)
             integer :: nlon
             integer, optional,check(shape(p, 0) == imid),depend(p) :: imid=shape(p, 0)
@@ -963,19 +963,19 @@ python module spherepack ! in
             real dimension(1) :: abc
             double precision dimension(1) :: cp
         end subroutine alini1
-        subroutine rabcp(nlat,nlon,abc) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine rabcp(nlat,nlon,abc) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: abc
         end subroutine rabcp
-        subroutine rabcp1(nlat,nlon,a,b,c) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine rabcp1(nlat,nlon,a,b,c) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: a
             real dimension(1) :: b
             real dimension(1) :: c
         end subroutine rabcp1
-        subroutine sea1(nlat,nlon,imid,z,idz,zin,wzfin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine sea1(nlat,nlon,imid,z,idz,zin,wzfin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(zin, 1) == nlat),depend(zin) :: nlat=shape(zin, 1)
             integer :: nlon
             integer, optional,check(shape(zin, 0) == imid),depend(zin) :: imid=shape(zin, 0)
@@ -985,7 +985,7 @@ python module spherepack ! in
             real dimension(*) :: wzfin
             double precision dimension(*) :: dwork
         end subroutine sea1
-        subroutine ses1(nlat,nlon,imid,p,pin,walin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine ses1(nlat,nlon,imid,p,pin,walin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(pin, 1) == nlat),depend(pin) :: nlat=shape(pin, 1)
             integer :: nlon
             integer, optional,check(shape(p, 0) == imid),depend(p) :: imid=shape(p, 0)
@@ -994,13 +994,13 @@ python module spherepack ! in
             real dimension(*) :: walin
             double precision dimension(*) :: dwork
         end subroutine ses1
-        subroutine zvinit(nlat,nlon,wzvin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zvinit(nlat,nlon,wzvin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: wzvin
             double precision dimension(*) :: dwork
         end subroutine zvinit
-        subroutine zvini1(nlat,nlon,imid,zv,abc,czv,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zvini1(nlat,nlon,imid,zv,abc,czv,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(zv, 1) == nlat),depend(zv) :: nlat=shape(zv, 1)
             integer :: nlon
             integer, optional,check(shape(zv, 0) == imid),depend(zv) :: imid=shape(zv, 0)
@@ -1009,13 +1009,13 @@ python module spherepack ! in
             double precision dimension(1) :: czv
             double precision dimension(1) :: work
         end subroutine zvini1
-        subroutine zwinit(nlat,nlon,wzwin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zwinit(nlat,nlon,wzwin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: wzwin
             double precision dimension(*) :: dwork
         end subroutine zwinit
-        subroutine zwini1(nlat,nlon,imid,zw,abc,czw,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zwini1(nlat,nlon,imid,zw,abc,czw,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(zw, 1) == nlat),depend(zw) :: nlat=shape(zw, 1)
             integer :: nlon
             integer, optional,check(shape(zw, 0) == imid),depend(zw) :: imid=shape(zw, 0)
@@ -1024,7 +1024,7 @@ python module spherepack ! in
             double precision dimension(1) :: czw
             double precision dimension(1) :: work
         end subroutine zwini1
-        subroutine zvin(ityp,nlat,nlon,m,zv,i3,wzvin) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zvin(ityp,nlat,nlon,m,zv,i3,wzvin) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: ityp
             integer :: nlat
             integer :: nlon
@@ -1033,7 +1033,7 @@ python module spherepack ! in
             integer :: i3
             real dimension(1) :: wzvin
         end subroutine zvin
-        subroutine zvin1(ityp,nlat,m,zv,imid,i3,zvz,zv1,a,b,c) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zvin1(ityp,nlat,m,zv,imid,i3,zvz,zv1,a,b,c) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: ityp
             integer, optional,check(shape(zv, 1) == nlat),depend(zv) :: nlat=shape(zv, 1)
             integer :: m
@@ -1046,7 +1046,7 @@ python module spherepack ! in
             real dimension(1) :: b
             real dimension(1) :: c
         end subroutine zvin1
-        subroutine zwin(ityp,nlat,nlon,m,zw,i3,wzwin) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zwin(ityp,nlat,nlon,m,zw,i3,wzwin) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: ityp
             integer :: nlat
             integer :: nlon
@@ -1055,7 +1055,7 @@ python module spherepack ! in
             integer :: i3
             real dimension(1) :: wzwin
         end subroutine zwin
-        subroutine zwin1(ityp,nlat,m,zw,imid,i3,zw1,zw2,a,b,c) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine zwin1(ityp,nlat,m,zw,imid,i3,zw1,zw2,a,b,c) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: ityp
             integer, optional,check(shape(zw, 1) == nlat),depend(zw) :: nlat=shape(zw, 1)
             integer :: m
@@ -1068,13 +1068,13 @@ python module spherepack ! in
             real dimension(1) :: b
             real dimension(1) :: c
         end subroutine zwin1
-        subroutine vbinit(nlat,nlon,wvbin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine vbinit(nlat,nlon,wvbin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: wvbin
             double precision dimension(*) :: dwork
         end subroutine vbinit
-        subroutine vbini1(nlat,nlon,imid,vb,abc,cvb,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine vbini1(nlat,nlon,imid,vb,abc,cvb,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(vb, 1) == nlat),depend(vb) :: nlat=shape(vb, 1)
             integer :: nlon
             integer, optional,check(shape(vb, 0) == imid),depend(vb) :: imid=shape(vb, 0)
@@ -1083,13 +1083,13 @@ python module spherepack ! in
             double precision dimension(1) :: cvb
             double precision dimension(1) :: work
         end subroutine vbini1
-        subroutine wbinit(nlat,nlon,wwbin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine wbinit(nlat,nlon,wwbin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: wwbin
             double precision dimension(*) :: dwork
         end subroutine wbinit
-        subroutine wbini1(nlat,nlon,imid,wb,abc,cwb,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine wbini1(nlat,nlon,imid,wb,abc,cwb,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(wb, 1) == nlat),depend(wb) :: nlat=shape(wb, 1)
             integer :: nlon
             integer, optional,check(shape(wb, 0) == imid),depend(wb) :: imid=shape(wb, 0)
@@ -1098,7 +1098,7 @@ python module spherepack ! in
             double precision dimension(1) :: cwb
             double precision dimension(1) :: work
         end subroutine wbini1
-        subroutine vbin(ityp,nlat,nlon,m,vb,i3,wvbin) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine vbin(ityp,nlat,nlon,m,vb,i3,wvbin) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: ityp
             integer :: nlat
             integer :: nlon
@@ -1107,7 +1107,7 @@ python module spherepack ! in
             integer :: i3
             real dimension(1) :: wvbin
         end subroutine vbin
-        subroutine vbin1(ityp,nlat,m,vb,imid,i3,vbz,vb1,a,b,c) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine vbin1(ityp,nlat,m,vb,imid,i3,vbz,vb1,a,b,c) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: ityp
             integer, optional,check(shape(vb, 1) == nlat),depend(vb) :: nlat=shape(vb, 1)
             integer :: m
@@ -1120,7 +1120,7 @@ python module spherepack ! in
             real dimension(1) :: b
             real dimension(1) :: c
         end subroutine vbin1
-        subroutine wbin(ityp,nlat,nlon,m,wb,i3,wwbin) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine wbin(ityp,nlat,nlon,m,wb,i3,wwbin) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: ityp
             integer :: nlat
             integer :: nlon
@@ -1129,7 +1129,7 @@ python module spherepack ! in
             integer :: i3
             real dimension(1) :: wwbin
         end subroutine wbin
-        subroutine wbin1(ityp,nlat,m,wb,imid,i3,wb1,wb2,a,b,c) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine wbin1(ityp,nlat,m,wb,imid,i3,wb1,wb2,a,b,c) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: ityp
             integer, optional,check(shape(wb, 1) == nlat),depend(wb) :: nlat=shape(wb, 1)
             integer :: m
@@ -1142,14 +1142,14 @@ python module spherepack ! in
             real dimension(1) :: b
             real dimension(1) :: c
         end subroutine wbin1
-        subroutine dzvk(nlat,m,n,czv,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dzvk(nlat,m,n,czv,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: m
             integer :: n
             double precision dimension(1) :: czv
             double precision dimension(1) :: work
         end subroutine dzvk
-        subroutine dzvt(nlat,m,n,th,czv,zvh) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dzvt(nlat,m,n,th,czv,zvh) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: m
             integer :: n
@@ -1157,14 +1157,14 @@ python module spherepack ! in
             double precision dimension(1) :: czv
             double precision :: zvh
         end subroutine dzvt
-        subroutine dzwk(nlat,m,n,czw,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dzwk(nlat,m,n,czw,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: m
             integer :: n
             double precision dimension(1) :: czw
             double precision dimension(1) :: work
         end subroutine dzwk
-        subroutine dzwt(nlat,m,n,th,czw,zwh) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dzwt(nlat,m,n,th,czw,zwh) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: m
             integer :: n
@@ -1172,63 +1172,63 @@ python module spherepack ! in
             double precision dimension(1) :: czw
             double precision :: zwh
         end subroutine dzwt
-        subroutine dvbk(m,n,cv,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dvbk(m,n,cv,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: m
             integer :: n
             double precision dimension(1) :: cv
             double precision dimension(1) :: work
         end subroutine dvbk
-        subroutine dwbk(m,n,cw,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dwbk(m,n,cw,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: m
             integer :: n
             double precision dimension(1) :: cw
             double precision dimension(1) :: work
         end subroutine dwbk
-        subroutine dvbt(m,n,theta,cv,vh) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dvbt(m,n,theta,cv,vh) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: m
             integer :: n
             double precision :: theta
             double precision dimension(1) :: cv
             double precision :: vh
         end subroutine dvbt
-        subroutine dwbt(m,n,theta,cw,wh) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dwbt(m,n,theta,cw,wh) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: m
             integer :: n
             double precision :: theta
             double precision dimension(1) :: cw
             double precision :: wh
         end subroutine dwbt
-        subroutine rabcv(nlat,nlon,abc) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine rabcv(nlat,nlon,abc) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: abc
         end subroutine rabcv
-        subroutine rabcv1(nlat,nlon,a,b,c) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine rabcv1(nlat,nlon,a,b,c) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: a
             real dimension(1) :: b
             real dimension(1) :: c
         end subroutine rabcv1
-        subroutine rabcw(nlat,nlon,abc) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine rabcw(nlat,nlon,abc) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: abc
         end subroutine rabcw
-        subroutine rabcw1(nlat,nlon,a,b,c) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine rabcw1(nlat,nlon,a,b,c) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: a
             real dimension(1) :: b
             real dimension(1) :: c
         end subroutine rabcw1
-        subroutine vtinit(nlat,nlon,wvbin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine vtinit(nlat,nlon,wvbin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(*) :: wvbin
             double precision dimension(*) :: dwork
         end subroutine vtinit
-        subroutine vtini1(nlat,nlon,imid,vb,abc,cvb,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine vtini1(nlat,nlon,imid,vb,abc,cvb,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(vb, 1) == nlat),depend(vb) :: nlat=shape(vb, 1)
             integer :: nlon
             integer, optional,check(shape(vb, 0) == imid),depend(vb) :: imid=shape(vb, 0)
@@ -1237,13 +1237,13 @@ python module spherepack ! in
             double precision dimension(1) :: cvb
             double precision dimension(*) :: work
         end subroutine vtini1
-        subroutine wtinit(nlat,nlon,wwbin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine wtinit(nlat,nlon,wwbin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: wwbin
             double precision dimension(*) :: dwork
         end subroutine wtinit
-        subroutine wtini1(nlat,nlon,imid,wb,abc,cwb,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine wtini1(nlat,nlon,imid,wb,abc,cwb,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(wb, 1) == nlat),depend(wb) :: nlat=shape(wb, 1)
             integer :: nlon
             integer, optional,check(shape(wb, 0) == imid),depend(wb) :: imid=shape(wb, 0)
@@ -1252,14 +1252,14 @@ python module spherepack ! in
             double precision dimension(*) :: cwb
             double precision dimension(*) :: work
         end subroutine wtini1
-        subroutine vtgint(nlat,nlon,theta,wvbin,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine vtgint(nlat,nlon,theta,wvbin,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             double precision dimension(*) :: theta
             real dimension(*) :: wvbin
             double precision dimension(*) :: work
         end subroutine vtgint
-        subroutine vtgit1(nlat,nlon,imid,theta,vb,abc,cvb,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine vtgit1(nlat,nlon,imid,theta,vb,abc,cvb,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(vb, 1) == nlat),depend(vb) :: nlat=shape(vb, 1)
             integer :: nlon
             integer, optional,check(shape(vb, 0) == imid),depend(vb) :: imid=shape(vb, 0)
@@ -1269,14 +1269,14 @@ python module spherepack ! in
             double precision dimension(*) :: cvb
             double precision dimension(*) :: work
         end subroutine vtgit1
-        subroutine wtgint(nlat,nlon,theta,wwbin,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine wtgint(nlat,nlon,theta,wwbin,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             double precision dimension(*) :: theta
             real dimension(*) :: wwbin
             double precision dimension(*) :: work
         end subroutine wtgint
-        subroutine wtgit1(nlat,nlon,imid,theta,wb,abc,cwb,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine wtgit1(nlat,nlon,imid,theta,wb,abc,cwb,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(wb, 1) == nlat),depend(wb) :: nlat=shape(wb, 1)
             integer :: nlon
             integer, optional,check(shape(wb, 0) == imid),depend(wb) :: imid=shape(wb, 0)
@@ -1286,40 +1286,40 @@ python module spherepack ! in
             double precision dimension(*) :: cwb
             double precision dimension(*) :: work
         end subroutine wtgit1
-        subroutine dvtk(m,n,cv,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dvtk(m,n,cv,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: m
             integer :: n
             double precision dimension(*) :: cv
             double precision dimension(*) :: work
         end subroutine dvtk
-        subroutine dwtk(m,n,cw,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dwtk(m,n,cw,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: m
             integer :: n
             double precision dimension(*) :: cw
             double precision dimension(*) :: work
         end subroutine dwtk
-        subroutine dvtt(m,n,theta,cv,vh) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dvtt(m,n,theta,cv,vh) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: m
             integer :: n
             double precision :: theta
             double precision dimension(1) :: cv
             double precision :: vh
         end subroutine dvtt
-        subroutine dwtt(m,n,theta,cw,wh) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine dwtt(m,n,theta,cw,wh) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: m
             integer :: n
             double precision :: theta
             double precision dimension(1) :: cw
             double precision :: wh
         end subroutine dwtt
-        subroutine vbgint(nlat,nlon,theta,wvbin,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine vbgint(nlat,nlon,theta,wvbin,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             double precision dimension(*) :: theta
             real dimension(1) :: wvbin
             double precision dimension(*) :: work
         end subroutine vbgint
-        subroutine vbgit1(nlat,nlon,imid,theta,vb,abc,cvb,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine vbgit1(nlat,nlon,imid,theta,vb,abc,cvb,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(vb, 1) == nlat),depend(vb) :: nlat=shape(vb, 1)
             integer :: nlon
             integer, optional,check(shape(vb, 0) == imid),depend(vb) :: imid=shape(vb, 0)
@@ -1329,14 +1329,14 @@ python module spherepack ! in
             double precision dimension(1) :: cvb
             double precision dimension(1) :: work
         end subroutine vbgit1
-        subroutine wbgint(nlat,nlon,theta,wwbin,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine wbgint(nlat,nlon,theta,wwbin,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer :: nlat
             integer :: nlon
             double precision dimension(*) :: theta
             real dimension(1) :: wwbin
             double precision dimension(*) :: work
         end subroutine wbgint
-        subroutine wbgit1(nlat,nlon,imid,theta,wb,abc,cwb,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
+        subroutine wbgit1(nlat,nlon,imid,theta,wb,abc,cwb,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\sphcom.f
             integer, optional,check(shape(wb, 1) == nlat),depend(wb) :: nlat=shape(wb, 1)
             integer :: nlon
             integer, optional,check(shape(wb, 0) == imid),depend(wb) :: imid=shape(wb, 0)
@@ -1346,7 +1346,7 @@ python module spherepack ! in
             double precision dimension(1) :: cwb
             double precision dimension(1) :: work
         end subroutine wbgit1
-        subroutine twodtooned(dataspec,a,b,nlat,ntrunc,nt) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\twodtooned.f
+        subroutine twodtooned(dataspec,a,b,nlat,ntrunc,nt) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\twodtooned.f
             complex dimension((2 + 3 * ntrunc + ntrunc * ntrunc) / 2,nt),check(shape(dataspec, 0) == (2 + 3 * ntrunc + ntrunc * ntrunc) / 2),depend(ntrunc) :: dataspec
             real dimension(nlat,nlat,nt),depend(nt) :: a
             real dimension(nlat,nlat,nt),depend(nlat,nt) :: b
@@ -1354,7 +1354,7 @@ python module spherepack ! in
             integer, required,intent(in) :: ntrunc
             integer, optional,check(shape(dataspec, 1) == nt),depend(dataspec) :: nt=shape(dataspec, 1)
         end subroutine twodtooned
-        subroutine twodtooned_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,ntrunc,nt,rsphere) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\twodtooned_vrtdiv.f
+        subroutine twodtooned_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\twodtooned_vrtdiv.f
             complex dimension((2 + 3 * ntrunc + ntrunc * ntrunc) / 2,nt),check(shape(vrtspec, 0) == (2 + 3 * ntrunc + ntrunc * ntrunc) / 2),depend(ntrunc) :: vrtspec
             complex dimension((2 + 3 * ntrunc + ntrunc * ntrunc) / 2,nt),check(shape(divspec, 0) == (2 + 3 * ntrunc + ntrunc * ntrunc) / 2),depend(ntrunc,nt) :: divspec
             real dimension(nlat,nlat,nt),depend(nt) :: br
@@ -1366,7 +1366,7 @@ python module spherepack ! in
             integer, optional,check(shape(vrtspec, 1) == nt),depend(vrtspec) :: nt=shape(vrtspec, 1)
             real :: rsphere
         end subroutine twodtooned_vrtdiv
-        subroutine vhaec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaec,lvhaec,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhaec.f
+        subroutine vhaec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaec,lvhaec,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhaec.f
             integer :: nlat
             integer :: nlon
             integer :: ityp
@@ -1387,7 +1387,7 @@ python module spherepack ! in
             integer :: lwork
             integer :: ierror
         end subroutine vhaec
-        subroutine vhaec1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,zv,zw,wzvin,wzwin,wrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhaec.f
+        subroutine vhaec1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,zv,zw,wzvin,wzwin,wrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhaec.f
             integer, optional,check(shape(zv, 1) == nlat),depend(zv) :: nlat=shape(zv, 1)
             integer, optional,check(shape(ve, 1) == nlon),depend(ve) :: nlon=shape(ve, 1)
             integer :: ityp
@@ -1414,7 +1414,7 @@ python module spherepack ! in
             real dimension(1) :: wzwin
             real dimension(1) :: wrfft
         end subroutine vhaec1
-        subroutine vhaeci(nlat,nlon,wvhaec,lvhaec,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhaec.f
+        subroutine vhaeci(nlat,nlon,wvhaec,lvhaec,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhaec.f
             integer :: nlat
             integer :: nlon
             real dimension(lvhaec) :: wvhaec
@@ -1423,7 +1423,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine vhaeci
-        subroutine vhaes(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaes,lvhaes,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhaes.f
+        subroutine vhaes(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaes,lvhaes,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhaes.f
             integer :: nlat
             integer :: nlon
             integer :: ityp
@@ -1438,13 +1438,13 @@ python module spherepack ! in
             real dimension(mdab,ndab,1),depend(ndab,mdab) :: ci
             integer, optional,check(shape(br, 0) == mdab),depend(br) :: mdab=shape(br, 0)
             integer, optional,check(shape(br, 1) == ndab),depend(br) :: ndab=shape(br, 1)
-            real dimension(1) :: wvhaes
+            real dimension(lvhaes) :: wvhaes
             integer :: lvhaes
-            real dimension(1) :: work
+            real dimension(lwork) :: work
             integer :: lwork
             integer :: ierror
         end subroutine vhaes
-        subroutine vhaes1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,work,idz,zv,zw,wrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhaes.f
+        subroutine vhaes1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,work,idz,zv,zw,wrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhaes.f
             integer :: nlat
             integer, optional,check(shape(ve, 1) == nlon),depend(ve) :: nlon=shape(ve, 1)
             integer :: ityp
@@ -1471,7 +1471,7 @@ python module spherepack ! in
             real dimension(idz,1),depend(idz) :: zw
             real dimension(1) :: wrfft
         end subroutine vhaes1
-        subroutine vhaesi(nlat,nlon,wvhaes,lvhaes,work,lwork,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhaes.f
+        subroutine vhaesi(nlat,nlon,wvhaes,lvhaes,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhaes.f
             integer :: nlat
             integer :: nlon
             real dimension(lvhaes) :: wvhaes
@@ -1482,7 +1482,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine vhaesi
-        subroutine vea1(nlat,nlon,imid,zv,zw,idz,zin,wzvin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhaes.f
+        subroutine vea1(nlat,nlon,imid,zv,zw,idz,zin,wzvin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhaes.f
             integer, optional,check(shape(zin, 1) == nlat),depend(zin) :: nlat=shape(zin, 1)
             integer :: nlon
             integer, optional,check(shape(zin, 0) == imid),depend(zin) :: imid=shape(zin, 0)
@@ -1493,7 +1493,7 @@ python module spherepack ! in
             real dimension(1) :: wzvin
             double precision dimension(*) :: dwork
         end subroutine vea1
-        subroutine vhagc(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhagc,lvhagc,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhagc.f
+        subroutine vhagc(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhagc,lvhagc,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhagc.f
             integer :: nlat
             integer :: nlon
             integer :: ityp
@@ -1514,7 +1514,7 @@ python module spherepack ! in
             integer :: lwork
             integer :: ierror
         end subroutine vhagc
-        subroutine vhagc1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,vb,wb,wts,wvbin,wwbin,wrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhagc.f
+        subroutine vhagc1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,vb,wb,wts,wvbin,wwbin,wrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhagc.f
             integer, optional,check(shape(vb, 1) == nlat),depend(vb) :: nlat=shape(vb, 1)
             integer, optional,check(shape(ve, 1) == nlon),depend(ve) :: nlon=shape(ve, 1)
             integer :: ityp
@@ -1542,7 +1542,7 @@ python module spherepack ! in
             real dimension(1) :: wwbin
             real dimension(1) :: wrfft
         end subroutine vhagc1
-        subroutine vhagci(nlat,nlon,wvhagc,lvhagc,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhagc.f
+        subroutine vhagci(nlat,nlon,wvhagc,lvhagc,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhagc.f
             integer :: nlat
             integer :: nlon
             real dimension(1) :: wvhagc
@@ -1551,12 +1551,12 @@ python module spherepack ! in
             integer :: ldwork
             integer :: ierror
         end subroutine vhagci
-        subroutine setwts(imid,dwts,wts) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhagc.f
+        subroutine setwts(imid,dwts,wts) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhagc.f
             integer, optional,check(shape(dwts, 0) == imid),depend(dwts) :: imid=shape(dwts, 0)
             double precision dimension(imid) :: dwts
             real dimension(imid),depend(imid) :: wts
         end subroutine setwts
-        subroutine vhags(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhags,lvhags,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhags.f
+        subroutine vhags(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhags,lvhags,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhags.f
             integer :: nlat
             integer :: nlon
             integer :: ityp
@@ -1577,7 +1577,7 @@ python module spherepack ! in
             integer :: lwork
             integer :: ierror
         end subroutine vhags
-        subroutine vhags1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,work,idz,vb,wb,wrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhags.f
+        subroutine vhags1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,work,idz,vb,wb,wrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhags.f
             integer :: nlat
             integer, optional,check(shape(ve, 1) == nlon),depend(ve) :: nlon=shape(ve, 1)
             integer :: ityp
@@ -1604,7 +1604,7 @@ python module spherepack ! in
             real dimension(imid,1),depend(imid) :: wb
             real dimension(1) :: wrfft
         end subroutine vhags1
-        subroutine vhagsi(nlat,nlon,wvhags,lvhags,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhags.f
+        subroutine vhagsi(nlat,nlon,wvhags,lvhags,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhags.f
             integer :: nlat
             integer :: nlon
             real dimension(lvhags) :: wvhags
@@ -1613,7 +1613,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine vhagsi
-        subroutine vhgai1(nlat,imid,vb,wb,dthet,dwts,dpbar,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhags.f
+        subroutine vhgai1(nlat,imid,vb,wb,dthet,dwts,dpbar,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhags.f
             integer, optional,check(shape(dpbar, 1) == nlat),depend(dpbar) :: nlat=shape(dpbar, 1)
             integer, optional,check(shape(vb, 0) == imid),depend(vb) :: imid=shape(vb, 0)
             real dimension(imid,*) :: vb
@@ -1623,13 +1623,13 @@ python module spherepack ! in
             double precision dimension(imid,nlat,3),depend(imid) :: dpbar
             double precision dimension(*) :: work
         end subroutine vhgai1
-        function indx(m,n,nlat) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhags.f
+        function indx(m,n,nlat) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhags.f
             integer :: m
             integer :: n
             integer :: nlat
             integer :: indx
         end function indx
-        subroutine vhsec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsec,lvhsec,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhsec.f
+        subroutine vhsec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsec,lvhsec,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhsec.f
             integer :: nlat
             integer :: nlon
             integer :: ityp
@@ -1650,7 +1650,7 @@ python module spherepack ! in
             integer :: lwork
             integer :: ierror
         end subroutine vhsec
-        subroutine vhsec1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,vb,wb,wvbin,wwbin,wrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhsec.f
+        subroutine vhsec1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,vb,wb,wvbin,wwbin,wrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhsec.f
             integer, optional,check(shape(vb, 1) == nlat),depend(vb) :: nlat=shape(vb, 1)
             integer, optional,check(shape(ve, 1) == nlon),depend(ve) :: nlon=shape(ve, 1)
             integer :: ityp
@@ -1677,7 +1677,7 @@ python module spherepack ! in
             real dimension(1) :: wwbin
             real dimension(1) :: wrfft
         end subroutine vhsec1
-        subroutine vhseci(nlat,nlon,wvhsec,lvhsec,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhsec.f
+        subroutine vhseci(nlat,nlon,wvhsec,lvhsec,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhsec.f
             integer :: nlat
             integer :: nlon
             real dimension(lvhsec) :: wvhsec
@@ -1686,7 +1686,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine vhseci
-        subroutine vhses(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhses,lvhses,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhses.f
+        subroutine vhses(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhses,lvhses,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhses.f
             integer :: nlat
             integer :: nlon
             integer :: ityp
@@ -1701,13 +1701,13 @@ python module spherepack ! in
             real dimension(mdab,ndab,1),depend(ndab,mdab) :: ci
             integer, optional,check(shape(br, 0) == mdab),depend(br) :: mdab=shape(br, 0)
             integer, optional,check(shape(br, 1) == ndab),depend(br) :: ndab=shape(br, 1)
-            real dimension(1) :: wvhses
+            real dimension(lvhses) :: wvhses
             integer :: lvhses
-            real dimension(1) :: work
+            real dimension(lwork) :: work
             integer :: lwork
             integer :: ierror
         end subroutine vhses
-        subroutine vhses1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,work,idz,vb,wb,wrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhses.f
+        subroutine vhses1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,work,idz,vb,wb,wrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhses.f
             integer :: nlat
             integer, optional,check(shape(ve, 1) == nlon),depend(ve) :: nlon=shape(ve, 1)
             integer :: ityp
@@ -1734,7 +1734,7 @@ python module spherepack ! in
             real dimension(imid,1),depend(imid) :: wb
             real dimension(1) :: wrfft
         end subroutine vhses1
-        subroutine vhsesi(nlat,nlon,wvhses,lvhses,work,lwork,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhses.f
+        subroutine vhsesi(nlat,nlon,wvhses,lvhses,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhses.f
             integer :: nlat
             integer :: nlon
             real dimension(lvhses) :: wvhses
@@ -1745,7 +1745,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine vhsesi
-        subroutine ves1(nlat,nlon,imid,vb,wb,idz,vin,wzvin,dwork) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhses.f
+        subroutine ves1(nlat,nlon,imid,vb,wb,idz,vin,wzvin,dwork) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhses.f
             integer, optional,check(shape(vin, 1) == nlat),depend(vin) :: nlat=shape(vin, 1)
             integer :: nlon
             integer, optional,check(shape(vb, 0) == imid),depend(vb) :: imid=shape(vb, 0)
@@ -1756,7 +1756,7 @@ python module spherepack ! in
             real dimension(*) :: wzvin
             double precision dimension(*) :: dwork
         end subroutine ves1
-        subroutine vhsgc(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgc,lvhsgc,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgc.f
+        subroutine vhsgc(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgc,lvhsgc,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgc.f
             integer :: nlat
             integer :: nlon
             integer :: ityp
@@ -1777,7 +1777,7 @@ python module spherepack ! in
             integer :: lwork
             integer :: ierror
         end subroutine vhsgc
-        subroutine vhsgc1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,vb,wb,wvbin,wwbin,wrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgc.f
+        subroutine vhsgc1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,vb,wb,wvbin,wwbin,wrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgc.f
             integer, optional,check(shape(vb, 1) == nlat),depend(vb) :: nlat=shape(vb, 1)
             integer, optional,check(shape(ve, 1) == nlon),depend(ve) :: nlon=shape(ve, 1)
             integer :: ityp
@@ -1804,7 +1804,7 @@ python module spherepack ! in
             real dimension(1) :: wwbin
             real dimension(1) :: wrfft
         end subroutine vhsgc1
-        subroutine vhsgci(nlat,nlon,wvhsgc,lvhsgc,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgc.f
+        subroutine vhsgci(nlat,nlon,wvhsgc,lvhsgc,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgc.f
             integer :: nlat
             integer :: nlon
             real dimension(lvhsgc) :: wvhsgc
@@ -1813,7 +1813,7 @@ python module spherepack ! in
             integer, optional,check(shape(dwork, 0) == ldwork),depend(dwork) :: ldwork=shape(dwork, 0)
             integer :: ierror
         end subroutine vhsgci
-        subroutine vhsgs(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgs,lvhsgs,work,lwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgs.f
+        subroutine vhsgs(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgs,lvhsgs,work,lwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgs.f
             integer :: nlat
             integer :: nlon
             integer :: ityp
@@ -1834,7 +1834,7 @@ python module spherepack ! in
             integer :: lwork
             integer :: ierror
         end subroutine vhsgs
-        subroutine vhsgs1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,work,idz,vb,wb,wrfft) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgs.f
+        subroutine vhsgs1(nlat,nlon,ityp,nt,imid,idvw,jdvw,v,w,mdab,ndab,br,bi,cr,ci,idv,ve,vo,we,wo,work,idz,vb,wb,wrfft) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgs.f
             integer :: nlat
             integer, optional,check(shape(ve, 1) == nlon),depend(ve) :: nlon=shape(ve, 1)
             integer :: ityp
@@ -1861,7 +1861,7 @@ python module spherepack ! in
             real dimension(imid,1),depend(imid) :: wb
             real dimension(1) :: wrfft
         end subroutine vhsgs1
-        subroutine vhsgsi(nlat,nlon,wvhsgs,lvhsgs,dwork,ldwork,ierror) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgs.f
+        subroutine vhsgsi(nlat,nlon,wvhsgs,lvhsgs,dwork,ldwork,ierror) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgs.f
             integer :: nlat
             integer :: nlon
             real dimension(*) :: wvhsgs
@@ -1870,7 +1870,7 @@ python module spherepack ! in
             integer :: ldwork
             integer :: ierror
         end subroutine vhsgsi
-        subroutine vhgsi1(nlat,imid,vb,wb,dthet,dwts,dpbar,work) ! in :spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgs.f
+        subroutine vhgsi1(nlat,imid,vb,wb,dthet,dwts,dpbar,work) ! in :_spherepack:d:\skyborn\src\skyborn\spharm\src\vhsgs.f
             integer, optional,check(shape(dpbar, 1) == nlat),depend(dpbar) :: nlat=shape(dpbar, 1)
             integer, optional,check(shape(vb, 0) == imid),depend(vb) :: imid=shape(vb, 0)
             real dimension(imid,*) :: vb
