@@ -189,15 +189,18 @@ class MesonBuildExt(build_ext):
 
             # Find the compiled file (e.g., _spherepack.cpython-312-x86_64-linux-gnu.so)
             # f2py outputs to project root, not to build_temp
-            compiled_files = list(Path.cwd().glob("_spherepack*.so")) + list(
-                Path.cwd().glob("_spherepack*.pyd")
+            compiled_files = (
+                list(Path.cwd().glob("_spherepack*.so"))
+                + list(Path.cwd().glob("_spherepack*.pyd"))
+                + list(Path.cwd().glob("_spherepack*.dylib"))
             )
             if not compiled_files:
                 # Also check build_temp in case f2py behavior changes
-                compiled_files = list(Path(self.build_temp).glob("_spherepack*"))
-                compiled_files = [
-                    f for f in compiled_files if f.suffix in [".so", ".pyd"]
-                ]
+                compiled_files = (
+                    list(Path(self.build_temp).glob("_spherepack*.so"))
+                    + list(Path(self.build_temp).glob("_spherepack*.pyd"))
+                    + list(Path(self.build_temp).glob("_spherepack*.dylib"))
+                )
 
             if not compiled_files:
                 raise FileNotFoundError(
