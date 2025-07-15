@@ -7,7 +7,8 @@ subroutine invlap(dataspec, dataspec_ilap, nmdim, nt, rsphere)
     implicit none
 
     ! Input/Output parameters
-    integer, intent(in) :: nmdim, nt
+    integer, intent(in) :: nmdim
+    integer, intent(in) :: nt
     real, intent(in) :: rsphere
     complex, intent(in) :: dataspec(nmdim, nt)
     complex, intent(out) :: dataspec_ilap(nmdim, nt)
