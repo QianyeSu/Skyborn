@@ -1221,3 +1221,81 @@ def specintrp(
         )
     except Exception as e:
         raise SpheremackError(f"Spectral interpolation failed: {str(e)}") from e
+
+
+if __name__ == "__main__":
+
+    def print_header(title):
+        print("\n" + "=" * 10 + f" {title} " + "=" * 10)
+
+    # 1. 创建 Spharmt 实例
+    print_header("Spharmt 实例化")
+    nlon, nlat = 16, 8
+    spharm = Spharmt(nlon, nlat, gridtype="regular", legfunc="stored")
+    print(spharm)
+
+    # 2. 测试 grdtospec 和 spectogrd
+    print_header("grdtospec / spectogrd")
+    data = np.random.rand(nlat, nlon)
+    spec = spharm.grdtospec(data)
+    data2 = spharm.spectogrd(spec)
+    print("原始数据均值:", np.mean(data), "逆变换后均值:", np.mean(data2))
+
+    # 3. 测试 getvrtdivspec 和 getuv
+    print_header("getvrtdivspec / getuv")
+    u = np.random.rand(nlat, nlon)
+    v = np.random.rand(nlat, nlon)
+    vrtspec, divspec = spharm.getvrtdivspec(u, v)
+    u2, v2 = spharm.getuv(vrtspec, divspec)
+    print("u2 shape:", u2.shape, "v2 shape:", v2.shape)
+
+    # 4. 测试 getpsichi
+    print_header("getpsichi")
+    psi, chi = spharm.getpsichi(u, v)
+    print("psi shape:", psi.shape, "chi shape:", chi.shape)
+
+    # 5. 测试 getgrad
+    print_header("getgrad")
+    grad_u, grad_v = spharm.getgrad(spec)
+    print("grad_u shape:", grad_u.shape, "grad_v shape:", grad_v.shape)
+
+    # 6. specsmooth
+    print_header("specsmooth")
+    smooth = np.exp(-np.arange(nlat))
+    smoothed = spharm.specsmooth(data, smooth)
+    print("smoothed shape:", smoothed.shape)
+
+    # 7. regrid
+    print_header("regrid")
+    spharm2 = Spharmt(nlon, nlat, gridtype="regular", legfunc="computed")
+    regridded = regrid(spharm, spharm2, data)
+    print("regridded shape:", regridded.shape)
+
+    # 8. gaussian_lats_wts
+    print_header("gaussian_lats_wts")
+    lats, wts = gaussian_lats_wts(nlat)
+    print("lats:", lats)
+    print("wts:", wts)
+
+    # 9. getspecindx
+    print_header("getspecindx")
+    indxm, indxn = getspecindx(nlat - 1)
+    print("indxm:", indxm)
+    print("indxn:", indxn)
+
+    # 10. getgeodesicpts
+    print_header("getgeodesicpts")
+    lat, lon = getgeodesicpts(3)
+    print("geodesic lat shape:", lat.shape, "lon shape:", lon.shape)
+
+    # 11. legendre
+    print_header("legendre")
+    leg = legendre(45.0, nlat - 1)
+    print("legendre shape:", leg.shape)
+
+    # 12. specintrp
+    print_header("specintrp")
+    val = specintrp(120.0, spec, leg)
+    print("specintrp value:", val)
+
+    print("\n全部 API 测试完成！")
