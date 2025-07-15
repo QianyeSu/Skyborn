@@ -293,50 +293,90 @@ class Spharmt:
         # Scalar harmonic analysis initialization
         lshaes = (n1 * n2 * (nlat + nlat - n1 + 1)) // 2 + nlon + 15
         lwork = 5 * nlat * n2 + 3 * ((n1 - 2) * (nlat + nlat - n1 - 1)) // 2
+        ldwork = nlat + 1
+
+        # Prepare arrays for shaesi
+        wshaes = np.zeros(lshaes, dtype=np.float32)
+        work = np.zeros(lwork, dtype=np.float32)
+        dwork = np.zeros(ldwork, dtype=np.float64)
+        ierror = 0
 
         self.wshaes = self._call_spherepack_safely(
             _spherepack.shaesi,
             nlat,
             nlon,
+            wshaes,
             lshaes,
+            work,
             lwork,
-            nlat + 1,
+            dwork,
+            ldwork,
+            ierror,
             operation_name="shaesi initialization",
         )
 
         # Scalar harmonic synthesis initialization
+        wshses = np.zeros(lshaes, dtype=np.float32)
+        work = np.zeros(lwork, dtype=np.float32)
+        dwork = np.zeros(ldwork, dtype=np.float64)
+        ierror = 0
+
         self.wshses = self._call_spherepack_safely(
             _spherepack.shsesi,
             nlat,
             nlon,
+            wshses,
             lshaes,
+            work,
             lwork,
-            nlat + 1,
+            dwork,
+            ldwork,
+            ierror,
             operation_name="shsesi initialization",
         )
 
         # Vector harmonic analysis initialization
         lvhaes = n1 * n2 * (nlat + nlat - n1 + 1) + nlon + 15
         lwork_vec = 3 * (max(n1 - 2, 0) * (nlat + nlat - n1 - 1)) // 2 + 5 * n2 * nlat
+        ldwork_vec = 2 * (nlat + 1)
+
+        # Prepare arrays for vhaesi
+        wvhaes = np.zeros(lvhaes, dtype=np.float32)
+        work = np.zeros(lwork_vec, dtype=np.float32)
+        dwork = np.zeros(ldwork_vec, dtype=np.float64)
+        ierror = 0
 
         self.wvhaes = self._call_spherepack_safely(
             _spherepack.vhaesi,
             nlat,
             nlon,
+            wvhaes,
+            work,
+            dwork,
+            ierror,
             lvhaes,
             lwork_vec,
-            2 * (nlat + 1),
+            ldwork_vec,
             operation_name="vhaesi initialization",
         )
 
         # Vector harmonic synthesis initialization
+        wvhses = np.zeros(lvhaes, dtype=np.float32)
+        work = np.zeros(lwork_vec, dtype=np.float32)
+        dwork = np.zeros(ldwork_vec, dtype=np.float64)
+        ierror = 0
+
         self.wvhses = self._call_spherepack_safely(
             _spherepack.vhsesi,
             nlat,
             nlon,
+            wvhses,
+            work,
+            dwork,
+            ierror,
             lvhaes,
             lwork_vec,
-            2 * (nlat + 1),
+            ldwork_vec,
             operation_name="vhsesi initialization",
         )
 
@@ -349,45 +389,73 @@ class Spharmt:
         lshaec = (
             2 * nlat * n2 + 3 * ((n1 - 2) * (nlat + nlat - n1 - 1)) // 2 + nlon + 15
         )
+        ldwork = 2 * (nlat + 1)
+
+        # Prepare arrays for shaeci
+        wshaec = np.zeros(lshaec, dtype=np.float32)
+        dwork = np.zeros(ldwork, dtype=np.float64)
+        ierror = 0
 
         self.wshaec = self._call_spherepack_safely(
             _spherepack.shaeci,
             nlat,
             nlon,
-            lshaec,
-            2 * (nlat + 1),
+            wshaec,
+            dwork,
+            ierror,
             operation_name="shaeci initialization",
         )
 
         # Scalar harmonic synthesis initialization
+        wshsec = np.zeros(lshaec, dtype=np.float32)
+        dwork = np.zeros(ldwork, dtype=np.float64)
+        ierror = 0
+
         self.wshsec = self._call_spherepack_safely(
             _spherepack.shseci,
             nlat,
             nlon,
+            wshsec,
             lshaec,
-            2 * (nlat + 1),
+            dwork,
+            ierror,
             operation_name="shseci initialization",
         )
 
         # Vector harmonic analysis initialization
         lvhaec = 4 * nlat * n2 + 3 * max(n1 - 2, 0) * (2 * nlat - n1 - 1) + nlon + 15
 
+        # Prepare arrays for vhaeci
+        wvhaec = np.zeros(lvhaec, dtype=np.float32)
+        dwork = np.zeros(ldwork, dtype=np.float64)
+        ierror = 0
+
         self.wvhaec = self._call_spherepack_safely(
             _spherepack.vhaeci,
             nlat,
             nlon,
+            wvhaec,
+            dwork,
+            ierror,
             lvhaec,
-            2 * (nlat + 1),
+            ldwork,
             operation_name="vhaeci initialization",
         )
 
         # Vector harmonic synthesis initialization
+        wvhsec = np.zeros(lvhaec, dtype=np.float32)
+        dwork = np.zeros(ldwork, dtype=np.float64)
+        ierror = 0
+
         self.wvhsec = self._call_spherepack_safely(
             _spherepack.vhseci,
             nlat,
             nlon,
+            wvhsec,
+            dwork,
+            ierror,
             lvhaec,
-            2 * (nlat + 1),
+            ldwork,
             operation_name="vhseci initialization",
         )
 
@@ -610,48 +678,34 @@ class Spharmt:
         nt, normalized_data = self._validate_grid_data(datagrid, "grdtospec")
         ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
 
-        # Select transform function based on configuration
-        transform_functions = {
-            ("regular", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.shaes,
-                    normalized_data,
-                    self.wshaes,
-                    (nt + 1) * self.nlat * self.nlon,
-                    operation_name="shaes transform",
-                )
-            ),
-            ("regular", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.shaec,
-                    normalized_data,
-                    self.wshaec,
-                    self.nlat * (nt * self.nlon + max(3 * self._n2, self.nlon)),
-                    operation_name="shaec transform",
-                )
-            ),
-            ("gaussian", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.shags,
-                    normalized_data,
-                    self.wshags,
-                    self.nlat * self.nlon * (nt + 1),
-                    operation_name="shags transform",
-                )
-            ),
-            ("gaussian", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.shagc,
-                    normalized_data,
-                    self.wshagc,
-                    self.nlat * (self.nlon * nt + max(3 * self._n2, self.nlon)),
-                    operation_name="shagc transform",
-                )
-            ),
-        }
+        # Remove the output arrays preparation - functions return the results directly
+        ierror = 0
 
-        transform_func = transform_functions[(self.gridtype, self.legfunc)]
-        a, b = transform_func()
+        # Call transform function using the correct 3-parameter pattern
+        if self.gridtype == "regular" and self.legfunc == "stored":
+            lwork = (nt + 1) * self.nlat * self.nlon
+            a, b, ierror = _spherepack.shaes(normalized_data, self.wshaes, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"shaes failed with error code {ierror}")
+        elif self.gridtype == "regular" and self.legfunc == "computed":
+            lwork = self.nlat * (nt * self.nlon + max(3 * self._n2, self.nlon))
+            a, b, ierror = _spherepack.shaec(normalized_data, self.wshaec, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"shaec failed with error code {ierror}")
+        elif self.gridtype == "gaussian" and self.legfunc == "stored":
+            lwork = self.nlat * self.nlon * (nt + 1)
+            a, b, ierror = _spherepack.shags(normalized_data, self.wshags, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"shags failed with error code {ierror}")
+        elif self.gridtype == "gaussian" and self.legfunc == "computed":
+            lwork = self.nlat * (self.nlon * nt + max(3 * self._n2, self.nlon))
+            a, b, ierror = _spherepack.shagc(normalized_data, self.wshagc, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"shagc failed with error code {ierror}")
+        else:
+            raise ValidationError(
+                f"Unsupported grid configuration: {self.gridtype}, {self.legfunc}"
+            )
 
         # Convert 2D real and imaginary arrays to 1D complex array
         dataspec = _spherepack.twodtooned(a, b, ntrunc)
@@ -680,56 +734,31 @@ class Spharmt:
         # Convert 1D complex array to 2D real and imaginary arrays
         a, b = _spherepack.onedtotwod(normalized_spec, self.nlat)
 
-        # Select transform function based on configuration
-        transform_functions = {
-            ("regular", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.shses,
-                    self.nlon,
-                    a,
-                    b,
-                    self.wshses,
-                    (nt + 1) * self.nlat * self.nlon,
-                    operation_name="shses transform",
-                )
-            ),
-            ("regular", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.shsec,
-                    self.nlon,
-                    a,
-                    b,
-                    self.wshsec,
-                    self.nlat * (nt * self.nlon + max(3 * self._n2, self.nlon)),
-                    operation_name="shsec transform",
-                )
-            ),
-            ("gaussian", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.shsgs,
-                    self.nlon,
-                    a,
-                    b,
-                    self.wshsgs,
-                    self.nlat * self.nlon * (nt + 1),
-                    operation_name="shsgs transform",
-                )
-            ),
-            ("gaussian", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.shsgc,
-                    self.nlon,
-                    a,
-                    b,
-                    self.wshsgc,
-                    self.nlat * (self.nlon * nt + max(3 * self._n2, self.nlon)),
-                    operation_name="shsgc transform",
-                )
-            ),
-        }
-
-        transform_func = transform_functions[(self.gridtype, self.legfunc)]
-        datagrid = transform_func()
+        # Call transform function using the correct 3-parameter pattern
+        if self.gridtype == "regular" and self.legfunc == "stored":
+            lwork = (nt + 1) * self.nlat * self.nlon
+            datagrid, ierror = _spherepack.shses(self.nlon, a, b, self.wshses, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"shses failed with error code {ierror}")
+        elif self.gridtype == "regular" and self.legfunc == "computed":
+            lwork = self.nlat * (nt * self.nlon + max(3 * self._n2, self.nlon))
+            datagrid, ierror = _spherepack.shsec(self.nlon, a, b, self.wshsec, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"shsec failed with error code {ierror}")
+        elif self.gridtype == "gaussian" and self.legfunc == "stored":
+            lwork = self.nlat * self.nlon * (nt + 1)
+            datagrid, ierror = _spherepack.shsgs(self.nlon, a, b, self.wshsgs, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"shsgs failed with error code {ierror}")
+        elif self.gridtype == "gaussian" and self.legfunc == "computed":
+            lwork = self.nlat * (self.nlon * nt + max(3 * self._n2, self.nlon))
+            datagrid, ierror = _spherepack.shsgc(self.nlon, a, b, self.wshsgc, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"shsgc failed with error code {ierror}")
+        else:
+            raise ValidationError(
+                f"Unsupported grid configuration: {self.gridtype}, {self.legfunc}"
+            )
 
         return np.squeeze(datagrid) if dataspec.ndim == 1 else datagrid
 
@@ -763,52 +792,30 @@ class Spharmt:
         w = normalized_u
         v = -normalized_v
 
-        # Select vector harmonic analysis function
-        vha_functions = {
-            ("regular", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhaes,
-                    v,
-                    w,
-                    self.wvhaes,
-                    (2 * nt + 1) * self.nlat * self.nlon,
-                    operation_name="vhaes transform",
-                )
-            ),
-            ("regular", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhaec,
-                    v,
-                    w,
-                    self.wvhaec,
-                    self.nlat * (2 * nt * self.nlon + max(6 * self._n2, self.nlon)),
-                    operation_name="vhaec transform",
-                )
-            ),
-            ("gaussian", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhags,
-                    v,
-                    w,
-                    self.wvhags,
-                    (2 * nt + 1) * self.nlat * self.nlon,
-                    operation_name="vhags transform",
-                )
-            ),
-            ("gaussian", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhagc,
-                    v,
-                    w,
-                    self.wvhagc,
-                    2 * self.nlat * (2 * self.nlon * nt + 3 * self._n2),
-                    operation_name="vhagc transform",
-                )
-            ),
-        }
+        # Remove the output arrays preparation - functions return the results directly
+        ierror = 0
 
-        vha_func = vha_functions[(self.gridtype, self.legfunc)]
-        br, bi, cr, ci = vha_func()
+        # Call vector harmonic analysis using the correct 3-parameter pattern
+        if self.gridtype == "regular" and self.legfunc == "stored":
+            lwork = (2 * nt + 1) * self.nlat * self.nlon
+            br, bi, cr, ci, ierror = _spherepack.vhaes(v, w, self.wvhaes, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"vhaes failed with error code {ierror}")
+        elif self.gridtype == "regular" and self.legfunc == "computed":
+            lwork = self.nlat * (2 * nt * self.nlon + max(6 * self._n2, self.nlon))
+            br, bi, cr, ci, ierror = _spherepack.vhaec(v, w, self.wvhaec, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"vhaec failed with error code {ierror}")
+        elif self.gridtype == "gaussian" and self.legfunc == "stored":
+            lwork = (2 * nt + 1) * self.nlat * self.nlon
+            br, bi, cr, ci, ierror = _spherepack.vhags(v, w, self.wvhags, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"vhags failed with error code {ierror}")
+        elif self.gridtype == "gaussian" and self.legfunc == "computed":
+            lwork = 2 * self.nlat * (2 * self.nlon * nt + 3 * self._n2)
+            br, bi, cr, ci, ierror = _spherepack.vhagc(v, w, self.wvhagc, lwork)
+            if ierror != 0:
+                raise SpheremackError(f"vhagc failed with error code {ierror}")
 
         # Convert vector harmonic coefficients to vorticity and divergence
         vrtspec, divspec = _spherepack.twodtooned_vrtdiv(
@@ -856,64 +863,38 @@ class Spharmt:
             normalized_vrt, normalized_div, self.nlat, self.rsphere
         )
 
-        # Select vector harmonic synthesis function
-        vhs_functions = {
-            ("regular", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhses,
-                    self.nlon,
-                    br,
-                    bi,
-                    cr,
-                    ci,
-                    self.wvhses,
-                    (2 * nt_vrt + 1) * self.nlat * self.nlon,
-                    operation_name="vhses transform",
-                )
-            ),
-            ("regular", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhsec,
-                    self.nlon,
-                    br,
-                    bi,
-                    cr,
-                    ci,
-                    self.wvhsec,
-                    self.nlat * (2 * nt_vrt * self.nlon + max(6 * self._n2, self.nlon)),
-                    operation_name="vhsec transform",
-                )
-            ),
-            ("gaussian", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhsgs,
-                    self.nlon,
-                    br,
-                    bi,
-                    cr,
-                    ci,
-                    self.wvhsgs,
-                    (2 * nt_vrt + 1) * self.nlat * self.nlon,
-                    operation_name="vhsgs transform",
-                )
-            ),
-            ("gaussian", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhsgc,
-                    self.nlon,
-                    br,
-                    bi,
-                    cr,
-                    ci,
-                    self.wvhsgc,
-                    self.nlat * (2 * nt_vrt * self.nlon + max(6 * self._n2, self.nlon)),
-                    operation_name="vhsgc transform",
-                )
-            ),
-        }
+        # Remove the output arrays preparation - functions return the results directly
+        ierror = 0
 
-        vhs_func = vhs_functions[(self.gridtype, self.legfunc)]
-        v, w = vhs_func()
+        # Call vector harmonic synthesis using the correct 3-parameter pattern
+        if self.gridtype == "regular" and self.legfunc == "stored":
+            lwork = (2 * nt_vrt + 1) * self.nlat * self.nlon
+            v, w, ierror = _spherepack.vhses(
+                self.nlon, br, bi, cr, ci, self.wvhses, lwork
+            )
+            if ierror != 0:
+                raise SpheremackError(f"vhses failed with error code {ierror}")
+        elif self.gridtype == "regular" and self.legfunc == "computed":
+            lwork = self.nlat * (2 * nt_vrt * self.nlon + max(6 * self._n2, self.nlon))
+            v, w, ierror = _spherepack.vhsec(
+                self.nlon, br, bi, cr, ci, self.wvhsec, lwork
+            )
+            if ierror != 0:
+                raise SpheremackError(f"vhsec failed with error code {ierror}")
+        elif self.gridtype == "gaussian" and self.legfunc == "stored":
+            lwork = (2 * nt_vrt + 1) * self.nlat * self.nlon
+            v, w, ierror = _spherepack.vhsgs(
+                self.nlon, br, bi, cr, ci, self.wvhsgs, lwork
+            )
+            if ierror != 0:
+                raise SpheremackError(f"vhsgs failed with error code {ierror}")
+        elif self.gridtype == "gaussian" and self.legfunc == "computed":
+            lwork = self.nlat * (2 * nt_vrt * self.nlon + max(6 * self._n2, self.nlon))
+            v, w, ierror = _spherepack.vhsgc(
+                self.nlon, br, bi, cr, ci, self.wvhsgc, lwork
+            )
+            if ierror != 0:
+                raise SpheremackError(f"vhsgc failed with error code {ierror}")
 
         # Convert to geographical coordinates
         if vrtspec.ndim == 1:
