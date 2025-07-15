@@ -51,6 +51,7 @@ class MesonBuildExt(build_ext):
 
     def run(self):
         """Run the build process"""
+        print("DEBUG: MesonBuildExt.run() called")
         # Build meson modules first
         self.build_meson_modules()
         # Then run the standard build_ext
@@ -58,6 +59,7 @@ class MesonBuildExt(build_ext):
 
     def build_meson_modules(self):
         """Build modules that use meson (like spharm)"""
+        print("DEBUG: build_meson_modules() called")
         meson_modules = [
             {
                 "name": "spharm",
@@ -67,8 +69,12 @@ class MesonBuildExt(build_ext):
         ]
 
         for module in meson_modules:
+            print(f"DEBUG: Processing module {module['name']}")
             if self.should_build_meson_module(module):
+                print(f"DEBUG: Building module {module['name']}")
                 self.build_single_meson_module(module)
+            else:
+                print(f"DEBUG: Skipping module {module['name']} - no meson.build found")
 
     def should_build_meson_module(self, module):
         """Check if we should build this meson module"""
@@ -85,16 +91,6 @@ class MesonBuildExt(build_ext):
         # CRITICAL: Use an isolated build directory for all generated files.
         # This prevents polluting the source tree and avoids permission errors.
         build_temp = module_path / "build"
-
-        try:
-            # Check if meson is available (keeping this check from your original code)
-            subprocess.run(
-                ["meson", "--version"], check=True, capture_output=True, text=True
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            print(f"Warning: meson not found. Skipping {module['name']} build.")
-            print("To install meson: pip install meson ninja")
-            return
 
         try:
             # Clean and create the isolated build directory
@@ -122,14 +118,15 @@ class MesonBuildExt(build_ext):
             ]
 
             print(f"Running generation command: {' '.join(generate_cmd)}")
-            # CRITICAL: Run the command within the temporary build directory.
-            subprocess.run(generate_cmd, cwd=str(build_temp), check=True)
+            # CRITICAL: Run the command from the project root directory.
+            subprocess.run(generate_cmd, cwd=str(Path.cwd()), check=True)
 
             # --- STEP 2: Verify generated files and build the full source list ---
             print("Step 2: Verifying wrappers and preparing source list...")
 
-            generated_c_wrapper = build_temp / "_spherepackmodule.c"
-            generated_f_wrapper = build_temp / "_spherepack-f2pywrappers.f"
+            # Generated files will be in the current working directory (project root)
+            generated_c_wrapper = Path.cwd() / "_spherepackmodule.c"
+            generated_f_wrapper = Path.cwd() / "_spherepack-f2pywrappers.f"
 
             # CRITICAL: Only the C wrapper is mandatory.
             if not generated_c_wrapper.exists():
@@ -152,18 +149,18 @@ class MesonBuildExt(build_ext):
 
             # The .pyf file must still be the first argument for f2py to get metadata
             f2py_cmd = (
-                ["python", "-m", "numpy.f2py", "-c", str(pyf_file)]
+                [sys.executable, "-m", "numpy.f2py", "-c", str(pyf_file)]
                 + compile_sources
                 # Use setuptools' global temp dir for output
                 + ["--build-dir", str(self.build_temp)]
             )
 
             fortran_optim_flags = "-O3 -fPIC -fno-second-underscore -funroll-loops -finline-functions -ftree-vectorize -ffinite-math-only"
-            c_optim_flags = "-O3 -DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"
+            # c_optim_flags = "-O3 -DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"
             f2py_cmd += [
                 "--opt=" + fortran_optim_flags,
                 "--f90flags=" + fortran_optim_flags,
-                "--cflags=" + c_optim_flags,
+                # "--cflags=" + c_optim_flags,
             ]
 
             import platform
@@ -177,20 +174,34 @@ class MesonBuildExt(build_ext):
             subprocess.run(
                 f2py_cmd,
                 # Run from project root so that build dir paths are correct
-                cwd=str(module_path.parent.parent.parent),
+                cwd=str(Path.cwd()),
                 check=True,
             )
 
-            # --- STEP 4: Move the compiled file to the final library directory ---
-            # f2py places the output in the --build-dir. We need to move it to where
-            # setuptools expects the final library to be (e.g., build/lib.linux-x86_64-3.12/skyborn/spharm)
-            print("Step 4: Moving compiled module to final location...")
+            # --- STEP 4: Clean up generated files and move compiled file ---
+            print("Step 4: Cleaning up generated files and moving compiled module...")
+
+            # Clean up generated wrapper files from project root
+            if generated_c_wrapper.exists():
+                generated_c_wrapper.unlink()
+            if generated_f_wrapper.exists():
+                generated_f_wrapper.unlink()
 
             # Find the compiled file (e.g., _spherepack.cpython-312-x86_64-linux-gnu.so)
-            compiled_files = list(Path(self.build_temp).glob("_spherepack.*"))
+            # f2py outputs to project root, not to build_temp
+            compiled_files = list(Path.cwd().glob("_spherepack*.so")) + list(
+                Path.cwd().glob("_spherepack*.pyd")
+            )
+            if not compiled_files:
+                # Also check build_temp in case f2py behavior changes
+                compiled_files = list(Path(self.build_temp).glob("_spherepack*"))
+                compiled_files = [
+                    f for f in compiled_files if f.suffix in [".so", ".pyd"]
+                ]
+
             if not compiled_files:
                 raise FileNotFoundError(
-                    f"Could not find compiled module in {self.build_temp}"
+                    f"Could not find compiled module in project root or {self.build_temp}"
                 )
 
             source_file = compiled_files[0]

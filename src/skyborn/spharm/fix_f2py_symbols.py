@@ -23,7 +23,7 @@ def find_all_f90_files(src_dir):
     return sorted(f90_files)
 
 
-def generate_pyf_signature(src_dir, output_file="spherepack.pyf"):
+def generate_pyf_signature(src_dir, output_file="_spherepack.pyf"):
     """Generate .pyf signature file for all .f90 files"""
     f90_files = find_all_f90_files(src_dir)
 
@@ -44,7 +44,7 @@ def generate_pyf_signature(src_dir, output_file="spherepack.pyf"):
         "-h",
         str(output_path),
         "-m",
-        "spherepack",
+        "_spherepack",
     ]
 
     # Add all .f90 files to the command
@@ -131,7 +131,7 @@ def main():
     print(f"📁 Source directory: {src_dir}")
 
     # Generate the .pyf signature file
-    output_file = "spherepack.pyf"
+    output_file = "_spherepack.pyf"
     success = generate_pyf_signature(src_dir, output_file)
 
     if success:
@@ -145,7 +145,7 @@ def main():
             print("2. Use the .pyf file to compile the Fortran 90 extension:")
             print(f"   python -m numpy.f2py -c {output_file} src/*.f90")
             print("3. Import the compiled module in Python:")
-            print("   import spherepack_f90")
+            print("   import _spherepack_f90")
         else:
             print(f"\n❌ Generated file {output_file} appears to be invalid")
     else:
