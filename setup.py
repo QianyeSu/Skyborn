@@ -100,6 +100,38 @@ class MesonBuildExt(build_ext):
 
             src_dir = module_path / "src"
             f_files = list(src_dir.glob("*.f"))
+            # f_files = [
+            #     src_dir / "lap.f90",
+            #     src_dir / "invlap.f90",
+            #     src_dir / "sphcom.f",
+            #     src_dir / "hrfft.f",
+            #     src_dir / "getlegfunc.f",
+            #     src_dir / "specintrp.f",
+            #     src_dir / "onedtotwod.f",
+            #     src_dir / "onedtotwod_vrtdiv.f",
+            #     src_dir / "twodtooned.f",
+            #     src_dir / "twodtooned_vrtdiv.f",
+            #     src_dir / "multsmoothfact.f",
+            #     src_dir / "gaqd.f",
+            #     src_dir / "shses.f",
+            #     src_dir / "shaes.f",
+            #     src_dir / "vhaes.f",
+            #     src_dir / "vhses.f",
+            #     src_dir / "shsgs.f",
+            #     src_dir / "shags.f",
+            #     src_dir / "vhags.f",
+            #     src_dir / "vhsgs.f",
+            #     src_dir / "shaec.f",
+            #     src_dir / "shagc.f",
+            #     src_dir / "shsec.f",
+            #     src_dir / "shsgc.f",
+            #     src_dir / "vhaec.f",
+            #     src_dir / "vhagc.f",
+            #     src_dir / "vhsec.f",
+            #     src_dir / "vhsgc.f",
+            #     src_dir / "ihgeod.f",
+            #     src_dir / "alf.f",
+            # ]
             pyf_file = src_dir / "_spherepack.pyf"
 
             # --- STEP 1: Generate wrapper files in the isolated build directory ---
