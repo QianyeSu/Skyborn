@@ -106,6 +106,7 @@ html_theme_options = {
     "collapse_navigation": False,
     "use_sidenotes": True,
     "home_page_in_toc": False,
+    "ethical_ads_enabled": False,
 }
 
 # Set the logo link manually
