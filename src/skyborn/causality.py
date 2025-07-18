@@ -531,8 +531,13 @@ def liang(y1: np.ndarray, y2: np.ndarray, npt: int = 1) -> Dict[str, float]:
 
 
 def signif_isopersist(
-    y1, y2, method, nsim=1000, qs=[0.005, 0.025, 0.05, 0.95, 0.975, 0.995], **kwargs
-):
+    y1: np.ndarray,
+    y2: np.ndarray,
+    method: str,
+    nsim: int = 1000,
+    qs: list[float] = [0.005, 0.025, 0.05, 0.95, 0.975, 0.995],
+    **kwargs,
+) -> dict[str, np.ndarray]:
     """significance test with AR(1) with same persistence
 
     Parameters
@@ -601,8 +606,13 @@ def signif_isopersist(
 
 
 def signif_isospec(
-    y1, y2, method, nsim=1000, qs=[0.005, 0.025, 0.05, 0.95, 0.975, 0.995], **kwargs
-):
+    y1: np.ndarray,
+    y2: np.ndarray,
+    method: str,
+    nsim: int = 1000,
+    qs: list[float] = [0.005, 0.025, 0.05, 0.95, 0.975, 0.995],
+    **kwargs,
+) -> dict[str, np.ndarray]:
     """significance test with surrogates with randomized phases
 
     Parameters
