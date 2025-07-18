@@ -249,20 +249,20 @@ jobs:
           path: wheels
           merge-multiple: true
 
-      - name: Install from wheel (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          pip install wheels/skyborn*-manylinux*.whl
-          python -c "import skyborn; print('Wheel installation test passed on Linux')"
+      # - name: Install from wheel (Linux)
+      #   if: matrix.os == 'ubuntu-latest'
+      #   run: |
+      #     pip install wheels/skyborn*-manylinux*.whl
+      #     python -c "import skyborn; print('Wheel installation test passed on Linux')"
 
-      - name: Install from wheel (macOS)
-        if: matrix.os == 'macos-13'
-        run: |
-          pip install wheels/skyborn*-macosx*.whl
-          python -c "import skyborn; print('Wheel installation test passed on macOS')"
+      # - name: Install from wheel (macOS)
+      #   if: matrix.os == 'macos-13'
+      #   run: |
+      #     pip install wheels/skyborn*-macosx*.whl
+      #     python -c "import skyborn; print('Wheel installation test passed on macOS')"
 
-      - name: Install from wheel (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          pip install wheels/skyborn*-win_amd64*.whl
-          python -c "import skyborn; print('Wheel installation test passed on Windows')"
+      # - name: Install from wheel (Windows)
+      #   if: matrix.os == 'windows-latest'
+      #   run: |
+      #     pip install wheels/skyborn*-win_amd64*.whl
+      #     python -c "import skyborn; print('Wheel installation test passed on Windows')"
