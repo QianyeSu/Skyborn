@@ -109,8 +109,8 @@ jobs:
       # Use different cibuildwheel versions for different platforms
       - name: Build wheels (Windows)
         if: matrix.buildplat[1] == 'win_amd64'
-        # uses: pypa/cibuildwheel@v2.21.3
-        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
+        uses: pypa/cibuildwheel@v2.21.3
+        # uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
         with:
           output-dir: wheelhouse
         env:
