@@ -109,8 +109,8 @@ jobs:
       # Use different cibuildwheel versions for different platforms
       - name: Build wheels (Windows)
         if: matrix.buildplat[1] == 'win_amd64'
-        uses: pypa/cibuildwheel@v2.21.3
-        # uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
+        # uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
         with:
           output-dir: wheelhouse
         env:
@@ -124,8 +124,8 @@ jobs:
 
       - name: Build wheels (macOS)
         if: startsWith(matrix.buildplat[1], 'macosx')
-        uses: pypa/cibuildwheel@v2.16.2
-        # uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
+        # uses: pypa/cibuildwheel@v2.16.2
+        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
         with:
           output-dir: wheelhouse
         env:
@@ -137,8 +137,8 @@ jobs:
 
       - name: Build wheels (Linux x86_64)
         if: matrix.buildplat[1] == 'manylinux_x86_64'
-        uses: pypa/cibuildwheel@v2.21.3
-        # uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
+        # uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
         with:
           output-dir: wheelhouse
         env:
@@ -249,7 +249,20 @@ jobs:
           path: wheels
           merge-multiple: true
 
-      - name: Install from wheel
+      - name: Install from wheel (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
-          pip install wheels/skyborn*.whl
-          python -c "import skyborn; print('Wheel installation test passed on ${{ matrix.os }}')"
+          pip install wheels/skyborn*-manylinux*.whl
+          python -c "import skyborn; print('Wheel installation test passed on Linux')"
+
+      - name: Install from wheel (macOS)
+        if: matrix.os == 'macos-13'
+        run: |
+          pip install wheels/skyborn*-macosx*.whl
+          python -c "import skyborn; print('Wheel installation test passed on macOS')"
+
+      - name: Install from wheel (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          pip install wheels/skyborn*-win_amd64*.whl
+          python -c "import skyborn; print('Wheel installation test passed on Windows')"
