@@ -133,8 +133,8 @@ jobs:
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
-      - name: Build wheels (Linux)
-        if: startsWith(matrix.buildplat[1], 'manylinux')
+      - name: Build wheels (Linux x86_64)
+        if: matrix.buildplat[1] == 'manylinux_x86_64'
         uses: pypa/cibuildwheel@v2.21.3
         with:
           output-dir: wheelhouse
@@ -142,10 +142,23 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_BEFORE_BUILD_LINUX: yum install -y gcc-gfortran || dnf install -y gcc-gfortran || echo 'gfortran install failed'
+          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
+          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
+          CIBW_BUILD_VERBOSITY: 1
+
+      - name: Build wheels (Linux aarch64)
+        if: matrix.buildplat[1] == 'manylinux_aarch64'
+        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2
+        with:
+          output-dir: wheelhouse
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
+          CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
           CIBW_BEFORE_BUILD_LINUX: dnf install -y gcc-gfortran || yum install -y gcc-gfortran || echo 'gfortran install failed'
           CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
-          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
+          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed on aarch64')"
           CIBW_BUILD_VERBOSITY: 1
 
       - name: Upload wheels
