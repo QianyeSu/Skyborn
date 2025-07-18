@@ -17,9 +17,10 @@ import numpy as np
 from statsmodels.tsa.stattools import grangercausalitytests
 from tqdm import tqdm
 from scipy.stats.mstats import mquantiles
+from typing import Any, Dict, List, Union
 
 
-def ar1_fit_evenly(y):
+def ar1_fit_evenly(y: np.ndarray) -> float:
     """Returns the lag-1 autocorrelation from AR(1) fit.
 
     Uses `statsmodels.tsa.arima.model.ARIMA <https://www.statsmodels.org/devel/generated/statsmodels.tsa.arima.model.ARIMA.html>`_. to
@@ -54,7 +55,7 @@ def ar1_fit_evenly(y):
     return g
 
 
-def sm_ar1_sim(n, p, g, sig):
+def sm_ar1_sim(n: int, p: int, g: float, sig: float) -> np.ndarray:
     """Produce p realizations of an AR1 process of length n with lag-1 autocorrelation g using statsmodels
 
     Parameters
@@ -104,7 +105,13 @@ def sm_ar1_sim(n, p, g, sig):
 # --------
 
 
-def granger_causality(y1, y2, maxlag=1, addconst=True, verbose=True):
+def granger_causality(
+    y1: np.ndarray,
+    y2: np.ndarray,
+    maxlag: Union[int, List[int]] = 1,
+    addconst: bool = True,
+    verbose: bool = True,
+) -> Dict[Any, Any]:
     """Granger causality tests
 
     Four tests for the Granger non-causality of 2 time series.
