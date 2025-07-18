@@ -155,13 +155,13 @@ The associated Legendre polynomials are normalized such that:
 
 .. math::
 
-   \\int_0^\\pi P_{nm}(\\theta)^2 \\sin(\\theta) d\\theta = 1
+   \int_0^\pi P_{nm}(\theta)^2 \sin(\theta) \, d\theta = 1
 
 where:
 
 .. math::
 
-   P_{nm}(\\theta) = \\sqrt{\\frac{2n+1}{2} \\frac{(n-m)!}{(n+m)!}} \\frac{\\sin^m(\\theta)}{2^n n!} \\frac{d^{n+m}}{d(\\cos\\theta)^{n+m}}(\\cos^2\\theta - 1)^n
+   P_{nm}(\theta) = \sqrt{\frac{2n+1}{2} \frac{(n-m)!}{(n+m)!}} \frac{\sin^m(\theta)}{2^n n!} \frac{d^{n+m}}{d(\cos\theta)^{n+m}}(\cos^2\theta - 1)^n
 
 **Coordinate Convention:**
 
