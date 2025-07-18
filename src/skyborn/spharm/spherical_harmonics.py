@@ -144,7 +144,6 @@ IntArray = NDArray[np.integer]
 
 # define a list of instance variables that cannot be rebound or unbound.
 _private_vars = ["nlon", "nlat", "gridtype", "legfunc", "rsphere"]
-__version__ = "1.0.9"
 
 # Constants for better code clarity
 DEFAULT_EARTH_RADIUS = 6.3712e6
