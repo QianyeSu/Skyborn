@@ -39,7 +39,7 @@ Quick Start
     from skyborn.spharm import Spharmt
 
     # Create a spherical harmonic transform instance
-    nlon, nlat = 144, 73
+    nlon, nlat = 144, 72
     spharm = Spharmt(nlon, nlat, gridtype='gaussian', legfunc='stored')
 
     # Generate some sample data
