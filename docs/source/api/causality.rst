@@ -97,7 +97,7 @@ Basic Granger Causality Test
    n_samples = 1000
 
    # Temperature-like series
-   temp = np.nancumsum(np.random.randn(n_samples)) * 0.1
+   temp = np.cumsum(np.random.randn(n_samples)) * 0.1
 
    # Pressure-like series with some dependence on temperature
    pressure = np.zeros(n_samples)
