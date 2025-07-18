@@ -177,7 +177,7 @@ def granger_causality(
     return res
 
 
-def phaseran(recblk, nsurr):
+def phaseran(recblk: np.ndarray, nsurr: int) -> np.ndarray:
     """Simultaneous phase randomization of a set of time series
 
     It creates blocks of surrogate data with the same second order properties as the original
@@ -253,13 +253,13 @@ def phaseran(recblk, nsurr):
 
 
 def liang_causality(
-    y1,
-    y2,
-    npt=1,
-    signif_test="isospec",
-    nsim=1000,
-    qs=[0.005, 0.025, 0.05, 0.95, 0.975, 0.995],
-):
+    y1: np.ndarray,
+    y2: np.ndarray,
+    npt: int = 1,
+    signif_test: str = "isospec",
+    nsim: int = 1000,
+    qs: List[float] = [0.005, 0.025, 0.05, 0.95, 0.975, 0.995],
+) -> Dict[str, Any]:
     """Liang-Kleeman information flow
 
     Estimate the Liang information transfer from series y2 to series y1 with
@@ -405,7 +405,7 @@ def liang_causality(
     return res
 
 
-def liang(y1, y2, npt=1):
+def liang(y1: np.ndarray, y2: np.ndarray, npt: int = 1) -> Dict[str, float]:
     """
     Estimate the Liang information transfer from series y2 to series y1
 
