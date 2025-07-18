@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Utilities for Liang and Granger causality analysis in atmospheric and climate data
+
+This module provides causality analysis tools for time series data commonly
+used in atmospheric and climate research.
+
 Utilities for Liang and Granger causality analysis
 https://github.com/LinkedEarth/Pyleoclim_util
 """
@@ -73,8 +78,8 @@ def sm_ar1_sim(n, p, g, sig):
     See also
     --------
 
-    pyleoclim.utils.correlation.corr_sig : Estimates the Pearson's correlation and associated significance between two non IID time series
-    pyleoclim.utils.correlation.fdr : Determine significance based on the false discovery rate
+    skyborn.causality.granger_causality : Granger causality analysis
+    skyborn.causality.liang_causality : Liang information flow analysis
 
     """
     # specify model parameters (statsmodel wants lag0 coefficents as unity)
@@ -140,11 +145,11 @@ def granger_causality(y1, y2, maxlag=1, addconst=True, verbose=True):
     See also
     --------
 
-    pyleoclim.utils.causality.liang_causality : information flow estimated using the Liang algorithm
+    skyborn.causality.liang_causality : Information flow estimated using the Liang algorithm
 
-    pyleoclim.utils.causality.signif_isopersist : significance test with AR(1) with same persistence
+    skyborn.causality.signif_isopersist : Significance test with AR(1) with same persistence
 
-    pyleoclim.utils.causality.signif_isospec : significance test with surrogates with randomized phases
+    skyborn.causality.signif_isospec : Significance test with surrogates with randomized phases
 
     References
     ----------
@@ -195,8 +200,8 @@ def phaseran(recblk, nsurr):
     See also
     --------
 
-    pyleoclim.utils.correlation.corr_sig : Estimates the Pearson's correlation and associated significance between two non IID time series
-    pyleoclim.utils.correlation.fdf : Determine significance based on the false discovery rate
+    skyborn.causality.liang_causality : Liang-Kleeman information flow analysis
+    skyborn.causality.granger_causality : Granger causality analysis
 
     References
     ----------
@@ -286,10 +291,10 @@ def liang_causality(
 
     See also
     --------
-    pyleoclim.utils.causality.liang : information flow estimated using the Liang algorithm
-    pyleoclim.utils.causality.granger_causality : information flow estimated using the Granger algorithm
-    pyleoclim.utils.causality.signif_isopersist : significance test with AR(1) with same persistence
-    pyleoclim.utils.causality.causality.signif_isospec : significance test with surrogates with randomized phases
+    skyborn.causality.liang : Information flow estimated using the Liang algorithm
+    skyborn.causality.granger_causality : Information flow estimated using the Granger algorithm
+    skyborn.causality.signif_isopersist : Significance test with AR(1) with same persistence
+    skyborn.causality.signif_isospec : Significance test with surrogates with randomized phases
 
     References
     ----------
@@ -421,10 +426,10 @@ def liang(y1, y2, npt=1):
     See also
     --------
 
-    pyleoclim.utils.causality.liang_causality : information flow estimated using the Liang algorithm
-    pyleoclim.utils.causality.granger_causality : information flow estimated using the Granger algorithm
-    pyleoclim.utils.causality.signif_isopersist : significance test with AR(1) with same persistence
-    pyleoclim.utils.causality.signif_isospec : significance test with surrogates with randomized phases
+    skyborn.causality.liang_causality : Information flow estimated using the Liang algorithm
+    skyborn.causality.granger_causality : Information flow estimated using the Granger algorithm
+    skyborn.causality.signif_isopersist : Significance test with AR(1) with same persistence
+    skyborn.causality.signif_isospec : Significance test with surrogates with randomized phases
 
     References
     ----------
@@ -551,9 +556,9 @@ def signif_isopersist(
     See also
     --------
 
-    pyleoclim.utils.causality.liang_causality : information flow estimated using the Liang algorithm
-    pyleoclim.utils.causality.granger_causality : information flow estimated using the Granger algorithm
-    pyleoclim.utils.causality.signif_isospec : significance test with surrogates with randomized phases
+    skyborn.causality.liang_causality : Information flow estimated using the Liang algorithm
+    skyborn.causality.granger_causality : Information flow estimated using the Granger algorithm
+    skyborn.causality.signif_isospec : Significance test with surrogates with randomized phases
 
     """
     g1 = ar1_fit_evenly(y1)
@@ -618,9 +623,9 @@ def signif_isospec(
     See also
     --------
 
-    pyleoclim.utils.causality.liang_causality : information flow estimated using the Liang algorithm
-    pyleoclim.utils.causality.granger_causality : information flow estimated using the Granger algorithm
-    pyleoclim.utils.causality.signif_isopersist : significance test with AR(1) with same persistence
+    skyborn.causality.liang_causality : Information flow estimated using the Liang algorithm
+    skyborn.causality.granger_causality : Information flow estimated using the Granger algorithm
+    skyborn.causality.signif_isopersist : Significance test with AR(1) with same persistence
 
     """
 
