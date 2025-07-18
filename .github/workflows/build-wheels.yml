@@ -124,7 +124,7 @@ jobs:
 
       - name: Build wheels (macOS)
         if: startsWith(matrix.buildplat[1], 'macosx')
-        uses: pypa/cibuildwheel@v2.16.2
+        uses: pypa/cibuildwheel@v3.0.1
         # uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
         with:
           output-dir: wheelhouse
