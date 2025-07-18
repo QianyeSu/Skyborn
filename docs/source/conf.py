@@ -195,6 +195,40 @@ myst_enable_extensions = [
     "substitution",
 ]
 
+# -- MathJax configuration for better LaTeX support ------------------------
+mathjax3_config = {
+    "tex": {
+        "inlineMath": [['$', '$'], ['\\(', '\\)']],
+        "displayMath": [['$$', '$$'], ['\\[', '\\]']],
+        "processEscapes": True,
+        "processEnvironments": True,
+        "macros": {
+            "bm": [r"\boldsymbol{#1}", 1],
+            "vec": [r"\mathbf{#1}", 1],
+            "mat": [r"\mathbf{#1}", 1],
+            "d": r"\mathrm{d}",
+            "e": r"\mathrm{e}",
+            "i": r"\mathrm{i}",
+            "R": r"\mathbb{R}",
+            "C": r"\mathbb{C}",
+            "N": r"\mathbb{N}",
+            "Z": r"\mathbb{Z}",
+            "Q": r"\mathbb{Q}",
+        },
+        "packages": ["base", "ams", "newcommand", "configmacros"],
+    },
+    "options": {
+        "ignoreHtmlClass": "tex2jax_ignore",
+        "processHtmlClass": "tex2jax_process",
+    },
+    "loader": {
+        "load": ["[tex]/ams", "[tex]/newcommand", "[tex]/configmacros"]
+    },
+    "svg": {
+        "fontCache": "global"
+    }
+}
+
 # Configure notebook output and MIME priorities
 nb_output_stderr = "show"
 nb_mime_priority_overrides = [
