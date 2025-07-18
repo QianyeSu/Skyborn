@@ -10,6 +10,7 @@ API Reference
    interpolation
    gradients
    causality
+   spharm
 
 This section provides detailed API documentation for all Skyborn modules.
 
@@ -42,6 +43,11 @@ Causality Functions
 -------------------
 
 Causality analysis methods.
+
+Spherical Harmonics Functions
+-----------------------------
+
+Spherical harmonic transforms and spectral analysis for atmospheric and oceanic data.
 
 .. note::
    The ROF (Regularized Optimal Fingerprinting) module; currently under development and testing.
