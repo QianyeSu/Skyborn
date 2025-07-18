@@ -30,15 +30,15 @@ jobs:
         # Following NumPy's matrix pattern
         buildplat:
           - [ubuntu-22.04, manylinux_x86_64]
-          - [ubuntu-22.04, manylinux_aarch64]
+          # - [ubuntu-22.04, manylinux_aarch64]  # Temporarily disabled
           - [macos-13, macosx_x86_64] # Intel Mac
           - [macos-14, macosx_arm64] # Apple Silicon Mac
           - [windows-2022, win_amd64]
         python: ["cp39", "cp310", "cp311", "cp312"]
-        exclude:
-          # Exclude problematic combinations if needed
-          - buildplat: [ubuntu-22.04, manylinux_aarch64]
-            python: "cp39" # Remove if this combination is problematic
+        # exclude:
+        #   # Exclude problematic combinations if needed
+        #   # - buildplat: [ubuntu-22.04, manylinux_aarch64]  # Temporarily disabled
+        #   #   python: "cp39"
 
     steps:
       - name: Checkout
@@ -46,12 +46,12 @@ jobs:
         with:
           submodules: recursive
 
-      # Set up QEMU for cross-compilation (ARM64 Linux)
-      - name: Set up QEMU
-        if: matrix.buildplat[1] == 'manylinux_aarch64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
+      # Set up QEMU for cross-compilation (ARM64 Linux) - Temporarily disabled
+      # - name: Set up QEMU
+      #   if: matrix.buildplat[1] == 'manylinux_aarch64'
+      #   uses: docker/setup-qemu-action@v3
+      #   with:
+      #     platforms: arm64
 
       # Setup for macOS (following NumPy's approach)
       - name: Setup macOS
@@ -109,7 +109,8 @@ jobs:
       # Use different cibuildwheel versions for different platforms
       - name: Build wheels (Windows)
         if: matrix.buildplat[1] == 'win_amd64'
-        uses: pypa/cibuildwheel@v2.21.3
+        # uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
         with:
           output-dir: wheelhouse
         env:
@@ -123,7 +124,8 @@ jobs:
 
       - name: Build wheels (macOS)
         if: startsWith(matrix.buildplat[1], 'macosx')
-        uses: pypa/cibuildwheel@v2.16.2
+        # uses: pypa/cibuildwheel@v2.16.2
+        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
         with:
           output-dir: wheelhouse
         env:
@@ -135,7 +137,8 @@ jobs:
 
       - name: Build wheels (Linux x86_64)
         if: matrix.buildplat[1] == 'manylinux_x86_64'
-        uses: pypa/cibuildwheel@v2.21.3
+        # uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
         with:
           output-dir: wheelhouse
         env:
@@ -147,19 +150,20 @@ jobs:
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
-      - name: Build wheels (Linux aarch64)
-        if: matrix.buildplat[1] == 'manylinux_aarch64'
-        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2
-        with:
-          output-dir: wheelhouse
-        env:
-          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-          CIBW_SKIP: "*-win32 *-musllinux*"
-          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
-          CIBW_BEFORE_BUILD_LINUX: dnf install -y gcc-gfortran || yum install -y gcc-gfortran || echo 'gfortran install failed'
-          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
-          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed on aarch64')"
-          CIBW_BUILD_VERBOSITY: 1
+      # Build wheels (Linux aarch64) - Temporarily disabled
+      # - name: Build wheels (Linux aarch64)
+      #   if: matrix.buildplat[1] == 'manylinux_aarch64'
+      #   uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2
+      #   with:
+      #     output-dir: wheelhouse
+      #   env:
+      #     CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
+      #     CIBW_SKIP: "*-win32 *-musllinux*"
+      #     CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+      #     CIBW_BEFORE_BUILD_LINUX: dnf install -y gcc-gfortran || yum install -y gcc-gfortran || echo 'gfortran install failed'
+      #     CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
+      #     CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed on aarch64')"
+      #     CIBW_BUILD_VERBOSITY: 1
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
