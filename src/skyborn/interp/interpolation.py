@@ -1,9 +1,13 @@
 """
 Interpolation functions for hybrid-sigma and multidimensional data.
 
+This module provides advanced interpolation capabilities for atmospheric science data,
+including hybrid-sigma to pressure level interpolation and multidimensional spatial
+interpolation with optional extrapolation.
+
 References
 ----------
-geocat-comp interpolation:
+Based on NCAR geocat-comp interpolation methods:
     https://github.com/NCAR/geocat-comp/blob/main/geocat/comp/interpolation.py
 """
 
@@ -370,30 +374,27 @@ def interp_hybrid_to_pressure(
     t_bot: xr.DataArray = None,
     phi_sfc: xr.DataArray = None,
 ) -> xr.DataArray:
-    """Interpolate and extrapolate data from hybrid-sigma levels to isobaric
-    levels. Keeps attributes (i.e. metadata) of the input data in the output as
-    default.
+    """Interpolate and extrapolate data from hybrid-sigma levels to isobaric levels.
+
+    This function interpolates atmospheric data from hybrid-sigma coordinate levels
+    to constant pressure levels, with optional extrapolation below ground using
+    ECMWF formulations. Preserves all metadata from the input data.
 
     Notes
     -----
     Atmosphere hybrid-sigma pressure coordinates are commonly defined in two different
     ways as described below and in CF Conventions. This particular function expects the
     first formulation. However, with some minor adjustments on the user side it can
-    support datasets leveraging the second formulation as well.  In this case, you can
+    support datasets leveraging the second formulation as well. In this case, you can
     set the input parameters p0=1 and hyam=ap to adapt the function to meet your needs.
 
     Formulation 1: p(n,k,j,i) = a(k)*p0 + b(k)*ps(n,j,i)
     Formulation 2: p(n,k,j,i) = ap(k) + b(k)*ps(n,j,i)
 
-    ACKNOWLEDGEMENT: We'd like to thank to `Brian Medeiros <https://github.com/brianpm>`__,
-    `Matthew Long <https://github.com/matt-long>`__, and `Deepak Cherian <https://github.com/dcherian>`__
-    at NSF NCAR for their great contributions since the code implemented here is mostly
-    based on their work.
-
     Parameters
     ----------
     data : :class:`xarray.DataArray`
-        Multidimensional data array of hybrid-sigma levels and has a ``lev_dim`` coordinate.
+        Multidimensional data array with hybrid-sigma levels and a ``lev_dim`` coordinate.
 
     ps : :class:`xarray.DataArray`
         A multi-dimensional array of surface pressures (Pa), same time/space shape as data.
@@ -410,10 +411,12 @@ def interp_hybrid_to_pressure(
         list of 21 pressure levels is used.
 
     lev_dim : str, optional
-        String that is the name of level dimension in data. Defaults to "lev".
+        String that is the name of level dimension in data. If None, attempts to detect
+        automatically using CF conventions.
 
     method : str, optional
-        String that is the interpolation method; can be either "linear" or "log". Defaults to "linear".
+        String that is the interpolation method; can be either "linear" or "log".
+        Defaults to "linear".
 
     extrapolate : bool, optional
         If True, below ground extrapolation for ``variable`` will be done using
@@ -440,10 +443,30 @@ def interp_hybrid_to_pressure(
     Returns
     -------
     output : :class:`xarray.DataArray`
-        Interpolated data with isobaric levels
+        Interpolated data with isobaric levels as the new vertical coordinate
+
+    Examples
+    --------
+    Basic interpolation from hybrid-sigma to pressure levels:
+
+    >>> import skyborn.interp as si
+    >>> import xarray as xr
+    >>> import numpy as np
+    >>>
+    >>> # Interpolate temperature to standard pressure levels
+    >>> temp_p = si.interp_hybrid_to_pressure(
+    ...     data=temperature,
+    ...     ps=surface_pressure,
+    ...     hyam=hybrid_a,
+    ...     hybm=hybrid_b,
+    ...     new_levels=np.array([100000, 85000, 70000])  # Pa
+    ... )
 
     See Also
     --------
+    interp_sigma_to_hybrid : Interpolate from sigma to hybrid coordinates
+    skyborn.conversion.grib_to_netcdf : Convert GRIB data with hybrid coordinates
+
     Related NCL Functions:
     `vinth2p <https://www.ncl.ucar.edu/Document/Functions/Built-in/vinth2p.shtml>`__,
     `vinth2p_ecmwf <https://www.ncl.ucar.edu/Document/Functions/Built-in/vinth2p_ecmwf.shtml>`__
@@ -587,40 +610,65 @@ def interp_sigma_to_hybrid(
     lev_dim: str = None,
     method: str = "linear",
 ) -> xr.DataArray:
-    """Interpolate data from sigma to hybrid coordinates.  Keeps the attributes
-    (i.e. meta information) of the input data in the output as default.
+    """Interpolate data from sigma to hybrid coordinates.
+
+    This function interpolates atmospheric data from sigma coordinate levels
+    to hybrid-sigma coordinate levels. Preserves all metadata from the input data.
 
     Parameters
     ----------
     data : :class:`xarray.DataArray`
-        Multidimensional data array, which holds sigma levels and has a ``lev_dim`` coordinate.
+        Multidimensional data array with sigma levels and a ``lev_dim`` coordinate.
 
     sig_coords : :class:`xarray.DataArray`
-        A one-dimensional array of sigma coordinates of ``lev_dim`` of ``data``.
+        A one-dimensional array of sigma coordinates corresponding to the ``lev_dim``
+        dimension of ``data``.
 
     ps : :class:`xarray.DataArray`
         A multi-dimensional array of surface pressures (Pa), same time/space shape as data.
 
     hyam, hybm : :class:`xarray.DataArray`
         One-dimensional arrays containing the hybrid A and B coefficients. Must have the same
-        dimension as the output hybrid levels.
+        dimension as the desired output hybrid levels.
 
     p0 : float, optional
         Scalar numeric value equal to surface reference pressure (Pa). Defaults to 100000 Pa.
 
     lev_dim : str, optional
-        String that is the name of level dimension in data. Defaults to "lev".
+        String that is the name of level dimension in data. If None, attempts to detect
+        automatically using CF conventions.
 
     method : str, optional
-        String that is the interpolation method; can be either "linear" or "log". Defaults to "linear".
+        String that is the interpolation method; can be either "linear" or "log".
+        Defaults to "linear".
 
     Returns
     -------
     output : :class:`xarray.DataArray`
-        Interpolated data with hybrid levels
+        Interpolated data with hybrid levels as the new vertical coordinate
+
+    Examples
+    --------
+    Basic interpolation from sigma to hybrid coordinates:
+
+    >>> import skyborn.interp as si
+    >>> import xarray as xr
+    >>> import numpy as np
+    >>>
+    >>> # Interpolate data from sigma to hybrid levels
+    >>> data_hybrid = si.interp_sigma_to_hybrid(
+    ...     data=sigma_data,
+    ...     sig_coords=sigma_levels,
+    ...     ps=surface_pressure,
+    ...     hyam=hybrid_a,
+    ...     hybm=hybrid_b
+    ... )
 
     See Also
     --------
+    interp_hybrid_to_pressure : Interpolate from hybrid to pressure coordinates
+    skyborn.conversion.grib_to_netcdf : Convert GRIB data with different coordinates
+
     Related NCL Function:
     `sigma2hybrid <https://www.ncl.ucar.edu/Document/Functions/Built-in/sigma2hybrid.shtml>`__
     """
@@ -741,9 +789,13 @@ def interp_multidim(
 
     Examples
     --------
+    Basic multidimensional interpolation:
+
+    >>> import skyborn.interp as si
     >>> import xarray as xr
     >>> import numpy as np
-    >>> import geocat.comp
+    >>>
+    >>> # Create sample data
     >>> data = np.asarray([[1, 2, 3, 4, 5, 99],
     ...                   [2, 4, 6, 8, 10, 12]])
     >>> lat_in = [0, 1]
@@ -752,14 +804,13 @@ def interp_multidim(
     ...                        dims=['lat', 'lon'],
     ...                        coords={'lat':lat_in,
     ...                                'lon': lon_in})
-    >>> data_out = xr.DataArray(dims=['lat', 'lon'],
-    ...                         coords={'lat': [0, 1],
-    ...                                 'lon': [0, 50, 360]})
-    >>> do = interp_multidim(data_in,
-    ...                      [0, 1],
-    ...                      [0, 50, 360],
-    ...                      cyclic=True,
-    ...                      missing_val=99)
+    >>>
+    >>> # Interpolate to new coordinates with cyclic boundary
+    >>> do = si.interp_multidim(data_in,
+    ...                         [0, 1],
+    ...                         [0, 50, 360],
+    ...                         cyclic=True,
+    ...                         missing_val=99)
     >>> print(do)
     <xarray.DataArray (lat: 2, lon: 3)>
     array([[ 1.,  2., 99.],

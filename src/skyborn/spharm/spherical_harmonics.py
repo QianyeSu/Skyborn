@@ -1270,10 +1270,190 @@ if __name__ == "__main__":
     u2, v2 = spharm.getuv(vrtspec, divspec)
     print("u2 shape:", u2.shape, "v2 shape:", v2.shape)
 
-    # 4. Test getpsichi
+    # 4. Test getpsichi with comprehensive validation
     print_header("getpsichi")
+
+    # Test 1: Random wind field
     psi, chi = spharm.getpsichi(u, v)
-    print("psi shape:", psi.shape, "chi shape:", chi.shape)
+    print("Random field - psi shape:", psi.shape, "chi shape:", chi.shape)
+    print("psi range: [{:.6f}, {:.6f}]".format(np.min(psi), np.max(psi)))
+    print("chi range: [{:.6f}, {:.6f}]".format(np.min(chi), np.max(chi)))
+
+    # Test 2: Create a simple test case - solid body rotation
+    print("\n--- Solid Body Rotation Test ---")
+    lons = np.linspace(0, 360, nlon, endpoint=False)
+    lats = np.linspace(90, -90, nlat, endpoint=False)
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+
+    # Convert to radians
+    lon_rad = lon_grid * np.pi / 180.0
+    lat_rad = lat_grid * np.pi / 180.0
+
+    # Create solid body rotation with reasonable wind speed
+    # Using omega = 1e-5 rad/s (typical atmospheric scale)
+    omega = 1e-5  # rad/s, realistic atmospheric rotation rate
+    u_test = -omega * spharm.rsphere * np.sin(lon_rad) * np.cos(lat_rad)
+    v_test = omega * spharm.rsphere * np.cos(lon_rad) * np.cos(lat_rad)
+
+    # Compute streamfunction and velocity potential
+    psi_test, chi_test = spharm.getpsichi(u_test, v_test)
+
+    print(
+        "Solid rotation - u range: [{:.1f}, {:.1f}] m/s".format(
+            np.min(u_test), np.max(u_test)
+        )
+    )
+    print(
+        "Solid rotation - v range: [{:.1f}, {:.1f}] m/s".format(
+            np.min(v_test), np.max(v_test)
+        )
+    )
+    print(
+        "Solid rotation - psi range: [{:.3e}, {:.3e}] m²/s".format(
+            np.min(psi_test), np.max(psi_test)
+        )
+    )
+    print(
+        "Solid rotation - chi range: [{:.3e}, {:.3e}] m²/s".format(
+            np.min(chi_test), np.max(chi_test)
+        )
+    )
+    print(
+        "Max wind speed: {:.1f} m/s ({:.1f} mph)".format(
+            np.max(np.sqrt(u_test**2 + v_test**2)),
+            np.max(np.sqrt(u_test**2 + v_test**2)) * 2.237,
+        )
+    )
+
+    # Test 3: Consistency check - reconstruct wind from psi and chi
+    print("\n--- Consistency Check ---")
+    # Get spectral coefficients of psi and chi
+    psi_spec = spharm.grdtospec(psi_test)
+    chi_spec = spharm.grdtospec(chi_test)
+
+    # Apply Laplacian to get vorticity and divergence spectra
+    vrt_spec = _spherepack.lap(psi_spec, spharm.rsphere)
+    div_spec = _spherepack.lap(chi_spec, spharm.rsphere)
+
+    # Reconstruct wind field
+    u_recon, v_recon = spharm.getuv(vrt_spec, div_spec)
+
+    # Ensure consistent dimensions for comparison
+    u_recon = np.squeeze(u_recon)
+    v_recon = np.squeeze(v_recon)
+
+    # Calculate errors
+    u_error = np.sqrt(np.mean((u_test - u_recon) ** 2))
+    v_error = np.sqrt(np.mean((v_test - v_recon) ** 2))
+    u_rel_error = u_error / np.sqrt(np.mean(u_test**2)) * 100
+    v_rel_error = v_error / np.sqrt(np.mean(v_test**2)) * 100
+
+    print("Wind reconstruction errors:")
+    print("  u RMSE: {:.3e} ({:.2f}%)".format(u_error, u_rel_error))
+    print("  v RMSE: {:.3e} ({:.2f}%)".format(v_error, v_rel_error))
+
+    # Test 4: Physical property check
+    print("\n--- Physical Properties ---")
+    # For solid body rotation, chi should be ~0 (no divergence)
+    # and psi should have specific pattern
+    chi_mean = np.mean(chi_test)
+    chi_std = np.std(chi_test)
+    psi_mean = np.mean(psi_test)
+    psi_std = np.std(psi_test)
+
+    print(
+        "Velocity potential (chi) - mean: {:.3e}, std: {:.3e}".format(chi_mean, chi_std)
+    )
+    print("Streamfunction (psi) - mean: {:.3e}, std: {:.3e}".format(psi_mean, psi_std))
+
+    # Theoretical expectation: chi should be very small for solid body rotation
+    chi_psi_ratio = chi_std / psi_std if psi_std > 0 else float("inf")
+    print(
+        "Chi/Psi ratio: {:.3e} (should be << 1 for solid rotation)".format(
+            chi_psi_ratio
+        )
+    )
+
+    # Check if chi is appropriately small
+    if chi_psi_ratio < 0.1:
+        print("Chi is appropriately small for rotational flow")
+    else:
+        print("Chi is unexpectedly large - may indicate numerical issues")
+
+    # Test 5: Helmholtz decomposition verification
+    print("\n--- Helmholtz Decomposition ---")
+    # Original vorticity and divergence
+    vrt_orig, div_orig = spharm.getvrtdivspec(u_test, v_test)
+
+    # Reconstructed vorticity and divergence
+    vrt_recon_spec = _spherepack.lap(psi_spec, spharm.rsphere)
+    div_recon_spec = _spherepack.lap(chi_spec, spharm.rsphere)
+
+    # Convert to grid for comparison
+    vrt_orig_grid = spharm.spectogrd(vrt_orig)
+    div_orig_grid = spharm.spectogrd(div_orig)
+    vrt_recon_grid = spharm.spectogrd(vrt_recon_spec)
+    div_recon_grid = spharm.spectogrd(div_recon_spec)
+
+    # Ensure consistent dimensions
+    vrt_orig_grid = np.squeeze(vrt_orig_grid)
+    div_orig_grid = np.squeeze(div_orig_grid)
+    vrt_recon_grid = np.squeeze(vrt_recon_grid)
+    div_recon_grid = np.squeeze(div_recon_grid)
+
+    vrt_decomp_error = np.sqrt(np.mean((vrt_orig_grid - vrt_recon_grid) ** 2))
+    div_decomp_error = np.sqrt(np.mean((div_orig_grid - div_recon_grid) ** 2))
+
+    print("Helmholtz decomposition errors:")
+    print("  Vorticity RMSE: {:.3e}".format(vrt_decomp_error))
+    print("  Divergence RMSE: {:.3e}".format(div_decomp_error))
+
+    # Overall validation result
+    print("\n--- Validation Summary ---")
+    total_error = u_rel_error + v_rel_error
+    print("Wind reconstruction total error: {:.2f}%".format(total_error))
+    print(
+        "Helmholtz decomposition errors: vrt={:.2e}, div={:.2e}".format(
+            vrt_decomp_error, div_decomp_error
+        )
+    )
+
+    # Check multiple criteria
+    wind_ok = total_error < 1.0  # Less than 1% wind reconstruction error
+    helmholtz_ok = vrt_decomp_error < 1e-5 and div_decomp_error < 1e-5
+    chi_psi_ratio = chi_std / psi_std if psi_std > 0 else float("inf")
+    physics_ok = chi_psi_ratio < 0.5  # Chi should be smaller than Psi for rotation
+
+    if wind_ok and helmholtz_ok:
+        print("PASSED - getpsichi validation")
+        print("   - Wind reconstruction: PASSED ({:.2f}% < 1%)".format(total_error))
+        print("   - Helmholtz decomposition: PASSED (errors < 1e-5)")
+        if physics_ok:
+            print(
+                "   - Physical consistency: PASSED (chi/psi = {:.2e})".format(
+                    chi_psi_ratio
+                )
+            )
+        else:
+            print(
+                "   - Physical consistency: WARNING (chi/psi = {:.2e}, may indicate low resolution)".format(
+                    chi_psi_ratio
+                )
+            )
+    else:
+        print("FAILED - getpsichi validation")
+        print(
+            "   - Wind reconstruction: {} ({:.2f}%)".format(
+                "PASSED" if wind_ok else "FAILED", total_error
+            )
+        )
+        print(
+            "   - Helmholtz decomposition: {} (vrt={:.2e}, div={:.2e})".format(
+                "PASSED" if helmholtz_ok else "FAILED",
+                vrt_decomp_error,
+                div_decomp_error,
+            )
+        )
 
     # 5. Test getgrad
     print_header("getgrad")
