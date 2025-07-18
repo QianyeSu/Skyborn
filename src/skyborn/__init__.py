@@ -45,4 +45,4 @@ from . import conversion
 from . import calc
 from . import spharm
 
-__version__ = "0.3.7"  # Updated to version 0.3.7
+__version__ = "0.3.8"  # Updated to version 0.3.8
