@@ -1196,6 +1196,288 @@ code {
     margin-top: 0.5rem;
 }
 
+/* ========== LaTeX数学公式样式优化 ========== */
+/* MathJax公式容器样式 */
+.MathJax_Display {
+    text-align: center !important;
+    margin: 1.5rem 0 !important;
+    padding: 1rem !important;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    border-radius: 12px !important;
+    border-left: 4px solid var(--primary-color) !important;
+    box-shadow: 0 4px 15px var(--shadow-blue-light) !important;
+    transition: all 0.3s ease !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.MathJax_Display:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px var(--shadow-blue) !important;
+}
+
+/* MathJax行内公式样式 */
+.MathJax {
+    font-size: 1.1em !important;
+    color: var(--secondary-color) !important;
+    transition: all 0.3s ease !important;
+}
+
+.MathJax:hover {
+    color: var(--primary-color) !important;
+    transform: scale(1.05) !important;
+}
+
+/* MathJax SVG样式 */
+.MathJax_SVG {
+    color: var(--secondary-color) !important;
+    transition: all 0.3s ease !important;
+}
+
+.MathJax_SVG:hover {
+    color: var(--primary-color) !important;
+    filter: drop-shadow(0 2px 8px var(--shadow-blue)) !important;
+}
+
+/* 数学公式区块样式 */
+.math {
+    font-size: 1.1em !important;
+    color: var(--secondary-color) !important;
+    margin: 0.5rem 0 !important;
+    padding: 0.2rem 0.4rem !important;
+    background: rgba(37, 99, 235, 0.05) !important;
+    border-radius: 4px !important;
+    transition: all 0.3s ease !important;
+}
+
+.math:hover {
+    background: rgba(37, 99, 235, 0.1) !important;
+    transform: scale(1.02) !important;
+}
+
+/* 显示公式容器 */
+.math.display {
+    display: block !important;
+    text-align: center !important;
+    margin: 1.5rem 0 !important;
+    padding: 1rem !important;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    border-radius: 12px !important;
+    border-left: 4px solid var(--primary-color) !important;
+    box-shadow: 0 4px 15px var(--shadow-blue-light) !important;
+    transition: all 0.3s ease !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.math.display::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--gradient-blue-deep);
+    transform: scaleY(0);
+    transform-origin: bottom;
+    transition: transform 0.3s ease;
+}
+
+.math.display:hover::before {
+    transform: scaleY(1);
+}
+
+.math.display:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px var(--shadow-blue);
+}
+
+/* 特定的数学符号和公式优化 */
+.math .mfrac {
+    margin: 0.2rem 0 !important;
+}
+
+.math .msub,
+.math .msup {
+    font-size: 0.8em !important;
+}
+
+.math .mroot {
+    margin: 0.1rem 0 !important;
+}
+
+/* 数学公式编号样式 */
+.eqno {
+    float: right !important;
+    margin-right: 1rem !important;
+    color: var(--primary-color) !important;
+    font-weight: 600 !important;
+    background: rgba(37, 99, 235, 0.1) !important;
+    padding: 0.2rem 0.6rem !important;
+    border-radius: 15px !important;
+    transition: all 0.3s ease !important;
+}
+
+.eqno:hover {
+    background: rgba(37, 99, 235, 0.2) !important;
+    transform: scale(1.05) !important;
+}
+
+/* Dark模式下的数学公式样式 */
+[data-theme="dark"] .MathJax_Display {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+    border-left: 4px solid var(--primary-color) !important;
+    box-shadow: 0 4px 15px rgba(96, 165, 250, 0.2) !important;
+}
+
+[data-theme="dark"] .MathJax,
+[data-theme="dark"] .MathJax_SVG {
+    color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .MathJax:hover,
+[data-theme="dark"] .MathJax_SVG:hover {
+    color: var(--primary-color) !important;
+}
+
+[data-theme="dark"] .math {
+    color: #e2e8f0 !important;
+    background: rgba(96, 165, 250, 0.1) !important;
+}
+
+[data-theme="dark"] .math:hover {
+    background: rgba(96, 165, 250, 0.2) !important;
+}
+
+[data-theme="dark"] .math.display {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+    border-left: 4px solid var(--primary-color) !important;
+    box-shadow: 0 4px 15px rgba(96, 165, 250, 0.2) !important;
+}
+
+[data-theme="dark"] .eqno {
+    color: var(--primary-color) !important;
+    background: rgba(96, 165, 250, 0.15) !important;
+}
+
+[data-theme="dark"] .eqno:hover {
+    background: rgba(96, 165, 250, 0.25) !important;
+}
+
+/* 数学公式的无障碍访问优化 */
+.MathJax_Display[aria-hidden="false"],
+.MathJax[aria-hidden="false"] {
+    outline: 2px solid transparent !important;
+    outline-offset: 2px !important;
+    transition: outline-color 0.3s ease !important;
+}
+
+.MathJax_Display[aria-hidden="false"]:focus,
+.MathJax[aria-hidden="false"]:focus {
+    outline-color: var(--primary-color) !important;
+}
+
+/* 数学公式中的特殊字符优化 */
+.math .mo {
+    padding: 0 0.1em !important;
+}
+
+.math .mn {
+    color: #d97706 !important;
+    font-weight: 600 !important;
+}
+
+.math .mi {
+    color: var(--secondary-color) !important;
+    font-style: italic !important;
+}
+
+[data-theme="dark"] .math .mn {
+    color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .math .mi {
+    color: #93c5fd !important;
+}
+
+/* 改进MathJax渲染质量 */
+.MathJax_Display svg,
+.MathJax svg {
+    shape-rendering: geometricPrecision !important;
+    text-rendering: optimizeLegibility !important;
+    image-rendering: optimizeQuality !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+}
+
+/* 数学公式的加载动画 */
+.MathJax_Display.MathJax_Processing,
+.MathJax.MathJax_Processing {
+    opacity: 0.7 !important;
+    transition: opacity 0.3s ease !important;
+}
+
+.MathJax_Display.MathJax_Processing::after,
+.MathJax.MathJax_Processing::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid var(--primary-color);
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: mathLoading 1s linear infinite;
+}
+
+@keyframes mathLoading {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* 响应式数学公式 */
+@media (max-width: 768px) {
+    .MathJax_Display {
+        margin: 1rem 0 !important;
+        padding: 0.8rem !important;
+        font-size: 0.9em !important;
+    }
+
+    .MathJax {
+        font-size: 1em !important;
+    }
+
+    .math.display {
+        margin: 1rem 0 !important;
+        padding: 0.8rem !important;
+        font-size: 0.9em !important;
+    }
+}
+
+/* 数学公式的选择样式 */
+.MathJax_Display::selection,
+.MathJax::selection {
+    background: rgba(37, 99, 235, 0.2) !important;
+    color: inherit !important;
+}
+
+.MathJax_Display::-moz-selection,
+.MathJax::-moz-selection {
+    background: rgba(37, 99, 235, 0.2) !important;
+    color: inherit !important;
+}
+
+[data-theme="dark"] .MathJax_Display::selection,
+[data-theme="dark"] .MathJax::selection,
+[data-theme="dark"] .MathJax_Display::-moz-selection,
+[data-theme="dark"] .MathJax::-moz-selection {
+    background: rgba(96, 165, 250, 0.3) !important;
+    color: inherit !important;
+}
+
 /* ========== Enhanced Button Styles ========== */
 
 /* ========== Header Logo/Title Click to Home ========== */
