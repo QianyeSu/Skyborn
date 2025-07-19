@@ -228,41 +228,37 @@ jobs:
           # Option 2: Use Trusted Publishing (pre-configure project trust on PyPI)
           # If using Trusted Publishing, remove the password line above
 
-  # Test installation (multi-platform verification)
+  # Test installation (multi-platform, multi-Python)
   test_install:
-    name: Test installation on ${{ matrix.os }}
+    name: Test installation on ${{ matrix.os }} / Python ${{ matrix.python-version }}
     needs: [build_wheels]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13]
+        os: [ubuntu-latest, windows-latest, macos-13, macos-14, macos-14-arm64]
+        python-version: ["cp39", "cp310", "cp311", "cp312"]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Download wheels
         uses: actions/download-artifact@v4
         with:
-          pattern: "wheel-cp311-*"
+          # Dynamically match cp39-cp312, do not hardcode
+          pattern: "wheel-${{ matrix.python-version }}-*"
           path: wheels
           merge-multiple: true
 
-      # - name: Install from wheel (Linux)
-      #   if: matrix.os == 'ubuntu-latest'
-      #   run: |
-      #     pip install wheels/skyborn*-manylinux*.whl
-      #     python -c "import skyborn; print('Wheel installation test passed on Linux')"
-
-      # - name: Install from wheel (macOS)
-      #   if: matrix.os == 'macos-13'
-      #   run: |
-      #     pip install wheels/skyborn*-macosx*.whl
-      #     python -c "import skyborn; print('Wheel installation test passed on macOS')"
-
-      # - name: Install from wheel (Windows)
-      #   if: matrix.os == 'windows-latest'
-      #   run: |
-      #     pip install wheels/skyborn*-win_amd64*.whl
-      #     python -c "import skyborn; print('Wheel installation test passed on Windows')"
+      - name: Install from wheel
+        run: |
+          PYVER=$(python -c "import sys; print(f'cp{sys.version_info.major}{sys.version_info.minor}')")
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            pip install wheels/skyborn*-$PYVER-*-manylinux*.whl
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            pip install wheels/skyborn*-$PYVER-*-macosx*.whl
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            pip install wheels/skyborn*-$PYVER-*-win_amd64*.whl
+          fi
+          python -c "import skyborn; print('Wheel installation test passed')"
