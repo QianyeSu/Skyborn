@@ -29,11 +29,11 @@ jobs:
       matrix:
         # Following NumPy's matrix pattern
         buildplat:
-          - [ubuntu-22.04, manylinux_x86_64]
+          - [ubuntu-latest, manylinux_x86_64]
           # - [ubuntu-22.04, manylinux_aarch64]  # Temporarily disabled
-          - [macos-13, macosx_x86_64] # Intel Mac
-          - [macos-14, macosx_arm64] # Apple Silicon Mac
-          - [windows-2022, win_amd64]
+          - [macos-latest, macosx_x86_64] # macOS Intel
+          - [macos-latest, macosx_arm64] # macOS Apple Silicon
+          - [windows-latest, win_amd64]
         python: ["cp39", "cp310", "cp311", "cp312"]
         # exclude:
         #   # Exclude problematic combinations if needed
@@ -124,8 +124,8 @@ jobs:
 
       - name: Build wheels (macOS)
         if: startsWith(matrix.buildplat[1], 'macosx')
-        uses: pypa/cibuildwheel@v3.0.1
-        # uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
+        # uses: pypa/cibuildwheel@v3.0.1
+        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
         with:
           output-dir: wheelhouse
         env:
@@ -235,7 +235,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14, macos-14-arm64]
+        os: [ubuntu-latest, windows-latest, macos-latest, macos-latest-arm64]
         python: ["cp39", "cp310", "cp311", "cp312"]
     steps:
       - name: Map abi tag to python version
@@ -266,14 +266,12 @@ jobs:
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             pip install wheels/skyborn*-$PYTAG-*-manylinux*.whl
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            if [[ "${{ matrix.os }}" == "macos-13" ]]; then
-              pip install wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl
-            elif [[ "${{ matrix.os }}" == "macos-14-arm64" ]]; then
+            # arm64 runner
+            if [[ "$(uname -m)" == "arm64" || "$(uname -m)" == "aarch64" ]]; then
               pip install wheels/skyborn*-$PYTAG-*-macosx*_arm64.whl
-            elif [[ "${{ matrix.os }}" == "macos-14" ]]; then
-              pip install wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl
+            # x86_64 runner
             else
-              pip install wheels/skyborn*-$PYTAG-*-macosx*.whl
+              pip install wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl
             fi
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
             pip install wheels/skyborn*-$PYTAG-*-win_amd64*.whl
