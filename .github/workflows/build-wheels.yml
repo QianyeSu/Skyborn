@@ -251,7 +251,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ steps.mapver.outputs.PYVER }}
+          python-version: ${{ env.PYVER }}
 
       - name: Download wheels
         uses: actions/download-artifact@v4
