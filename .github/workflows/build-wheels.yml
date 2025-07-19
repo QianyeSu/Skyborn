@@ -230,35 +230,44 @@ jobs:
 
   # Test installation (multi-platform, multi-Python)
   test_install:
-    name: Test installation on ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    name: Test installation on ${{ matrix.os }} / Python ${{ matrix.python }}
     needs: [build_wheels]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-13, macos-14, macos-14-arm64]
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python: ["cp39", "cp310", "cp311", "cp312"]
     steps:
+      - name: Map abi tag to python version
+        id: mapver
+        run: |
+          case "${{ matrix.python }}" in
+            cp39)  echo "PYVER=3.9"  >> $GITHUB_ENV ;;
+            cp310) echo "PYVER=3.10" >> $GITHUB_ENV ;;
+            cp311) echo "PYVER=3.11" >> $GITHUB_ENV ;;
+            cp312) echo "PYVER=3.12" >> $GITHUB_ENV ;;
+          esac
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ steps.mapver.outputs.PYVER }}
 
       - name: Download wheels
         uses: actions/download-artifact@v4
         with:
-          # Dynamically match cp39-cp312, do not hardcode
-          pattern: "wheel-cp${{ matrix.python-version | replace('.', '') }}-*"
+          pattern: "wheel-${{ matrix.python }}-*"
           path: wheels
           merge-multiple: true
 
       - name: Install from wheel
         run: |
-          PYVER=$(python -c "import sys; print(f'cp{sys.version_info.major}{sys.version_info.minor}')")
+          PYTAG=${{ matrix.python }}
           if [[ "${{ runner.os }}" == "Linux" ]]; then
-            pip install wheels/skyborn*-$PYVER-*-manylinux*.whl
+            pip install wheels/skyborn*-$PYTAG-*-manylinux*.whl
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            pip install wheels/skyborn*-$PYVER-*-macosx*.whl
+            pip install wheels/skyborn*-$PYTAG-*-macosx*.whl
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            pip install wheels/skyborn*-$PYVER-*-win_amd64*.whl
+            pip install wheels/skyborn*-$PYTAG-*-win_amd64*.whl
           fi
           python -c "import skyborn; print('Wheel installation test passed')"
