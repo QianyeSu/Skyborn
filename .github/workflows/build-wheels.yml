@@ -266,7 +266,13 @@ jobs:
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             pip install wheels/skyborn*-$PYTAG-*-manylinux*.whl
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            pip install wheels/skyborn*-$PYTAG-*-macosx*.whl
+            if [[ "${{ matrix.os }}" == "macos-13" ]]; then
+              pip install wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl
+            elif [[ "${{ matrix.os }}" == "macos-14-arm64" ]]; then
+              pip install wheels/skyborn*-$PYTAG-*-macosx*_arm64.whl
+            else
+              pip install wheels/skyborn*-$PYTAG-*-macosx*.whl
+            fi
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
             pip install wheels/skyborn*-$PYTAG-*-win_amd64*.whl
           fi
