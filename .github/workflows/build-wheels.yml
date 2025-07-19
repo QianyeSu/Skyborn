@@ -236,7 +236,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-13, macos-14, macos-14-arm64]
-        python-version: ["cp39", "cp310", "cp311", "cp312"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -247,7 +247,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           # Dynamically match cp39-cp312, do not hardcode
-          pattern: "wheel-${{ matrix.python-version }}-*"
+          pattern: "wheel-cp${{ matrix.python-version | replace('.', '') }}-*"
           path: wheels
           merge-multiple: true
 
