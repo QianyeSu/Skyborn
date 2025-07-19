@@ -262,11 +262,12 @@ jobs:
           merge-multiple: true
 
       - name: Install from wheel
+        shell: bash
         run: |
           PYTAG=${{ matrix.python }}
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
             pip install wheels/skyborn*-$PYTAG-*-manylinux*.whl
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
             # arm64 runner
             if [[ "$(uname -m)" == "arm64" || "$(uname -m)" == "aarch64" ]]; then
               pip install wheels/skyborn*-$PYTAG-*-macosx*_arm64.whl
@@ -274,7 +275,7 @@ jobs:
             else
               pip install wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl
             fi
-          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
             pip install wheels/skyborn*-$PYTAG-*-win_amd64*.whl
           fi
           python -c "import skyborn; print('Wheel installation test passed')"
