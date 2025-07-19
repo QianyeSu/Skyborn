@@ -270,6 +270,8 @@ jobs:
               pip install wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl
             elif [[ "${{ matrix.os }}" == "macos-14-arm64" ]]; then
               pip install wheels/skyborn*-$PYTAG-*-macosx*_arm64.whl
+            elif [[ "${{ matrix.os }}" == "macos-14" ]]; then
+              pip install wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl
             else
               pip install wheels/skyborn*-$PYTAG-*-macosx*.whl
             fi
