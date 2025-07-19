@@ -236,7 +236,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-13, macos-13-x86_64, macos-14-arm64]
-        python: ["cp311", "cp312"]
+        python: ["cp311"]
     steps:
       - name: Map abi tag to python version
         id: mapver
