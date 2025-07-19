@@ -32,7 +32,7 @@ jobs:
           - [ubuntu-latest, manylinux_x86_64]
           # - [ubuntu-22.04, manylinux_aarch64]  # Temporarily disabled
           - [macos-13, macosx_x86_64] # macOS Intel
-          - [macos-13, macosx_arm64] # macOS Apple Silicon
+          - [macos-14, macosx_arm64] # macOS Apple Silicon
           - [windows-2022, win_amd64]
         python: ["cp39", "cp310", "cp311", "cp312"]
         # exclude:
@@ -235,7 +235,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest, macos-latest-arm64]
+        os: [ubuntu-latest, windows-latest, macos-13, macos-14-arm64]
         python: ["cp39", "cp310", "cp311", "cp312"]
     steps:
       - name: Map abi tag to python version
