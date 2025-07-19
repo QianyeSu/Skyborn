@@ -96,13 +96,30 @@ if try_f2py.returncode() == 0
         '-funroll-loops',         # Loop unrolling optimization (5-15% improvement)
         '-finline-functions',     # Inline small functions (3-10% improvement)
         '-ftree-vectorize',       # Auto-vectorization for SIMD (10-25% improvement)
-        '-ffinite-math-only'      # Assume no NaN/Inf values (5-10% improvement)
+        '-ffinite-math-only',     # Assume no NaN/Inf values (5-10% improvement)
+        '-march=x86-64',
+        '-mtune=generic',
+        '-fno-common',
+        '-ftree-loop-im',
+        '-ftree-loop-distribution',
+        '-falign-functions=32'
+        # '-fno-protect-parens',
+        # '-fno-math-errno',
+        # '-fno-sign-zero',
+        # '-fno-trapping-math',
+        # '-freciprocal-math',
+
     ]
 
     # Conservative C optimization flags for numerical stability
     c_args = [
         '-O3',
-        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION'
+        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',
+        '-march=x86-64',
+        '-mtune=generic',
+        '-fPIC',
+        '-fno-trapping-math',
+        '-falign-functions=32',
     ]
 
     # Additional debugging for CI
