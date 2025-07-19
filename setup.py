@@ -187,14 +187,49 @@ class MesonBuildExt(build_ext):
                 + ["--build-dir", str(self.build_temp)]
             )
 
-            fortran_optim_flags = "-O3 -fPIC -fno-second-underscore -funroll-loops -finline-functions -ftree-vectorize -ffinite-math-only"
-            # c_optim_flags = "-O3 -DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION"
-            f2py_cmd += [
-                "--opt=" + fortran_optim_flags,
-                "--f90flags=" + fortran_optim_flags,
-                # "--cflags=" + c_optim_flags,
-            ]
-
+            # fortran_optim_flags = "-O3 -fPIC -fno-second-underscore -funroll-loops -finline-functions -ftree-vectorize -ffinite-math-only"
+            fortran_optim_flags = (
+                "-O3 "
+                "-fPIC "
+                "-fno-second-underscore "
+                "-funroll-loops "
+                "-finline-functions "
+                "-ftree-vectorize "
+                "-ffinite-math-only "
+                "-march=x86-64 "
+                "-mtune=generic "
+                "-fno-common "
+                "-ftree-loop-im "
+                "-ftree-loop-distribution "
+                "-falign-functions=32"
+            )
+            c_optim_flags = (
+                # Highest level optimization, covers most performance enhancements
+                "-O3 "
+                # NumPy API compatibility, very important
+                "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION "
+                # Explicitly target all 64-bit x86 CPUs for optimization, consistent with Fortran, ensures portability
+                "-march=x86-64 "
+                # Tune for generic processors, not specific models, consistent with Fortran
+                "-mtune=generic "
+                # Position Independent Code, required for shared libraries
+                "-fPIC "
+                # Disable floating-point exception traps, prevents crashes due to floating-point errors, enhances robustness
+                "-fno-trapping-math "
+                # Align function entry points, potentially slightly improves instruction cache efficiency
+                "-falign-functions=32"
+            )
+            # f2py_cmd += [
+            #     "--opt=" + fortran_optim_flags,
+            #     "--f90flags=" + fortran_optim_flags,
+            #     "--cflags=" + c_optim_flags,
+            # ]
+            print(
+                "INFO: Setting compiler flags via environment variables for the Meson backend."
+            )
+            build_env = os.environ.copy()
+            build_env["FFLAGS"] = fortran_optim_flags
+            build_env["CFLAGS"] = c_optim_flags
             import platform
 
             if platform.system() == "Windows":
@@ -203,11 +238,14 @@ class MesonBuildExt(build_ext):
                 f2py_cmd += ["--fcompiler=gnu95", "--compiler=unix"]
 
             print("f2py build command:", " ".join(f2py_cmd))
+            print(f"Using FFLAGS: {build_env.get('FFLAGS')}")
+            print(f"Using CFLAGS: {build_env.get('CFLAGS')}")
             subprocess.run(
                 f2py_cmd,
                 # Run from project root so that build dir paths are correct
                 cwd=str(Path.cwd()),
                 check=True,
+                env=build_env,  # <-- This passes the environment to the subprocess
             )
 
             # --- STEP 4: Clean up generated files and move compiled file ---
