@@ -240,6 +240,7 @@ jobs:
     steps:
       - name: Map abi tag to python version
         id: mapver
+        shell: bash
         run: |
           case "${{ matrix.python }}" in
             cp39)  echo "PYVER=3.9"  >> $GITHUB_ENV ;;
