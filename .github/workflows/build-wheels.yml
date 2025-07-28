@@ -110,7 +110,7 @@ jobs:
       - name: Build wheels (Windows)
         if: matrix.buildplat[1] == 'win_amd64'
         # uses: pypa/cibuildwheel@v2.21.3
-        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
+        uses: pypa/cibuildwheel@e6de07ed3921b51089aae6981989889cf1eddd0c # v3.1.1
         with:
           output-dir: wheelhouse
         env:
@@ -124,8 +124,8 @@ jobs:
 
       - name: Build wheels (macOS)
         if: startsWith(matrix.buildplat[1], 'macosx')
-        uses: pypa/cibuildwheel@v3.0.1
-        # uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
+        uses: pypa/cibuildwheel@v3.1.1
+        # uses: pypa/cibuildwheel@e6de07ed3921b51089aae6981989889cf1eddd0c # v3.1.1
         with:
           output-dir: wheelhouse
         env:
@@ -138,7 +138,7 @@ jobs:
       - name: Build wheels (Linux x86_64)
         if: matrix.buildplat[1] == 'manylinux_x86_64'
         # uses: pypa/cibuildwheel@v2.21.3
-        uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2 # v3.0.1
+        uses: pypa/cibuildwheel@e6de07ed3921b51089aae6981989889cf1eddd0c # v3.1.1
         with:
           output-dir: wheelhouse
         env:
@@ -153,7 +153,7 @@ jobs:
       # Build wheels (Linux aarch64) - Temporarily disabled
       # - name: Build wheels (Linux aarch64)
       #   if: matrix.buildplat[1] == 'manylinux_aarch64'
-      #   uses: pypa/cibuildwheel@95d2f3a92fbf80abe066b09418bbf128a8923df2
+      #   uses: pypa/cibuildwheel@e6de07ed3921b51089aae6981989889cf1eddd0c
       #   with:
       #     output-dir: wheelhouse
       #   env:
