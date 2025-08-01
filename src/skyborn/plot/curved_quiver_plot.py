@@ -343,207 +343,195 @@ class CurvedQuiverLegend(Artist):
         ax.add_artist(self.text)
         ax.add_artist(self)
 
-    def _position_arrow_and_text(self, text_width, text_height):
-        """Position arrow and text based on labelpos"""
-        box_center_x = self.x + self.width / 2
-        box_center_y = self.y + self.height / 2
-
-        # Set default text alignment
-        self.text_props.update(
-            {"verticalalignment": "center", "horizontalalignment": "center"}
+    def _create_arrow(self, start_x, start_y, end_x, end_y):
+        """Create arrow with consistent properties"""
+        return FancyArrowPatch(
+            (start_x, start_y),
+            (end_x, end_y),
+            transform=self.ax.transAxes,
+            **self.arrow_props,
         )
 
-        if self.center_label:
-            # Center mode - entire combination (arrow+text) is centered
-            if self.labelpos in ["E", "W"]:  # Horizontal layout
-                # Calculate total content width
-                total_content_width = self.arrow_length + self.padding + text_width
+    def _create_text(self, x, y, h_align="center", v_align="center"):
+        """Create text with consistent properties"""
+        self.text_props.update(
+            {"horizontalalignment": h_align, "verticalalignment": v_align}
+        )
+        return Text(
+            x, y, self.text_content, transform=self.ax.transAxes, **self.text_props
+        )
 
-                # Group start position to center the entire element
+    def _calculate_box_center(self):
+        """Calculate box center coordinates"""
+        return self.x + self.width / 2, self.y + self.height / 2
+
+    def _calculate_horizontal_arrow_positions(
+        self, box_center_x, box_center_y, is_centered, label_left
+    ):
+        """Calculate arrow positions for horizontal layout"""
+        if is_centered:
+            if label_left:  # 'W' - text to left of arrow
+                return box_center_x, box_center_x + self.arrow_length
+            else:  # 'E' - text to right of arrow
+                return box_center_x - self.arrow_length, box_center_x
+        else:
+            if label_left:  # 'W' - text to left of arrow
+                arrow_end_x = self.x + self.width - self.padding
+                arrow_start_x = arrow_end_x - self.arrow_length
+                return arrow_start_x, arrow_end_x
+            else:  # 'E' - text to right of arrow
+                arrow_start_x = self.x + self.padding
+                arrow_end_x = arrow_start_x + self.arrow_length
+                return arrow_start_x, arrow_end_x
+
+    def _calculate_vertical_arrow_positions(self, box_center_x, is_centered):
+        """Calculate arrow positions for vertical layout"""
+        if is_centered:
+            arrow_start_x = box_center_x - self.arrow_length / 2
+            arrow_end_x = box_center_x + self.arrow_length / 2
+        else:
+            arrow_start_x = self.x + (self.width - self.arrow_length) / 2
+            arrow_end_x = arrow_start_x + self.arrow_length
+        return arrow_start_x, arrow_end_x
+
+    def _calculate_text_position_horizontal(
+        self,
+        arrow_start_x,
+        arrow_end_x,
+        box_center_y,
+        text_width,
+        is_centered,
+        label_left,
+    ):
+        """Calculate text position for horizontal layout"""
+        if is_centered:
+            if label_left:  # 'W'
+                text_x = arrow_start_x - text_width - self.padding
+                h_align = "right"
+            else:  # 'E'
+                text_x = arrow_end_x + self.padding
+                h_align = "left"
+        else:
+            if label_left:  # 'W'
+                text_x = arrow_start_x - self.padding
+                h_align = "right"
+            else:  # 'E'
+                text_x = arrow_end_x + self.padding
+                h_align = "left"
+
+        return text_x, box_center_y, h_align, "center"
+
+    def _calculate_text_position_vertical(
+        self, box_center_x, arrow_y, text_height, is_centered, label_above
+    ):
+        """Calculate text position for vertical layout"""
+        if is_centered:
+            if label_above:  # 'N'
+                text_y = arrow_y + text_height / 2 + self.padding / 2
+                v_align = "bottom"
+            else:  # 'S'
+                text_y = arrow_y - self.padding / 2
+                v_align = "top"
+        else:
+            if label_above:  # 'N'
+                text_y = self.y + self.height - self.padding
+                v_align = "top"
+            else:  # 'S'
+                text_y = self.y + self.padding
+                v_align = "bottom"
+
+        return box_center_x, text_y, "center", v_align
+
+    def _position_arrow_and_text(self, text_width, text_height):
+        """Position arrow and text based on labelpos"""
+        box_center_x, box_center_y = self._calculate_box_center()
+
+        # Determine layout orientation
+        is_horizontal = self.labelpos in ["E", "W"]
+
+        if is_horizontal:
+            # Horizontal layout
+            label_left = self.labelpos == "W"
+
+            # Calculate arrow positions
+            if self.center_label:
+                # For centered mode, adjust positioning logic
+                total_content_width = self.arrow_length + self.padding + text_width
                 group_start_x = box_center_x - (total_content_width / 2)
 
-                if self.labelpos == "E":  # Text to the right of arrow
-                    # Set arrow position
+                if label_left:
+                    arrow_start_x = group_start_x + text_width + self.padding
+                    arrow_end_x = arrow_start_x + self.arrow_length
+                else:
                     arrow_start_x = group_start_x
                     arrow_end_x = arrow_start_x + self.arrow_length
-
-                    # Create arrow
-                    self.arrow = FancyArrowPatch(
-                        (arrow_start_x, box_center_y),
-                        (arrow_end_x, box_center_y),
-                        transform=self.ax.transAxes,
-                        **self.arrow_props,
-                    )
-
-                    # Set text position
-                    text_x = arrow_end_x + self.padding
-                    self.text_props["horizontalalignment"] = "left"
-
-                else:  # self.labelpos == 'W', text to the left of arrow
-                    # Place text first
-                    text_x = group_start_x
-                    self.text_props["horizontalalignment"] = "right"
-
-                    # Set arrow position
-                    arrow_start_x = text_x + text_width + self.padding
-                    arrow_end_x = arrow_start_x + self.arrow_length
-
-                    # Create arrow
-                    self.arrow = FancyArrowPatch(
-                        (arrow_start_x, box_center_y),
-                        (arrow_end_x, box_center_y),
-                        transform=self.ax.transAxes,
-                        **self.arrow_props,
-                    )
-
-                # Create text
-                self.text = Text(
-                    text_x,
-                    box_center_y,
-                    self.text_content,
-                    transform=self.ax.transAxes,
-                    **self.text_props,
+            else:
+                arrow_start_x, arrow_end_x = self._calculate_horizontal_arrow_positions(
+                    box_center_x, box_center_y, False, label_left
                 )
 
-            else:  # Vertical layout (self.labelpos in ['N', 'S'])
-                if self.labelpos == "N":  # Text above the arrow
-                    # Set arrow position (horizontally centered)
-                    arrow_start_x = box_center_x - self.arrow_length / 2
-                    arrow_end_x = box_center_x + self.arrow_length / 2
+            # Create arrow
+            self.arrow = self._create_arrow(
+                arrow_start_x, box_center_y, arrow_end_x, box_center_y
+            )
 
-                    # Vertical position (lower half)
+            # Calculate text position
+            if self.center_label:
+                if label_left:
+                    text_x = group_start_x + text_width / 2
+                    h_align = "center"
+                else:
+                    text_x = arrow_end_x + self.padding + text_width / 2
+                    h_align = "center"
+                text_y, v_align = box_center_y, "center"
+            else:
+                text_x, text_y, h_align, v_align = (
+                    self._calculate_text_position_horizontal(
+                        arrow_start_x,
+                        arrow_end_x,
+                        box_center_y,
+                        text_width,
+                        False,
+                        label_left,
+                    )
+                )
+
+            # Create text
+            self.text = self._create_text(text_x, text_y, h_align, v_align)
+
+        else:
+            # Vertical layout
+            label_above = self.labelpos == "N"
+
+            # Calculate arrow positions
+            arrow_start_x, arrow_end_x = self._calculate_vertical_arrow_positions(
+                box_center_x, self.center_label
+            )
+
+            # Calculate arrow Y position
+            if self.center_label:
+                if label_above:
                     arrow_y = box_center_y - text_height / 2 - self.padding / 2
-
-                    # Create arrow
-                    self.arrow = FancyArrowPatch(
-                        (arrow_start_x, arrow_y),
-                        (arrow_end_x, arrow_y),
-                        transform=self.ax.transAxes,
-                        **self.arrow_props,
-                    )
-
-                    # Set text position (upper half)
-                    text_y = box_center_y + self.padding / 2
-                    self.text_props["verticalalignment"] = "bottom"
-
-                else:  # self.labelpos == 'S', text below the arrow
-                    # Set arrow position (horizontally centered)
-                    arrow_start_x = box_center_x - self.arrow_length / 2
-                    arrow_end_x = box_center_x + self.arrow_length / 2
-
-                    # Vertical position (upper half)
+                else:
                     arrow_y = box_center_y + text_height / 2 + self.padding / 2
-
-                    # Create arrow
-                    self.arrow = FancyArrowPatch(
-                        (arrow_start_x, arrow_y),
-                        (arrow_end_x, arrow_y),
-                        transform=self.ax.transAxes,
-                        **self.arrow_props,
-                    )
-
-                    # Set text position (lower half)
-                    text_y = box_center_y - self.padding / 2
-                    self.text_props["verticalalignment"] = "top"
-
-                # Create text (horizontally centered)
-                self.text = Text(
-                    box_center_x,
-                    text_y,
-                    self.text_content,
-                    transform=self.ax.transAxes,
-                    **self.text_props,
-                )
-
-        else:  # Non-centered mode
-            if self.labelpos in ["E", "W"]:  # Horizontal layout
-                if self.labelpos == "E":  # Text to the right of arrow
-                    # Layout starting from left
-                    arrow_start_x = self.x + self.padding
-                    arrow_end_x = arrow_start_x + self.arrow_length
-
-                    # Create arrow
-                    self.arrow = FancyArrowPatch(
-                        (arrow_start_x, box_center_y),
-                        (arrow_end_x, box_center_y),
-                        transform=self.ax.transAxes,
-                        **self.arrow_props,
-                    )
-
-                    # Create text label
-                    text_x = arrow_end_x + self.padding
-                    self.text_props["horizontalalignment"] = "left"
-
-                else:  # self.labelpos == 'W', text to the left of arrow
-                    # Layout starting from right
-                    arrow_end_x = self.x + self.width - self.padding
-                    arrow_start_x = arrow_end_x - self.arrow_length
-
-                    # Create arrow
-                    self.arrow = FancyArrowPatch(
-                        (arrow_start_x, box_center_y),
-                        (arrow_end_x, box_center_y),
-                        transform=self.ax.transAxes,
-                        **self.arrow_props,
-                    )
-
-                    # Create text label
-                    text_x = arrow_start_x - self.padding
-                    self.text_props["horizontalalignment"] = "right"
-
-                self.text = Text(
-                    text_x,
-                    box_center_y,
-                    self.text_content,
-                    transform=self.ax.transAxes,
-                    **self.text_props,
-                )
-
-            else:  # Vertical layout (self.labelpos in ['N', 'S'])
-                # Horizontally center the arrow
-                arrow_start_x = self.x + (self.width - self.arrow_length) / 2
-                arrow_end_x = arrow_start_x + self.arrow_length
-
-                if self.labelpos == "N":  # Text above the arrow
-                    # Arrow at bottom
-                    arrow_y = self.y + self.padding + 0.015  # Give the arrow some space
-
-                    # Create arrow
-                    self.arrow = FancyArrowPatch(
-                        (arrow_start_x, arrow_y),
-                        (arrow_end_x, arrow_y),
-                        transform=self.ax.transAxes,
-                        **self.arrow_props,
-                    )
-
-                    # Text at top
-                    text_y = self.y + self.height - self.padding
-                    self.text_props["verticalalignment"] = "top"
-
-                else:  # self.labelpos == 'S', text below the arrow
-                    # Arrow at top
+            else:
+                if label_above:
+                    arrow_y = self.y + self.padding + 0.015
+                else:
                     arrow_y = self.y + self.height - self.padding - 0.015
 
-                    # Create arrow
-                    self.arrow = FancyArrowPatch(
-                        (arrow_start_x, arrow_y),
-                        (arrow_end_x, arrow_y),
-                        transform=self.ax.transAxes,
-                        **self.arrow_props,
-                    )
+            # Create arrow
+            self.arrow = self._create_arrow(
+                arrow_start_x, arrow_y, arrow_end_x, arrow_y
+            )
 
-                    # Text at bottom
-                    text_y = self.y + self.padding
-                    self.text_props["verticalalignment"] = "bottom"
+            # Calculate text position
+            text_x, text_y, h_align, v_align = self._calculate_text_position_vertical(
+                box_center_x, arrow_y, text_height, self.center_label, label_above
+            )
 
-                # Create text (horizontally centered)
-                self.text = Text(
-                    box_center_x,
-                    text_y,
-                    self.text_content,
-                    transform=self.ax.transAxes,
-                    **self.text_props,
-                )
+            # Create text
+            self.text = self._create_text(text_x, text_y, h_align, v_align)
 
     def _calculate_arrow_length(self):
         """Calculate arrow length based on actual wind speed and original data"""
@@ -608,6 +596,12 @@ class CurvedQuiverLegend(Artist):
                 f"loc must be one of ['lower left', 'lower right', 'upper left', 'upper right'], got {self.loc}"
             )
 
+    def _setup_props(self, user_props, defaults):
+        """Generic property setup method"""
+        if user_props:
+            defaults.update(user_props)
+        return defaults
+
     def _setup_arrow_props(self, arrow_props):
         """Set default arrow properties"""
         defaults = {
@@ -616,9 +610,7 @@ class CurvedQuiverLegend(Artist):
             "linewidth": 1.5,
             "color": "black",
         }
-        if arrow_props:
-            defaults.update(arrow_props)
-        return defaults
+        return self._setup_props(arrow_props, defaults)
 
     def _setup_patch_props(self, patch_props):
         """Set default background box properties"""
@@ -628,9 +620,7 @@ class CurvedQuiverLegend(Artist):
             "facecolor": "white",
             "alpha": 0.9,
         }
-        if patch_props:
-            defaults.update(patch_props)
-        return defaults
+        return self._setup_props(patch_props, defaults)
 
     def _setup_text_props(self, text_props):
         """Set default text properties"""
@@ -640,9 +630,7 @@ class CurvedQuiverLegend(Artist):
             "horizontalalignment": "left",
             "color": "black",
         }
-        if text_props:
-            defaults.update(text_props)
-        return defaults
+        return self._setup_props(text_props, defaults)
 
     def set_figure(self, fig: Figure) -> None:
         """Set figure object"""
