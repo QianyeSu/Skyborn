@@ -1,234 +1,332 @@
-"""Spherical harmonic vector wind computations (`iris` interface)."""
+"""
+Spherical harmonic vector wind computations with Iris interface.
 
-# Copyright (c) 2012-2018 Andrew Dawson
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
-from __future__ import absolute_import
+This module provides a VectorWind class that works with Iris Cubes,
+preserving coordinate information and metadata throughout the computation process.
+It serves as a high-level interface to the standard VectorWind implementation.
 
-from iris.cube import Cube
-from iris.util import reverse
+Main Class:
+    VectorWind: Iris-aware interface for wind field analysis
+
+Example:
+    >>> import iris
+    >>> from skyborn.windspharm.iris import VectorWind
+    >>>
+    >>> # Load wind data as Iris cubes
+    >>> u = iris.load_cube('u_wind.nc')
+    >>> v = iris.load_cube('v_wind.nc')
+    >>>
+    >>> # Create VectorWind instance
+    >>> vw = VectorWind(u, v)
+    >>>
+    >>> # Compute with preserved metadata
+    >>> vorticity = vw.vorticity()
+    >>> streamfunction = vw.streamfunction()
+"""
+
+from __future__ import annotations
+from typing import Optional, Tuple, Union, Any
+
+try:
+    from iris.cube import Cube
+    from iris.util import reverse
+except ImportError:
+    raise ImportError(
+        "Iris is required for the iris interface. "
+        "Install with: conda install -c conda-forge iris"
+    )
 
 from . import standard
 from ._common import get_apiorder, inspect_gridtype, to3d
 
+# Type aliases for better readability
+IrisCube = Cube
+LegFunc = str  # 'stored' or 'computed'
+GridType = str  # 'regular' or 'gaussian'
 
-class VectorWind(object):
-    """Vector wind computations (`iris` interface)."""
 
-    def __init__(self, u, v, rsphere=6.3712e6, legfunc="stored"):
-        """Initialize a VectorWind instance.
+class VectorWind:
+    """
+    Vector wind analysis using Iris cubes.
 
-        **Arguments:**
+    This class provides a high-level interface for spherical harmonic wind analysis
+    that preserves Iris coordinate information and metadata. It wraps the standard
+    VectorWind implementation while maintaining CF-compliant attributes.
 
-        *u*, *v*
-            Zonal and meridional components of the vector wind
-            respectively. Both components should be `~iris.cube.Cube`
-            instances. The components must have the same dimension
-            coordinates and contain no missing values.
+    Parameters
+    ----------
+    u, v : iris.cube.Cube
+        Zonal and meridional wind components. Must have the same dimension
+        coordinates and contain no missing values. Should include latitude
+        and longitude dimensions with appropriate coordinate information.
+    rsphere : float, default 6.3712e6
+        Earth radius in meters for spherical harmonic computations.
+    legfunc : {'stored', 'computed'}, default 'stored'
+        Legendre function computation method:
+        - 'stored': precompute and store (faster, more memory)
+        - 'computed': compute on-the-fly (slower, less memory)
 
-        **Optional argument:**
+    Attributes
+    ----------
+    _api : standard.VectorWind
+        Underlying standard VectorWind instance
+    _reorder : list
+        Dimension reordering for output reconstruction
+    _ishape : tuple
+        Original data shape
+    _coords : list
+        Original coordinate information
 
-        *rsphere*
-            The radius in metres of the sphere used in the spherical
-            harmonic computations. Default is 6371200 m, the approximate
-            mean spherical Earth radius.
+    Examples
+    --------
+    >>> import iris
+    >>> from skyborn.windspharm.iris import VectorWind
+    >>>
+    >>> # Load wind components
+    >>> u = iris.load_cube('u850.nc')
+    >>> v = iris.load_cube('v850.nc')
+    >>>
+    >>> # Create VectorWind instance
+    >>> vw = VectorWind(u, v)
+    >>>
+    >>> # Compute vorticity with preserved metadata
+    >>> vorticity = vw.vorticity()
+    >>> print(vorticity.attributes)  # CF-compliant attributes
+    >>>
+    >>> # Helmholtz decomposition
+    >>> u_chi, v_chi, u_psi, v_psi = vw.helmholtz()
+    """
 
-        *legfunc*
-            'stored' (default) or 'computed'.  If 'stored', associated legendre
-            functions are precomputed and stored when the class instance is
-            created.  This uses O(nlat**3) memory, but speeds up the spectral
-            transforms.  If 'computed', associated legendre functions are
-            computed on the fly when transforms are requested.  This uses
-            O(nlat**2) memory, but slows down the spectral transforms a bit.
-
-        **Example:**
-
-        Initialize a `VectorWind` instance with zonal and meridional
-        components of the vector wind::
-
-            from windspharm.iris import VectorWind
-            w = VectorWind(u, v)
-
+    def __init__(
+        self,
+        u: IrisCube,
+        v: IrisCube,
+        rsphere: float = 6.3712e6,
+        legfunc: LegFunc = "stored",
+    ) -> None:
         """
-        # Make sure inputs are Iris cubes.
-        if type(u) is not Cube or type(v) is not Cube:
-            raise TypeError("u and v must be iris cubes")
-        # Get the coordinates of each component and make sure they are the
-        # same.
-        ucoords = u.dim_coords
-        vcoords = v.dim_coords
-        if ucoords != vcoords:
-            raise ValueError("u and v must have the same dimensions")
-        # Extract the latitude and longitude dimension coordinates.
+        Initialize VectorWind instance with comprehensive validation.
+
+        This method performs thorough validation of input wind components including
+        checks for cube compatibility, coordinate consistency, and proper formatting.
+
+        Parameters
+        ----------
+        u, v : iris.cube.Cube
+            Zonal and meridional wind components with matching coordinates
+        rsphere : float, default 6.3712e6
+            Earth radius in meters
+        legfunc : {'stored', 'computed'}, default 'stored'
+            Legendre function computation method
+
+        Raises
+        ------
+        TypeError
+            If u or v are not Iris cubes
+        ValueError
+            If u and v don't have matching dimensions or coordinates
+        """
+        # Validate input types
+        if not isinstance(u, Cube):
+            raise TypeError(f"u must be iris.cube.Cube, got {type(u).__name__}")
+        if not isinstance(v, Cube):
+            raise TypeError(f"v must be iris.cube.Cube, got {type(v).__name__}")
+
+        # Validate coordinate compatibility
+        self._validate_cube_compatibility(u, v)
+
+        # Extract and validate latitude/longitude coordinates
         lat, lat_dim = _dim_coord_and_dim(u, "latitude")
         lon, lon_dim = _dim_coord_and_dim(v, "longitude")
-        # Reverse the latitude dimension if necessary.
+
+        # Ensure north-to-south latitude ordering
         if lat.points[0] < lat.points[1]:
-            # need to reverse latitude dimension
             u = reverse(u, lat_dim)
             v = reverse(v, lat_dim)
             lat, lat_dim = _dim_coord_and_dim(u, "latitude")
-        # Determine the grid type of the input.
+
+        # Determine grid type
         gridtype = inspect_gridtype(lat.points)
-        # Determine the ordering list (input to transpose) which will put the
-        # latitude and longitude dimensions at the front of the cube's
-        # dimensions, and the ordering list which will reverse this process.
+
+        # Calculate dimension ordering for API compatibility
         apiorder, self._reorder = get_apiorder(u.ndim, lat_dim, lon_dim)
-        # Re-order the inputs (in-place, so we take a copy first) so latiutude
-        # and longitude are at the front.
+
+        # Prepare cubes for processing (make copies to avoid modifying originals)
         u = u.copy()
         v = v.copy()
         u.transpose(apiorder)
         v.transpose(apiorder)
-        # Records the current shape and dimension coordinates of the inputs.
+
+        # Store original structure for output reconstruction
         self._ishape = u.shape
         self._coords = u.dim_coords
-        # Reshape the inputs so they are compatible with pyspharm.
-        u = to3d(u.data)
-        v = to3d(v.data)
-        # Create a base VectorWind instance to do the computations.
+
+        # Convert to 3D format and initialize standard API
+        u_data = to3d(u.data)
+        v_data = to3d(v.data)
+
         self._api = standard.VectorWind(
-            u, v, gridtype=gridtype, rsphere=rsphere, legfunc=legfunc
+            u_data, v_data, gridtype=gridtype, rsphere=rsphere, legfunc=legfunc
         )
 
-    def _metadata(self, var, **attributes):
-        """Re-shape outputs and add meta-data."""
+    def _validate_cube_compatibility(self, u: IrisCube, v: IrisCube) -> None:
+        """
+        Validate that u and v cubes have compatible coordinates.
+
+        Parameters
+        ----------
+        u, v : iris.cube.Cube
+            Wind components to validate
+
+        Raises
+        ------
+        ValueError
+            If cubes don't have matching dimension coordinates
+        """
+        if u.dim_coords != v.dim_coords:
+            raise ValueError(
+                f"u and v must have identical dimension coordinates. "
+                f"u coords: {[c.name() for c in u.dim_coords]}, "
+                f"v coords: {[c.name() for c in v.dim_coords]}"
+            )
+
+    def _metadata(self, var: Any, **attributes: Any) -> IrisCube:
+        """
+        Create Iris cube with proper metadata and coordinate information.
+
+        Parameters
+        ----------
+        var : array_like
+            Data to wrap in Iris cube
+        **attributes
+            Additional attributes to set on the cube
+
+        Returns
+        -------
+        iris.cube.Cube
+            Properly formatted cube with coordinates and metadata
+        """
+        # Reshape to original structure
         var = var.reshape(self._ishape)
-        var = Cube(var, dim_coords_and_dims=list(zip(self._coords, range(var.ndim))))
-        var.transpose(self._reorder)
+
+        # Create cube with coordinates
+        cube = Cube(var, dim_coords_and_dims=list(zip(self._coords, range(var.ndim))))
+
+        # Restore original dimension order
+        cube.transpose(self._reorder)
+
+        # Set attributes
         for attribute, value in attributes.items():
-            setattr(var, attribute, value)
-        return var
+            setattr(cube, attribute, value)
 
-    def u(self):
-        """Zonal component of vector wind.
+        return cube
 
-        **Returns:**
+    def u(self) -> IrisCube:
+        """
+        Get zonal component of vector wind.
 
-        *u*
-            The zonal component of the wind.
+        Returns
+        -------
+        iris.cube.Cube
+            Zonal (eastward) wind component with CF-compliant attributes
 
-        **Example:**
-
-        Get the zonal component of the vector wind::
-
-            u = w.u()
-
+        Examples
+        --------
+        >>> u_wind = vw.u()
+        >>> print(u_wind.standard_name)  # 'eastward_wind'
         """
         u = self._api.u
-        u = self._metadata(
+        return self._metadata(
             u,
             standard_name="eastward_wind",
             units="m s**-1",
             long_name="eastward component of wind",
         )
-        return u
 
-    def v(self):
-        """Meridional component of vector wind.
+    def v(self) -> IrisCube:
+        """
+        Get meridional component of vector wind.
 
-        **Returns:**
+        Returns
+        -------
+        iris.cube.Cube
+            Meridional (northward) wind component with CF-compliant attributes
 
-        *v*
-            The meridional component of the wind.
-
-        **Example:**
-
-        Get the meridional component of the vector wind::
-
-            v = w.v()
-
+        Examples
+        --------
+        >>> v_wind = vw.v()
+        >>> print(v_wind.standard_name)  # 'northward_wind'
         """
         v = self._api.v
-        v = self._metadata(
+        return self._metadata(
             v,
             standard_name="northward_wind",
             units="m s**-1",
             long_name="northward component of wind",
         )
-        return v
 
-    def magnitude(self):
-        """Wind speed (magnitude of vector wind).
+    def magnitude(self) -> IrisCube:
+        """
+        Calculate wind speed (magnitude of vector wind).
 
-        **Returns:**
+        Returns
+        -------
+        iris.cube.Cube
+            Wind speed with CF-compliant attributes
 
-        *speed*
-            The wind speed.
-
-        **Example:**
-
-        Get the magnitude of the vector wind::
-
-            spd = w.magnitude()
-
+        Examples
+        --------
+        >>> wind_speed = vw.magnitude()
+        >>> print(wind_speed.standard_name)  # 'wind_speed'
         """
         m = self._api.magnitude()
-        m = self._metadata(
+        return self._metadata(
             m, standard_name="wind_speed", units="m s**-1", long_name="wind speed"
         )
-        return m
 
-    def vrtdiv(self, truncation=None):
-        """Relative vorticity and horizontal divergence.
+    def vrtdiv(self, truncation: Optional[int] = None) -> Tuple[IrisCube, IrisCube]:
+        """
+        Calculate relative vorticity and horizontal divergence.
 
-        **Optional argument:**
+        Parameters
+        ----------
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation
 
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation.
+        Returns
+        -------
+        vorticity : iris.cube.Cube
+            Relative vorticity with CF-compliant attributes
+        divergence : iris.cube.Cube
+            Horizontal divergence with CF-compliant attributes
 
-        **Returns:**
+        See Also
+        --------
+        vorticity : Calculate only vorticity
+        divergence : Calculate only divergence
 
-        *vrt*, *div*
-            The relative vorticity and divergence respectively.
-
-        **See also:**
-
-        `~VectorWind.vorticity`, `~VectorWind.divergence`.
-
-        **Examples:**
-
-        Compute the relative vorticity and divergence::
-
-            vrt, div = w.vrtdiv()
-
-        Compute the relative vorticity and divergence and apply spectral
-        truncation at triangular T13::
-
-            vrtT13, divT13 = w.vrtdiv(truncation=13)
-
+        Examples
+        --------
+        >>> vrt, div = vw.vrtdiv()
+        >>> vrt_t13, div_t13 = vw.vrtdiv(truncation=13)
         """
         vrt, div = self._api.vrtdiv(truncation=truncation)
-        vrt = self._metadata(
+
+        vrt_cube = self._metadata(
             vrt,
             units="s**-1",
             standard_name="atmosphere_relative_vorticity",
             long_name="relative vorticity",
         )
-        div = self._metadata(
+
+        div_cube = self._metadata(
             div,
             units="s**-1",
             standard_name="divergence_of_wind",
             long_name="horizontal divergence",
         )
-        return vrt, div
+
+        return vrt_cube, div_cube
 
     def vorticity(self, truncation=None):
         """Relative vorticity.
