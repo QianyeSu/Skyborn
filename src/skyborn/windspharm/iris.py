@@ -328,569 +328,546 @@ class VectorWind:
 
         return vrt_cube, div_cube
 
-    def vorticity(self, truncation=None):
-        """Relative vorticity.
+    def vorticity(self, truncation: Optional[int] = None) -> IrisCube:
+        """
+        Calculate relative vorticity.
 
-        **Optional argument:**
+        Parameters
+        ----------
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation
 
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation.
+        Returns
+        -------
+        iris.cube.Cube
+            Relative vorticity field with CF-compliant attributes
 
-        **Returns:**
+        See Also
+        --------
+        vrtdiv : Calculate both vorticity and divergence
+        absolutevorticity : Calculate absolute vorticity
 
-        *vrt*
-            The relative vorticity.
-
-        **See also:**
-
-        `~VectorWind.vrtdiv`, `~VectorWind.absolutevorticity`.
-
-        **Examples:**
-
-        Compute the relative vorticity::
-
-            vrt = w.vorticity()
-
-        Compute the relative vorticity and apply spectral truncation at
-        triangular T13::
-
-            vrtT13 = w.vorticity(truncation=13)
-
+        Examples
+        --------
+        >>> vrt = vw.vorticity()
+        >>> vrt_t13 = vw.vorticity(truncation=13)
         """
         vrt = self._api.vorticity(truncation=truncation)
-        vrt = self._metadata(
+        return self._metadata(
             vrt,
             units="s**-1",
             standard_name="atmosphere_relative_vorticity",
             long_name="relative vorticity",
         )
-        return vrt
 
-    def divergence(self, truncation=None):
-        """Horizontal divergence.
+    def divergence(self, truncation: Optional[int] = None) -> IrisCube:
+        """
+        Calculate horizontal divergence.
 
-        **Optional argument:**
+        Parameters
+        ----------
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation
 
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation.
+        Returns
+        -------
+        iris.cube.Cube
+            Horizontal divergence field with CF-compliant attributes
 
-        **Returns:**
+        See Also
+        --------
+        vrtdiv : Calculate both vorticity and divergence
 
-        *div*
-            The divergence.
-
-        **See also:**
-
-        `~VectorWind.vrtdiv`.
-
-        **Examples:**
-
-        Compute the divergence::
-
-            div = w.divergence()
-
-        Compute the divergence and apply spectral truncation at
-        triangular T13::
-
-            divT13 = w.divergence(truncation=13)
-
+        Examples
+        --------
+        >>> div = vw.divergence()
+        >>> div_t13 = vw.divergence(truncation=13)
         """
         div = self._api.divergence(truncation=truncation)
-        div = self._metadata(
+        return self._metadata(
             div,
             units="s**-1",
             standard_name="divergence_of_wind",
             long_name="horizontal divergence",
         )
-        return div
 
-    def planetaryvorticity(self, omega=None):
-        """Planetary vorticity (Coriolis parameter).
+    def planetaryvorticity(self, omega: Optional[float] = None) -> IrisCube:
+        """
+        Calculate planetary vorticity (Coriolis parameter).
 
-        **Optional argument:**
+        Parameters
+        ----------
+        omega : float, optional
+            Earth's angular velocity in rad/s. Default is 7.292e-5 s⁻¹
 
-        *omega*
-            Earth's angular velocity. The default value if not specified
-            is 7.292x10**-5 s**-1.
+        Returns
+        -------
+        iris.cube.Cube
+            Planetary vorticity (Coriolis parameter) with CF-compliant attributes
 
-        **Returns:**
+        See Also
+        --------
+        absolutevorticity : Calculate absolute vorticity
 
-        *pvorticity*
-            The planetary vorticity.
-
-        **See also:**
-
-        `~VectorWind.absolutevorticity`.
-
-        **Example:**
-
-        Compute planetary vorticity using default values::
-
-            pvrt = w.planetaryvorticity()
-
-        Override the default value for Earth's angular velocity::
-
-            pvrt = w.planetaryvorticity(omega=7.2921150)
-
+        Examples
+        --------
+        >>> f = vw.planetaryvorticity()
+        >>> f_custom = vw.planetaryvorticity(omega=7.2921150e-5)
         """
         f = self._api.planetaryvorticity(omega=omega)
-        f = self._metadata(
+        return self._metadata(
             f,
             units="s**-1",
             standard_name="coriolis_parameter",
             long_name="planetary vorticity (coriolis parameter)",
         )
-        return f
 
-    def absolutevorticity(self, omega=None, truncation=None):
-        """Absolute vorticity (sum of relative and planetary vorticity).
+    def absolutevorticity(
+        self, omega: Optional[float] = None, truncation: Optional[int] = None
+    ) -> IrisCube:
+        """
+        Calculate absolute vorticity (relative + planetary vorticity).
 
-        **Optional arguments:**
+        Parameters
+        ----------
+        omega : float, optional
+            Earth's angular velocity in rad/s. Default is 7.292e-5 s⁻¹
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation
 
-        *omega*
-            Earth's angular velocity. The default value if not specified
-            is 7.292x10**-5 s**-1.
+        Returns
+        -------
+        iris.cube.Cube
+            Absolute vorticity field with CF-compliant attributes
 
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation.
+        See Also
+        --------
+        vorticity : Calculate relative vorticity
+        planetaryvorticity : Calculate planetary vorticity
 
-        **Returns:**
-
-        *avorticity*
-            The absolute (relative + planetary) vorticity.
-
-        **See also:**
-
-        `~VectorWind.vorticity`, `~VectorWind.planetaryvorticity`.
-
-        **Examples:**
-
-        Compute absolute vorticity::
-
-            avrt = w.absolutevorticity()
-
-        Compute absolute vorticity and apply spectral truncation at
-        triangular T13, also override the default value for Earth's
-        angular velocity::
-
-            avrt = w.absolutevorticity(omega=7.2921150, truncation=13)
-
+        Examples
+        --------
+        >>> abs_vrt = vw.absolutevorticity()
+        >>> abs_vrt_t13 = vw.absolutevorticity(omega=7.2921150e-5, truncation=13)
         """
         avrt = self._api.absolutevorticity(omega=omega, truncation=truncation)
-        avrt = self._metadata(
+        return self._metadata(
             avrt,
             units="s**-1",
             standard_name="atmosphere_absolute_vorticity",
             long_name="absolute vorticity",
         )
-        return avrt
 
-    def sfvp(self, truncation=None):
-        """Streamfunction and velocity potential.
+    def sfvp(self, truncation: Optional[int] = None) -> Tuple[IrisCube, IrisCube]:
+        """
+        Calculate streamfunction and velocity potential.
 
-        **Optional argument:**
+        Parameters
+        ----------
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation
 
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation.
+        Returns
+        -------
+        streamfunction : iris.cube.Cube
+            Streamfunction field with CF-compliant attributes
+        velocity_potential : iris.cube.Cube
+            Velocity potential field with CF-compliant attributes
 
-        **Returns:**
+        See Also
+        --------
+        streamfunction : Calculate only streamfunction
+        velocitypotential : Calculate only velocity potential
 
-        *sf*, *vp*
-            The streamfunction and velocity potential respectively.
-
-        **See also:**
-
-        `~VectorWind.streamfunction`, `~VectorWind.velocitypotential`.
-
-        **Examples:**
-
-        Compute streamfunction and velocity potential::
-
-            sf, vp = w.sfvp()
-
-        Compute streamfunction and velocity potential and apply spectral
-        truncation at triangular T13::
-
-            sfT13, vpT13 = w.sfvp(truncation=13)
-
+        Examples
+        --------
+        >>> psi, chi = vw.sfvp()
+        >>> psi_t13, chi_t13 = vw.sfvp(truncation=13)
         """
         sf, vp = self._api.sfvp(truncation=truncation)
-        sf = self._metadata(
+
+        sf_cube = self._metadata(
             sf,
             units="m**2 s**-1",
             standard_name="atmosphere_horizontal_streamfunction",
             long_name="streamfunction",
         )
-        vp = self._metadata(
+
+        vp_cube = self._metadata(
             vp,
             units="m**2 s**-1",
             standard_name="atmosphere_horizontal_velocity_potential",
             long_name="velocity potential",
         )
-        return sf, vp
 
-    def streamfunction(self, truncation=None):
-        """Streamfunction.
+        return sf_cube, vp_cube
 
-        **Optional argument:**
+    def streamfunction(self, truncation: Optional[int] = None) -> IrisCube:
+        """
+        Calculate streamfunction.
 
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation.
+        Parameters
+        ----------
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation
 
-        **Returns:**
+        Returns
+        -------
+        iris.cube.Cube
+            Streamfunction field with CF-compliant attributes
 
-        *sf*
-            The streamfunction.
+        See Also
+        --------
+        sfvp : Calculate both streamfunction and velocity potential
 
-        **See also:**
-
-        `~VectorWind.sfvp`.
-
-        **Examples:**
-
-        Compute streamfunction::
-
-            sf = w.streamfunction()
-
-        Compute streamfunction and apply spectral truncation at
-        triangular T13::
-
-            sfT13 = w.streamfunction(truncation=13)
-
+        Examples
+        --------
+        >>> psi = vw.streamfunction()
+        >>> psi_t13 = vw.streamfunction(truncation=13)
         """
         sf = self._api.streamfunction(truncation=truncation)
-        sf = self._metadata(
+        return self._metadata(
             sf,
             units="m**2 s**-1",
             standard_name="atmosphere_horizontal_streamfunction",
             long_name="streamfunction",
         )
-        return sf
 
-    def velocitypotential(self, truncation=None):
-        """Velocity potential.
+    def velocitypotential(self, truncation: Optional[int] = None) -> IrisCube:
+        """
+        Calculate velocity potential.
 
-        **Optional argument:**
+        Parameters
+        ----------
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation
 
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation.
+        Returns
+        -------
+        iris.cube.Cube
+            Velocity potential field with CF-compliant attributes
 
-        **Returns:**
+        See Also
+        --------
+        sfvp : Calculate both streamfunction and velocity potential
 
-        *vp*
-            The velocity potential.
-
-        **See also:**
-
-        `~VectorWind.sfvp`.
-
-        **Examples:**
-
-        Compute velocity potential::
-
-            vp = w.velocity potential()
-
-        Compute velocity potential and apply spectral truncation at
-        triangular T13::
-
-            vpT13 = w.velocity potential(truncation=13)
-
+        Examples
+        --------
+        >>> chi = vw.velocitypotential()
+        >>> chi_t13 = vw.velocitypotential(truncation=13)
         """
         vp = self._api.velocitypotential(truncation=truncation)
-        vp = self._metadata(
+        return self._metadata(
             vp,
             units="m**2 s**-1",
             standard_name="atmosphere_horizontal_velocity_potential",
             long_name="velocity potential",
         )
-        return vp
 
-    def helmholtz(self, truncation=None):
-        """Irrotational and non-divergent components of the vector wind.
+    def helmholtz(
+        self, truncation: Optional[int] = None
+    ) -> Tuple[IrisCube, IrisCube, IrisCube, IrisCube]:
+        """
+        Perform Helmholtz decomposition of vector wind.
 
-        **Optional argument:**
+        Decomposes the wind field into irrotational (divergent) and
+        non-divergent (rotational) components.
 
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation.
+        Parameters
+        ----------
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation
 
-        **Returns:**
+        Returns
+        -------
+        u_chi : iris.cube.Cube
+            Zonal component of irrotational wind
+        v_chi : iris.cube.Cube
+            Meridional component of irrotational wind
+        u_psi : iris.cube.Cube
+            Zonal component of non-divergent wind
+        v_psi : iris.cube.Cube
+            Meridional component of non-divergent wind
 
-        *uchi*, *vchi*, *upsi*, *vpsi*
-            Zonal and meridional components of irrotational and
-            non-divergent wind components respectively.
+        See Also
+        --------
+        irrotationalcomponent : Get only irrotational component
+        nondivergentcomponent : Get only non-divergent component
 
-        **See also:**
-
-        `~VectorWind.irrotationalcomponent`,
-        `~VectorWind.nondivergentcomponent`.
-
-        **Examples:**
-
-        Compute the irrotational and non-divergent components of the
-        vector wind::
-
-            uchi, vchi, upsi, vpsi = w.helmholtz()
-
-        Compute the irrotational and non-divergent components of the
-        vector wind and apply spectral truncation at triangular T13::
-
-            uchiT13, vchiT13, upsiT13, vpsiT13 = w.helmholtz(truncation=13)
-
+        Examples
+        --------
+        >>> u_chi, v_chi, u_psi, v_psi = vw.helmholtz()
+        >>> u_chi_t13, v_chi_t13, u_psi_t13, v_psi_t13 = vw.helmholtz(truncation=13)
         """
         uchi, vchi, upsi, vpsi = self._api.helmholtz(truncation=truncation)
-        uchi = self._metadata(
+
+        uchi_cube = self._metadata(
             uchi, units="m s**-1", long_name="irrotational_eastward_wind"
         )
-        vchi = self._metadata(
+        vchi_cube = self._metadata(
             vchi, units="m s**-1", long_name="irrotational_northward_wind"
         )
-        upsi = self._metadata(
+        upsi_cube = self._metadata(
             upsi, units="m s**-1", long_name="non_divergent_eastward_wind"
         )
-        vpsi = self._metadata(
+        vpsi_cube = self._metadata(
             vpsi, units="m s**-1", long_name="non_divergent_northward_wind"
         )
-        return uchi, vchi, upsi, vpsi
 
-    def irrotationalcomponent(self, truncation=None):
-        """Irrotational (divergent) component of the vector wind.
+        return uchi_cube, vchi_cube, upsi_cube, vpsi_cube
 
-        .. note::
+    def irrotationalcomponent(
+        self, truncation: Optional[int] = None
+    ) -> Tuple[IrisCube, IrisCube]:
+        """
+        Calculate irrotational (divergent) component of vector wind.
 
-           If both the irrotational and non-divergent components are
-           required then `~VectorWind.helmholtz` should be used instead.
+        Note
+        ----
+        If both irrotational and non-divergent components are needed,
+        use `helmholtz()` method for efficiency.
 
-        **Optional argument:**
+        Parameters
+        ----------
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation
 
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation.
+        Returns
+        -------
+        u_chi : iris.cube.Cube
+            Zonal component of irrotational wind
+        v_chi : iris.cube.Cube
+            Meridional component of irrotational wind
 
-        **Returns:**
+        See Also
+        --------
+        helmholtz : Complete Helmholtz decomposition
+        nondivergentcomponent : Non-divergent component
 
-        *uchi*, *vchi*
-            The zonal and meridional components of the irrotational wind
-            respectively.
-
-        **See also:**
-
-        `~VectorWind.helmholtz`.
-
-        **Examples:**
-
-        Compute the irrotational component of the vector wind::
-
-            uchi, vchi = w.irrotationalcomponent()
-
-        Compute the irrotational component of the vector wind and apply
-        spectral truncation at triangular T13::
-
-            uchiT13, vchiT13 = w.irrotationalcomponent(truncation=13)
-
+        Examples
+        --------
+        >>> u_chi, v_chi = vw.irrotationalcomponent()
+        >>> u_chi_t13, v_chi_t13 = vw.irrotationalcomponent(truncation=13)
         """
         uchi, vchi = self._api.irrotationalcomponent(truncation=truncation)
-        uchi = self._metadata(
+
+        uchi_cube = self._metadata(
             uchi, units="m s**-1", long_name="irrotational_eastward_wind"
         )
-        vchi = self._metadata(
+        vchi_cube = self._metadata(
             vchi, units="m s**-1", long_name="irrotational_northward_wind"
         )
-        return uchi, vchi
 
-    def nondivergentcomponent(self, truncation=None):
-        """Non-divergent (rotational) component of the vector wind.
+        return uchi_cube, vchi_cube
 
-        .. note::
+    def nondivergentcomponent(
+        self, truncation: Optional[int] = None
+    ) -> Tuple[IrisCube, IrisCube]:
+        """
+        Calculate non-divergent (rotational) component of vector wind.
 
-           If both the non-divergent and irrotational components are
-           required then `~VectorWind.helmholtz` should be used instead.
+        Note
+        ----
+        If both non-divergent and irrotational components are needed,
+        use `helmholtz()` method for efficiency.
 
-        **Optional argument:**
+        Parameters
+        ----------
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation
 
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation.
+        Returns
+        -------
+        u_psi : iris.cube.Cube
+            Zonal component of non-divergent wind
+        v_psi : iris.cube.Cube
+            Meridional component of non-divergent wind
 
-        **Returns:**
+        See Also
+        --------
+        helmholtz : Complete Helmholtz decomposition
+        irrotationalcomponent : Irrotational component
 
-        *upsi*, *vpsi*
-            The zonal and meridional components of the non-divergent
-            wind respectively.
-
-        **See also:**
-
-        `~VectorWind.helmholtz`.
-
-        **Examples:**
-
-        Compute the non-divergent component of the vector wind::
-
-            upsi, vpsi = w.nondivergentcomponent()
-
-        Compute the non-divergent component of the vector wind and apply
-        spectral truncation at triangular T13::
-
-            upsiT13, vpsiT13 = w.nondivergentcomponent(truncation=13)
-
+        Examples
+        --------
+        >>> u_psi, v_psi = vw.nondivergentcomponent()
+        >>> u_psi_t13, v_psi_t13 = vw.nondivergentcomponent(truncation=13)
         """
         upsi, vpsi = self._api.nondivergentcomponent(truncation=truncation)
-        upsi = self._metadata(
+
+        upsi_cube = self._metadata(
             upsi, units="m s**-1", long_name="non_divergent_eastward_wind"
         )
-        vpsi = self._metadata(
+        vpsi_cube = self._metadata(
             vpsi, units="m s**-1", long_name="non_divergent_northward_wind"
         )
-        return upsi, vpsi
 
-    def gradient(self, chi, truncation=None):
-        """Computes the vector gradient of a scalar field on the sphere.
+        return upsi_cube, vpsi_cube
 
-        **Argument:**
-
-        *chi*
-            A scalar field. It must be a `~iris.cube.Cube`
-            with the same latitude and longitude dimensions as the
-            vector wind components that initialized the `VectorWind`
-            instance.
-
-        **Optional argument:**
-
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation.
-
-        **Returns:**
-
-        *uchi*, *vchi*
-            The zonal and meridional components of the vector gradient
-            respectively.
-
-        **Examples:**
-
-        Compute the vector gradient of absolute vorticity::
-
-            avrt = w.absolutevorticity()
-            avrt_zonal, avrt_meridional = w.gradient(avrt)
-
-        Compute the vector gradient of absolute vorticity and apply
-        spectral truncation at triangular T13::
-
-            avrt = w.absolutevorticity()
-            avrt_zonalT13, avrt_meridionalT13 = w.gradient(avrt, truncation=13)
-
+    def gradient(
+        self, chi: IrisCube, truncation: Optional[int] = None
+    ) -> Tuple[IrisCube, IrisCube]:
         """
-        if type(chi) is not Cube:
-            raise TypeError("scalar field must be an iris cube")
-        name = chi.name()
+        Calculate vector gradient of a scalar field on the sphere.
+
+        Parameters
+        ----------
+        chi : iris.cube.Cube
+            Scalar field with same latitude/longitude dimensions as wind components
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation
+
+        Returns
+        -------
+        u_gradient : iris.cube.Cube
+            Zonal component of vector gradient
+        v_gradient : iris.cube.Cube
+            Meridional component of vector gradient
+
+        Examples
+        --------
+        >>> abs_vrt = vw.absolutevorticity()
+        >>> avrt_u, avrt_v = vw.gradient(abs_vrt)
+        >>> avrt_u_t13, avrt_v_t13 = vw.gradient(abs_vrt, truncation=13)
+        """
+        if not isinstance(chi, Cube):
+            raise TypeError(
+                f"Scalar field must be iris.cube.Cube, got {type(chi).__name__}"
+            )
+
+        name = chi.name() or "field"
+
+        # Process coordinate ordering similar to initialization
         lat, lat_dim = _dim_coord_and_dim(chi, "latitude")
         lon, lon_dim = _dim_coord_and_dim(chi, "longitude")
+
+        # Ensure north-to-south latitude ordering
         if lat.points[0] < lat.points[1]:
-            # need to reverse latitude dimension
             chi = reverse(chi, lat_dim)
             lat, lat_dim = _dim_coord_and_dim(chi, "latitude")
+
+        # Reorder for API compatibility
         apiorder, reorder = get_apiorder(chi.ndim, lat_dim, lon_dim)
         chi = chi.copy()
         chi.transpose(apiorder)
+
+        # Store shape and coordinates
         ishape = chi.shape
         coords = chi.dim_coords
-        chi = to3d(chi.data)
-        uchi, vchi = self._api.gradient(chi, truncation=truncation)
+
+        # Compute gradient using standard API
+        chi_data = to3d(chi.data)
+        uchi, vchi = self._api.gradient(chi_data, truncation=truncation)
+
+        # Reshape and create cubes
         uchi = uchi.reshape(ishape)
         vchi = vchi.reshape(ishape)
-        uchi = Cube(uchi, dim_coords_and_dims=list(zip(coords, range(uchi.ndim))))
-        vchi = Cube(vchi, dim_coords_and_dims=list(zip(coords, range(vchi.ndim))))
-        uchi.transpose(reorder)
-        vchi.transpose(reorder)
-        uchi.long_name = "zonal_gradient_of_{!s}".format(name)
-        vchi.long_name = "meridional_gradient_of_{!s}".format(name)
-        return uchi, vchi
 
-    def truncate(self, field, truncation=None):
-        """Apply spectral truncation to a scalar field.
+        uchi_cube = Cube(uchi, dim_coords_and_dims=list(zip(coords, range(uchi.ndim))))
+        vchi_cube = Cube(vchi, dim_coords_and_dims=list(zip(coords, range(vchi.ndim))))
 
-        This is useful to represent other fields in a way consistent
-        with the output of other `VectorWind` methods.
+        # Restore original dimension order
+        uchi_cube.transpose(reorder)
+        vchi_cube.transpose(reorder)
 
-        **Argument:**
+        # Set descriptive names
+        uchi_cube.long_name = f"zonal_gradient_of_{name}"
+        vchi_cube.long_name = f"meridional_gradient_of_{name}"
 
-        *field*
-            A scalar field. It must be a `~iris.cube.Cube`
-            with the same latitude and longitude dimensions as the
-            vector wind components that initialized the `VectorWind`
-            instance.
+        return uchi_cube, vchi_cube
 
-        **Optional argument:**
-
-        *truncation*
-            Truncation limit (triangular truncation) for the spherical
-            harmonic computation. If not specified it will default to
-            *nlats - 1* where *nlats* is the number of latitudes.
-
-        **Returns:**
-
-        *truncated_field*
-            The field with spectral truncation applied.
-
-        **Examples:**
-
-        Truncate a scalar field to the computational resolution of the
-        `VectorWind` instance::
-
-            scalar_field_truncated = w.truncate(scalar_field)
-
-        Truncate a scalar field to T21::
-
-            scalar_field_T21 = w.truncate(scalar_field, truncation=21)
-
+    def truncate(self, field: IrisCube, truncation: Optional[int] = None) -> IrisCube:
         """
-        if type(field) is not Cube:
-            raise TypeError("scalar field must be an iris cube")
+        Apply spectral truncation to a scalar field.
+
+        This is useful to represent other fields consistently with the output
+        of other VectorWind methods.
+
+        Parameters
+        ----------
+        field : iris.cube.Cube
+            Scalar field with same latitude/longitude dimensions as wind components
+        truncation : int, optional
+            Triangular truncation limit. If None, defaults to nlat-1
+
+        Returns
+        -------
+        iris.cube.Cube
+            Field with spectral truncation applied
+
+        Examples
+        --------
+        >>> field_trunc = vw.truncate(scalar_field)
+        >>> field_t21 = vw.truncate(scalar_field, truncation=21)
+        """
+        if not isinstance(field, Cube):
+            raise TypeError(f"Field must be iris.cube.Cube, got {type(field).__name__}")
+
+        # Process coordinate ordering
         lat, lat_dim = _dim_coord_and_dim(field, "latitude")
         lon, lon_dim = _dim_coord_and_dim(field, "longitude")
+
+        # Ensure north-to-south latitude ordering
         if lat.points[0] < lat.points[1]:
-            # need to reverse latitude dimension
             field = reverse(field, lat_dim)
             lat, lat_dim = _dim_coord_and_dim(field, "latitude")
+
+        # Reorder for API compatibility
         apiorder, reorder = get_apiorder(field.ndim, lat_dim, lon_dim)
         field = field.copy()
         field.transpose(apiorder)
+
+        # Store shape and apply truncation
         ishape = field.shape
         fielddata = to3d(field.data)
         fieldtrunc = self._api.truncate(fielddata, truncation=truncation)
+
+        # Update field data and restore dimension order
         field.data = fieldtrunc.reshape(ishape)
         field.transpose(reorder)
+
         return field
 
 
-def _dim_coord_and_dim(cube, coord):
+def _dim_coord_and_dim(cube: IrisCube, coord: str) -> Tuple[Any, int]:
     """
-    Retrieve a given dimension coordinate from a `~iris.cube.Cube` and
-    the dimension number it corresponds to.
+    Retrieve a dimension coordinate from an Iris cube and its dimension index.
 
+    Parameters
+    ----------
+    cube : iris.cube.Cube
+        Input cube to search
+    coord : str
+        Name of coordinate to find (e.g., 'latitude', 'longitude')
+
+    Returns
+    -------
+    coordinate : iris.coords.DimCoord
+        Found dimension coordinate
+    dim_index : int
+        Dimension index of the coordinate
+
+    Raises
+    ------
+    ValueError
+        If coordinate not found or multiple coordinates found
     """
+    # Find coordinates matching the name
     coords = [c for c in cube.dim_coords if coord in c.name()]
+
     if len(coords) > 1:
+        raise ValueError(f"Multiple {coord} coordinates not allowed: {coords}")
+
+    if not coords:
+        raise ValueError(f"Cannot find {coord} coordinate in cube {cube}")
+
+    coordinate = coords[0]
+    coord_dims = cube.coord_dims(coordinate)
+
+    if len(coord_dims) != 1:
         raise ValueError(
-            "multiple {!s} coordinates not " "allowed: {!r}".format(coord, cube)
+            f"Multiple dimensions with {coord} coordinate not allowed: {coord_dims}"
         )
-    try:
-        c = coords[0]
-    except IndexError:
-        raise ValueError(
-            "cannot get {!s} coordinate " "from cube {!r}".format(coord, cube)
-        )
-    c_dim = cube.coord_dims(c)
-    if len(c_dim) != 1:
-        raise ValueError(
-            "multiple dimensions with {!s} coordinate "
-            "not allowed: {!r}".format(coord, cube)
-        )
-    c_dim = c_dim[0]
-    return c, c_dim
+
+    dim_index = coord_dims[0]
+    return coordinate, dim_index
