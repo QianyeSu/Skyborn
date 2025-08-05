@@ -10,6 +10,7 @@ This section contains interactive Jupyter notebooks demonstrating various Skybor
    :caption: Available Notebooks:
 
    ecs_emergent_constraints_analysis.ipynb
+   windspharm_tutorial.ipynb
 
 Emergent Constraints Analysis
 -----------------------------
@@ -32,6 +33,29 @@ demonstration of emergent constraint methods for climate sensitivity analysis.
 * Applying observational constraints
 * Quantifying uncertainty reduction
 * Visualizing results
+
+Vector Wind Analysis
+--------------------
+
+The :doc:`windspharm_tutorial` notebook demonstrates spherical harmonic vector wind
+analysis using the Skyborn windspharm module.
+
+**Key Features:**
+
+* Spherical harmonic transforms
+* Vorticity and divergence calculations
+* Helmholtz decomposition
+* Streamfunction and velocity potential
+* Time series analysis
+
+**Topics Covered:**
+
+* Creating realistic wind data
+* Computing dynamical quantities
+* Decomposing wind into components
+* Visualizing results
+* Performance optimization
+* Error handling
 
 Getting Started
 ---------------
