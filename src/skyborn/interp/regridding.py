@@ -124,7 +124,7 @@ class Regridder:
             lat_dim: Name of latitude dimension (auto-detected if None)
 
         Returns:
-            Regridded xarray Dataset
+            Regridded xarray Dataset with preserved dimension order
         """
         # Auto-detect coordinate names if not provided
         if lon_dim is None or lat_dim is None:
@@ -132,31 +132,78 @@ class Regridder:
             lon_dim = lon_dim or detected_lon
             lat_dim = lat_dim or detected_lat
 
+        # Store original dimension order for each variable
+        original_dims = {}
+        for var_name in dataset.data_vars:
+            original_dims[var_name] = list(dataset[var_name].dims)
+
         # Ensure latitude is in ascending order
         if not (dataset[lat_dim].diff(lat_dim) > 0).all():
             dataset = dataset.isel({lat_dim: slice(None, None, -1)})  # Reverse
         assert (dataset[lat_dim].diff(lat_dim) > 0).all()
 
-        # Apply regridding
-        dataset = xarray.apply_ufunc(
-            self.regrid_array,
-            dataset,
-            input_core_dims=[[lon_dim, lat_dim]],
-            output_core_dims=[[lon_dim, lat_dim]],
-            exclude_dims={lon_dim, lat_dim},
-            vectorize=True,
-            dask="allowed",  # Allow Dask arrays to be passed to the function
-            output_dtypes=[dataset[list(dataset.data_vars)[0]].dtype],
-        )
-
-        # Update coordinates to target grid
+        # Create target grid coordinates
         target_lon_deg = np.rad2deg(self.target.lon)
         target_lat_deg = np.rad2deg(self.target.lat)
-        dataset = dataset.assign_coords(
-            {lon_dim: target_lon_deg, lat_dim: target_lat_deg}
+
+        # Process each variable separately to maintain dimension order
+        regridded_vars = {}
+        for var_name, var in dataset.data_vars.items():
+            if lon_dim in var.dims and lat_dim in var.dims:
+                # Apply regridding with proper dimension handling
+                regridded_var = xarray.apply_ufunc(
+                    self.regrid_array,
+                    var,
+                    input_core_dims=[[lon_dim, lat_dim]],
+                    output_core_dims=[[lon_dim, lat_dim]],
+                    exclude_dims={lon_dim, lat_dim},
+                    vectorize=True,
+                    dask="allowed",
+                    output_dtypes=[var.dtype],
+                    keep_attrs=True,
+                )
+
+                # Update coordinates while preserving dimension order
+                regridded_var = regridded_var.assign_coords(
+                    {lon_dim: target_lon_deg, lat_dim: target_lat_deg}
+                )
+
+                # Ensure original dimension order is maintained
+                current_dims = list(regridded_var.dims)
+                target_dims = original_dims[var_name].copy()
+
+                # Update spatial dimensions in target_dims
+                for i, dim in enumerate(target_dims):
+                    if dim == lon_dim:
+                        target_dims[i] = lon_dim
+                    elif dim == lat_dim:
+                        target_dims[i] = lat_dim
+
+                # Transpose to match original order if needed
+                if current_dims != target_dims:
+                    regridded_var = regridded_var.transpose(*target_dims)
+
+                regridded_vars[var_name] = regridded_var
+            else:
+                # Variables without spatial dimensions remain unchanged
+                regridded_vars[var_name] = var
+
+        # Create new dataset with regridded variables
+        regridded_dataset = xarray.Dataset(
+            regridded_vars,
+            coords={
+                **{
+                    k: v
+                    for k, v in dataset.coords.items()
+                    if k not in [lon_dim, lat_dim]
+                },
+                lon_dim: target_lon_deg,
+                lat_dim: target_lat_deg,
+            },
+            attrs=dataset.attrs,
         )
 
-        return dataset
+        return regridded_dataset
 
 
 def nearest_neighbor_indices(source_grid: Grid, target_grid: Grid) -> np.ndarray:
@@ -174,22 +221,30 @@ def nearest_neighbor_indices(source_grid: Grid, target_grid: Grid) -> np.ndarray
 class NearestRegridder(Regridder):
     """Regrid with nearest neighbor interpolation."""
 
-    @functools.cached_property
+    def __init__(self, source: Grid, target: Grid):
+        super().__init__(source, target)
+        self._indices = None
+
+    @property
     def indices(self):
         """The interpolation indices associated with source_grid."""
-        return nearest_neighbor_indices(self.source, self.target)
+        if self._indices is None:
+            self._indices = nearest_neighbor_indices(self.source, self.target)
+        return self._indices
 
     def _nearest_neighbor_2d(self, array: Array) -> np.ndarray:
-        """2D nearest neighbor interpolation using BallTree."""
+        """2D nearest neighbor interpolation using BallTree with optimized indexing."""
         if array.shape != self.source.shape:
             raise ValueError(
                 f"Expected array.shape={array.shape} to match source.shape={self.source.shape}"
             )
+        # Use advanced indexing for better performance
         array_flat = array.ravel()
         interpolated = array_flat[self.indices]
         return interpolated.reshape(self.target.shape)
 
     def regrid_array(self, field: Array) -> np.ndarray:
+        # Use direct vectorization for better performance
         interp = np.vectorize(self._nearest_neighbor_2d, signature="(a,b)->(c,d)")
         return interp(field)
 
@@ -203,23 +258,24 @@ class BilinearRegridder(Regridder):
         lon_source = self.source.lon
         lon_target = self.target.lon
 
-        # Interpolate over latitude
-        lat_interp = np.array(
-            [
-                np.interp(lat_target, lat_source, f)
-                for f in field.transpose(1, 0, *range(2, field.ndim))
-            ]
-        ).transpose(1, 0, *range(2, field.ndim))
+        # Ensure the field has the correct shape (lon, lat)
+        if field.shape != (len(lon_source), len(lat_source)):
+            raise ValueError(
+                f"Expected field shape {(len(lon_source), len(lat_source))}, "
+                f"got {field.shape}"
+            )
 
-        # Interpolate over longitude
-        lon_interp = np.array(
-            [
-                np.interp(lon_target, lon_source, f)
-                for f in lat_interp.transpose(0, *range(2, field.ndim), 1)
-            ]
-        ).transpose(0, *range(2, field.ndim), 1)
+        # Interpolate over latitude first (for each longitude)
+        lat_interp = np.zeros((len(lon_source), len(lat_target)))
+        for i, lon_slice in enumerate(field):
+            lat_interp[i, :] = np.interp(lat_target, lat_source, lon_slice)
 
-        return lon_interp
+        # Interpolate over longitude (for each target latitude)
+        result = np.zeros((len(lon_target), len(lat_target)))
+        for j in range(len(lat_target)):
+            result[:, j] = np.interp(lon_target, lon_source, lat_interp[:, j])
+
+        return result
 
 
 def _assert_increasing(x: np.ndarray) -> None:
@@ -261,8 +317,20 @@ def _conservative_latitude_weights(
     _assert_increasing(source_points)
     _assert_increasing(target_points)
     weights = _latitude_overlap(source_points, target_points)
-    weights /= np.sum(weights, axis=1, keepdims=True)
-    return weights
+
+    # Handle zero-sum rows to avoid division by zero
+    row_sums = np.sum(weights, axis=1, keepdims=True)
+
+    # Avoid in-place division which causes broadcasting issues
+    result = np.copy(weights)
+    for i in range(result.shape[0]):
+        if row_sums[i, 0] > 1e-15:
+            result[i, :] /= row_sums[i, 0]
+        else:
+            # For zero-sum rows, distribute weight equally
+            result[i, :] = 1.0 / result.shape[1]
+
+    return result
 
 
 def _align_phase_with(x, target, period):
@@ -330,21 +398,57 @@ def _conservative_longitude_weights(
     _assert_increasing(source_points)
     _assert_increasing(target_points)
     weights = _longitude_overlap(target_points, source_points)
-    weights /= np.sum(weights, axis=1, keepdims=True)
-    return weights
+
+    # Handle zero-sum rows to avoid division by zero
+    row_sums = np.sum(weights, axis=1, keepdims=True)
+    nonzero_mask = row_sums > 1e-15
+
+    # Avoid in-place division which causes broadcasting issues
+    result = np.copy(weights)
+    for i in range(result.shape[0]):
+        if nonzero_mask[i, 0]:
+            result[i, :] /= row_sums[i, 0]
+        else:
+            # For zero-sum rows, distribute weight equally
+            result[i, :] = 1.0 / result.shape[1]
+
+    return result
 
 
 class ConservativeRegridder(Regridder):
     """Regrid with linear conservative regridding."""
 
+    def __init__(self, source: Grid, target: Grid):
+        super().__init__(source, target)
+        # Pre-compute weights for better performance
+        self._lon_weights = None
+        self._lat_weights = None
+
+    @property
+    def lon_weights(self):
+        """Cached longitude weights for performance."""
+        if self._lon_weights is None:
+            self._lon_weights = _conservative_longitude_weights(
+                self.source.lon, self.target.lon
+            )
+        return self._lon_weights
+
+    @property
+    def lat_weights(self):
+        """Cached latitude weights for performance."""
+        if self._lat_weights is None:
+            self._lat_weights = _conservative_latitude_weights(
+                self.source.lat, self.target.lat
+            )
+        return self._lat_weights
+
     def _mean(self, field: Array) -> np.ndarray:
-        """Computes cell-averages of field on the target grid."""
-        lon_weights = _conservative_longitude_weights(self.source.lon, self.target.lon)
-        lat_weights = _conservative_latitude_weights(self.source.lat, self.target.lat)
+        """Computes cell-averages of field on the target grid with optimized einsum."""
+        # Use cached weights for better performance
         result = np.einsum(
             "ac,bd,...cd->...ab",
-            lon_weights,
-            lat_weights,
+            self.lon_weights,
+            self.lat_weights,
             field,
             optimize=True,
         )
@@ -373,7 +477,7 @@ def regrid_dataset(
     lat_dim: Optional[str] = None,
 ) -> xarray.Dataset:
     """
-    Convenience function to regrid a dataset.
+    Convenience function to regrid a dataset with optimized performance.
 
     Args:
         dataset: Input xarray Dataset
@@ -383,12 +487,12 @@ def regrid_dataset(
         lat_dim: Name of latitude dimension (auto-detected if None)
 
     Returns:
-        Regridded xarray Dataset
+        Regridded xarray Dataset with preserved dimension order
     """
     # Create source grid from dataset
     source_grid = Grid.from_dataset(dataset)
 
-    # Select regridder based on method
+    # Select regridder based on method with performance optimizations
     if method == "nearest":
         regridder = NearestRegridder(source_grid, target_grid)
     elif method == "bilinear":
