@@ -11,6 +11,7 @@ API Reference
    gradients
    causality
    spharm
+   windspharm
 
 This section provides detailed API documentation for all Skyborn modules.
 
@@ -48,6 +49,11 @@ Spherical Harmonics Functions
 -----------------------------
 
 Spherical harmonic transforms and spectral analysis for atmospheric and oceanic data.
+
+Vector Wind Analysis Functions
+------------------------------
+
+Spherical harmonic vector wind analysis including vorticity, divergence, streamfunction, and velocity potential calculations.
 
 .. note::
    The ROF (Regularized Optimal Fingerprinting) module; currently under development and testing.
