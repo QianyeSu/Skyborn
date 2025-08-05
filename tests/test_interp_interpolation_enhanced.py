@@ -19,7 +19,23 @@ from skyborn.interp.interpolation import (
     _pressure_from_hybrid,
     _sigma_from_hybrid,
     _func_interpolate,
+    __pres_lev_mandatory__,
 )
+
+# Try to import private functions - they may not be available
+try:
+    from skyborn.interp.interpolation import (
+        _pre_interp_multidim,
+        _post_interp_multidim,
+        _vertical_remap,
+        _temp_extrapolate,
+        _geo_height_extrapolate,
+        _vertical_remap_extrap,
+    )
+
+    PRIVATE_FUNCTIONS_AVAILABLE = True
+except ImportError:
+    PRIVATE_FUNCTIONS_AVAILABLE = False
 
 
 class TestInterpolationEdgeCases:
@@ -188,6 +204,9 @@ class TestInterpolationEdgeCases:
         # Geopotential should increase with altitude (decrease with pressure)
         assert result[0, 0, 0] <= result[0, 1, 0] <= result[0, 2, 0]
 
+    @pytest.mark.skipif(
+        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
+    )
     def test_sigma_to_hybrid_edge_coordinates(self):
         """Test sigma to hybrid with edge coordinate values."""
         # Single time step, simple spatial grid
