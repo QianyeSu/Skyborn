@@ -45,6 +45,7 @@ jobs:
         run: |
           pytest tests/ \
             --cov=src/skyborn \
+            --cov-omit="*/windspharm/*,*/spharm/*" \
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing \
