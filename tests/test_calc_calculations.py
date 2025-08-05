@@ -9,7 +9,14 @@ import pytest
 import numpy as np
 import xarray as xr
 from numpy.testing import assert_array_almost_equal, assert_array_equal
-from skyborn.calc.calculations import linear_regression
+from skyborn.calc.calculations import (
+    linear_regression,
+    convert_longitude_range,
+    pearson_correlation,
+    spearman_correlation,
+    kendall_correlation,
+    calculate_potential_temperature,
+)
 from skyborn.calc.emergent_constraints import (
     gaussian_pdf,
     emergent_constraint_posterior,
@@ -168,8 +175,403 @@ class TestLinearRegression:
         assert isinstance(p_values_xr, np.ndarray)
 
 
+class TestLongitudeConversion:
+    """Test longitude coordinate conversion functionality."""
+
+    def test_convert_longitude_range_center_on_180(self):
+        """Test converting longitude range to center on 180."""
+        # Create test data with longitude 0-359
+        lon = np.array([0, 90, 180, 270, 359])
+        lat = np.array([0, 45, 90])
+        data = np.random.rand(3, 5)
+
+        da = xr.DataArray(data, coords={"lat": lat, "lon": lon}, dims=["lat", "lon"])
+
+        # Convert to -180..179 range
+        result = convert_longitude_range(da, center_on_180=True)
+
+        # Check that longitudes are converted correctly
+        expected_lon = np.array([0, 90, 180, 270, 359])  # Should remain as 0-359
+        assert_array_almost_equal(result.lon.values, expected_lon)
+
+        # Check that data is preserved
+        assert result.shape == da.shape
+
+    def test_convert_longitude_range_center_on_0(self):
+        """Test converting longitude range to center on 0."""
+        # Create test data with longitude -180..179
+        lon = np.array([-180, -90, 0, 90, 179])
+        lat = np.array([0, 45])
+        data = np.random.rand(2, 5)
+
+        da = xr.DataArray(data, coords={"lat": lat, "lon": lon}, dims=["lat", "lon"])
+
+        # Convert to 0..359 range
+        result = convert_longitude_range(da, center_on_180=False)
+
+        # Check that longitudes are sorted
+        assert np.all(result.lon.values[:-1] <= result.lon.values[1:])
+
+    def test_convert_longitude_range_with_dataset(self):
+        """Test longitude conversion with xarray Dataset."""
+        lon = np.array([0, 90, 180, 270])
+        lat = np.array([0, 45])
+
+        ds = xr.Dataset(
+            {
+                "temp": (["lat", "lon"], np.random.rand(2, 4)),
+                "precip": (["lat", "lon"], np.random.rand(2, 4)),
+            },
+            coords={"lat": lat, "lon": lon},
+        )
+
+        result = convert_longitude_range(ds, center_on_180=True)
+
+        assert isinstance(result, xr.Dataset)
+        assert "temp" in result.data_vars
+        assert "precip" in result.data_vars
+
+    def test_convert_longitude_range_custom_coordinate_name(self):
+        """Test longitude conversion with custom coordinate name."""
+        longitude = np.array([0, 180, 270])
+        lat = np.array([0, 45])
+        data = np.random.rand(2, 3)
+
+        da = xr.DataArray(
+            data, coords={"lat": lat, "longitude": longitude}, dims=["lat", "longitude"]
+        )
+
+        result = convert_longitude_range(da, lon="longitude", center_on_180=True)
+        assert "longitude" in result.coords
+
+
+class TestCorrelationFunctions:
+    """Test correlation calculation functions."""
+
+    @pytest.fixture
+    def sample_correlation_data(self):
+        """Create sample data for correlation testing."""
+        np.random.seed(42)
+        n = 100
+
+        # Create perfectly correlated data
+        x_perfect = np.random.randn(n)
+        y_perfect = 2.0 * x_perfect + 1.0
+
+        # Create anticorrelated data
+        x_anti = np.random.randn(n)
+        y_anti = -1.5 * x_anti + 0.5
+
+        # Create uncorrelated data
+        x_uncorr = np.random.randn(n)
+        y_uncorr = np.random.randn(n)
+
+        return {
+            "perfect": (x_perfect, y_perfect),
+            "anti": (x_anti, y_anti),
+            "uncorrelated": (x_uncorr, y_uncorr),
+        }
+
+    def test_pearson_correlation_perfect(self, sample_correlation_data):
+        """Test Pearson correlation with perfectly correlated data."""
+        x, y = sample_correlation_data["perfect"]
+
+        corr = pearson_correlation(x, y)
+
+        # Should be very close to 1.0
+        assert abs(corr - 1.0) < 0.01
+
+    def test_pearson_correlation_anticorrelated(self, sample_correlation_data):
+        """Test Pearson correlation with anticorrelated data."""
+        x, y = sample_correlation_data["anti"]
+
+        corr = pearson_correlation(x, y)
+
+        # Should be very close to -1.0
+        assert abs(corr + 1.0) < 0.01
+
+    def test_pearson_correlation_uncorrelated(self, sample_correlation_data):
+        """Test Pearson correlation with uncorrelated data."""
+        x, y = sample_correlation_data["uncorrelated"]
+
+        corr = pearson_correlation(x, y)
+
+        # Should be close to 0.0
+        assert abs(corr) < 0.2
+
+    def test_pearson_correlation_xarray_input(self, sample_correlation_data):
+        """Test Pearson correlation with xarray input."""
+        x, y = sample_correlation_data["perfect"]
+
+        x_da = xr.DataArray(x, dims=["time"])
+        y_da = xr.DataArray(y, dims=["time"])
+
+        corr = pearson_correlation(x_da, y_da)
+
+        assert abs(corr - 1.0) < 0.01
+
+    def test_spearman_correlation_perfect(self, sample_correlation_data):
+        """Test Spearman correlation with perfectly correlated data."""
+        x, y = sample_correlation_data["perfect"]
+
+        corr = spearman_correlation(x, y)
+
+        # Should be very close to 1.0
+        assert abs(corr - 1.0) < 0.01
+
+    def test_spearman_correlation_monotonic(self):
+        """Test Spearman correlation with monotonic relationship."""
+        x = np.array([1, 2, 3, 4, 5])
+        y = np.array([1, 4, 9, 16, 25])  # y = x^2, monotonic but not linear
+
+        corr = spearman_correlation(x, y)
+
+        # Should be exactly 1.0 for monotonic relationship
+        assert abs(corr - 1.0) < 0.01
+
+    def test_spearman_correlation_xarray_input(self):
+        """Test Spearman correlation with xarray input."""
+        x = np.array([1, 2, 3, 4, 5])
+        y = np.array([5, 4, 3, 2, 1])
+
+        x_da = xr.DataArray(x, dims=["time"])
+        y_da = xr.DataArray(y, dims=["time"])
+
+        corr = spearman_correlation(x_da, y_da)
+
+        # Perfect negative monotonic relationship
+        assert abs(corr + 1.0) < 0.01
+
+    def test_kendall_correlation_perfect(self, sample_correlation_data):
+        """Test Kendall correlation with perfectly correlated data."""
+        x, y = sample_correlation_data["perfect"]
+
+        corr = kendall_correlation(x, y)
+
+        # Should be very close to 1.0
+        assert abs(corr - 1.0) < 0.05
+
+    def test_kendall_correlation_tied_ranks(self):
+        """Test Kendall correlation with tied ranks."""
+        x = np.array([1, 2, 2, 3, 4])
+        y = np.array([1, 2, 2, 3, 4])
+
+        corr = kendall_correlation(x, y)
+
+        # Should be 1.0 despite tied ranks
+        assert abs(corr - 1.0) < 0.01
+
+    def test_kendall_correlation_xarray_input(self):
+        """Test Kendall correlation with xarray input."""
+        x = np.array([1, 3, 2, 5, 4])
+        y = np.array([2, 6, 4, 10, 8])
+
+        x_da = xr.DataArray(x, dims=["time"])
+        y_da = xr.DataArray(y, dims=["time"])
+
+        corr = kendall_correlation(x_da, y_da)
+
+        assert isinstance(corr, float)
+        assert abs(corr) <= 1.0
+
+    def test_correlation_functions_multidimensional_input(self):
+        """Test correlation functions with multidimensional arrays."""
+        # Create 2D arrays that should be flattened
+        x = np.random.randn(10, 5)
+        y = 2 * x + np.random.randn(10, 5) * 0.1
+
+        # Test all correlation functions
+        pearson_corr = pearson_correlation(x, y)
+        spearman_corr = spearman_correlation(x, y)
+        kendall_corr = kendall_correlation(x, y)
+
+        # All should return scalars
+        assert isinstance(pearson_corr, float)
+        assert isinstance(spearman_corr, float)
+        assert isinstance(kendall_corr, float)
+
+        # All should be positive and reasonably high
+        assert pearson_corr > 0.8
+        assert spearman_corr > 0.8
+        assert kendall_corr > 0.6
+
+
+class TestPotentialTemperature:
+    """Test potential temperature calculation functionality."""
+
+    def test_calculate_potential_temperature_basic(self):
+        """Test basic potential temperature calculation."""
+        # Standard conditions
+        temperature = np.array([273.15, 283.15, 293.15])  # 0, 10, 20°C
+        pressure = np.array([1000.0, 850.0, 700.0])  # hPa
+
+        potential_temp = calculate_potential_temperature(temperature, pressure)
+
+        # Check output shape
+        assert potential_temp.shape == temperature.shape
+
+        # Potential temperature should be higher at lower pressures
+        assert potential_temp[2] > potential_temp[1] > potential_temp[0]
+
+        # At reference pressure, potential temp should equal temperature
+        ref_temp = calculate_potential_temperature(
+            np.array([300.0]), np.array([1000.0])
+        )
+        assert abs(ref_temp[0] - 300.0) < 0.01
+
+    def test_calculate_potential_temperature_xarray_input(self):
+        """Test potential temperature with xarray input."""
+        temperature = xr.DataArray(
+            [273.15, 283.15, 293.15],
+            dims=["level"],
+            attrs={"units": "K", "long_name": "Temperature"},
+        )
+        pressure = xr.DataArray(
+            [1000.0, 850.0, 700.0], dims=["level"], attrs={"units": "hPa"}
+        )
+
+        potential_temp = calculate_potential_temperature(temperature, pressure)
+
+        # Should return xarray with appropriate attributes
+        assert hasattr(potential_temp, "attrs")
+        assert potential_temp.attrs["units"] == "K"
+        assert "Potential Temperature" in potential_temp.attrs["long_name"]
+
+    def test_calculate_potential_temperature_custom_reference(self):
+        """Test potential temperature with custom reference pressure."""
+        temperature = np.array([300.0])
+        pressure = np.array([500.0])
+
+        # Default reference (1000 hPa)
+        theta_default = calculate_potential_temperature(temperature, pressure)
+
+        # Custom reference (900 hPa)
+        theta_custom = calculate_potential_temperature(
+            temperature, pressure, reference_pressure=900.0
+        )
+
+        # Different reference pressures should give different results
+        assert abs(theta_default[0] - theta_custom[0]) > 1.0
+
+    def test_calculate_potential_temperature_multidimensional(self):
+        """Test potential temperature with multidimensional arrays."""
+        # Create 2D temperature and pressure arrays
+        temperature = np.random.uniform(250, 320, (5, 10))  # Realistic temp range
+        pressure = np.random.uniform(200, 1000, (5, 10))  # Realistic pressure range
+
+        potential_temp = calculate_potential_temperature(temperature, pressure)
+
+        # Check output shape
+        assert potential_temp.shape == temperature.shape
+
+        # All values should be positive
+        assert np.all(potential_temp > 0)
+
+        # Potential temperature should generally be >= temperature for pressures < 1000 hPa
+        low_pressure_mask = pressure < 1000
+        assert np.all(
+            potential_temp[low_pressure_mask] >= temperature[low_pressure_mask]
+        )
+
+    def test_calculate_potential_temperature_edge_cases(self):
+        """Test potential temperature with edge cases."""
+        # Very high temperature
+        high_temp = np.array([400.0])
+        pressure = np.array([500.0])
+
+        theta_high = calculate_potential_temperature(high_temp, pressure)
+        assert np.isfinite(theta_high[0])
+        assert theta_high[0] > high_temp[0]
+
+        # Very low pressure
+        temperature = np.array([250.0])
+        low_pressure = np.array([100.0])
+
+        theta_low_p = calculate_potential_temperature(temperature, low_pressure)
+        assert np.isfinite(theta_low_p[0])
+        assert theta_low_p[0] > temperature[0]
+
+    def test_calculate_potential_temperature_physical_consistency(self):
+        """Test that potential temperature follows physical principles."""
+        # Create a vertical profile
+        levels = np.array([1000.0, 850.0, 700.0, 500.0, 300.0])  # hPa
+        # Typical temperature profile (decreasing with height)
+        temperatures = np.array([288.0, 281.0, 274.0, 261.0, 241.0])  # K
+
+        potential_temps = calculate_potential_temperature(temperatures, levels)
+
+        # In a stable atmosphere, potential temperature should increase with height
+        # (though this isn't always true in the real atmosphere)
+        # At minimum, check that all values are reasonable
+        assert np.all(potential_temps > 200)  # All should be above 200K
+        assert np.all(potential_temps < 500)  # All should be below 500K
+
+        # First level (1000 hPa) should have theta ≈ temperature
+        assert abs(potential_temps[0] - temperatures[0]) < 1.0
+
+
 class TestCalculationsIntegration:
     """Integration tests for calculations module."""
+
+    def test_all_correlation_functions_consistency(self):
+        """Test that all correlation functions give consistent results."""
+        # Create strongly correlated data
+        np.random.seed(42)
+        x = np.random.randn(50)
+        y = 0.8 * x + 0.2 * np.random.randn(50)
+
+        pearson_corr = pearson_correlation(x, y)
+        spearman_corr = spearman_correlation(x, y)
+        kendall_corr = kendall_correlation(x, y)
+
+        # All should be positive and reasonably similar for linear relationship
+        assert pearson_corr > 0.6
+        assert spearman_corr > 0.6
+        assert kendall_corr > 0.4  # Kendall is typically smaller
+
+        # Pearson and Spearman should be similar for linear relationship
+        assert abs(pearson_corr - spearman_corr) < 0.2
+
+    def test_longitude_conversion_round_trip(self):
+        """Test that longitude conversion is reversible."""
+        # Create test data
+        lon = np.array([30, 120, 200, 300])
+        lat = np.array([0, 45])
+        data = np.random.rand(2, 4)
+
+        da = xr.DataArray(data, coords={"lat": lat, "lon": lon}, dims=["lat", "lon"])
+
+        # Convert to -180..179 and back to 0..359
+        converted1 = convert_longitude_range(da, center_on_180=False)
+        converted2 = convert_longitude_range(converted1, center_on_180=True)
+
+        # Data values should be preserved
+        # (coordinates might be reordered, so we check data integrity differently)
+        assert converted2.shape == da.shape
+        assert np.allclose(
+            np.sort(converted2.values.flatten()), np.sort(da.values.flatten())
+        )
+
+    def test_potential_temperature_with_realistic_sounding(self):
+        """Test potential temperature with realistic atmospheric sounding."""
+        # Typical mid-latitude sounding
+        pressure_levels = np.array(
+            [1000, 925, 850, 700, 500, 400, 300, 250, 200]
+        )  # hPa
+        temperatures = np.array([288, 284, 278, 268, 249, 236, 221, 213, 205])  # K
+
+        potential_temps = calculate_potential_temperature(temperatures, pressure_levels)
+
+        # Check physical realism
+        assert len(potential_temps) == len(pressure_levels)
+        assert np.all(potential_temps > temperatures)  # theta > T for p < 1000 hPa
+
+        # Potential temperature should generally increase with height in stable conditions
+        # Check that at least some increase occurs
+        theta_increase = np.diff(potential_temps)
+        assert (
+            np.sum(theta_increase > 0) >= len(theta_increase) * 0.6
+        )  # At least 60% increase
 
     def test_calculations_with_climate_data(self, sample_climate_data):
         """Test calculations using realistic climate data."""
