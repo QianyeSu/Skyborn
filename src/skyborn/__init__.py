@@ -46,4 +46,4 @@ from . import calc
 from . import spharm
 from . import windspharm
 
-__version__ = "0.3.8"  # Updated to version 0.3.8
+__version__ = "0.3.9"  # Updated to version 0.3.9
