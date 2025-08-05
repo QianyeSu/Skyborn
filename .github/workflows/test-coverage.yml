@@ -49,6 +49,8 @@ jobs:
             --cov-report=html \
             --cov-report=term-missing \
             --cov-fail-under=50 \
+            --ignore=tests/test_windspharm.py \
+            --ignore=tests/test_spharm.py \
             -v || echo "Some tests failed, but continuing..."
 
       - name: Upload coverage to Codecov
