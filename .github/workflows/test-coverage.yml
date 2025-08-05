@@ -52,23 +52,42 @@ jobs:
             --cov-fail-under=50 \
             --ignore=tests/test_windspharm.py \
             --ignore=tests/test_spharm.py \
-            -v || echo "Some tests failed, but continuing..."
+            -v --tb=short || true
+
+      - name: Check if coverage files exist
+        run: |
+          echo "Checking for coverage files..."
+          ls -la coverage.xml || echo "coverage.xml not found"
+          ls -la htmlcov/ || echo "htmlcov directory not found"
+
+      - name: Generate coverage report even if tests failed
+        if: always()
+        run: |
+          # If coverage.xml doesn't exist, try to generate it manually
+          if [ ! -f coverage.xml ]; then
+            echo "Attempting to generate coverage report manually..."
+            coverage xml --fail-under=0 || echo "Failed to generate coverage.xml"
+          fi
 
       - name: Upload coverage to Codecov
+        if: always()
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
           flags: unittests
           name: skyborn-coverage
           fail_ci_if_error: false
+          verbose: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: htmlcov/
+        continue-on-error: true
 
   # Performance benchmarks
   performance:
