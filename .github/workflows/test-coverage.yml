@@ -50,7 +50,7 @@ jobs:
             --cov-report=html \
             --cov-report=term-missing \
             --cov-fail-under=50 \
-            -v --tb=short || true
+            -v --tb=short
 
       - name: Check if coverage files exist
         run: |
