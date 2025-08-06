@@ -5,6 +5,7 @@ windspharm
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
 
 Overview
 --------
@@ -31,7 +32,7 @@ Main Features
 * **Comprehensive Validation**: Thorough input validation and error handling
 
 Real-World Application Examples
-------------------------------
+-----------------------------------
 
 **Computing Divergent Wind Components from 4D Data**
 
@@ -49,6 +50,7 @@ VectorWind
    :members:
    :inherited-members:
    :show-inheritance:
+   :noindex:
 
    .. rubric:: Methods
 
@@ -76,8 +78,6 @@ VectorWind
    .. autosummary::
 
       ~VectorWind.truncate
-      ~VectorWind.nlat
-      ~VectorWind.nlon
 
 Standard Interface
 ------------------
@@ -86,6 +86,7 @@ Standard Interface
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
 
 Tools and Utilities
 -------------------
@@ -94,6 +95,7 @@ Tools and Utilities
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
 
 **Key Functions for Multi-dimensional Data Processing**
 
@@ -229,6 +231,7 @@ Common Functions
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
 
 xarray Interface
 ----------------
@@ -237,6 +240,7 @@ xarray Interface
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
 
 Examples
 --------
@@ -341,6 +345,6 @@ where:
 See Also
 --------
 
-* :doc:`../modules/spharm` : Spherical harmonic transform utilities
+* :doc:`spharm` : Spherical harmonic transform utilities
 * :doc:`interpolation` : Interpolation and regridding tools
 * :doc:`calculations` : Additional atmospheric calculations

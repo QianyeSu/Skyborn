@@ -347,15 +347,35 @@ document.addEventListener('DOMContentLoaded', function() {
         document.head.appendChild(style);
     }
 
-    // ========== 中间Logo放大动画 ==========
-    function addMainLogoAnimation() {
-        // 查找文档主要内容区域中的logo图片
-        const mainContentLogos = document.querySelectorAll('.bd-content img, .bd-article img, article img, .document img');
+    // ========== 通用图片放大功能 ==========
+    function addImageZoomFunction() {
+        // 查找所有图片（包括Jupyter notebook输出、文档图片等）
+        // 但排除MathJax公式相关的图片和元素
+        const allImages = document.querySelectorAll('img:not(.MathJax img):not([class*="MathJax"]):not(mjx-container img)');
 
-        mainContentLogos.forEach(img => {
-            // 检查是否是logo图片（通过路径或alt文本判断）
-            if (img.src && (img.src.includes('SkyBornLogo') || img.alt.toLowerCase().includes('logo'))) {
+        allImages.forEach(img => {
+            // 跳过导航栏logo、favicon、MathJax相关图片等小图片
+            if (img.src &&
+                !img.src.includes('favicon') &&
+                !img.classList.contains('navbar-logo') &&
+                !img.closest('.MathJax') && // 排除在MathJax容器内的图片
+                !img.closest('mjx-container') && // 排除在mjx-container内的图片
+                !img.closest('.enhanced-formula') && // 排除在公式包装器内的图片
+                !img.parentElement.classList.contains('formula-wrapper') && // 排除公式包装器
+                img.offsetWidth > 100 && // 只处理较大的图片
+                img.offsetHeight > 100) {
+
                 img.style.cursor = 'pointer';
+                img.style.transition = 'transform 0.3s ease';
+
+                // 添加hover效果
+                img.addEventListener('mouseenter', function() {
+                    this.style.transform = 'scale(1.05)';
+                });
+
+                img.addEventListener('mouseleave', function() {
+                    this.style.transform = 'scale(1)';
+                });
 
                 // 移除默认的图片点击事件
                 img.onclick = null;
@@ -364,10 +384,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     e.preventDefault();
                     e.stopPropagation();
 
-                    createLogoModal(this);
+                    // 判断是否是logo，使用不同的模态窗口
+                    if (this.src.includes('SkyBornLogo') || this.alt.toLowerCase().includes('logo')) {
+                        createLogoModal(this);
+                    } else {
+                        createImageModal(this);
+                    }
                 });
             }
         });
+    }
+
+    // ========== 中间Logo放大动画 ==========
+    function addMainLogoAnimation() {
+        // 这个函数现在由addImageZoomFunction统一处理
+        // 保留用于向后兼容
     }
 
     // 创建Logo模态弹窗
@@ -588,6 +619,316 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         animate();
     }
+
+    // ========== 通用图片模态弹窗 ==========
+    function createImageModal(imageElement) {
+        // 防止重复创建
+        if (document.querySelector('.image-modal')) {
+            return;
+        }
+
+        // 创建遮罩层
+        const overlay = document.createElement('div');
+        overlay.className = 'image-modal-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+        `;
+
+        // 创建模态容器
+        const modal = document.createElement('div');
+        modal.className = 'image-modal';
+        modal.style.cssText = `
+            background: white;
+            border-radius: 20px;
+            padding: 1rem;
+            max-width: 90vw;
+            max-height: 90vh;
+            min-width: 300px;
+            min-height: 200px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            transform: scale(0.3) rotate(5deg);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        `;
+
+        // 创建关闭按钮
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '×';
+        closeBtn.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #333;
+            transition: all 0.3s ease;
+            z-index: 10001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        `;
+
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.background = 'rgba(255, 0, 0, 0.1)';
+            closeBtn.style.color = '#ff0000';
+            closeBtn.style.transform = 'scale(1.1)';
+        });
+
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.background = 'rgba(255, 255, 255, 0.9)';
+            closeBtn.style.color = '#333';
+            closeBtn.style.transform = 'scale(1)';
+        });
+
+        // 创建图片副本
+        const imageClone = imageElement.cloneNode(true);
+        imageClone.style.cssText = `
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            border: none !important;
+            border-radius: 10px !important;
+            padding: 0 !important;
+            background: none !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+            margin: 0 auto;
+            display: block;
+            object-fit: contain;
+            animation: imageZoom 0.5s ease-out;
+        `;
+
+        // 创建图片信息
+        const imageInfo = document.createElement('div');
+        const fileName = imageElement.src.split('/').pop() || 'Image';
+        const imageTitle = imageElement.alt || imageElement.title || fileName;
+
+        // imageInfo.innerHTML = `
+        //     <h3 style="margin: 1rem 0 0.5rem; color: #333; font-size: 1.2rem; text-align: center;">${imageTitle}</h3>
+        //     <p style="margin: 0; color: #666; font-size: 0.9rem; text-align: center;">Click and drag to pan • Scroll to zoom</p>
+        // `;
+
+        // 添加图片交互功能
+        let isDragging = false;
+        let startX, startY, translateX = 0, translateY = 0;
+        let scale = 1;
+        let lastTranslateX = 0, lastTranslateY = 0;
+
+        // 鼠标按下开始拖拽
+        imageClone.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isDragging = true;
+            startX = e.clientX - translateX;
+            startY = e.clientY - translateY;
+            imageClone.style.cursor = 'grabbing';
+            imageClone.style.userSelect = 'none';
+            imageClone.style.transition = 'none'; // 拖拽时禁用过渡动画
+        });
+
+        // 鼠标移动拖拽图片
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            imageClone.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        });
+
+        // 鼠标抬起结束拖拽
+        document.addEventListener('mouseup', (e) => {
+            if (isDragging) {
+                isDragging = false;
+                imageClone.style.cursor = 'grab';
+                imageClone.style.userSelect = 'auto';
+                imageClone.style.transition = 'transform 0.2s ease'; // 恢复过渡动画
+                // 保存当前位置
+                lastTranslateX = translateX;
+                lastTranslateY = translateY;
+            }
+        });
+
+        // 滚轮缩放（优化缩放中心点）
+        imageClone.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = imageClone.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const newScale = Math.max(0.5, Math.min(5, scale * delta));
+
+            if (newScale !== scale) {
+                // 计算缩放中心调整
+                const scaleChange = newScale / scale;
+                translateX = translateX * scaleChange + mouseX * (1 - scaleChange);
+                translateY = translateY * scaleChange + mouseY * (1 - scaleChange);
+
+                scale = newScale;
+                imageClone.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+
+                // 更新保存的位置
+                lastTranslateX = translateX;
+                lastTranslateY = translateY;
+            }
+        });
+
+        // 双击重置图片位置和缩放
+        imageClone.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            translateX = 0;
+            translateY = 0;
+            scale = 1;
+            imageClone.style.transition = 'transform 0.3s ease';
+            imageClone.style.transform = `translate(0px, 0px) scale(1)`;
+            setTimeout(() => {
+                imageClone.style.transition = 'transform 0.2s ease';
+            }, 300);
+            lastTranslateX = 0;
+            lastTranslateY = 0;
+        });
+
+        // 防止图片拖拽时的默认行为
+        imageClone.addEventListener('dragstart', (e) => {
+            e.preventDefault();
+        });
+
+        imageClone.style.cursor = 'grab';
+
+        // 组装模态内容
+        modal.appendChild(closeBtn);
+        modal.appendChild(imageClone);
+        modal.appendChild(imageInfo);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // 阻止页面滚动
+        document.body.style.overflow = 'hidden';
+
+        // 动画显示
+        requestAnimationFrame(() => {
+            overlay.style.opacity = '1';
+            modal.style.transform = 'scale(1) rotate(0deg)';
+            modal.style.opacity = '1';
+        });
+
+        // 关闭功能
+        function closeModal() {
+            overlay.style.opacity = '0';
+            modal.style.transform = 'scale(0.3) rotate(-5deg)';
+            modal.style.opacity = '0';
+
+            setTimeout(() => {
+                document.body.removeChild(overlay);
+                document.body.style.overflow = '';
+            }, 400);
+        }
+
+        // 绑定关闭事件
+        closeBtn.addEventListener('click', closeModal);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                closeModal();
+            }
+        });
+
+        // ESC键关闭
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+
+        // 添加背景动画效果
+        addImageModalEffects(modal);
+    }
+
+    // 为图片模态添加背景效果
+    function addImageModalEffects(modal) {
+        const canvas = document.createElement('canvas');
+        canvas.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+            opacity: 0.3;
+        `;
+
+        modal.appendChild(canvas);
+
+        const ctx = canvas.getContext('2d');
+        const dots = [];
+
+        function resizeCanvas() {
+            canvas.width = modal.offsetWidth;
+            canvas.height = modal.offsetHeight;
+        }
+        resizeCanvas();
+
+        // 创建装饰性点阵
+        for (let i = 0; i < 20; i++) {
+            dots.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                vx: (Math.random() - 0.5) * 1,
+                vy: (Math.random() - 0.5) * 1,
+                size: Math.random() * 2 + 1,
+                opacity: Math.random() * 0.3 + 0.1,
+                color: `hsl(${200 + Math.random() * 60}, 70%, 70%)`
+            });
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            dots.forEach(dot => {
+                dot.x += dot.vx;
+                dot.y += dot.vy;
+
+                if (dot.x < 0 || dot.x > canvas.width) dot.vx *= -1;
+                if (dot.y < 0 || dot.y > canvas.height) dot.vy *= -1;
+
+                ctx.beginPath();
+                ctx.arc(dot.x, dot.y, dot.size, 0, Math.PI * 2);
+                ctx.fillStyle = dot.color;
+                ctx.globalAlpha = dot.opacity;
+                ctx.fill();
+            });
+
+            if (modal.parentNode) {
+                requestAnimationFrame(animate);
+            }
+        }
+        animate();
+    }
     function addLogoClickToHome() {
         // 查找所有可能的logo元素
         const logoSelectors = [
@@ -685,7 +1026,7 @@ document.addEventListener('DOMContentLoaded', function() {
         addScrollProgress();
         addThemeTransitions();
         addLogoClickToHome();
-        addMainLogoAnimation(); // 添加中间logo动画
+        addImageZoomFunction(); // 添加通用图片放大功能（包括logo）
 
         console.log('🎉 Skyborn Documentation interactive effects loaded!');
     }
@@ -700,13 +1041,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // 多次尝试添加logo点击事件，因为logo可能是动态加载的
     setTimeout(() => {
         addLogoClickToHome();
-        addMainLogoAnimation(); // 也要重新添加中间logo事件
+        addImageZoomFunction(); // 也要重新添加图片缩放事件
         console.log('Logo click handlers re-added after 1 second');
     }, 1000);
 
     setTimeout(() => {
         addLogoClickToHome();
-        addMainLogoAnimation(); // 也要重新添加中间logo事件
+        addImageZoomFunction(); // 也要重新添加图片缩放事件
         console.log('Logo click handlers re-added after 2 seconds');
     }, 2000);
 
@@ -730,7 +1071,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (shouldAddLogoHandler) {
             setTimeout(() => {
                 addLogoClickToHome();
-                addMainLogoAnimation(); // 也要重新添加中间logo事件
+                addImageZoomFunction(); // 也要重新添加图片缩放事件
                 console.log('Logo click handlers added after DOM mutation');
             }, 100);
         }
@@ -800,12 +1141,47 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        @keyframes imageZoom {
+            0% {
+                transform: scale(0.8) rotate(5deg);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(1) rotate(0deg);
+                opacity: 1;
+            }
+        }
+
+        /* 通用图片悬停效果 */
+        img:not(.navbar-brand img):not([src*="favicon"]) {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        img:not(.navbar-brand img):not([src*="favicon"]):hover {
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
         /* 防止中间logo的默认点击行为 */
         .bd-content img[src*="SkyBornLogo"],
         .bd-article img[src*="SkyBornLogo"],
         article img[src*="SkyBornLogo"],
         .document img[src*="SkyBornLogo"] {
             cursor: pointer !important;
+        }
+
+        /* 所有大图片都可点击放大 */
+        img[width]:not(.navbar-brand img):not([src*="favicon"]) {
+            cursor: pointer !important;
+        }
+
+        /* 图片模态窗口相关样式 */
+        .image-modal-overlay {
+            backdrop-filter: blur(15px) !important;
+        }
+
+        .image-modal {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         /* Enhanced button hover states */
