@@ -14,14 +14,30 @@ for atmospheric and oceanic sciences. This module is based on the ajdawson/winds
 and has been enhanced with modern Python features including type hints, comprehensive error
 handling, and improved documentation.
 
+**Key Use Case**: Divergent Wind Component Analysis
+The module is particularly useful for calculating divergent wind components from 4D atmospheric
+data (time, level, lat, lon), which is essential for understanding atmospheric circulation patterns
+and energy transport mechanisms.
+
 Main Features
 -------------
 
 * **Vector Wind Analysis**: Compute vorticity, divergence, streamfunction, and velocity potential
 * **Helmholtz Decomposition**: Separate wind fields into rotational and divergent components
+* **Data Preparation Tools**: Robust ``prep_data`` and ``recover_data`` utilities for handling multi-dimensional arrays
+* **Parallel Processing Support**: Efficient computation for large time-series datasets
 * **Multiple Grid Support**: Works with regular and Gaussian latitude grids
 * **Efficient Computation**: Uses optimized spherical harmonic transforms
 * **Comprehensive Validation**: Thorough input validation and error handling
+
+Real-World Application Examples
+------------------------------
+
+**Computing Divergent Wind Components from 4D Data**
+
+A common use case involves processing atmospheric wind data with shape ``(time, level, lat, lon)``
+to extract divergent wind components for circulation analysis. This requires careful data preparation
+and can benefit from parallel processing for large datasets.
 
 Core Classes
 ------------
@@ -78,6 +94,133 @@ Tools and Utilities
    :members:
    :undoc-members:
    :show-inheritance:
+
+**Key Functions for Multi-dimensional Data Processing**
+
+* **prep_data**: Prepares wind data for spherical harmonic analysis by handling dimension reordering
+* **recover_data**: Recovers original data structure after spherical harmonic processing
+
+These tools are essential when working with 4D atmospheric data (time, level, lat, lon) and need
+to process individual time slices while preserving the original data structure.
+
+Real-World Usage Pattern
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+For processing large atmospheric datasets with parallel computation:
+
+.. code-block:: python
+
+    from skyborn.windspharm.tools import prep_data, recover_data
+    from skyborn.windspharm.standard import VectorWind
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from tqdm import tqdm
+    import numpy as np
+
+    def calculate_divergent_wind_component(time_idx: int,
+                                         zonal_wind: np.ndarray,
+                                         meridional_wind: np.ndarray) -> tuple:
+        """
+        Calculate divergent wind components for a single time step.
+
+        Args:
+            time_idx: Time index for processing
+            zonal_wind: Zonal wind component array (time, level, lat, lon)
+            meridional_wind: Meridional wind component array (time, level, lat, lon)
+
+        Returns:
+            tuple: (time_idx, divergent_zonal_wind, divergent_meridional_wind)
+        """
+        try:
+            # Prepare data for spherical harmonic analysis
+            # Convert from (level, lat, lon) to analysis format
+            zonal_prepared, wind_info = prep_data(zonal_wind[time_idx], 'zyx')
+            meridional_prepared, _ = prep_data(meridional_wind[time_idx], 'zyx')
+
+            # Create vector wind object and compute irrotational component
+            vector_wind = VectorWind(zonal_prepared, meridional_prepared)
+            divergent_u, divergent_v = vector_wind.irrotationalcomponent()
+
+            # Recover original data structure
+            divergent_u_recovered = recover_data(divergent_u, wind_info)
+            divergent_v_recovered = recover_data(divergent_v, wind_info)
+
+            return time_idx, divergent_u_recovered, divergent_v_recovered
+
+        except Exception as e:
+            print(f"Error processing time step {time_idx}: {e}")
+            raise
+
+    def compute_divergent_wind_components(zonal_wind: np.ndarray,
+                                        meridional_wind: np.ndarray,
+                                        max_workers: int = 4) -> tuple:
+        """
+        Compute divergent wind components using parallel processing.
+
+        Args:
+            zonal_wind: 4D array of zonal wind (time, level, lat, lon)
+            meridional_wind: 4D array of meridional wind (time, level, lat, lon)
+            max_workers: Maximum number of worker threads
+
+        Returns:
+            tuple: (divergent_zonal_wind, divergent_meridional_wind)
+        """
+        input_shape = zonal_wind.shape
+        n_timesteps = input_shape[0]
+
+        # Initialize output arrays with same shape as input
+        divergent_zonal = np.zeros_like(zonal_wind)
+        divergent_meridional = np.zeros_like(meridional_wind)
+
+        # Process all time steps in parallel
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            future_to_time = {
+                executor.submit(calculate_divergent_wind_component, t,
+                              zonal_wind, meridional_wind): t
+                for t in range(n_timesteps)
+            }
+
+            # Collect results with progress bar
+            for future in tqdm(as_completed(future_to_time),
+                             total=n_timesteps,
+                             desc='Computing divergent wind components'):
+                try:
+                    time_idx, div_u, div_v = future.result()
+                    divergent_zonal[time_idx] = div_u
+                    divergent_meridional[time_idx] = div_v
+
+                except Exception as e:
+                    print(f"Error in future result: {e}")
+                    raise
+
+        return divergent_zonal, divergent_meridional
+
+**Usage Example**:
+
+.. code-block:: python
+
+    # Load your 4D wind data (time, level, lat, lon)
+    # zonal_wind.shape = (365, 37, 181, 360)  # Daily data, 37 levels
+    # meridional_wind.shape = (365, 37, 181, 360)
+
+    # Import skyborn windspharm components
+    from skyborn.windspharm.tools import prep_data, recover_data
+    from skyborn.windspharm.standard import VectorWind
+
+    # Compute divergent components efficiently
+    div_u, div_v = compute_divergent_wind_components(
+        zonal_wind, meridional_wind, max_workers=8
+    )
+
+    print(f"Processed {zonal_wind.shape[0]} time steps")
+    print(f"Output shape: {div_u.shape}")
+
+This approach is particularly effective for:
+
+* Long time series atmospheric data analysis
+* Climate model output processing
+* Reanalysis data divergent circulation studies
+* Large-scale atmospheric dynamics research
 
 Common Functions
 ~~~~~~~~~~~~~~~~
