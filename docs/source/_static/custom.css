@@ -1600,3 +1600,68 @@ code {
         font-size: 1.1rem !important;
     }
 }
+
+/* ========== Copy Button Fix ========== */
+/* Fix copy button positioning issues */
+button.copybtn {
+    position: absolute !important;
+    top: .3em !important;
+    right: .3em !important;
+    z-index: 10 !important;  /* Ensure button stays on top */
+    opacity: 0 !important;
+    transition: opacity 0.3s, border .3s, background-color .3s !important;
+}
+
+/* Ensure highlight container has relative positioning */
+div.highlight {
+    position: relative !important;
+}
+
+/* Show the copybutton on hover */
+.highlight:hover button.copybtn,
+button.copybtn.success {
+    opacity: 1 !important;
+}
+
+/* Style the copy button */
+button.copybtn {
+    width: 1.7em !important;
+    height: 1.7em !important;
+    padding: 0 !important;
+    border: #1b1f2426 1px solid !important;
+    border-radius: 0.4em !important;
+    background-color: #f6f8fa !important;
+    color: #57606a !important;
+    user-select: none !important;
+    outline: none !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+button.copybtn:hover {
+    background-color: rgb(235, 235, 235) !important;
+}
+
+button.copybtn:active {
+    background-color: rgb(187, 187, 187) !important;
+}
+
+button.copybtn.success {
+    border-color: #22863a !important;
+    color: #22863a !important;
+}
+
+button.copybtn svg {
+    stroke: currentColor !important;
+    width: 1.5em !important;
+    height: 1.5em !important;
+    padding: 0.1em !important;
+}
+
+/* Hide copy button when printing */
+@media print {
+    button.copybtn {
+        display: none !important;
+    }
+}

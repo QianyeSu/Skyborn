@@ -27,10 +27,13 @@ Causality Analysis
 ~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: skyborn.causality.granger_causality
+   :no-index:
 
 .. autofunction:: skyborn.causality.liang_causality
+   :no-index:
 
 .. autofunction:: skyborn.causality.liang
+   :no-index:
 
 Significance Testing
 ~~~~~~~~~~~~~~~~~~~~

@@ -2,9 +2,9 @@ Spherical Harmonics (spharm)
 =============================
 
 .. automodule:: skyborn.spharm
-   :members:
-   :undoc-members:
+   :members: Spharmt, gaussian_lats_wts, regrid
    :show-inheritance:
+   :noindex:
 
 Overview
 --------
