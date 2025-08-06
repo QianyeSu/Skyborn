@@ -23,7 +23,7 @@
     box-shadow: 0 8px 30px var(--shadow-blue-light),
                 0 2px 8px rgba(0, 0, 0, 0.1);
     position: relative;
-    overflow: hidden;
+    overflow: visible; /* 修复：允许内容溢出显示 */
 }
 
 .bd-main .bd-content .bd-article-container::before {
@@ -780,24 +780,25 @@ code {
     scrollbar-width: thin !important;
 }
 
-/* 表格内容的处理 */
-table {
+/* 表格内容的处理 - 修复表格显示问题 */
+.bd-article-container table {
     table-layout: auto !important;
     width: 100% !important;
-    max-width: 100% !important;
-    overflow-x: auto !important;
-    display: block !important;
-    white-space: nowrap !important;
+    max-width: none !important;
+    overflow-x: visible !important;
+    display: table !important; /* 修复：保持正常表格显示 */
+    white-space: normal !important; /* 修复：允许正常换行 */
+    border-collapse: collapse !important;
 }
 
-table td,
-table th {
+.bd-article-container table td,
+.bd-article-container table th {
     word-wrap: break-word !important;
     word-break: break-word !important;
     overflow-wrap: break-word !important;
-    max-width: 200px !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    max-width: none !important; /* 修复：移除最大宽度限制 */
+    overflow: visible !important; /* 修复：允许内容正常显示 */
+    text-overflow: clip !important; /* 修复：不裁剪文本 */
     vertical-align: top !important;
     padding: 8px !important;
 }
@@ -1664,4 +1665,70 @@ button.copybtn svg {
     button.copybtn {
         display: none !important;
     }
+}
+
+/* ========== 表格显示修复 ========== */
+/* 修复表格被裁剪的问题 */
+.bd-main .bd-content .bd-article-container {
+    overflow: visible !important; /* 允许内容溢出显示 */
+}
+
+/* 确保表格容器可以水平滚动 */
+.bd-article {
+    overflow-x: auto !important;
+}
+
+/* 表格样式增强 */
+table {
+    width: 100% !important;
+    max-width: none !important;
+    border-collapse: collapse !important;
+    margin: 1rem 0 !important;
+    background: white !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 表格单元格样式 */
+table th,
+table td {
+    padding: 12px 16px !important;
+    border: 1px solid #e2e8f0 !important;
+    text-align: left !important;
+    vertical-align: top !important;
+    word-wrap: break-word !important;
+}
+
+/* 表格头部样式 */
+table th {
+    background: var(--gradient-blue-light) !important;
+    font-weight: 600 !important;
+    color: var(--dark-blue) !important;
+}
+
+/* 表格行悬停效果 */
+table tbody tr:hover {
+    background: rgba(37, 99, 235, 0.05) !important;
+    transition: background-color 0.2s ease !important;
+}
+
+/* 响应式表格 */
+@media (max-width: 768px) {
+    table {
+        font-size: 0.9rem !important;
+    }
+
+    table th,
+    table td {
+        padding: 8px 12px !important;
+    }
+}
+
+/* 表格容器确保完整显示 */
+.table-responsive,
+.docutils,
+.table-wrapper {
+    overflow-x: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
 }

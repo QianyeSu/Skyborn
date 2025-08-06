@@ -1,4 +1,4 @@
-windspharm
+Windspharm
 ==========
 
 .. automodule:: skyborn.windspharm
