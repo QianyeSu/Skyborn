@@ -1,12 +1,12 @@
 /* Custom CSS for Sphinx Book Theme - Blue theme with animations */
 
-/* ========== 主题颜色配置 ========== */
+/* ========== Theme Color Configuration ========== */
 :root {
-    --primary-color: #2563eb;      /* 蓝色主色调 */
-    --secondary-color: #1e40af;    /* 深蓝色 */
-    --accent-color: #3b82f6;       /* 亮蓝色 */
-    --light-blue: #dbeafe;         /* 浅蓝色背景 */
-    --dark-blue: #1e3a8a;          /* 深蓝色 */
+    --primary-color: #2563eb;      /* Primary blue */
+    --secondary-color: #1e40af;    /* Deep blue */
+    --accent-color: #3b82f6;       /* Bright blue */
+    --light-blue: #dbeafe;         /* Light blue background */
+    --dark-blue: #1e3a8a;          /* Dark blue */
     --gradient-blue: linear-gradient(135deg, #2563eb, #3b82f6);
     --gradient-blue-deep: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #3b82f6 100%);
     --gradient-blue-light: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 50%, #93c5fd 100%);
@@ -15,7 +15,7 @@
     --shadow-blue-hover: rgba(37, 99, 235, 0.5);
 }
 
-/* ========== 页面整体样式 ========== */
+/* ========== Main Page Container Styles ========== */
 .bd-main .bd-content .bd-article-container {
     background: var(--gradient-blue-light);
     border-radius: 12px;
@@ -23,7 +23,7 @@
     box-shadow: 0 8px 30px var(--shadow-blue-light),
                 0 2px 8px rgba(0, 0, 0, 0.1);
     position: relative;
-    overflow: visible; /* 修复：允许内容溢出显示 */
+    overflow: visible; /* Fix: allow content overflow */
 }
 
 .bd-main .bd-content .bd-article-container::before {
