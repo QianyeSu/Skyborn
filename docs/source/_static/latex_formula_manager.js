@@ -54,214 +54,221 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 1000); // Wait for MathJax to finish rendering
     }
 
-    // ========== Formula Modal with Drag Support ==========
+    // ========== Formula Modal with Image-like Effect ==========
     function openFormulaModal(originalFormula) {
         // Prevent multiple modals
         if (document.querySelector('.formula-modal')) return;
 
-        const modal = createFormulaModal('formula-modal');
-
-        // Clone the formula element properly for display
-        const formulaClone = originalFormula.cloneNode(true);
-
-        const content = document.createElement('div');
-        content.className = 'modal-formula-content';
-        content.appendChild(formulaClone);
-
-        modal.querySelector('.modal-content').appendChild(content);
-
-        // Enhanced styling for formula modal
-        content.style.cssText = `
-            padding: 40px;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 90vw;
-            max-height: 80vh;
-            overflow: auto;
-            text-align: center;
-            transform: scale(1.8);
-            cursor: move;
-            user-select: none;
-            position: relative;
-        `;
-
-        // Add drag functionality
-        makeDraggable(content);
-
-        // Add zoom functionality
-        makeZoomable(content);
-
-        document.body.appendChild(modal);
-
-        // Animation
-        setTimeout(() => {
-            modal.style.opacity = '1';
-            content.style.transform = 'scale(1.8) translateY(0)';
-        }, 10);
-    }
-
-    // ========== Drag Functionality ==========
-    function makeDraggable(element) {
-        let isDragging = false;
-        let currentX = 0;
-        let currentY = 0;
-        let initialX = 0;
-        let initialY = 0;
-        let xOffset = 0;
-        let yOffset = 0;
-
-        element.addEventListener('mousedown', dragStart);
-        document.addEventListener('mousemove', drag);
-        document.addEventListener('mouseup', dragEnd);
-
-        // Touch events for mobile
-        element.addEventListener('touchstart', dragStart);
-        document.addEventListener('touchmove', drag);
-        document.addEventListener('touchend', dragEnd);
-
-        function dragStart(e) {
-            if (e.type === "touchstart") {
-                initialX = e.touches[0].clientX - xOffset;
-                initialY = e.touches[0].clientY - yOffset;
-            } else {
-                initialX = e.clientX - xOffset;
-                initialY = e.clientY - yOffset;
-            }
-
-            if (e.target === element || element.contains(e.target)) {
-                isDragging = true;
-                element.style.cursor = 'grabbing';
-            }
-        }
-
-        function drag(e) {
-            if (isDragging) {
-                e.preventDefault();
-
-                if (e.type === "touchmove") {
-                    currentX = e.touches[0].clientX - initialX;
-                    currentY = e.touches[0].clientY - initialY;
-                } else {
-                    currentX = e.clientX - initialX;
-                    currentY = e.clientY - initialY;
-                }
-
-                xOffset = currentX;
-                yOffset = currentY;
-
-                setTranslate(currentX, currentY, element);
-            }
-        }
-
-        function setTranslate(xPos, yPos, el) {
-            el.style.transform = `scale(1.8) translate(${xPos}px, ${yPos}px)`;
-        }
-
-        function dragEnd() {
-            if (isDragging) {
-                initialX = currentX;
-                initialY = currentY;
-                isDragging = false;
-                element.style.cursor = 'move';
-            }
-        }
-    }
-
-    // ========== Modal Creation Utility ==========
-    function createFormulaModal(className) {
-        const modal = document.createElement('div');
-        modal.className = `modal ${className}`;
-        modal.style.cssText = `
+        // Create overlay (similar to image modal)
+        const overlay = document.createElement('div');
+        overlay.className = 'formula-modal-overlay';
+        overlay.style.cssText = `
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            background: rgba(0, 0, 0, 0.9);
             z-index: 10000;
             opacity: 0;
             transition: opacity 0.3s ease;
-            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
         `;
 
-        const content = document.createElement('div');
-        content.className = 'modal-content';
-        content.style.cssText = `
+        // Create modal container (similar to image modal)
+        const modal = document.createElement('div');
+        modal.className = 'formula-modal';
+        modal.style.cssText = `
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            max-width: 90vw;
+            max-height: 90vh;
+            min-width: 300px;
+            min-height: 200px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            transform: scale(0.3) rotate(5deg);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0;
             position: relative;
-            transform: scale(0.8) translateY(50px);
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         `;
 
-        // Close button
+        // Create close button (exactly like image modal)
         const closeBtn = document.createElement('button');
         closeBtn.innerHTML = '×';
-        closeBtn.className = 'modal-close';
         closeBtn.style.cssText = `
             position: absolute;
-            top: -20px;
-            right: -20px;
-            width: 50px;
-            height: 50px;
-            border: none;
+            top: 10px;
+            right: 15px;
             background: rgba(255, 255, 255, 0.9);
-            color: #333;
-            font-size: 30px;
-            font-weight: bold;
+            border: none;
             border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 1.5rem;
             cursor: pointer;
+            color: #333;
+            transition: all 0.3s ease;
             z-index: 10001;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            transition: all 0.2s ease;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
         `;
 
         closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.background = 'rgba(255, 0, 0, 0.1)';
+            closeBtn.style.color = '#ff0000';
             closeBtn.style.transform = 'scale(1.1)';
-            closeBtn.style.background = '#ff4757';
-            closeBtn.style.color = 'white';
         });
 
         closeBtn.addEventListener('mouseleave', () => {
-            closeBtn.style.transform = 'scale(1)';
             closeBtn.style.background = 'rgba(255, 255, 255, 0.9)';
             closeBtn.style.color = '#333';
+            closeBtn.style.transform = 'scale(1)';
         });
 
-        // Drag instruction
-        const dragHint = document.createElement('div');
-        // dragHint.innerHTML = '💡 可以拖拽移动公式';
-        dragHint.style.cssText = `
-            position: absolute;
-            top: -60px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.9);
-            color: #333;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 500;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            white-space: nowrap;
-            animation: fadeInOut 4s ease-in-out;
+        // Clone the formula element with enhanced styling (like image)
+        const formulaClone = originalFormula.cloneNode(true);
+        formulaClone.style.cssText = `
+            max-width: 100%;
+            max-height: 100%;
+            border: none !important;
+            border-radius: 10px !important;
+            padding: 1rem !important;
+            background: none !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+            margin: 0 auto;
+            display: block;
+            animation: formulaZoom 0.5s ease-out;
+            font-size: 2rem !important;
+            cursor: grab;
+            user-select: none;
         `;
 
-        // Close modal events
-        const closeModal = () => {
-            modal.style.opacity = '0';
-            content.style.transform = 'scale(0.8) translateY(50px)';
-            setTimeout(() => modal.remove(), 300);
-        };
+        // Add drag and zoom functionality (exactly like image modal)
+        let isDragging = false;
+        let startX, startY, translateX = 0, translateY = 0;
+        let scale = 1;
+        let lastTranslateX = 0, lastTranslateY = 0;
 
+        // Mouse down - start dragging
+        formulaClone.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isDragging = true;
+            startX = e.clientX - translateX;
+            startY = e.clientY - translateY;
+            formulaClone.style.cursor = 'grabbing';
+            formulaClone.style.userSelect = 'none';
+            formulaClone.style.transition = 'none';
+        });
+
+        // Mouse move - drag formula
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            formulaClone.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        });
+
+        // Mouse up - end dragging
+        document.addEventListener('mouseup', (e) => {
+            if (isDragging) {
+                isDragging = false;
+                formulaClone.style.cursor = 'grab';
+                formulaClone.style.userSelect = 'auto';
+                formulaClone.style.transition = 'transform 0.2s ease';
+                lastTranslateX = translateX;
+                lastTranslateY = translateY;
+            }
+        });
+
+        // Scroll wheel zoom (optimized zoom center point)
+        formulaClone.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = formulaClone.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const newScale = Math.max(0.5, Math.min(5, scale * delta));
+
+            if (newScale !== scale) {
+                const scaleChange = newScale / scale;
+                translateX = translateX * scaleChange + mouseX * (1 - scaleChange);
+                translateY = translateY * scaleChange + mouseY * (1 - scaleChange);
+
+                scale = newScale;
+                formulaClone.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+
+                lastTranslateX = translateX;
+                lastTranslateY = translateY;
+            }
+        });
+
+        // Double click to reset formula position and zoom
+        formulaClone.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            translateX = 0;
+            translateY = 0;
+            scale = 1;
+            formulaClone.style.transition = 'transform 0.3s ease';
+            formulaClone.style.transform = `translate(0px, 0px) scale(1)`;
+            setTimeout(() => {
+                formulaClone.style.transition = 'transform 0.2s ease';
+            }, 300);
+            lastTranslateX = 0;
+            lastTranslateY = 0;
+        });
+
+        // Prevent default drag behavior
+        formulaClone.addEventListener('dragstart', (e) => {
+            e.preventDefault();
+        });
+
+        // Assemble modal content
+        modal.appendChild(closeBtn);
+        modal.appendChild(formulaClone);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // Prevent page scrolling
+        document.body.style.overflow = 'hidden';
+
+        // Animated display (same as image modal)
+        requestAnimationFrame(() => {
+            overlay.style.opacity = '1';
+            modal.style.transform = 'scale(1) rotate(0deg)';
+            modal.style.opacity = '1';
+        });
+
+        // Close function
+        function closeModal() {
+            overlay.style.opacity = '0';
+            modal.style.transform = 'scale(0.3) rotate(-5deg)';
+            modal.style.opacity = '0';
+
+            setTimeout(() => {
+                document.body.removeChild(overlay);
+                document.body.style.overflow = '';
+            }, 400);
+        }
+
+        // Bind close events
         closeBtn.addEventListener('click', closeModal);
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) closeModal();
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                closeModal();
+            }
         });
 
         // ESC key to close
@@ -273,11 +280,67 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         document.addEventListener('keydown', escHandler);
 
-        content.appendChild(closeBtn);
-        content.appendChild(dragHint);
-        modal.appendChild(content);
+        // Add background effects (similar to image modal)
+        addFormulaModalEffects(modal);
+    }
 
-        return modal;
+    // Add background effects for formula modal (similar to image modal)
+    function addFormulaModalEffects(modal) {
+        const canvas = document.createElement('canvas');
+        canvas.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+            opacity: 0.3;
+        `;
+
+        modal.appendChild(canvas);
+
+        const ctx = canvas.getContext('2d');
+        const dots = [];
+
+        function resizeCanvas() {
+            canvas.width = modal.offsetWidth;
+            canvas.height = modal.offsetHeight;
+        }
+        resizeCanvas();
+
+        // Create decorative dot array
+        for (let i = 0; i < 20; i++) {
+            dots.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 3 + 1,
+                speedX: (Math.random() - 0.5) * 0.5,
+                speedY: (Math.random() - 0.5) * 0.5,
+                opacity: Math.random() * 0.5 + 0.2
+            });
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            dots.forEach(dot => {
+                dot.x += dot.speedX;
+                dot.y += dot.speedY;
+
+                if (dot.x < 0 || dot.x > canvas.width) dot.speedX *= -1;
+                if (dot.y < 0 || dot.y > canvas.height) dot.speedY *= -1;
+
+                ctx.beginPath();
+                ctx.arc(dot.x, dot.y, dot.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(100, 150, 255, ${dot.opacity})`;
+                ctx.fill();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
     }
 
     // ========== CSS Injection ==========
@@ -299,7 +362,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 overflow: hidden;
             }
 
-            /* 防止MathJax元素被其他脚本处理 */
+            /* Prevent MathJax elements from being handled by other scripts */
             .enhanced-formula .MathJax,
             .enhanced-formula mjx-container,
             .enhanced-formula [class*="MathJax"] {
@@ -307,7 +370,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 cursor: inherit !important;
             }
 
-            /* 确保公式包装器内的图片不被通用图片处理器选中 */
+            /* Ensure images inside formula wrapper are not selected by generic image handlers */
             .formula-wrapper img,
             .enhanced-formula img {
                 pointer-events: none !important;
@@ -334,18 +397,14 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             /* Modal Animations */
-            .modal-formula-content {
-                animation: modalSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-            }
-
-            @keyframes modalSlideIn {
+            @keyframes formulaZoom {
                 from {
                     opacity: 0;
                     transform: scale(0.5) translateY(100px) rotateX(30deg);
                 }
                 to {
                     opacity: 1;
-                    transform: scale(1.8) translateY(0) rotateX(0deg);
+                    transform: scale(1) translateY(0) rotateX(0deg);
                 }
             }
 
@@ -361,20 +420,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     padding: 15px;
                 }
 
-                .modal-formula-content {
-                    padding: 25px !important;
-                    transform: scale(1.4) !important;
+                .formula-modal {
+                    padding: 1rem !important;
                 }
 
-                @keyframes modalSlideIn {
-                    from {
-                        opacity: 0;
-                        transform: scale(0.5) translateY(100px) rotateX(30deg);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: scale(1.4) translateY(0) rotateX(0deg);
-                    }
+                .formula-modal mjx-container,
+                .formula-modal .MathJax {
+                    font-size: 1.5rem !important;
                 }
             }
 
@@ -386,9 +438,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
                 }
 
-                .modal-close {
-                    background: rgba(45, 55, 72, 0.9) !important;
+                .formula-modal {
+                    background: #2d3748 !important;
                     color: white !important;
+                }
+
+                .formula-modal-overlay {
+                    background: rgba(0, 0, 0, 0.95) !important;
                 }
             }
             </style>
