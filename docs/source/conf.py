@@ -65,6 +65,9 @@ autosummary_imported_members = True
 templates_path = ['_templates']
 exclude_patterns = []
 
+# Suppress specific warnings
+suppress_warnings = ['myst.mathjax']
+
 # -- Internationalization ---------------------------------------------------
 language = 'en'  # Default language
 locale_dirs = ['locale/']   # Path to locale directoryfuro
@@ -83,6 +86,8 @@ html_css_files = [
 
 html_js_files = [
     'interactive.js',
+    'copybutton_fix.js',
+    'latex_formula_manager.js',
 ]
 
 # Theme options for sphinx_book_theme
@@ -106,7 +111,6 @@ html_theme_options = {
     "collapse_navigation": False,
     "use_sidenotes": True,
     "home_page_in_toc": False,
-    "ethical_ads_enabled": False,
 }
 
 # Set the logo link manually
