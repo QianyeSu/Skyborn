@@ -345,7 +345,7 @@ class VectorWind:
         --------
         >>> wind_speed = vw.magnitude()
         """
-        return (self.u**2 + self.v**2) ** 0.5
+        return np.hypot(self.u + self.v)
 
     def vrtdiv(self, truncation: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
         """
