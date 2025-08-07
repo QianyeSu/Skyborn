@@ -80,3 +80,4 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 src/skyborn/__pycache__/__init__.cpython-312.pyc
+src/skyborn/gridfill/_gridfill.c
