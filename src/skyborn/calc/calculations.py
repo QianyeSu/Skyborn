@@ -82,13 +82,17 @@ def convert_longitude_range(
     xr.DataArray or xr.Dataset
         The DataArray or Dataset with wrapped longitude coordinates.
     """
-    # Wrap -180..179 to 0..359
-    if center_on_180:
-        data = data.assign_coords(**{lon: (lambda x: (x[lon] % 360))})
-    # Wrap 0..359 to -180..179
-    else:
-        data = data.assign_coords(**{lon: (lambda x: ((x[lon] + 180) % 360) - 180)})
-    return data.sortby(lon, ascending=True)
+    return data.assign_coords(
+        **{
+            lon: (
+                lambda x: (
+                    ((x[lon] + 180) % 360 - 180)
+                    if not center_on_180
+                    else (x[lon] % 360)
+                )
+            )
+        }
+    ).sortby(lon, ascending=True)
 
 
 def pearson_correlation(
