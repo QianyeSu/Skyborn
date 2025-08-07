@@ -99,8 +99,8 @@ class VectorWind:
 
     def __init__(
         self,
-        u: IrisCube,
-        v: IrisCube,
+        u: Cube,
+        v: Cube,
         rsphere: float = 6.3712e6,
         legfunc: LegFunc = "stored",
     ) -> None:
@@ -169,7 +169,7 @@ class VectorWind:
             u_data, v_data, gridtype=gridtype, rsphere=rsphere, legfunc=legfunc
         )
 
-    def _validate_cube_compatibility(self, u: IrisCube, v: IrisCube) -> None:
+    def _validate_cube_compatibility(self, u: Cube, v: Cube) -> None:
         """
         Validate that u and v cubes have compatible coordinates.
 
@@ -190,7 +190,7 @@ class VectorWind:
                 f"v coords: {[c.name() for c in v.dim_coords]}"
             )
 
-    def _metadata(self, var: Any, **attributes: Any) -> IrisCube:
+    def _metadata(self, var: Any, **attributes: Any) -> Cube:
         """
         Create Iris cube with proper metadata and coordinate information.
 
@@ -221,7 +221,7 @@ class VectorWind:
 
         return cube
 
-    def u(self) -> IrisCube:
+    def u(self) -> Cube:
         """
         Get zonal component of vector wind.
 
@@ -243,7 +243,7 @@ class VectorWind:
             long_name="eastward component of wind",
         )
 
-    def v(self) -> IrisCube:
+    def v(self) -> Cube:
         """
         Get meridional component of vector wind.
 
@@ -265,7 +265,7 @@ class VectorWind:
             long_name="northward component of wind",
         )
 
-    def magnitude(self) -> IrisCube:
+    def magnitude(self) -> Cube:
         """
         Calculate wind speed (magnitude of vector wind).
 
@@ -284,7 +284,7 @@ class VectorWind:
             m, standard_name="wind_speed", units="m s**-1", long_name="wind speed"
         )
 
-    def vrtdiv(self, truncation: Optional[int] = None) -> Tuple[IrisCube, IrisCube]:
+    def vrtdiv(self, truncation: Optional[int] = None) -> Tuple[Cube, Cube]:
         """
         Calculate relative vorticity and horizontal divergence.
 
@@ -328,7 +328,7 @@ class VectorWind:
 
         return vrt_cube, div_cube
 
-    def vorticity(self, truncation: Optional[int] = None) -> IrisCube:
+    def vorticity(self, truncation: Optional[int] = None) -> Cube:
         """
         Calculate relative vorticity.
 
@@ -360,7 +360,7 @@ class VectorWind:
             long_name="relative vorticity",
         )
 
-    def divergence(self, truncation: Optional[int] = None) -> IrisCube:
+    def divergence(self, truncation: Optional[int] = None) -> Cube:
         """
         Calculate horizontal divergence.
 
@@ -391,7 +391,7 @@ class VectorWind:
             long_name="horizontal divergence",
         )
 
-    def planetaryvorticity(self, omega: Optional[float] = None) -> IrisCube:
+    def planetaryvorticity(self, omega: Optional[float] = None) -> Cube:
         """
         Calculate planetary vorticity (Coriolis parameter).
 
@@ -424,7 +424,7 @@ class VectorWind:
 
     def absolutevorticity(
         self, omega: Optional[float] = None, truncation: Optional[int] = None
-    ) -> IrisCube:
+    ) -> Cube:
         """
         Calculate absolute vorticity (relative + planetary vorticity).
 
@@ -458,7 +458,7 @@ class VectorWind:
             long_name="absolute vorticity",
         )
 
-    def sfvp(self, truncation: Optional[int] = None) -> Tuple[IrisCube, IrisCube]:
+    def sfvp(self, truncation: Optional[int] = None) -> Tuple[Cube, Cube]:
         """
         Calculate streamfunction and velocity potential.
 
@@ -502,7 +502,7 @@ class VectorWind:
 
         return sf_cube, vp_cube
 
-    def streamfunction(self, truncation: Optional[int] = None) -> IrisCube:
+    def streamfunction(self, truncation: Optional[int] = None) -> Cube:
         """
         Calculate streamfunction.
 
@@ -533,7 +533,7 @@ class VectorWind:
             long_name="streamfunction",
         )
 
-    def velocitypotential(self, truncation: Optional[int] = None) -> IrisCube:
+    def velocitypotential(self, truncation: Optional[int] = None) -> Cube:
         """
         Calculate velocity potential.
 
@@ -566,7 +566,7 @@ class VectorWind:
 
     def helmholtz(
         self, truncation: Optional[int] = None
-    ) -> Tuple[IrisCube, IrisCube, IrisCube, IrisCube]:
+    ) -> Tuple[Cube, Cube, Cube, Cube]:
         """
         Perform Helmholtz decomposition of vector wind.
 
@@ -618,7 +618,7 @@ class VectorWind:
 
     def irrotationalcomponent(
         self, truncation: Optional[int] = None
-    ) -> Tuple[IrisCube, IrisCube]:
+    ) -> Tuple[Cube, Cube]:
         """
         Calculate irrotational (divergent) component of vector wind.
 
@@ -662,7 +662,7 @@ class VectorWind:
 
     def nondivergentcomponent(
         self, truncation: Optional[int] = None
-    ) -> Tuple[IrisCube, IrisCube]:
+    ) -> Tuple[Cube, Cube]:
         """
         Calculate non-divergent (rotational) component of vector wind.
 
@@ -705,8 +705,8 @@ class VectorWind:
         return upsi_cube, vpsi_cube
 
     def gradient(
-        self, chi: IrisCube, truncation: Optional[int] = None
-    ) -> Tuple[IrisCube, IrisCube]:
+        self, chi: Cube, truncation: Optional[int] = None
+    ) -> Tuple[Cube, Cube]:
         """
         Calculate vector gradient of a scalar field on the sphere.
 
@@ -776,7 +776,7 @@ class VectorWind:
 
         return uchi_cube, vchi_cube
 
-    def truncate(self, field: IrisCube, truncation: Optional[int] = None) -> IrisCube:
+    def truncate(self, field: Cube, truncation: Optional[int] = None) -> Cube:
         """
         Apply spectral truncation to a scalar field.
 
@@ -829,7 +829,7 @@ class VectorWind:
         return field
 
 
-def _dim_coord_and_dim(cube: IrisCube, coord: str) -> Tuple[Any, int]:
+def _dim_coord_and_dim(cube: Cube, coord: str) -> Tuple[Any, int]:
     """
     Retrieve a dimension coordinate from an Iris cube and its dimension index.
 
