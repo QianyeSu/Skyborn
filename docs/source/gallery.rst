@@ -131,11 +131,11 @@ Overview
 
 The GridFill module addresses common atmospheric data challenges:
 
-.. image:: images/gridfill_comparison.png
-   :alt: GridFill Interpolation Comparison
+.. image:: images/gridfill_missing_data_overview.png
+   :alt: GridFill Missing Data Overview
    :width: 100%
 
-*Figure 1: GridFill interpolation comparison showing original data with missing values (left), multiple interpolation methods (center), and final analysis (right).*
+*Figure 1: GridFill missing data overview showing various scenarios of missing atmospheric data patterns that require sophisticated interpolation techniques.*
 
 .. note::
    **Key Features:**
@@ -161,11 +161,11 @@ where φ represents the atmospheric field being interpolated.
 
 **2. Advanced Methods**
 
-.. image:: images/gridfill_methods.png
-   :alt: GridFill Method Comparison
+.. image:: images/gridfill_comprehensive_comparison.png
+   :alt: GridFill Comprehensive Comparison
    :width: 100%
 
-*Figure 2: Comparison of different GridFill interpolation methods showing convergence and accuracy characteristics.*
+*Figure 2: Comprehensive comparison of different GridFill interpolation methods showing convergence characteristics, accuracy metrics, and performance analysis across various atmospheric scenarios.*
 
 * **Standard GridFill**: Classical Poisson equation solver
 * **Xarray Interface**: Seamless integration with modern Python climate data workflows
@@ -174,22 +174,22 @@ where φ represents the atmospheric field being interpolated.
 
 **3. Quality Assessment**
 
-.. image:: images/gridfill_convergence.png
-   :alt: GridFill Convergence Analysis
+.. image:: images/gridfill_component_vs_direct_comparison.png
+   :alt: GridFill Component vs Direct Comparison
    :width: 100%
 
-*Figure 3: GridFill convergence analysis showing iteration progress and solution stability.*
+*Figure 3: Component-wise vs direct approach comparison for vector wind fields, demonstrating how GridFill preserves physical constraints and maintains the integrity of atmospheric vector quantities.*
 
 Performance Analysis
 --------------------
 
 **Method Comparison and Validation**
 
-.. image:: images/gridfill_validation.png
-   :alt: GridFill Validation Results
+.. image:: images/gridfill_uv_component_analysis.png
+   :alt: GridFill UV Component Analysis
    :width: 100%
 
-*Figure 4: Comprehensive validation of GridFill methods against known analytical solutions and real atmospheric data.*
+*Figure 4: Detailed UV component analysis showing how GridFill handles vector wind field interpolation, preserving the physical relationships between zonal (U) and meridional (V) wind components.*
 
 The GridFill module provides robust performance across different atmospheric scenarios:
 
