@@ -254,11 +254,11 @@ Where:
 
 **Truncation Effects on RWS**
 
-.. image:: images/windspharm_rws_truncation.png
+.. image:: images/windspharm_rossby_wave_source_truncations.png
    :alt: Windspharm RWS Truncation Comparison
    :width: 100%
 
-*Figure 9: Comparison of Rossby wave source calculations with different spectral truncation levels (T21, T42, and no truncation).*
+*Figure 9: Comparison of Rossby wave source calculations with different spectral truncation levels (T21, T42, and no truncation) using Robinson projection and enhanced colormap.*
 
 Mathematical Foundation
 -----------------------

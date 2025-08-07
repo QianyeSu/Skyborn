@@ -51,6 +51,9 @@ Utility Functions
 .. autofunction:: skyborn.calc.calculate_potential_temperature
    :no-index:
 
+.. autofunction:: skyborn.calc.convert_longitude_range
+   :no-index:
+
 Example Usage
 -------------
 

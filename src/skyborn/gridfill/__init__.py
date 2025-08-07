@@ -62,7 +62,7 @@ from __future__ import absolute_import
 from .gridfill import fill, fill_cube
 
 try:
-    from ._version import __version__
+    from skyborn import __version__
 except ImportError:
     __version__ = "1.0.0"
 

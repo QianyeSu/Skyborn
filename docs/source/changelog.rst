@@ -1,6 +1,57 @@
 Changelog
 =========
 
+Version 0.3.10 (In Development)
+-------------------------------
+
+**🚀 New Features**
+
+* **Rossby Wave Source Analysis**: Added comprehensive Rossby wave source calculation capabilities to the windspharm module:
+
+  - New ``rossbywavesource()`` method in both standard and xarray interfaces
+  - Implements the Sardeshmukh & Hoskins (1988) formulation: S = -ζₐ∇·v - v_χ·∇ζₐ
+  - Support for custom truncation levels and Earth's angular velocity parameters
+  - CF-compliant metadata for xarray output with proper units and standard names
+
+* **Enhanced Gridfill Module**: Expanded grid filling capabilities for atmospheric data:
+
+  - Improved algorithm for handling missing data in wind fields
+  - Better performance for large-scale data filling operations
+  - Enhanced robustness for irregular grid patterns
+
+
+**🔧 Improvements**
+
+* **Test File Consolidation**: Merged duplicate gridfill test files for better maintainability
+* **Better Grid Handling**: Improved spherical harmonic truncation validation for different grid sizes
+* **Documentation Updates**: Enhanced gallery with new Rossby wave source visualization examples
+
+**📚 Documentation**
+
+* **New Tutorial Notebooks**: Added comprehensive examples for:
+
+  - Rossby wave source analysis and visualization
+  - Grid filling techniques with atmospheric data
+  - Longitude coordinate system transformations
+
+* **Enhanced Gallery**: Updated with new visualization examples including:
+
+  - ``windspharm_rossby_wave_source_truncations.png`` showing truncation effects
+  - Improved figure captions and mathematical formulations
+  - Better integration of notebook examples
+
+**🧪 Testing**
+
+* **Expanded Test Coverage**: Added comprehensive tests for new Rossby wave source functionality
+* **Grid Size Validation**: Enhanced parameter validation for different grid resolutions
+* **Cross-interface Testing**: Verified consistency between standard and xarray interfaces
+
+**Technical Notes**
+
+* All existing functionality remains backward compatible
+* Enhanced error handling for grid size limitations in spherical harmonic calculations
+* Improved memory efficiency for large-scale atmospheric analysis
+
 Version 0.3.9 (Current)
 ------------------------
 
