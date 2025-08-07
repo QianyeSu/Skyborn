@@ -182,6 +182,40 @@ class TestXarrayVectorWindOperations:
         assert "lon" in divergence.coords
         assert divergence.shape == u.shape
 
+    def test_rossby_wave_source_xarray(self, sample_xarray_data):
+        """Test Rossby wave source calculation with xarray."""
+        u, v = sample_xarray_data
+        vw = VectorWind(u, v)
+
+        # Test basic RWS calculation
+        rws = vw.rossbywavesource()
+
+        assert isinstance(rws, xr.DataArray)
+        assert "lat" in rws.coords
+        assert "lon" in rws.coords
+        assert rws.shape == u.shape
+        assert np.all(np.isfinite(rws.values))
+
+        # Check units and metadata
+        assert "units" in rws.attrs
+        assert rws.attrs["units"] == "s**-2"
+        assert "standard_name" in rws.attrs
+        assert rws.attrs["standard_name"] == "rossby_wave_source"
+
+        # Test with truncation (use smaller truncation for test grid)
+        rws_t15 = vw.rossbywavesource(truncation=15)
+        assert isinstance(rws_t15, xr.DataArray)
+        assert rws_t15.shape == u.shape
+        assert np.all(np.isfinite(rws_t15.values))
+
+        # Test with custom omega (significantly different from default 7.292e-5)
+        rws_custom = vw.rossbywavesource(omega=1.0e-4)
+        assert isinstance(rws_custom, xr.DataArray)
+        assert rws_custom.shape == u.shape
+        assert np.all(np.isfinite(rws_custom.values))
+
+        # Basic functionality test passed - omega parameter is correctly accepted
+
     def test_streamfunction_xarray(self, sample_xarray_data):
         """Test streamfunction calculation with xarray."""
         u, v = sample_xarray_data
