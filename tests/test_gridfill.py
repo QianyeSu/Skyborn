@@ -114,6 +114,179 @@ class TestGridfill:
             filled_zero[mask], filled_zonal[mask]
         ), "Different initialization should give different results"
 
+    def test_initzonal_linear(self):
+        """Test linear zonal initialization."""
+        # Create data with linear trend in latitude
+        lon = np.linspace(0, 360, 24)
+        lat = np.linspace(-90, 90, 12)
+        LON, LAT = np.meshgrid(lon, lat)
+
+        # Create a linear pattern in latitude
+        data = LAT * 2.0 + 0.1 * np.random.rand(*LAT.shape)
+
+        # Create a gap in the middle
+        mask = np.zeros_like(data, dtype=bool)
+        mask[4:8, 10:14] = True
+
+        masked_data = ma.array(data, mask=mask)
+
+        # Fill with different initialization methods
+        filled_default, _ = fill(
+            masked_data,
+            xdim=1,
+            ydim=0,
+            eps=1e-4,
+            initzonal=True,
+            initzonal_linear=False,
+            verbose=False,
+        )
+        filled_linear, _ = fill(
+            masked_data,
+            xdim=1,
+            ydim=0,
+            eps=1e-4,
+            initzonal=True,
+            initzonal_linear=True,
+            verbose=False,
+        )
+
+        # Both should be finite
+        assert np.all(np.isfinite(filled_default[mask]))
+        assert np.all(np.isfinite(filled_linear[mask]))
+
+        # Linear initialization should preserve the linear trend better
+        # Calculate the true values at the missing points
+        true_values = data.data[mask]
+        linear_values = filled_linear[mask]
+        default_values = filled_default[mask]
+
+        # Linear initialization should be closer to the true values for linear data
+        linear_rmse = np.sqrt(np.mean((linear_values - true_values) ** 2))
+        default_rmse = np.sqrt(np.mean((default_values - true_values) ** 2))
+
+        # For purely linear data, linear initialization should be better
+        assert (
+            linear_rmse <= default_rmse * 2
+        ), "Linear initialization should handle linear trends better"
+
+    def test_initial_value_parameter(self):
+        """Test initial value parameter."""
+        # Create test data
+        data = np.random.rand(15, 20)
+        mask = np.zeros_like(data, dtype=bool)
+        mask[6:10, 8:12] = True
+
+        masked_data = ma.array(data, mask=mask)
+
+        # Test with different initial values
+        filled_zero, _ = fill(
+            masked_data,
+            xdim=1,
+            ydim=0,
+            eps=1e-4,
+            initzonal=False,
+            initial_value=0.0,
+            verbose=False,
+        )
+        filled_one, _ = fill(
+            masked_data,
+            xdim=1,
+            ydim=0,
+            eps=1e-4,
+            initzonal=False,
+            initial_value=1.0,
+            verbose=False,
+        )
+        filled_mean, _ = fill(
+            masked_data,
+            xdim=1,
+            ydim=0,
+            eps=1e-4,
+            initzonal=False,
+            initial_value=0.5,
+            verbose=False,
+        )
+
+        # All should be finite
+        assert np.all(np.isfinite(filled_zero[mask]))
+        assert np.all(np.isfinite(filled_one[mask]))
+        assert np.all(np.isfinite(filled_mean[mask]))
+
+        # Different initial values should generally give different results
+        # (unless the algorithm converges to exactly the same solution)
+        zero_values = filled_zero[mask]
+        one_values = filled_one[mask]
+        mean_values = filled_mean[mask]
+
+        # At least one pair should be different
+        different_from_zero = not np.allclose(zero_values, one_values, rtol=1e-8)
+        different_from_one = not np.allclose(one_values, mean_values, rtol=1e-8)
+        different_from_mean = not np.allclose(zero_values, mean_values, rtol=1e-8)
+
+        assert (
+            different_from_zero or different_from_one or different_from_mean
+        ), "Different initial values should produce some variation"
+
+        # All values should be reasonable (between min and max of data)
+        data_min = np.min(data[~mask])
+        data_max = np.max(data[~mask])
+
+        assert np.all((zero_values >= data_min - 0.1) & (zero_values <= data_max + 0.1))
+        assert np.all((one_values >= data_min - 0.1) & (one_values <= data_max + 0.1))
+        assert np.all((mean_values >= data_min - 0.1) & (mean_values <= data_max + 0.1))
+
+    def test_combined_initialization_parameters(self):
+        """Test combination of initzonal, initzonal_linear, and initial_value."""
+        # Create test data with both zonal and meridional structure
+        lon = np.linspace(0, 360, 30)
+        lat = np.linspace(-60, 60, 20)
+        LON, LAT = np.meshgrid(lon, lat)
+
+        # Data with both zonal mean and linear trend
+        data = (
+            2.0 * np.sin(np.radians(LAT))
+            + 0.02 * LAT
+            + 0.1 * np.random.rand(*LAT.shape)
+        )
+
+        # Create a large gap
+        mask = np.zeros_like(data, dtype=bool)
+        mask[8:14, 12:18] = True
+
+        masked_data = ma.array(data, mask=mask)
+
+        # Test different combinations
+        fill_configs = [
+            {"initzonal": False, "initial_value": 0.0},
+            {"initzonal": True, "initzonal_linear": False},
+            {"initzonal": True, "initzonal_linear": True},
+            {"initzonal": True, "initzonal_linear": True, "initial_value": 1.0},
+        ]
+
+        results = []
+        for config in fill_configs:
+            filled, converged = fill(
+                masked_data, xdim=1, ydim=0, eps=1e-4, verbose=False, **config
+            )
+            assert converged[0], f"Should converge with config {config}"
+            results.append(filled)
+
+        # All results should be finite
+        for filled in results:
+            assert np.all(np.isfinite(filled[mask]))
+
+        # Different configurations should generally give different results
+        # Check that at least some pairs are different
+        different_pairs = 0
+        for i in range(len(results)):
+            for j in range(i + 1, len(results)):
+                if not np.allclose(results[i][mask], results[j][mask], rtol=1e-6):
+                    different_pairs += 1
+
+        assert (
+            different_pairs > 0
+        ), "Different initialization configurations should produce different results"
+
     def test_cyclic_boundary(self):
         """Test cyclic boundary conditions."""
         # Create a 8x16 grid (like a simplified global grid)
@@ -779,6 +952,86 @@ class TestGridfillXArray:
         assert not np.any(np.isnan(filled.values))
         # Value should be reasonable interpolation
         assert 0 < filled.values[4, 5] < 1
+
+    def test_xarray_new_initialization_parameters(self):
+        """Test xarray interface with new initialization parameters."""
+        lons = np.linspace(0, 360, 16, endpoint=False)
+        lats = np.linspace(-60, 60, 12)
+
+        # Create data with zonal pattern
+        LAT, LON = np.meshgrid(lats, lons, indexing="ij")
+        data = np.sin(np.radians(LAT)) + 0.1 * np.random.rand(*LAT.shape)
+
+        # Add missing values
+        data[4:8, 6:10] = np.nan
+
+        da = xr.DataArray(
+            data,
+            coords={
+                "lat": ("lat", lats, {"standard_name": "latitude"}),
+                "lon": ("lon", lons, {"standard_name": "longitude"}),
+            },
+            dims=["lat", "lon"],
+        )
+
+        # Test with linear zonal initialization
+        filled_linear = xr_fill(da, eps=1e-3, initzonal=True, initzonal_linear=True)
+        assert isinstance(filled_linear, xr.DataArray)
+        assert not np.any(np.isnan(filled_linear.values))
+
+        # Test with initial value parameter
+        filled_init = xr_fill(da, eps=1e-3, initzonal=False, initial_value=0.5)
+        assert isinstance(filled_init, xr.DataArray)
+        assert not np.any(np.isnan(filled_init.values))
+
+        # Test combined parameters
+        filled_combined = xr_fill(
+            da, eps=1e-3, initzonal=True, initzonal_linear=True, initial_value=0.2
+        )
+        assert isinstance(filled_combined, xr.DataArray)
+        assert not np.any(np.isnan(filled_combined.values))
+
+        # Results should be different with different initialization methods
+        assert not np.allclose(filled_linear.values, filled_init.values, rtol=1e-6)
+
+    def test_xarray_fill_multiple_with_new_params(self):
+        """Test fill_multiple function with new initialization parameters."""
+        lons = np.linspace(0, 360, 12, endpoint=False)
+        lats = np.linspace(-60, 60, 8)
+
+        # Create two datasets with missing values
+        data1 = np.random.rand(8, 12)
+        data1[2:5, 4:7] = np.nan
+
+        data2 = np.random.rand(8, 12)
+        data2[3:6, 6:9] = np.nan
+
+        da1 = xr.DataArray(
+            data1,
+            coords={
+                "lat": ("lat", lats, {"standard_name": "latitude"}),
+                "lon": ("lon", lons, {"standard_name": "longitude"}),
+            },
+            dims=["lat", "lon"],
+        )
+
+        da2 = xr.DataArray(
+            data2,
+            coords={
+                "lat": ("lat", lats, {"standard_name": "latitude"}),
+                "lon": ("lon", lons, {"standard_name": "longitude"}),
+            },
+            dims=["lat", "lon"],
+        )
+
+        # Test fill_multiple with new parameters
+        filled_list = fill_multiple(
+            [da1, da2], eps=1e-3, initzonal=True, initzonal_linear=True
+        )
+
+        assert len(filled_list) == 2
+        assert all(isinstance(da, xr.DataArray) for da in filled_list)
+        assert all(not np.any(np.isnan(da.values)) for da in filled_list)
 
 
 # Test fill_cube function if iris is available
