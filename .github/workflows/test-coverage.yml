@@ -31,26 +31,34 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libeccodes-dev
+          sudo apt-get install -y libeccodes-dev gfortran libopenblas-dev
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # Install build dependencies first
+          pip install wheel build cython>=3.0.0 numpy
+          # Install package in development mode
           pip install -e .
           pip install pytest pytest-cov pytest-xdist coverage[toml]
           # Try to install eccodes, but don't fail if it doesn't work
           pip install eccodes || echo "eccodes installation failed, continuing without it"
 
+      - name: Build compiled extensions
+        run: |
+          # Build all extensions (Fortran and Cython)
+          python setup.py build_ext --inplace
+          echo "Extensions built successfully"
+
       - name: Run tests with coverage
         run: |
           pytest tests/ \
+            src/skyborn/gridfill/tests/ \
             --cov=src/skyborn \
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing \
             --cov-fail-under=50 \
-            --ignore=tests/test_windspharm.py \
-            --ignore=tests/test_spharm.py \
             -v --tb=short || true
 
       - name: Check if coverage files exist
