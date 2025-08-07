@@ -59,7 +59,7 @@ try:
     import iris
 
     IrisCube = iris.cube.Cube
-except ImportError:
+except (ImportError, RuntimeError):
     IrisCube = Any
 
 
