@@ -45,7 +45,8 @@ try:
     from . import iris
 
     __all__.append("iris")
-except ImportError:
+except (ImportError, RuntimeError):
+    # Skip iris if not available or if there are package conflicts
     pass
 
 try:

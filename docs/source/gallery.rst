@@ -222,6 +222,44 @@ Advanced Features
 
 *Figure 7: Spectral truncation comparison showing the effects of different truncation levels on atmospheric field analysis.*
 
+Rossby Wave Source Analysis
+----------------------------
+
+**Rossby Wave Source Calculation**
+
+The windspharm package includes advanced Rossby wave source analysis capabilities:
+
+.. image:: images/windspharm_rossby_wave_source.png
+   :alt: Windspharm Rossby Wave Source
+   :width: 100%
+
+*Figure 8: Rossby wave source analysis showing wave generation (red) and absorption (blue) regions. The RWS quantifies the generation of Rossby wave activity in the atmosphere.*
+
+The Rossby wave source (RWS) is calculated as:
+
+.. math::
+
+   S = -\zeta_a \nabla \cdot \mathbf{v} - \mathbf{v}_\chi \cdot \nabla \zeta_a
+
+Where:
+- ζₐ is absolute vorticity (relative + planetary)
+- ∇·v is horizontal divergence
+- v_χ is the irrotational (divergent) wind component
+- ∇ζₐ is the gradient of absolute vorticity
+
+**Physical Interpretation:**
+- **Positive RWS (Red)**: Rossby wave generation regions
+- **Negative RWS (Blue)**: Rossby wave absorption/dissipation regions
+- **Applications**: Tropical-extratropical interactions, jet stream dynamics, storm track analysis
+
+**Truncation Effects on RWS**
+
+.. image:: images/windspharm_rws_truncation.png
+   :alt: Windspharm RWS Truncation Comparison
+   :width: 100%
+
+*Figure 9: Comparison of Rossby wave source calculations with different spectral truncation levels (T21, T42, and no truncation).*
+
 Mathematical Foundation
 -----------------------
 
@@ -259,6 +297,9 @@ Example Applications
 **Jet Stream Dynamics**
    Apply Helmholtz decomposition to understand jet stream structure
 
+**Rossby Wave Generation**
+   Calculate Rossby wave source to study tropical-extratropical interactions
+
 **Model Validation**
    Compare reanalysis data with climate model output using spectral methods
 
@@ -289,6 +330,13 @@ Getting Started
    # Get streamfunction and velocity potential
    streamfunction = vw.streamfunction()
    velocity_potential = vw.velocitypotential()
+
+   # Calculate Rossby wave source
+   rossby_wave_source = vw.rossbywavesource()
+
+   # Analyze with different truncations
+   rws_t21 = vw.rossbywavesource(truncation=21)
+   rws_t42 = vw.rossbywavesource(truncation=42)
 
 Technical Notes
 ---------------

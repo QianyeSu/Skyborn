@@ -9,7 +9,89 @@ import pytest
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
-from skyborn.plot.plotting import add_equal_axes
+from skyborn.plot.plotting import add_equal_axes, createFigure
+
+
+class TestCreateFigure:
+    """Test the createFigure function."""
+
+    def test_createFigure_basic(self):
+        """Test basic createFigure functionality."""
+        fig = createFigure()
+
+        # Check default parameters
+        assert fig.get_figwidth() == 12
+        assert fig.get_figheight() == 8
+        assert fig.dpi == 300
+
+        plt.close(fig)
+
+    def test_createFigure_custom_figsize(self):
+        """Test createFigure with custom figsize."""
+        fig = createFigure(figsize=(8, 6))
+
+        assert fig.get_figwidth() == 8
+        assert fig.get_figheight() == 6
+        assert fig.dpi == 300
+
+        plt.close(fig)
+
+    def test_createFigure_custom_dpi(self):
+        """Test createFigure with custom DPI."""
+        fig = createFigure(dpi=150)
+
+        assert fig.get_figwidth() == 12
+        assert fig.get_figheight() == 8
+        assert fig.dpi == 150
+
+        plt.close(fig)
+
+    def test_createFigure_with_subplotAdj(self):
+        """Test createFigure with subplot adjustments."""
+        subplot_params = {
+            "left": 0.1,
+            "right": 0.9,
+            "top": 0.9,
+            "bottom": 0.1,
+            "hspace": 0.2,
+            "wspace": 0.2,
+        }
+
+        fig = createFigure(subplotAdj=subplot_params)
+
+        # Check that figure was created successfully
+        assert fig.get_figwidth() == 12
+        assert fig.get_figheight() == 8
+
+        plt.close(fig)
+
+    def test_createFigure_kwargs(self):
+        """Test createFigure with additional keyword arguments."""
+        fig = createFigure(facecolor="lightblue", edgecolor="red")
+
+        # Check that figure was created successfully
+        assert fig.get_figwidth() == 12
+        assert fig.get_figheight() == 8
+
+        plt.close(fig)
+
+    def test_createFigure_all_parameters(self):
+        """Test createFigure with all parameters specified."""
+        subplot_params = {"left": 0.2, "right": 0.8}
+
+        fig = createFigure(
+            figsize=(10, 5),
+            dpi=200,
+            subplotAdj=subplot_params,
+            facecolor="white",
+            edgecolor="black",
+        )
+
+        assert fig.get_figwidth() == 10
+        assert fig.get_figheight() == 5
+        assert fig.dpi == 200
+
+        plt.close(fig)
 
 
 class TestAddEqualAxes:
@@ -174,7 +256,7 @@ class TestAddEqualAxes:
         """Test add_equal_axes with invalid location parameter."""
         fig, ax = plt.subplots()
 
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError):
             add_equal_axes(ax, loc="invalid_location", pad=0.05, width=0.1)
 
         plt.close(fig)
@@ -244,7 +326,7 @@ class TestPlottingIntegration:
         fig, ax = plt.subplots()
 
         # Test with invalid parameters
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError):
             add_equal_axes(ax, loc="nowhere", pad=0.05, width=0.1)
 
         plt.close(fig)

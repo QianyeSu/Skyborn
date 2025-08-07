@@ -819,6 +819,84 @@ class VectorWind:
 
         return u_da, v_da
 
+    def rossbywavesource(
+        self, truncation: Optional[int] = None, omega: Optional[float] = None
+    ) -> DataArray:
+        """
+        Calculate Rossby wave source.
+
+        The Rossby wave source quantifies the generation of Rossby wave activity
+        in the atmosphere through the interaction of divergence with absolute
+        vorticity and the advection of absolute vorticity by the irrotational wind.
+
+        Parameters
+        ----------
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation.
+            If None, uses the default truncation based on grid resolution.
+        omega : float, optional
+            Earth's angular velocity in rad/s. Default is 7.292e-5 s⁻¹.
+
+        Returns
+        -------
+        DataArray
+            Rossby wave source field with CF-compliant attributes
+
+        See Also
+        --------
+        absolutevorticity : Calculate absolute vorticity
+        divergence : Calculate horizontal divergence
+        irrotationalcomponent : Calculate irrotational wind component
+        gradient : Calculate vector gradient
+
+        Notes
+        -----
+        The Rossby wave source is defined as:
+        S = -ζₐ∇·v - v_χ·∇ζₐ
+
+        where:
+        - ζₐ is absolute vorticity (relative + planetary)
+        - ∇·v is horizontal divergence
+        - v_χ is the irrotational (divergent) wind component
+        - ∇ζₐ is the gradient of absolute vorticity
+
+        Positive values indicate Rossby wave generation, while negative values
+        indicate wave absorption or dissipation.
+
+        Examples
+        --------
+        >>> rws = vw.rossbywavesource()
+        >>> rws_t21 = vw.rossbywavesource(truncation=21)
+        >>> rws_custom_omega = vw.rossbywavesource(omega=7.2921150e-5)
+
+        # Create a plot of Rossby wave source
+        >>> import matplotlib.pyplot as plt
+        >>> import cartopy.crs as ccrs
+        >>>
+        >>> ax = plt.axes(projection=ccrs.PlateCarree())
+        >>> rws.plot.contourf(ax=ax, transform=ccrs.PlateCarree(),
+        ...                   levels=20, cmap='RdBu_r')
+        >>> ax.coastlines()
+        >>> ax.gridlines()
+        >>> plt.title('Rossby Wave Source')
+        >>> plt.show()
+
+        References
+        ----------
+        Sardeshmukh, P. D., & Hoskins, B. J. (1988). The generation of global
+        rotational flow by steady idealized tropical heating. Journal of the
+        Atmospheric Sciences, 45(7), 1228-1251.
+        """
+        rws = self._api.rossbywavesource(truncation=truncation, omega=omega)
+        return self._metadata(
+            rws,
+            "rossby_wave_source",
+            units="s**-2",
+            standard_name="rossby_wave_source",
+            long_name="rossby_wave_source_term",
+            description="Generation term for Rossby wave activity",
+        )
+
     def truncate(self, field: DataArray, truncation: Optional[int] = None) -> DataArray:
         """
         Apply spectral truncation to a scalar field.
