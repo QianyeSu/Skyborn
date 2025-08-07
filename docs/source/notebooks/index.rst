@@ -35,28 +35,6 @@ demonstration of emergent constraint methods for climate sensitivity analysis.
 * Quantifying uncertainty reduction
 * Visualizing results
 
-GridFill Data Interpolation
----------------------------
-
-The :doc:`gridfill_tutorial` notebook demonstrates advanced data interpolation
-techniques for filling missing values in atmospheric datasets using Poisson equation solvers.
-
-**Key Features:**
-
-* Multiple interpolation algorithms
-* Physical constraint preservation
-* Component-wise vs direct approaches
-* Quality assessment and validation
-* Publication-quality visualizations
-
-**Topics Covered:**
-
-* Creating realistic missing data scenarios
-* Applying different GridFill methods
-* Component-wise wind field filling
-* Performance analysis and comparison
-* Best practices for atmospheric data
-
 Vector Wind Analysis
 --------------------
 
@@ -79,6 +57,28 @@ analysis using the Skyborn windspharm module.
 * Visualizing results
 * Performance optimization
 * Error handling
+
+GridFill Data Interpolation
+---------------------------
+
+The :doc:`gridfill_tutorial` notebook demonstrates advanced data interpolation
+techniques for filling missing values in atmospheric datasets using Poisson equation solvers.
+
+**Key Features:**
+
+* Multiple interpolation algorithms
+* Physical constraint preservation
+* Component-wise vs direct approaches
+* Quality assessment and validation
+* Publication-quality visualizations
+
+**Topics Covered:**
+
+* Creating realistic missing data scenarios
+* Applying different GridFill methods
+* Component-wise wind field filling
+* Performance analysis and comparison
+* Best practices for atmospheric data
 
 Getting Started
 ---------------
