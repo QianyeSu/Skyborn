@@ -8,7 +8,7 @@ def calculate_gradient(
     field: np.ndarray,
     coordinates: np.ndarray,
     axis: int = -1,
-    radius: float = 6371000.0,
+    radius: Optional[float] = None,
 ) -> np.ndarray:
     """Calculate gradient of an arbitrary dimensional array along specified coordinates
 
@@ -16,7 +16,8 @@ def calculate_gradient(
         field: Data field for gradient calculation, can be any dimensional array, e.g., (time, level, lat, lon)
         coordinates: Coordinate array along which to calculate the gradient, such as latitude or longitude values
         axis: Specifies the dimensional axis for gradient calculation, defaults to the last dimension (-1)
-        radius: Earth radius, default is 6371000.0 meters, used for latitude gradient calculation
+        radius: Earth radius, default is None. If provided, coordinates are treated as latitude in degrees
+                and converted to distance in meters. If None, coordinates are used directly.
 
     Returns:
         Gradient field with the same shape as the input field
@@ -27,75 +28,98 @@ def calculate_gradient(
             f"Coordinate array size ({coordinates.size}) does not match field size ({field.shape[axis]}) on the specified axis"
         )
 
-    # Determine if coordinates are latitude or longitude
-    is_latitude = False
-    if np.min(coordinates) >= -90 and np.max(coordinates) <= 90:
-        is_latitude = True
-        # For latitude, calculate actual distance (in meters)
-        if is_latitude:
-            # Convert latitude to actual distance
-            distances = coordinates * np.pi / 180.0 * radius
-        else:
-            # For longitude, we need to consider the latitude effect, but this requires additional latitude information
-            # Here we simply use longitude differences directly
-            distances = coordinates
+    # If radius is provided, treat coordinates as latitude and convert to distance
+    if radius is not None:
+        # Convert latitude to actual distance
+        distances = coordinates * np.pi / 180.0 * radius
+    else:
+        # Use coordinates directly
+        distances = coordinates
 
     # Create output array with the same shape as input
     gradient = np.zeros_like(field, dtype=float)
+
+    # Handle edge case: single point (no gradient can be computed)
+    if field.shape[axis] < 2:
+        return gradient  # Return zero gradient
 
     # To use numpy's advanced indexing, we need to create index arrays
     ndim = field.ndim
     idx_ranges = [slice(None)] * ndim
 
-    # Use central difference for interior points
-    inner_range = slice(1, field.shape[axis] - 1)
-    idx_forward = idx_ranges.copy()
-    idx_forward[axis] = slice(2, field.shape[axis])
+    # Handle the simple case where distances are uniform
+    dx = np.diff(distances)
+    if len(dx) > 0 and np.allclose(dx, dx[0]):
+        # Uniform spacing - use simple central differences
+        h = dx[0]
 
-    idx_center = idx_ranges.copy()
-    idx_center[axis] = inner_range
+        # Central differences for interior points
+        for i in range(1, field.shape[axis] - 1):
+            idx = idx_ranges.copy()
+            idx[axis] = i
+            idx_forward = idx_ranges.copy()
+            idx_forward[axis] = i + 1
+            idx_backward = idx_ranges.copy()
+            idx_backward[axis] = i - 1
 
-    idx_backward = idx_ranges.copy()
-    idx_backward[axis] = slice(0, field.shape[axis] - 2)
+            gradient[tuple(idx)] = (
+                field[tuple(idx_forward)] - field[tuple(idx_backward)]
+            ) / (2.0 * h)
 
-    # Use vectorized operations to calculate gradient for interior points
-    forward_dists = np.diff(distances[1:])
-    backward_dists = np.diff(distances[:-1])
-    total_dists = distances[2:] - distances[:-2]
+        # Forward difference for left boundary
+        idx_left = idx_ranges.copy()
+        idx_left[axis] = 0
+        idx_left_plus = idx_ranges.copy()
+        idx_left_plus[axis] = 1
+        gradient[tuple(idx_left)] = (
+            field[tuple(idx_left_plus)] - field[tuple(idx_left)]
+        ) / h
 
-    # Create coefficient arrays with shape suitable for broadcasting
-    shape = [1] * ndim
-    shape[axis] = len(forward_dists)
+        # Backward difference for right boundary
+        idx_right = idx_ranges.copy()
+        idx_right[axis] = -1
+        idx_right_minus = idx_ranges.copy()
+        idx_right_minus[axis] = -2
+        gradient[tuple(idx_right)] = (
+            field[tuple(idx_right)] - field[tuple(idx_right_minus)]
+        ) / h
 
-    a0 = forward_dists.reshape(shape)
-    b0 = backward_dists.reshape(shape)
-    c0 = total_dists.reshape(shape)
+    else:
+        # Non-uniform spacing - use variable spacing formulas
+        for i in range(field.shape[axis]):
+            idx = idx_ranges.copy()
+            idx[axis] = i
 
-    # Calculate gradient using weighted difference formula
-    gradient[tuple(idx_center)] = (
-        b0 / a0 / c0 * field[tuple(idx_forward)]
-        - a0 / b0 / c0 * field[tuple(idx_backward)]
-        + (a0 - b0) / a0 / b0 * field[tuple(idx_center)]
-    )
+            if i == 0:
+                # Forward difference for first point
+                idx_plus = idx_ranges.copy()
+                idx_plus[axis] = 1
+                gradient[tuple(idx)] = (field[tuple(idx_plus)] - field[tuple(idx)]) / (
+                    distances[1] - distances[0]
+                )
+            elif i == field.shape[axis] - 1:
+                # Backward difference for last point
+                idx_minus = idx_ranges.copy()
+                idx_minus[axis] = i - 1
+                gradient[tuple(idx)] = (field[tuple(idx)] - field[tuple(idx_minus)]) / (
+                    distances[i] - distances[i - 1]
+                )
+            else:
+                # Central difference for interior points
+                idx_forward = idx_ranges.copy()
+                idx_forward[axis] = i + 1
+                idx_backward = idx_ranges.copy()
+                idx_backward[axis] = i - 1
 
-    # Handle boundary points (forward and backward differences)
-    # Left boundary
-    left_idx = idx_ranges.copy()
-    left_idx[axis] = 0
-    left_idx_plus = idx_ranges.copy()
-    left_idx_plus[axis] = 1
-    gradient[tuple(left_idx)] = (
-        field[tuple(left_idx_plus)] - field[tuple(left_idx)]
-    ) / (distances[1] - distances[0])
+                h1 = distances[i] - distances[i - 1]
+                h2 = distances[i + 1] - distances[i]
 
-    # Right boundary
-    right_idx = idx_ranges.copy()
-    right_idx[axis] = -1
-    right_idx_minus = idx_ranges.copy()
-    right_idx_minus[axis] = -2
-    gradient[tuple(right_idx)] = (
-        field[tuple(right_idx)] - field[tuple(right_idx_minus)]
-    ) / (distances[-1] - distances[-2])
+                # Use weighted central difference for non-uniform spacing
+                gradient[tuple(idx)] = (
+                    -h2 / (h1 * (h1 + h2)) * field[tuple(idx_backward)]
+                    + (h2 - h1) / (h1 * h2) * field[tuple(idx)]
+                    + h1 / (h2 * (h1 + h2)) * field[tuple(idx_forward)]
+                )
 
     return gradient
 
