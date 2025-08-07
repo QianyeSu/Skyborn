@@ -89,9 +89,27 @@ jobs:
             find . -name "*.so" -o -name "*.pyd" | head -10
             echo "=== Checking Python import capabilities ==="
             python -c "import sys; print('Python executable:', sys.executable)"
-            python -c "try: import numpy; print('✓ numpy version:', numpy.__version__); except Exception as e: print('✗ numpy import failed:', e)"
-            python -c "try: import skyborn; print('✓ skyborn imported successfully'); except Exception as e: print('✗ skyborn import failed:', e)"
-            python -c "try: from skyborn.gridfill import fill; print('✓ gridfill imported successfully'); except Exception as e: print('✗ gridfill import failed:', e)"
+            python -c "
+            try:
+                import numpy
+                print('✓ numpy version:', numpy.__version__)
+            except Exception as e:
+                print('✗ numpy import failed:', e)
+            "
+            python -c "
+            try:
+                import skyborn
+                print('✓ skyborn imported successfully')
+            except Exception as e:
+                print('✗ skyborn import failed:', e)
+            "
+            python -c "
+            try:
+                from skyborn.gridfill import fill
+                print('✓ gridfill imported successfully')
+            except Exception as e:
+                print('✗ gridfill import failed:', e)
+            "
             echo "=== Continue anyway for testing ==="
           fi
 
@@ -102,8 +120,20 @@ jobs:
 
           echo "=== Testing imports ==="
           python -c "import sys; print('Python path:', sys.path[:2])"
-          python -c "try: import skyborn; print('✓ skyborn imported'); except Exception as e: print('✗ skyborn import failed:', e)"
-          python -c "try: from skyborn.gridfill import fill; print('✓ gridfill imported'); except Exception as e: print('✗ gridfill import failed:', e)"
+          python -c "
+          try:
+              import skyborn
+              print('✓ skyborn imported')
+          except Exception as e:
+              print('✗ skyborn import failed:', e)
+          "
+          python -c "
+          try:
+              from skyborn.gridfill import fill
+              print('✓ gridfill imported')
+          except Exception as e:
+              print('✗ gridfill import failed:', e)
+          "
 
           echo "=== Running tests with coverage ==="
           # Test gridfill specifically since it should work
