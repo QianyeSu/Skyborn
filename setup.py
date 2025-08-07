@@ -56,21 +56,68 @@ check_gfortran()
 
 
 def get_gridfill_extensions():
-    """Get Cython extensions for gridfill module"""
+    """Get Cython extensions for gridfill module with cross-platform optimizations"""
     extensions = []
 
     if HAVE_CYTHON:
-        # Define the Cython extension for gridfill
+        import platform
+
+        # Cross-platform optimization flags based on existing project standards
+        # Similar to what we use for Fortran compilation
+
+        # Check compiler type on Windows
+        is_msvc = platform.system() == "Windows" and (
+            "MSVC" in os.environ.get("CC", "") or "cl.exe" in os.environ.get("CC", "")
+        )
+
+        if is_msvc:
+            # MSVC flags for Windows
+            extra_compile_args = [
+                # Maximum speed optimization (stable, Microsoft recommended)
+                "/O2",
+                "/Oy",  # Frame pointer omission
+                "/GT",  # Support fiber-safe thread-local storage
+                # Use SSE2 instructions (widely supported on x86-64)
+                "/arch:SSE2",
+                # Note: Removed /fp:fast to preserve numerical precision
+            ]
+        else:
+            # GCC/Clang compatible flags (Linux/macOS/MinGW)
+            # Using same strategy as Fortran compilation in this project
+            extra_compile_args = [
+                "-O3",  # Maximum optimization
+                # Target x86-64 architecture (portable)
+                "-march=x86-64",
+                "-mtune=generic",  # Generic tuning (not CPU-specific)
+                "-fPIC",  # Position Independent Code
+                "-funroll-loops",  # Unroll loops for performance
+                "-finline-functions",  # Inline functions
+                "-ftree-vectorize",  # Enable vectorization
+                # Assume finite math (same as Fortran config)
+                "-ffinite-math-only",
+                "-fno-trapping-math",  # Disable floating-point traps
+                "-falign-functions=32",  # Function alignment
+                # Note: Removed -ffast-math to preserve IEEE 754 compliance
+            ]
+
+        # Define the Cython extension for gridfill with optimizations
         gridfill_ext = Extension(
             "skyborn.gridfill._gridfill",
             ["src/skyborn/gridfill/_gridfill.pyx"],
             include_dirs=[np.get_include()],
-            define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
+            define_macros=[
+                ("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"),
+                ("CYTHON_TRACE", "0"),  # Disable tracing for performance
+                ("CYTHON_TRACE_NOGIL", "0"),  # Disable nogil tracing
+            ],
+            extra_compile_args=extra_compile_args,
             language="c",
         )
         extensions.append(gridfill_ext)
 
-        print("Found Cython - will build gridfill Cython extensions")
+        compiler_type = "MSVC" if is_msvc else "GCC/Clang"
+        print(f"Found Cython - will build cross-platform optimized gridfill extensions")
+        print(f"Using {compiler_type} with flags: {extra_compile_args}")
     else:
         print(
             "Warning: Cython not found - gridfill Cython extensions will not be built"

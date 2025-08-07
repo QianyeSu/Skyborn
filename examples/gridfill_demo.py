@@ -6,6 +6,7 @@ GridFill Integration Demo
 This example demonstrates the integrated gridfill functionality in skyborn.
 """
 
+from skyborn.gridfill import fill as gridfill_fill
 import numpy as np
 import matplotlib.pyplot as plt
 import skyborn
@@ -45,7 +46,6 @@ error = np.abs(filled_data - data)[valid_mask]
 print(f"RMS error in valid regions: {np.sqrt(np.mean(error**2)):.6f}")
 
 # Also test the direct module access
-from skyborn.gridfill import fill as gridfill_fill
 
 filled_data2, converged2 = gridfill_fill(data_with_gaps, xdim=1, ydim=0, eps=1e-4)
 print("Direct gridfill access also works:", converged2[0])
