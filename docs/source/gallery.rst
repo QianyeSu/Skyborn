@@ -515,24 +515,27 @@ References
 ----------
 
 **Emergent Constraints:**
+
 * **Methodology**: Cox, P. M., et al. (2013). Nature, 494(7437), 341-344
 * **Implementation**: Based on https://github.com/blackcata/Emergent_Constraints/tree/master
 * **Climate Data**: CMIP5/CMIP6 model ensembles
 * **IPCC Assessment**: AR6 Working Group I Report
 
 **Spherical Harmonics:**
+
 * **Mathematical Foundation**: Spherical harmonic expansion theory
-* **Atmospheric Applications**: Lynch, P. (2006). The Emergence of Numerical Weather Prediction
+* **Key References**: Swarztrauber, P. N. (2000). Generalized Discrete Spherical Harmonic Transforms. Journal of Computational Physics 213-230.
 * **Implementation**: Based on established meteorological practices
 * **Validation**: Cross-verified against reference implementations
 
 **GridFill Interpolation:**
+
 * **Mathematical Foundation**: Poisson equation solver for atmospheric data gap-filling
 * **Implementation**: Based on the gridfill package by Andrew Dawson (https://github.com/ajdawson/gridfill)
 * **Numerical Methods**: Finite difference relaxation schemes for 2D Poisson equation (∇²φ = 0)
 * **Atmospheric Applications**: Optimized for meteorological and oceanographic data interpolation
 * **Boundary Conditions**: Support for cyclic (global) and non-cyclic (regional) grids
 * **Key References**:
-  - Numerical methods for partial differential equations in atmospheric sciences
-  - Finite difference methods for fluid dynamics applications
-  - Climate data quality control and gap-filling techniques
+   - Numerical methods for partial differential equations in atmospheric sciences
+   - Finite difference methods for fluid dynamics applications
+   - Climate data quality control and gap-filling techniques
