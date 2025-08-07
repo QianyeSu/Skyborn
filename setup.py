@@ -11,6 +11,15 @@ from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 from setuptools.command.develop import develop
 from setuptools.command.install import install
+import numpy as np
+
+# Check if Cython is available
+try:
+    from Cython.Build import cythonize
+
+    HAVE_CYTHON = True
+except ImportError:
+    HAVE_CYTHON = False
 
 # Force gfortran compiler usage
 os.environ["FC"] = os.environ.get("FC", "gfortran")
@@ -44,6 +53,31 @@ def check_gfortran():
 
 # Check gfortran availability at setup time
 check_gfortran()
+
+
+def get_gridfill_extensions():
+    """Get Cython extensions for gridfill module"""
+    extensions = []
+
+    if HAVE_CYTHON:
+        # Define the Cython extension for gridfill
+        gridfill_ext = Extension(
+            "skyborn.gridfill._gridfill",
+            ["src/skyborn/gridfill/_gridfill.pyx"],
+            include_dirs=[np.get_include()],
+            define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
+            language="c",
+        )
+        extensions.append(gridfill_ext)
+
+        print("Found Cython - will build gridfill Cython extensions")
+    else:
+        print(
+            "Warning: Cython not found - gridfill Cython extensions will not be built"
+        )
+        print("Install Cython to enable gridfill functionality: pip install Cython")
+
+    return extensions
 
 
 class MesonBuildExt(build_ext):
@@ -322,10 +356,15 @@ setup_config = {
         "develop": CustomDevelop,
         "install": CustomInstall,
     },
-    # Add a dummy extension to force platform wheel generation - Windows compatible
+    # Add extensions for both dummy (Windows compatibility) and gridfill
     "ext_modules": [
         Extension("skyborn._dummy", sources=["src/skyborn/_dummy.c"], optional=True)
-    ],
+    ]
+    + (
+        cythonize(get_gridfill_extensions())
+        if HAVE_CYTHON and get_gridfill_extensions()
+        else []
+    ),
 }
 
 if __name__ == "__main__":
