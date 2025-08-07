@@ -52,6 +52,10 @@ def add_equal_axes(ax, loc, pad, width):
         x1_new = bbox.x1
         y0_new = bbox.y1 + pad
         y1_new = y0_new + width
+    else:
+        raise ValueError(
+            f"Invalid location '{loc}'. Must be one of: 'left', 'right', 'bottom', 'top'"
+        )
 
     # Create new Axes.
     fig = axes[0].get_figure()

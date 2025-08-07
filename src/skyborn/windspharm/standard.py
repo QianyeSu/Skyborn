@@ -345,7 +345,7 @@ class VectorWind:
         --------
         >>> wind_speed = vw.magnitude()
         """
-        return np.hypot(self.u + self.v)
+        return np.hypot(self.u, self.v)
 
     def vrtdiv(self, truncation: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -791,3 +791,81 @@ class VectorWind:
             raise ValueError("field is not compatible")
 
         return self.s.spectogrd(field_spec)
+
+    def rossbywavesource(
+        self, truncation: Optional[int] = None, omega: Optional[float] = None
+    ) -> np.ndarray:
+        """
+        Calculate Rossby wave source.
+
+        The Rossby wave source is defined as:
+        S = -ζₐ∇·v - v_χ·∇ζₐ
+
+        where:
+        - ζₐ is absolute vorticity (relative + planetary)
+        - ∇·v is horizontal divergence
+        - v_χ is the irrotational (divergent) wind component
+        - ∇ζₐ is the gradient of absolute vorticity
+
+        Parameters
+        ----------
+        truncation : int, optional
+            Triangular truncation limit for spherical harmonic computation.
+            If None, uses the default truncation based on grid resolution.
+        omega : float, optional
+            Earth's angular velocity in rad/s. Default is 7.292e-5 s⁻¹.
+
+        Returns
+        -------
+        ndarray
+            Rossby wave source field (s⁻²)
+
+        See Also
+        --------
+        absolutevorticity : Calculate absolute vorticity
+        divergence : Calculate horizontal divergence
+        irrotationalcomponent : Calculate irrotational wind component
+        gradient : Calculate vector gradient
+
+        Notes
+        -----
+        The Rossby wave source quantifies the generation of Rossby wave activity
+        in the atmosphere. Positive values indicate wave generation, while
+        negative values indicate wave absorption or dissipation.
+
+        The calculation involves several steps:
+        1. Compute absolute vorticity (relative + planetary)
+        2. Compute horizontal divergence
+        3. Compute irrotational wind components
+        4. Compute gradients of absolute vorticity
+        5. Combine terms according to the RWS formula
+
+        Examples
+        --------
+        >>> rws = vw.rossbywavesource()
+        >>> rws_t21 = vw.rossbywavesource(truncation=21)
+        >>> rws_custom_omega = vw.rossbywavesource(omega=7.2921150e-5)
+
+        References
+        ----------
+        Sardeshmukh, P. D., & Hoskins, B. J. (1988). The generation of global
+        rotational flow by steady idealized tropical heating. Journal of the
+        Atmospheric Sciences, 45(7), 1228-1251.
+        """
+        # Calculate absolute vorticity
+        eta = self.absolutevorticity(omega=omega, truncation=truncation)
+
+        # Calculate divergence
+        div = self.divergence(truncation=truncation)
+
+        # Calculate irrotational (divergent) wind components
+        uchi, vchi = self.irrotationalcomponent(truncation=truncation)
+
+        # Calculate gradients of absolute vorticity
+        etax, etay = self.gradient(eta, truncation=truncation)
+
+        # Combine components to form Rossby wave source
+        # S = -eta * div - (uchi * etax + vchi * etay)
+        rws = -eta * div - (uchi * etax + vchi * etay)
+
+        return rws
