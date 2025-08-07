@@ -2,14 +2,14 @@ name: Test Coverage and Quality
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "src/**"
       - "tests/**"
       - "requirements*.txt"
       - "pyproject.toml"
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 jobs:
