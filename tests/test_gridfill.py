@@ -156,7 +156,7 @@ class TestGridfill:
 
         # Linear initialization should preserve the linear trend better
         # Calculate the true values at the missing points
-        true_values = data.data[mask]
+        true_values = data[mask]
         linear_values = filled_linear[mask]
         default_values = filled_default[mask]
 
