@@ -203,7 +203,9 @@ def fill(
     relax: float = 0.6,
     itermax: int = 100,
     initzonal: bool = False,
+    initzonal_linear: bool = False,
     cyclic: bool = False,
+    initial_value: float = 0.0,
     verbose: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -236,9 +238,22 @@ def fill(
         - False: Initialize with zeros
         - True: Initialize with zonal (x-direction) mean
         Default: False
+    initzonal_linear : bool, optional
+        Use linear interpolation for zonal initialization:
+        - False: Use constant zonal mean (if initzonal=True)
+        - True: Use linear interpolation between valid points in each latitude band
+        This provides better initial conditions by connecting valid data points
+        with linear interpolation rather than using a constant mean value.
+        Can be used with both cyclic and non-cyclic data. Default: False
     cyclic : bool, optional
-        Whether the x-coordinate is cyclic (e.g., longitude wrapping).
-        Default: False
+        Whether the x-coordinate is cyclic (e.g., longitude wrapping around).
+        When True, the algorithm treats the rightmost and leftmost columns as
+        adjacent for interpolation purposes. Default: False
+    initial_value : float, optional
+        Custom initial value for missing data points when using zero initialization
+        (i.e., when both initzonal=False and initzonal_linear=False). This allows
+        setting a more appropriate background value for specific applications.
+        Default: 0.0
     verbose : bool, optional
         Print convergence information for each grid. Default: False
 
@@ -315,7 +330,15 @@ def fill(
 
     # Call the computation subroutine:
     niter, resmax = _poisson_fill_grids(
-        grids, masks, relax, eps, itermax, 1 if cyclic else 0, 1 if initzonal else 0
+        grids,
+        masks,
+        relax,
+        eps,
+        itermax,
+        1 if cyclic else 0,
+        1 if initzonal else 0,
+        1 if initzonal_linear else 0,
+        initial_value,
     )
     grids = _recover_data(grids, info)
     converged = np.logical_not(resmax > eps)
@@ -337,15 +360,17 @@ def fill(
 
 
 def fill_cube(
-    cube: IrisCube,
+    cube: Any,  # iris.cube.Cube when iris is available
     eps: float,
     relax: float = 0.6,
     itermax: int = 100,
     initzonal: bool = False,
+    initzonal_linear: bool = False,
+    initial_value: float = 0.0,
     full_output: bool = False,
     verbose: bool = False,
     inplace: bool = False,
-) -> Union[IrisCube, Tuple[IrisCube, np.ndarray]]:
+) -> Union[Any, Tuple[Any, np.ndarray]]:
     """
     Fill missing values in an iris cube using Poisson equation solver.
 
@@ -365,6 +390,15 @@ def fill_cube(
         Maximum iterations. Default: 100
     initzonal : bool, optional
         Initialize missing values with zonal mean instead of zeros. Default: False
+    initzonal_linear : bool, optional
+        Use linear interpolation for zonal initialization. This provides better
+        initial conditions by interpolating between valid points in each latitude
+        band rather than using a constant mean value. Can be used with both
+        cyclic and non-cyclic data. Default: False
+    initial_value : float, optional
+        Custom initial value for missing data when using zero initialization
+        (i.e., when both initzonal=False and initzonal_linear=False).
+        Default: 0.0
     full_output : bool, optional
         Return convergence information along with filled cube. Default: False
     verbose : bool, optional
@@ -434,7 +468,9 @@ def fill_cube(
         relax=relax,
         itermax=itermax,
         initzonal=initzonal,
+        initzonal_linear=initzonal_linear,
         cyclic=cyclic,
+        initial_value=initial_value,
         verbose=verbose,
     )
 
