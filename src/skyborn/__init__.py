@@ -37,6 +37,9 @@ from .conversion import (
     grib_to_netcdf,
 )
 
+# Import gridfill functions for easy access
+from .gridfill import fill, fill_cube
+
 # Import submodules
 from . import plot
 from . import interp
@@ -45,5 +48,6 @@ from . import conversion
 from . import calc
 from . import spharm
 from . import windspharm
+from . import gridfill
 
 __version__ = "0.3.9"  # Updated to version 0.3.9
