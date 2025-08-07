@@ -37,9 +37,6 @@ from .conversion import (
     grib_to_netcdf,
 )
 
-# Import gridfill functions for easy access
-from .gridfill import fill, fill_cube
-
 # Import submodules
 from . import plot
 from . import interp
@@ -49,5 +46,13 @@ from . import calc
 from . import spharm
 from . import windspharm
 from . import gridfill
+
+# Import key gridfill functions for convenient access
+# (Users can use either skyborn.fill or skyborn.gridfill.fill)
+from .gridfill import fill as gridfill_fill, fill_cube as gridfill_fill_cube
+
+# Expose gridfill functions at top level with clear names
+fill = gridfill_fill
+fill_cube = gridfill_fill_cube
 
 __version__ = "0.3.9"  # Updated to version 0.3.9

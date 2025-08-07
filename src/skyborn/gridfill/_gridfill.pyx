@@ -1,24 +1,18 @@
 #cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False
-"""Fill missing values in grids using an iterative relaxation scheme."""
-# Copyright (c) 2016 Andrew Dawson
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+#cython: cdivision=True, nonecheck=False, overflowcheck=False
+#cython: profile=False, linetrace=False, binding=False
+"""
+Optimized Cython implementation for grid filling using iterative relaxation.
+
+This module is based on the gridfill package by Andrew Dawson:
+https://github.com/ajdawson/gridfill
+
+Performance optimizations include:
+- Disabled bounds checking and wraparound
+- Enabled C-style division
+- Disabled overflow checking for maximum speed
+- Used nogil contexts where possible
+"""
 
 from libc.math cimport fabs, fmax
 import numpy as np
@@ -30,7 +24,7 @@ ctypedef np.float64_t FLOAT64_t
 ctypedef np.uint32_t UINT32_t
 
 
-cdef int int_sum(int[:, :] a, unsigned int ny, unsigned int nx) nogil:
+cdef int int_sum(int[:, :] a, unsigned int ny, unsigned int nx) noexcept nogil:
     """
     Compute the sum of the elements in a 2-dimensional integer array.
 
@@ -45,7 +39,7 @@ cdef int int_sum(int[:, :] a, unsigned int ny, unsigned int nx) nogil:
 
 
 cdef void latitude_indices(unsigned int index, unsigned int nlat,
-                           unsigned int *im1, unsigned int *ip1) nogil:
+                           unsigned int *im1, unsigned int *ip1) noexcept nogil:
     """
     The indices of the neighbouring points for a given index in the
     latitude direction, taking into account grid edges.
@@ -74,7 +68,7 @@ cdef void latitude_indices(unsigned int index, unsigned int nlat,
 
 
 cdef void longitude_indices(unsigned int index, unsigned int nlon, int cyclic,
-                            unsigned int *jm1, unsigned int *jp1) nogil:
+                            unsigned int *jm1, unsigned int *jp1) noexcept nogil:
     """
     The indices of the neighbouring points for a given index in the
     longitude direction, taking into account grid edges and cyclicity.
@@ -116,7 +110,7 @@ cdef void initialize_missing(double[:, :] grid,
                              int[:, :] mask,
                              unsigned int nlat,
                              unsigned int nlon,
-                             int initialize_zonal) nogil:
+                             int initialize_zonal) noexcept nogil:
     """
     Initialize the missing values in a grid in-place.
 
@@ -174,7 +168,7 @@ cdef void poisson_fill(double[:, :] grid,
                        int cyclic,
                        int initialize_zonal,
                        unsigned int *numiter,
-                       double *resmax) nogil:
+                       double *resmax) noexcept nogil:
     """
     Fill missing values in a grid by iterative relaxation.
 
