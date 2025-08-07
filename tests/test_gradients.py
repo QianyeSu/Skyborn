@@ -31,14 +31,20 @@ class TestCalculateGradient:
 
         # For x^2, gradient should be approximately 2*x
         # At x=1: gradient ≈ 2*1 = 2, at x=2: gradient ≈ 2*2 = 4, etc.
-        expected = np.array([3, 5, 7, 9, 7])  # Numerical approximation
+        # Using numerical differentiation:
+        # Point 0: forward diff = (4-1)/(2-1) = 3
+        # Point 1: central diff = (9-1)/(3-1) = 4
+        # Point 2: central diff = (16-4)/(4-2) = 6
+        # Point 3: central diff = (25-9)/(5-3) = 8
+        # Point 4: backward diff = (25-16)/(5-4) = 9
+        expected = np.array([3, 4, 6, 8, 9])  # Correct numerical approximation
 
         assert gradient.shape == field.shape
         assert np.allclose(gradient, expected, atol=1.0)
 
     def test_calculate_gradient_2d(self):
         """Test gradient calculation for 2D array."""
-        # Create a simple 2D field
+        # Create a simple 2D field with linear gradient in each row
         field = np.array([[1, 2, 3], [2, 4, 6], [3, 6, 9]])
         coordinates = np.array([0, 1, 2])
 
@@ -48,9 +54,19 @@ class TestCalculateGradient:
         assert gradient.shape == field.shape
         assert np.all(np.isfinite(gradient))
 
-        # For a linear field, gradient should be approximately constant
-        # Check that interior points have similar gradients
-        assert np.allclose(gradient[:, 1], gradient[:, 1][0], rtol=0.1)
+        # For a linear field with slope 1 in first row, slope 2 in second row, slope 3 in third row
+        # Each row should have constant gradient
+        # Row 0: gradient should be approximately 1
+        # Row 1: gradient should be approximately 2
+        # Row 2: gradient should be approximately 3
+        expected_gradients = [1.0, 2.0, 3.0]
+        for i in range(3):
+            # Check that gradient is approximately constant within each row
+            row_gradient = gradient[i, :]
+            expected = expected_gradients[i]
+            assert np.allclose(
+                row_gradient, expected, rtol=0.2
+            ), f"Row {i}: got {row_gradient}, expected ~{expected}"
 
     def test_calculate_gradient_multidimensional(self):
         """Test gradient calculation for multidimensional arrays."""

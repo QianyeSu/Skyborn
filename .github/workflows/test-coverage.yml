@@ -87,31 +87,58 @@ jobs:
           if ! python setup.py build_ext --inplace --verbose; then
             echo "=== Build failed, checking for any compiled modules ==="
             find . -name "*.so" -o -name "*.pyd" | head -10
-            echo "=== Checking Python import capabilities ==="
-            python -c "import sys; print('Python executable:', sys.executable)"
-            python -c "
-            try:
-                import numpy
-                print('✓ numpy version:', numpy.__version__)
-            except Exception as e:
-                print('✗ numpy import failed:', e)
-            "
-            python -c "
-            try:
-                import skyborn
-                print('✓ skyborn imported successfully')
-            except Exception as e:
-                print('✗ skyborn import failed:', e)
-            "
-            python -c "
-            try:
-                from skyborn.gridfill import fill
-                print('✓ gridfill imported successfully')
-            except Exception as e:
-                print('✗ gridfill import failed:', e)
-            "
-            echo "=== Continue anyway for testing ==="
+          else
+            echo "=== Build succeeded, checking compiled modules ==="
+            find . -name "*.so" -o -name "*.pyd" | head -10
+            echo "=== Ensuring compiled modules are in correct locations ==="
+            # Make sure compiled extensions are in the right place
+            find build/ -name "*spherepack*.so" -exec cp {} src/skyborn/spharm/ \; || echo "No spherepack .so found"
+            find build/ -name "*gridfill*.so" -exec cp {} src/skyborn/gridfill/ \; || echo "No gridfill .so found"
+            ls -la src/skyborn/spharm/
+            ls -la src/skyborn/gridfill/
           fi
+
+          echo "=== Checking Python import capabilities ==="
+          python -c "import sys; print('Python executable:', sys.executable)"
+          python -c "
+          try:
+              import numpy
+              print('✓ numpy version:', numpy.__version__)
+          except Exception as e:
+              print('✗ numpy import failed:', e)
+          "
+          python -c "
+          try:
+              import skyborn
+              print('✓ skyborn imported successfully')
+          except Exception as e:
+              print('✗ skyborn import failed:', e)
+          "
+          python -c "
+          try:
+              from skyborn.gridfill import fill
+              print('✓ gridfill imported successfully')
+          except Exception as e:
+              print('✗ gridfill import failed:', e)
+          "
+          python -c "
+          try:
+              from skyborn.spharm import _spherepack
+              print('✓ _spherepack imported successfully')
+          except Exception as e:
+              print('✗ _spherepack import failed:', e)
+              import traceback
+              traceback.print_exc()
+          "
+          python -c "
+          try:
+              from skyborn.spharm import Spharmt
+              print('✓ spharm.Spharmt imported successfully')
+          except Exception as e:
+              print('✗ spharm.Spharmt import failed:', e)
+              import traceback
+              traceback.print_exc()
+          "
 
       - name: Run tests with coverage (focus on working modules)
         run: |
@@ -134,6 +161,22 @@ jobs:
           except Exception as e:
               print('✗ gridfill import failed:', e)
           "
+
+          echo "=== Testing spharm imports specifically ==="
+          python -c "
+          try:
+              from skyborn.spharm import Spharmt
+              print('✓ spharm.Spharmt imported successfully')
+          except Exception as e:
+              print('✗ spharm.Spharmt import failed:', e)
+              import traceback
+              traceback.print_exc()
+          "
+
+          echo "=== Checking compiled extensions ==="
+          find src/ -name "*.so" -o -name "*.pyd" | head -10
+          ls -la src/skyborn/spharm/ || echo "spharm directory not found"
+          ls -la src/skyborn/gridfill/ || echo "gridfill directory not found"
 
           echo "=== Running tests with coverage ==="
           # Test gridfill specifically since it should work
