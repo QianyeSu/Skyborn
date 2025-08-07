@@ -6,18 +6,20 @@ Version 0.3.10 (Current)
 
 **🚀 New Features**
 
+* **Advanced GridFill Module**: Major expansion of grid filling capabilities for atmospheric data interpolation:
+
+  - **New XArray Interface**: Modern `skyborn.gridfill.xarray` module with automatic coordinate detection
+  - **Comprehensive Tutorial**: Interactive Jupyter notebook demonstrating wind field gap filling techniques
+  - **Multiple Interpolation Methods**: Basic Poisson, high-precision, zonal initialization, and relaxation parameter tuning
+  - **Physical Validation**: Component-wise vs direct speed filling comparison for vector wind fields
+  - **Quality Assessment**: Grid coverage validation and interpolation accuracy metrics
+
 * **Rossby Wave Source Analysis**: Added comprehensive Rossby wave source calculation capabilities to the windspharm module:
 
   - New ``rossbywavesource()`` method in both standard and xarray interfaces
   - Implements the Sardeshmukh & Hoskins (1988) formulation: S = -ζₐ∇·v - v_χ·∇ζₐ
   - Support for custom truncation levels and Earth's angular velocity parameters
   - CF-compliant metadata for xarray output with proper units and standard names
-
-* **Enhanced Gridfill Module**: Expanded grid filling capabilities for atmospheric data:
-
-  - Improved algorithm for handling missing data in wind fields
-  - Better performance for large-scale data filling operations
-  - Enhanced robustness for irregular grid patterns
 
 
 **🔧 Improvements**
@@ -28,6 +30,14 @@ Version 0.3.10 (Current)
 
 **📚 Documentation**
 
+* **New GridFill Tutorial**: Complete interactive demonstration including:
+
+  - Advanced data interpolation techniques with real atmospheric wind data
+  - Missing data simulation and quality assessment methodologies
+  - Component-wise vs direct approach comparison for vector fields
+  - Publication-quality visualizations with integer colorbar formatting
+  - Performance analysis and best practices for atmospheric applications
+
 * **New Tutorial Notebooks**: Added comprehensive examples for:
 
   - Rossby wave source analysis and visualization
@@ -37,6 +47,8 @@ Version 0.3.10 (Current)
 * **Enhanced Gallery**: Updated with new visualization examples including:
 
   - ``windspharm_rossby_wave_source_truncations.png`` showing truncation effects
+  - ``gridfill_missing_data_overview.png`` demonstrating gap filling scenarios
+  - ``gridfill_component_vs_direct_comparison.png`` showing physical constraint preservation
   - Improved figure captions and mathematical formulations
   - Better integration of notebook examples
 

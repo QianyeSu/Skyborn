@@ -39,7 +39,13 @@ Data interpolation and regridding.
 GridFill Functions
 ------------------
 
-Missing value interpolation using Poisson equation solvers.
+Advanced atmospheric data interpolation using Poisson equation solvers. Provides gap-filling and smoothing capabilities for irregular atmospheric datasets with physically-based methods.
+
+**Version 0.3.10 Highlights:**
+- Enhanced xarray interface with automatic coordinate detection
+- Comprehensive tutorial and examples
+- Improved performance and convergence handling
+- Publication-ready visualization tools
 
 Gradient Functions
 ------------------
