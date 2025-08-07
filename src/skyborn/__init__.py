@@ -55,4 +55,7 @@ from .gridfill import fill as gridfill_fill, fill_cube as gridfill_fill_cube
 fill = gridfill_fill
 fill_cube = gridfill_fill_cube
 
-__version__ = "0.3.9"  # Updated to version 0.3.9
+# Note: Enhanced gridfill module now includes modern xarray interface:
+# from skyborn.gridfill.xarray import fill  # For xarray DataArrays
+
+__version__ = "0.3.10"  # Updated to version 0.3.10
