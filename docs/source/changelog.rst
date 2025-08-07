@@ -1,7 +1,7 @@
 Changelog
 =========
 
-Version 0.3.10 (In Development)
+Version 0.3.10 (Current)
 -------------------------------
 
 **🚀 New Features**
@@ -52,7 +52,7 @@ Version 0.3.10 (In Development)
 * Enhanced error handling for grid size limitations in spherical harmonic calculations
 * Improved memory efficiency for large-scale atmospheric analysis
 
-Version 0.3.9 (Current)
+Version 0.3.9
 ------------------------
 
 **New Features**
