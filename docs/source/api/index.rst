@@ -8,6 +8,7 @@ API Reference
    conversion
    plotting
    interpolation
+   gridfill
    gradients
    causality
    spharm
@@ -34,6 +35,11 @@ Interpolation Functions
 -----------------------
 
 Data interpolation and regridding.
+
+GridFill Functions
+------------------
+
+Missing value interpolation using Poisson equation solvers.
 
 Gradient Functions
 ------------------

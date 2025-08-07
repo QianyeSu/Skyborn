@@ -23,6 +23,11 @@ Main Functions:
     fill: Fill missing values in numpy arrays or masked arrays
     fill_cube: Fill missing values in iris cubes (if iris is available)
 
+Interfaces:
+    - Standard numpy/masked array interface via fill() function
+    - Iris cube interface via fill_cube() function
+    - Modern xarray interface via skyborn.gridfill.xarray submodule
+
 Examples:
     Basic usage with numpy masked arrays:
 
@@ -51,6 +56,18 @@ Examples:
     >>> # Fill missing values
     >>> filled_cube = fill_cube(cube, eps=1e-4, verbose=True)
 
+    Modern xarray interface with automatic coordinate detection:
+
+    >>> import xarray as xr
+    >>> from skyborn.gridfill.xarray import fill
+    >>>
+    >>> # Load data with missing values
+    >>> data = xr.open_dataarray('sst_with_gaps.nc')
+    >>>
+    >>> # Fill missing values preserving metadata
+    >>> filled = fill(data, eps=1e-4)
+    >>> print(f"Attributes preserved: {filled.attrs == data.attrs}")
+
 Notes:
     This implementation requires compiled Cython extensions for optimal
     performance. The core computational routines are implemented in
@@ -61,6 +78,14 @@ from __future__ import absolute_import
 
 from .gridfill import fill, fill_cube
 
+# Try to import xarray interface if xarray is available
+try:
+    from . import xarray
+
+    _has_xarray = True
+except ImportError:
+    _has_xarray = False
+
 try:
     from skyborn import __version__
 except ImportError:
@@ -69,3 +94,10 @@ except ImportError:
 # Define the objects to be imported by imports of the form:
 #   from skyborn.gridfill import *
 __all__ = ["fill", "fill_cube"]
+
+# Add xarray to __all__ if available
+if _has_xarray:
+    __all__.append("xarray")
+
+# Note: xarray interface is available as a submodule:
+#   from skyborn.gridfill.xarray import fill
