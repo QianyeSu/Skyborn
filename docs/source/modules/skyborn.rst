@@ -10,6 +10,7 @@ The Skyborn package contains the following main modules:
 
 * **calc**: Statistical calculations and emergent constraint methods
 * **conversion**: Data format conversion utilities (GRIB to NetCDF)
+* **gridfill**: Advanced data interpolation using Poisson equation solvers
 * **interp**: Interpolation and regridding functions
 * **plot**: Specialized plotting and visualization tools
 * **gradients**: Spatial and temporal gradient calculations
@@ -26,6 +27,10 @@ Module Overview
 
 **conversion**
    Data format conversion utilities (GRIB to NetCDF) with enhanced error handling
+
+**gridfill** *(New in v0.3.10)*
+   Advanced data interpolation using Poisson equation solvers for filling missing values in gridded data.
+   Provides multiple interfaces (standard, iris, xarray) and algorithms for atmospheric and oceanic applications.
 
 **interp**
    Interpolation and regridding functions with improved dimension handling
@@ -70,6 +75,10 @@ To use any module, import Skyborn and access the module:
    # Convert data formats
    skb.conversion.grib_to_netcdf('input.grib', 'output.nc')
 
+   # Fill missing data with GridFill
+   from skyborn.gridfill.xarray import fill
+   filled_data = fill(data_with_gaps, eps=1e-4)
+
    # Create visualizations
    fig, ax = skb.plot.createFigure((10, 6), 1, 1)
 
@@ -88,11 +97,14 @@ To use any module, import Skyborn and access the module:
 * **v0.3.7**: Enhanced documentation with interactive particle effects entrance page
 * **v0.3.8**: Added comprehensive windspharm module and improved spherical harmonics support
 * **v0.3.9**: Current version with optimized build system and enhanced cross-platform compatibility
+* **v0.3.10**: Major GridFill module expansion with advanced interpolation capabilities and comprehensive tutorial
 
 For detailed API documentation, see :doc:`../api/index`.
 
 **Quick Links**
 
+* :doc:`../notebooks/gridfill_tutorial` - Complete tutorial for advanced data interpolation
 * :doc:`../notebooks/windspharm_tutorial` - Complete tutorial for wind field analysis
+* :doc:`../api/gridfill` - GridFill data interpolation documentation
 * :doc:`../api/spharm` - Spherical harmonic transforms documentation
 * :doc:`../api/windspharm` - Vector wind analysis documentation
