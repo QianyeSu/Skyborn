@@ -31,13 +31,13 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libeccodes-dev gfortran build-essential libopenblas-dev libblas-dev liblapack-dev
+          sudo apt-get install -y libeccodes-dev gfortran build-essential libopenblas-dev libblas-dev liblapack-dev meson ninja-build
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          # Install build dependencies first
-          pip install build cython>=3.0.0 numpy
+          # Install build dependencies first, including meson for f2py
+          pip install build cython>=3.0.0 numpy meson ninja
 
           # Try to install package in development mode, but continue if it fails
           echo "=== Attempting to install package ==="
@@ -69,6 +69,10 @@ jobs:
 
           echo "=== Testing f2py availability ==="
           python -m numpy.f2py --help | head -5 || echo "f2py not available"
+
+          echo "=== Testing meson availability ==="
+          meson --version || echo "meson not found"
+          ninja --version || echo "ninja not found"
 
       - name: Manual build attempt with detailed output
         run: |
