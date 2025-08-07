@@ -10,8 +10,8 @@ This section contains interactive Jupyter notebooks demonstrating various Skybor
    :caption: Available Notebooks:
 
    ecs_emergent_constraints_analysis.ipynb
-   gridfill_tutorial.ipynb
    windspharm_tutorial.ipynb
+   gridfill_tutorial.ipynb
 
 Emergent Constraints Analysis
 -----------------------------
