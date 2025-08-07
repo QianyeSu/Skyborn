@@ -200,7 +200,9 @@ def fill(
     relax: float = 0.6,
     itermax: int = 100,
     initzonal: bool = False,
+    initzonal_linear: bool = False,
     cyclic: Optional[bool] = None,
+    initial_value: float = 0.0,
     verbose: bool = False,
     keep_attrs: bool = True,
 ) -> DataArray:
@@ -233,11 +235,23 @@ def fill(
         Maximum number of iterations.
     initzonal : bool, default False
         Initialization method for missing values:
-        - False: Initialize with zeros
+        - False: Initialize with zeros or initial_value
         - True: Initialize with zonal (x-direction) mean
+    initzonal_linear : bool, default False
+        Use linear interpolation for zonal initialization:
+        - False: Use constant zonal mean (if initzonal=True)
+        - True: Use linear interpolation between valid points in each latitude band
+        This provides better initial conditions by connecting valid data points
+        with linear interpolation rather than using a constant mean value.
+        Can be used with both cyclic and non-cyclic data.
     cyclic : bool, optional
         Whether the x-coordinate is cyclic (e.g., longitude wrapping).
         If None, will be detected automatically for longitude coordinates.
+    initial_value : float, default 0.0
+        Initial value to use for missing grid points when initzonal=False.
+        This provides a custom starting guess for the iterative solver.
+        When initzonal=True, this value may still be used in combination
+        with the zonal mean for enhanced initialization.
     verbose : bool, default False
         Print convergence information for each slice.
     keep_attrs : bool, default True
@@ -385,7 +399,9 @@ def fill(
         relax=relax,
         itermax=itermax,
         initzonal=initzonal,
+        initzonal_linear=initzonal_linear,
         cyclic=cyclic,
+        initial_value=initial_value,
         verbose=verbose,
     )
 
