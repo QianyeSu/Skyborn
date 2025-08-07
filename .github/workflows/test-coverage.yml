@@ -31,13 +31,13 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libeccodes-dev gfortran libopenblas-dev
+          sudo apt-get install -y libeccodes-dev gfortran build-essential libopenblas-dev
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           # Install build dependencies first
-          pip install wheel build cython>=3.0.0 numpy
+          pip install build cython>=3.0.0 numpy
           # Install package in development mode
           pip install -e .
           pip install pytest pytest-cov pytest-xdist coverage[toml]
@@ -112,7 +112,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           pip install -e .
           pip install pytest-benchmark memory-profiler numpy xarray
 
@@ -163,7 +163,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           pip install -e .
           pip install -r requirements-docs.txt
 

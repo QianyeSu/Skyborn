@@ -70,6 +70,9 @@ def get_gridfill_extensions():
             "MSVC" in os.environ.get("CC", "") or "cl.exe" in os.environ.get("CC", "")
         )
 
+        # Check for Apple Silicon (arm64) architecture
+        is_macos_arm64 = platform.system() == "Darwin" and platform.machine() == "arm64"
+
         if is_msvc:
             # MSVC flags for Windows
             extra_compile_args = [
@@ -81,8 +84,22 @@ def get_gridfill_extensions():
                 "/arch:SSE2",
                 # Note: Removed /fp:fast to preserve numerical precision
             ]
+        elif is_macos_arm64:
+            # Apple Silicon (arm64) optimized flags
+            extra_compile_args = [
+                "-O3",  # Maximum optimization
+                "-march=armv8-a",  # ARM64 architecture
+                "-mtune=apple-m1",  # Tune for Apple Silicon
+                "-fPIC",  # Position Independent Code
+                "-funroll-loops",  # Unroll loops for performance
+                "-finline-functions",  # Inline functions
+                "-ftree-vectorize",  # Enable vectorization
+                "-ffinite-math-only",  # Assume finite math
+                "-fno-trapping-math",  # Disable floating-point traps
+                "-falign-functions=32",  # Function alignment
+            ]
         else:
-            # GCC/Clang compatible flags (Linux/macOS/MinGW)
+            # GCC/Clang compatible flags (Linux/x86-64 macOS/MinGW)
             # Using same strategy as Fortran compilation in this project
             extra_compile_args = [
                 "-O3",  # Maximum optimization
@@ -269,37 +286,73 @@ class MesonBuildExt(build_ext):
             )
 
             # fortran_optim_flags = "-O3 -fPIC -fno-second-underscore -funroll-loops -finline-functions -ftree-vectorize -ffinite-math-only"
-            fortran_optim_flags = (
-                "-O3 "
-                "-fPIC "
-                "-fno-second-underscore "
-                "-funroll-loops "
-                "-finline-functions "
-                "-ftree-vectorize "
-                "-ffinite-math-only "
-                "-march=x86-64 "
-                "-mtune=generic "
-                "-fno-common "
-                "-ftree-loop-im "
-                "-ftree-loop-distribution "
-                "-falign-functions=32"
+            # fortran_optim_flags = "-O3 -fPIC -fno-second-underscore -funroll-loops -finline-functions -ftree-vectorize -ffinite-math-only"
+            import platform
+
+            # Check for Apple Silicon (arm64) architecture
+            is_macos_arm64 = (
+                platform.system() == "Darwin" and platform.machine() == "arm64"
             )
-            c_optim_flags = (
-                # Highest level optimization, covers most performance enhancements
-                "-O3 "
-                # NumPy API compatibility, very important
-                "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION "
-                # Explicitly target all 64-bit x86 CPUs for optimization, consistent with Fortran, ensures portability
-                "-march=x86-64 "
-                # Tune for generic processors, not specific models, consistent with Fortran
-                "-mtune=generic "
-                # Position Independent Code, required for shared libraries
-                "-fPIC "
-                # Disable floating-point exception traps, prevents crashes due to floating-point errors, enhances robustness
-                "-fno-trapping-math "
-                # Align function entry points, potentially slightly improves instruction cache efficiency
-                "-falign-functions=32"
-            )
+
+            if is_macos_arm64:
+                # Apple Silicon (arm64) optimized flags
+                fortran_optim_flags = (
+                    "-O3 "
+                    "-fPIC "
+                    "-fno-second-underscore "
+                    "-funroll-loops "
+                    "-finline-functions "
+                    "-ftree-vectorize "
+                    "-ffinite-math-only "
+                    "-march=armv8-a "
+                    "-mtune=apple-m1 "
+                    "-fno-common "
+                    "-ftree-loop-im "
+                    "-ftree-loop-distribution "
+                    "-falign-functions=32"
+                )
+                c_optim_flags = (
+                    "-O3 "
+                    "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION "
+                    "-march=armv8-a "
+                    "-mtune=apple-m1 "
+                    "-fPIC "
+                    "-fno-trapping-math "
+                    "-falign-functions=32"
+                )
+            else:
+                # x86-64 optimized flags (Linux/Windows/Intel macOS)
+                fortran_optim_flags = (
+                    "-O3 "
+                    "-fPIC "
+                    "-fno-second-underscore "
+                    "-funroll-loops "
+                    "-finline-functions "
+                    "-ftree-vectorize "
+                    "-ffinite-math-only "
+                    "-march=x86-64 "
+                    "-mtune=generic "
+                    "-fno-common "
+                    "-ftree-loop-im "
+                    "-ftree-loop-distribution "
+                    "-falign-functions=32"
+                )
+                c_optim_flags = (
+                    # Highest level optimization, covers most performance enhancements
+                    "-O3 "
+                    # NumPy API compatibility, very important
+                    "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION "
+                    # Explicitly target all 64-bit x86 CPUs for optimization, consistent with Fortran, ensures portability
+                    "-march=x86-64 "
+                    # Tune for generic processors, not specific models, consistent with Fortran
+                    "-mtune=generic "
+                    # Position Independent Code, required for shared libraries
+                    "-fPIC "
+                    # Disable floating-point exception traps, prevents crashes due to floating-point errors, enhances robustness
+                    "-fno-trapping-math "
+                    # Align function entry points, potentially slightly improves instruction cache efficiency
+                    "-falign-functions=32"
+                )
             # f2py_cmd += [
             #     "--opt=" + fortran_optim_flags,
             #     "--f90flags=" + fortran_optim_flags,
