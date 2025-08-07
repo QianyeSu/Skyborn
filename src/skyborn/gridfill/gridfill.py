@@ -242,13 +242,17 @@ def fill(
         Use linear interpolation for zonal initialization:
         - False: Use constant zonal mean (if initzonal=True)
         - True: Use linear interpolation between valid points in each latitude band
-        Requires cyclic=True for global data. Default: False
+        This provides better initial conditions by connecting valid data points
+        with linear interpolation rather than using a constant mean value.
+        Can be used with both cyclic and non-cyclic data. Default: False
     cyclic : bool, optional
-        Whether the x-coordinate is cyclic (e.g., longitude wrapping).
-        Default: False
+        Whether the x-coordinate is cyclic (e.g., longitude wrapping around).
+        When True, the algorithm treats the rightmost and leftmost columns as
+        adjacent for interpolation purposes. Default: False
     initial_value : float, optional
-        Custom initial value for missing data points when using zero initialization.
-        Only used when both initzonal=False and initzonal_linear=False.
+        Custom initial value for missing data points when using zero initialization
+        (i.e., when both initzonal=False and initzonal_linear=False). This allows
+        setting a more appropriate background value for specific applications.
         Default: 0.0
     verbose : bool, optional
         Print convergence information for each grid. Default: False
@@ -356,7 +360,7 @@ def fill(
 
 
 def fill_cube(
-    cube: IrisCube,
+    cube: Any,  # iris.cube.Cube when iris is available
     eps: float,
     relax: float = 0.6,
     itermax: int = 100,
@@ -366,7 +370,7 @@ def fill_cube(
     full_output: bool = False,
     verbose: bool = False,
     inplace: bool = False,
-) -> Union[IrisCube, Tuple[IrisCube, np.ndarray]]:
+) -> Union[Any, Tuple[Any, np.ndarray]]:
     """
     Fill missing values in an iris cube using Poisson equation solver.
 
@@ -387,10 +391,13 @@ def fill_cube(
     initzonal : bool, optional
         Initialize missing values with zonal mean instead of zeros. Default: False
     initzonal_linear : bool, optional
-        Use linear interpolation for zonal initialization. Requires cyclic data.
-        Default: False
+        Use linear interpolation for zonal initialization. This provides better
+        initial conditions by interpolating between valid points in each latitude
+        band rather than using a constant mean value. Can be used with both
+        cyclic and non-cyclic data. Default: False
     initial_value : float, optional
-        Custom initial value for missing data when using zero initialization.
+        Custom initial value for missing data when using zero initialization
+        (i.e., when both initzonal=False and initzonal_linear=False).
         Default: 0.0
     full_output : bool, optional
         Return convergence information along with filled cube. Default: False
