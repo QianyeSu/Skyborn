@@ -195,3 +195,7 @@ __all__ = [
     "legendre",
     "specintrp",
 ]
+"""
+Note:
+    This __init__.py is designed to enable API cross-references to work correctly in Read the Docs.
+"""
