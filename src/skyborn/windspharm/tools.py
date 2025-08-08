@@ -17,6 +17,14 @@ from __future__ import annotations
 from typing import Tuple, Dict, Any, List, Callable, Union
 import numpy as np
 
+__all__ = [
+    "prep_data",
+    "recover_data",
+    "get_recovery",
+    "reverse_latdim",
+    "order_latdim",
+]
+
 # Type aliases
 ArrayLike = Union[np.ndarray, np.ma.MaskedArray]
 DimOrder = str

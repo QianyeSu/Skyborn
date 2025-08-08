@@ -16,6 +16,8 @@ from typing import Tuple, List, Union, Literal
 import numpy as np
 from skyborn.spharm import gaussian_lats_wts
 
+__all__ = ["get_apiorder", "inspect_gridtype", "to3d"]
+
 # Type aliases for better readability
 ArrayLike = Union[np.ndarray, np.ma.MaskedArray]
 GridType = Literal["regular", "gaussian"]

@@ -58,6 +58,15 @@ from dask.diagnostics import ProgressBar
 from typing import Tuple, Union, Optional, Dict, Any, List, TYPE_CHECKING
 import warnings
 
+__all__ = [
+    "mann_kendall_test",
+    "mann_kendall_multidim",
+    "mann_kendall_xarray",
+    "trend_analysis",
+    "mk_test",
+    "mk_multidim",
+]
+
 
 def mann_kendall_test(
     data: Union[np.ndarray, "xr.DataArray"],

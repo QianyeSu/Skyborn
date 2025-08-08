@@ -54,6 +54,8 @@ import numpy.ma as ma
 
 from ._gridfill import poisson_fill_grids as _poisson_fill_grids
 
+__all__ = ["fill", "fill_cube"]
+
 # Type alias for iris cube (may not be available)
 try:
     import iris

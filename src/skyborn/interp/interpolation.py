@@ -17,6 +17,8 @@ import metpy.interpolate
 import numpy as np
 import xarray as xr
 
+__all__ = ["interp_hybrid_to_pressure", "interp_sigma_to_hybrid", "interp_multidim"]
+
 supported_types = typing.Union[xr.DataArray, np.ndarray]
 
 __pres_lev_mandatory__ = np.array(

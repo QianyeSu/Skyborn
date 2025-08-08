@@ -123,6 +123,18 @@ PERFORMANCE OF THIS SOFTWARE.
 
 from typing import Optional, Tuple, Union, Literal, Any, Dict, Callable
 import math
+
+__all__ = [
+    "Spharmt",
+    "SpheremackError",
+    "ValidationError",
+    "regrid",
+    "gaussian_lats_wts",
+    "getspecindx",
+    "getgeodesicpts",
+    "legendre",
+    "specintrp",
+]
 import sys
 
 import numpy as np
