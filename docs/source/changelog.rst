@@ -19,6 +19,10 @@ Version 0.3.11 (Current)
 
 **🔧 Technical Improvements**
 
+* **Simplified Import Structure**: Removed conditional/backup import logic in favor of direct scipy.stats imports for improved maintainability
+* **Code Quality Enhancements**: Eliminated unused backup functions (`_mk_score_backup`, `_theil_sen_backup`) that were reducing test coverage
+* **Consolidated Test Suite**: Merged supplementary test files into main test suite for better organization and reduced maintenance overhead
+* **Documentation Fixes**: Corrected parameter names in API documentation examples (time_axis → axis)
 * **Advanced Vectorization**: New `_vectorized_mk_score()` function using upper triangular indices for O(n²) to O(1) complexity reduction
 * **Smart Memory Management**: Automatic chunk size estimation based on available memory and data dimensions
 * **Robust Error Handling**: Graceful handling of edge cases and problematic time series
