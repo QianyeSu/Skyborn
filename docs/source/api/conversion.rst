@@ -8,21 +8,21 @@ GRIB to NetCDF Conversion
 -------------------------
 
 .. autofunction:: skyborn.conversion.grib_to_netcdf
-   :no-index:
+
 
 .. autofunction:: skyborn.conversion.convert_grib_to_nc
-   :no-index:
+
 
 .. autofunction:: skyborn.conversion.convert_grib_to_nc_simple
-   :no-index:
+
 
 .. autofunction:: skyborn.conversion.batch_convert_grib_to_nc
 
 .. autofunction:: skyborn.conversion.grib2nc
-   :no-index:
+
 
 .. autofunction:: skyborn.conversion.batch_convert_grib_to_nc
-   :no-index:
+
 
 Example Usage
 -------------

@@ -7,19 +7,19 @@ Plotting Utilities
 ------------------
 
 .. autofunction:: skyborn.plot.add_equal_axes
-   :no-index:
+
 
 .. autofunction:: skyborn.plot.createFigure
-   :no-index:
+
 
 Curved Quiver Plots
 -------------------
 
 .. autofunction:: skyborn.plot.curved_quiver
-   :no-index:
+
 
 .. autofunction:: skyborn.plot.add_curved_quiverkey
-   :no-index:
+
 
 Modular Plotting
 ----------------

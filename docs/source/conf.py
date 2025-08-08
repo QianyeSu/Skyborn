@@ -88,6 +88,7 @@ html_js_files = [
     'interactive.js',
     'copybutton_fix.js',
     'latex_formula_manager.js',
+    'table_responsive.js',
 ]
 
 # Theme options for sphinx_book_theme
@@ -117,6 +118,11 @@ html_theme_options = {
 html_logo_link = "index.html"
 
 # -- Extension configuration -------------------------------------------------
+# Autosummary configuration
+autosummary_generate = True
+autosummary_imported_members = True
+autosummary_ignore_module_all = False
+
 # Autodoc configuration
 autodoc_default_options = {
     'members': True,
