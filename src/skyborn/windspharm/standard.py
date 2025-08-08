@@ -11,6 +11,8 @@ from typing import Optional, Union, Tuple, Literal
 import numpy as np
 from skyborn.spharm import Spharmt, gaussian_lats_wts
 
+__all__ = ["VectorWind"]
+
 # Type aliases for better readability
 ArrayLike = Union[np.ndarray, np.ma.MaskedArray]
 GridType = Literal["regular", "gaussian"]

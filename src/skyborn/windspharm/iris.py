@@ -27,6 +27,8 @@ Example:
 from __future__ import annotations
 from typing import Optional, Tuple, Union, Any
 
+__all__ = ["VectorWind"]
+
 try:
     from iris.cube import Cube
     from iris.util import reverse

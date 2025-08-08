@@ -16,6 +16,8 @@ from typing import Dict, Any, Tuple, Literal
 from .preprocess import PreProcess
 from .utils import chi2_test
 
+__all__ = ["AttributionModel"]
+
 
 class AttributionModel:
     """

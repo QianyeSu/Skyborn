@@ -1481,7 +1481,255 @@ code {
 
 /* ========== Enhanced Button Styles ========== */
 
-/* ========== Header Logo/Title Click to Home ========== */
+/* ========== Functions and Classes Page Styling ========== */
+/* Functions and Classes page enhancements */
+.functions-classes-page .contents {
+    background: var(--gradient-blue-light) !important;
+    border-radius: 12px !important;
+    padding: 1.5rem !important;
+    margin-bottom: 2rem !important;
+    border-left: 4px solid var(--primary-color) !important;
+    box-shadow: 0 4px 15px var(--shadow-blue-light) !important;
+}
+
+.functions-classes-page .contents .topic-title {
+    color: var(--secondary-color) !important;
+    font-weight: 600 !important;
+    margin-bottom: 1rem !important;
+}
+
+.functions-classes-page .contents ul {
+    columns: 2 !important;
+    column-gap: 2rem !important;
+    list-style: none !important;
+    padding-left: 0 !important;
+}
+
+.functions-classes-page .contents li {
+    break-inside: avoid !important;
+    margin-bottom: 0.5rem !important;
+    padding: 0.25rem 0.5rem !important;
+    border-radius: 6px !important;
+    transition: all 0.2s ease !important;
+}
+
+.functions-classes-page .contents li:hover {
+    background: rgba(37, 99, 235, 0.1) !important;
+    transform: translateX(4px) !important;
+}
+
+.functions-classes-page .contents a {
+    color: var(--primary-color) !important;
+    text-decoration: none !important;
+    font-weight: 500 !important;
+}
+
+/* Module section styling */
+.functions-classes-page h2 {
+    background: var(--gradient-blue-deep) !important;
+    color: white !important;
+    padding: 1rem 1.5rem !important;
+    border-radius: 12px !important;
+    margin: 2rem 0 1rem 0 !important;
+    box-shadow: 0 4px 15px var(--shadow-blue) !important;
+    transition: all 0.3s ease !important;
+}
+
+.functions-classes-page h2:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px var(--shadow-blue-hover) !important;
+}
+
+.functions-classes-page h3 {
+    color: var(--secondary-color) !important;
+    border-bottom: 2px solid var(--light-blue) !important;
+    padding-bottom: 0.5rem !important;
+    margin: 1.5rem 0 1rem 0 !important;
+    font-weight: 600 !important;
+}
+
+/* Autosummary tables styling for functions page */
+.functions-classes-page .autosummary {
+    background: white !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    box-shadow: 0 4px 15px var(--shadow-blue-light) !important;
+    margin: 1rem 0 !important;
+    border: none !important;
+}
+
+.functions-classes-page .autosummary thead th {
+    background: var(--gradient-blue-light) !important;
+    color: var(--dark-blue) !important;
+    font-weight: 600 !important;
+    padding: 1rem !important;
+    border: none !important;
+}
+
+.functions-classes-page .autosummary tbody td {
+    padding: 0.8rem 1rem !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-left: none !important;
+    border-right: none !important;
+    transition: all 0.2s ease !important;
+}
+
+.functions-classes-page .autosummary tbody tr:hover {
+    background: rgba(37, 99, 235, 0.05) !important;
+    transform: translateX(2px) !important;
+}
+
+.functions-classes-page .autosummary tbody tr:hover td {
+    border-left: 3px solid var(--primary-color) !important;
+}
+
+.functions-classes-page .autosummary a {
+    color: var(--primary-color) !important;
+    font-weight: 500 !important;
+    text-decoration: none !important;
+    transition: all 0.2s ease !important;
+}
+
+.functions-classes-page .autosummary a:hover {
+    color: var(--secondary-color) !important;
+    text-shadow: 0 0 8px var(--shadow-blue) !important;
+}
+
+/* Quick lookup section styling */
+.functions-classes-page .section:last-of-type {
+    background: var(--gradient-blue-light) !important;
+    border-radius: 16px !important;
+    padding: 2rem !important;
+    margin-top: 3rem !important;
+    border: 2px solid white !important;
+    box-shadow: 0 8px 30px var(--shadow-blue-light) !important;
+}
+
+.functions-classes-page .section:last-of-type h2 {
+    background: white !important;
+    color: var(--primary-color) !important;
+    text-align: center !important;
+    margin: -1rem -1rem 2rem -1rem !important;
+    border-radius: 12px 12px 0 0 !important;
+}
+
+.functions-classes-page .section:last-of-type ul {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important;
+    gap: 1rem !important;
+    list-style: none !important;
+    padding: 0 !important;
+}
+
+.functions-classes-page .section:last-of-type li {
+    background: white !important;
+    padding: 1rem !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+    transition: all 0.3s ease !important;
+}
+
+.functions-classes-page .section:last-of-type li:hover {
+    transform: translateY(-2px) scale(1.02) !important;
+    box-shadow: 0 6px 20px var(--shadow-blue) !important;
+}
+
+/* Notes and tips styling */
+.functions-classes-page .admonition {
+    border-radius: 12px !important;
+    border: none !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+    margin: 2rem 0 !important;
+    overflow: hidden !important;
+}
+
+.functions-classes-page .admonition.note {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
+    border-left: 4px solid #2563eb !important;
+}
+
+.functions-classes-page .admonition.tip {
+    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%) !important;
+    border-left: 4px solid #16a34a !important;
+}
+
+.functions-classes-page .admonition-title {
+    background: rgba(255, 255, 255, 0.8) !important;
+    color: var(--secondary-color) !important;
+    font-weight: 600 !important;
+    padding: 1rem 1.5rem !important;
+    margin: 0 !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.5) !important;
+}
+
+.functions-classes-page .admonition p {
+    padding: 1rem 1.5rem !important;
+    margin: 0 !important;
+    color: var(--dark-blue) !important;
+}
+
+/* Responsive design for functions page */
+@media (max-width: 768px) {
+    .functions-classes-page .contents ul {
+        columns: 1 !important;
+    }
+
+    .functions-classes-page .section:last-of-type ul {
+        grid-template-columns: 1fr !important;
+    }
+
+    .functions-classes-page h2 {
+        padding: 0.8rem 1rem !important;
+        font-size: 1.3rem !important;
+    }
+}
+
+/* Dark mode support for functions page */
+[data-theme="dark"] .functions-classes-page .contents {
+    background: var(--gradient-blue-light) !important;
+    border-left: 4px solid var(--primary-color) !important;
+}
+
+[data-theme="dark"] .functions-classes-page .autosummary {
+    background: #374151 !important;
+}
+
+[data-theme="dark"] .functions-classes-page .autosummary thead th {
+    background: var(--gradient-blue-light) !important;
+    color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .functions-classes-page .autosummary tbody td {
+    border-bottom: 1px solid #4b5563 !important;
+    color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .functions-classes-page .autosummary tbody tr:hover {
+    background: rgba(96, 165, 250, 0.15) !important;
+}
+
+[data-theme="dark"] .functions-classes-page .section:last-of-type {
+    background: var(--gradient-blue-light) !important;
+    border: 2px solid #4b5563 !important;
+}
+
+[data-theme="dark"] .functions-classes-page .section:last-of-type li {
+    background: #374151 !important;
+    color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .functions-classes-page .admonition.note {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+}
+
+[data-theme="dark"] .functions-classes-page .admonition.tip {
+    background: linear-gradient(135deg, #134e4a 0%, #1f2937 100%) !important;
+}
+
+[data-theme="dark"] .functions-classes-page .admonition-title,
+[data-theme="dark"] .functions-classes-page .admonition p {
+    color: #e2e8f0 !important;
+}
 /* 左上角标题点击回到首页功能 */
 .bd-header .navbar-brand,
 .bd-header .navbar-brand:hover,

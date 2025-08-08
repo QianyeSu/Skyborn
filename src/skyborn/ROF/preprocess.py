@@ -2,6 +2,8 @@ import numpy as np
 from typing import Tuple, Literal
 from .utils import speco
 
+__all__ = ["PreProcess"]
+
 
 class PreProcess:
     """

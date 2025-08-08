@@ -6,6 +6,17 @@ import numpy as np
 from scipy import stats
 from typing import Dict, List, Tuple, Union, Any
 
+__all__ = [
+    "speco",
+    "chi2_test",
+    "project_vectors",
+    "unproject_vectors",
+    "SSM",
+    "get_nruns",
+    "Cm_estimate",
+    "Cv_estimate",
+]
+
 
 def speco(C: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
