@@ -1,4 +1,4 @@
-Conversion Functions
+Conversion
 ====================
 
 The Skyborn conversion module provides utilities for converting between different data formats,

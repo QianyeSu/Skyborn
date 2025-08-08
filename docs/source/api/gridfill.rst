@@ -209,7 +209,7 @@ The iterative update formula is:
 
 .. math::
    \phi_{i,j}^{(k+1)} = \phi_{i,j}^k + \text{relax} \times \frac{\text{residual}_{i,j}}{4}
-png
+
 where the residual is computed using a 5-point stencil:
 
 .. math::
