@@ -8,12 +8,9 @@ Spatial Gradients
 
 .. autofunction:: skyborn.gradients.calculate_gradient
 
-
 .. autofunction:: skyborn.gradients.calculate_meridional_gradient
 
-
 .. autofunction:: skyborn.gradients.calculate_zonal_gradient
-
 
 .. autofunction:: skyborn.gradients.calculate_vertical_gradient
 

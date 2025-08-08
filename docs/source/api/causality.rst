@@ -5,6 +5,7 @@ Causality
    :members:
    :undoc-members:
    :show-inheritance:
+   :exclude-members: granger_causality, liang_causality
 
 Overview
 --------

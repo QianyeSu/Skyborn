@@ -66,7 +66,11 @@ templates_path = ['_templates']
 exclude_patterns = []
 
 # Suppress specific warnings
-suppress_warnings = ['myst.mathjax']
+suppress_warnings = [
+    'myst.mathjax',
+    'autodoc.duplicate_object',
+    'autodoc',  # Add more general autodoc suppression
+]
 
 # -- Internationalization ---------------------------------------------------
 language = 'en'  # Default language
