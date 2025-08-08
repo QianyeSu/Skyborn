@@ -7,73 +7,73 @@ Statistical Functions
 ---------------------
 
 .. autofunction:: skyborn.calc.linear_regression
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.pearson_correlation
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.spearman_correlation
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.kendall_correlation
-   :no-index:
+
 
 Emergent Constraint Functions
 -----------------------------
 
 .. autofunction:: skyborn.calc.gaussian_pdf
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.emergent_constraint_posterior
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.emergent_constraint_prior
-   :no-index:
+
 
 Legacy Functions (for backward compatibility)
 ---------------------------------------------
 
 .. autofunction:: skyborn.calc.calc_GAUSSIAN_PDF
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.calc_PDF_EC
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.find_std_from_PDF
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.calc_PDF_EC_PRIOR
-   :no-index:
+
 
 Utility Functions
 -----------------
 
 .. autofunction:: skyborn.calc.calculate_potential_temperature
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.convert_longitude_range
-   :no-index:
+
 
 Mann-Kendall Trend Analysis
 ---------------------------
 
 .. autofunction:: skyborn.calc.mann_kendall_test
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.mann_kendall_multidim
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.mann_kendall_xarray
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.trend_analysis
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.mk_test
-   :no-index:
+
 
 .. autofunction:: skyborn.calc.mk_multidim
-   :no-index:
+
 
 Example Usage
 -------------

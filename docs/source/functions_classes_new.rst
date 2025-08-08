@@ -19,7 +19,7 @@ Statistical Functions
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
@@ -42,7 +42,7 @@ Emergent Constraints
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
@@ -67,7 +67,7 @@ Trend Analysis
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
@@ -91,7 +91,7 @@ Conversion Functions
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
@@ -112,7 +112,7 @@ Conversion Classes
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Class
@@ -130,7 +130,7 @@ Core GridFill Functions
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
@@ -145,7 +145,7 @@ XArray GridFill Interface
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
@@ -167,7 +167,7 @@ Regridding Classes
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Class
@@ -188,7 +188,7 @@ Interpolation Functions
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
@@ -214,7 +214,7 @@ Gradient Functions
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
@@ -238,7 +238,7 @@ Core Plotting Functions
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
@@ -251,13 +251,15 @@ Core Plotting Functions
      - Plot streamlines
    * - :func:`skyborn.plot.plot_contour`
      - Contour plotting
+   * - :func:`skyborn.plot.plot_quiver`
+     - Quiver plot for vector data
 
 Specialized Plotting
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
@@ -277,7 +279,7 @@ Causality Functions
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
@@ -297,25 +299,15 @@ Spherical Harmonics Functions
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function
      - Description
-   * - :func:`skyborn.spharm.Spharmt`
-     - Main class for spherical harmonic transforms with grid-spectral conversions
-   * - :func:`skyborn.spharm.gaussian_lats_wts`
-     - Compute gaussian latitudes (in degrees) and quadrature weights for spherical grids
-   * - :func:`skyborn.spharm.regrid`
-     - Spectral re-gridding with optional smoothing and/or truncation for data interpolation
-   * - :func:`skyborn.spharm.getspecindx`
-     - Compute indices of zonal wavenumber and degree for complex spherical harmonic coefficients
-   * - :func:`skyborn.spharm.getgeodesicpts`
-     - Compute points on sphere surface corresponding to icosahedral geodesic
-   * - :func:`skyborn.spharm.legendre`
-     - Compute associated Legendre functions for spherical harmonic calculations
-   * - :func:`skyborn.spharm.specintrp`
-     - Spectral interpolation to arbitrary point on sphere given harmonic coefficients
+   * - :func:`skyborn.spharm.spharm_analysis`
+     - Spherical harmonic analysis
+   * - :func:`skyborn.spharm.spharm_synthesis`
+     - Spherical harmonic synthesis
 
 Vector Wind Analysis
 --------------------
@@ -327,7 +319,7 @@ Standard Interface
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Class
@@ -342,7 +334,7 @@ XArray Interface
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Class
@@ -425,7 +417,7 @@ Function Usage Categories
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
+   :widths: 50 50
    :class: skyborn-function-table
 
    * - Function/Class
@@ -483,17 +475,15 @@ Function Usage Categories
    * - :func:`skyborn.calc.emergent_constraint_prior`
      - Prior distributions
 
-.. admonition:: 📚 函数参考说明
-   :class: important
+.. note::
 
-   此页面提供了Skyborn包中所有可用函数和类的完整清单。每个条目都链接到详细的API文档，包含参数说明、示例和使用指南。
+   All functions and classes listed above are clickable links that will take you to their detailed API documentation. The responsive table system automatically adjusts column widths for optimal display of long function names.
 
-.. admonition:: 💡 智能表格交互
-   :class: tip
+.. tip::
 
-   **表格优化功能**:
+   **Using the Interactive Tables**:
 
-   - **智能适配**: 双击列标题自动调整该列宽度
-   - **紧凑模式**: 点击 "📱 紧凑" 按钮适应小屏幕
-   - **重置布局**: 点击 "🔄 重置" 按钮恢复默认宽度
-   - **视觉反馈**: 鼠标悬停查看行列高亮效果
+   - **Auto-fit**: Double-click any column header to auto-fit that column
+   - **Compact mode**: Use the "📱 Compact" button for smaller displays
+   - **Reset**: Use the "🔄 Reset" button to restore default sizing
+   - **Hover effects**: Hover over rows and columns for visual highlighting
