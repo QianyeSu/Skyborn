@@ -183,18 +183,6 @@ except ImportError as e:
 __author__ = "Qianye Su"
 __license__ = "BSD-3-Clause"
 
-# Ensure all functions are available for documentation
-__all__ = [
-    "Spharmt",
-    "SpheremackError",
-    "ValidationError",
-    "regrid",
-    "gaussian_lats_wts",
-    "getspecindx",
-    "getgeodesicpts",
-    "legendre",
-    "specintrp",
-]
 """
 Note:
     This __init__.py is designed to enable API cross-references to work correctly in Read the Docs.
