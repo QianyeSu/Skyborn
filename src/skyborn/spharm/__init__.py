@@ -59,13 +59,139 @@ except ImportError as e:
             )
 
     def regrid(*args, **kwargs):
-        """Placeholder function for regrid."""
+        """
+        Regrid data using spectral interpolation with optional smoothing and truncation.
+
+        .. note::
+           This function requires compiled Fortran extensions which are not available
+           in this environment.
+
+        Args:
+            grdin: Input grid Spharmt instance
+            grdout: Output grid Spharmt instance
+            datagrid: Data on input grid
+            ntrunc: Optional spectral truncation limit
+            smooth: Optional smoothing factors
+
+        Returns:
+            Interpolated data on output grid
+
+        Raises:
+            ImportError: If Fortran extensions are not available
+        """
         raise ImportError("spharm module not available - Fortran extensions required")
 
     def gaussian_lats_wts(*args, **kwargs):
-        """Placeholder function for gaussian_lats_wts."""
+        """
+        Compute Gaussian latitudes and quadrature weights.
+
+        .. note::
+           This function requires compiled Fortran extensions which are not available
+           in this environment.
+
+        Args:
+            nlat: Number of Gaussian latitudes desired
+
+        Returns:
+            Tuple of (latitudes_in_degrees, quadrature_weights)
+
+        Raises:
+            ImportError: If Fortran extensions are not available
+        """
+        raise ImportError("spharm module not available - Fortran extensions required")
+
+    def getspecindx(*args, **kwargs):
+        """
+        Compute indices of zonal wavenumber and degree for spherical harmonic coefficients.
+
+        .. note::
+           This function requires compiled Fortran extensions which are not available
+           in this environment.
+
+        Args:
+            ntrunc: Spherical harmonic triangular truncation limit
+
+        Returns:
+            Tuple of (zonal_wavenumber_indices, degree_indices)
+
+        Raises:
+            ImportError: If Fortran extensions are not available
+        """
+        raise ImportError("spharm module not available - Fortran extensions required")
+
+    def getgeodesicpts(*args, **kwargs):
+        """
+        Compute lat/lon values for icosahedral geodesic points.
+
+        .. note::
+           This function requires compiled Fortran extensions which are not available
+           in this environment.
+
+        Args:
+            m: Number of points on edge of single geodesic triangle
+
+        Returns:
+            Tuple of (latitudes, longitudes) in degrees
+
+        Raises:
+            ImportError: If Fortran extensions are not available
+        """
+        raise ImportError("spharm module not available - Fortran extensions required")
+
+    def legendre(*args, **kwargs):
+        """
+        Calculate associated Legendre functions for triangular truncation.
+
+        .. note::
+           This function requires compiled Fortran extensions which are not available
+           in this environment.
+
+        Args:
+            lat: Latitude in degrees
+            ntrunc: Triangular truncation limit
+
+        Returns:
+            Associated Legendre functions array
+
+        Raises:
+            ImportError: If Fortran extensions are not available
+        """
+        raise ImportError("spharm module not available - Fortran extensions required")
+
+    def specintrp(*args, **kwargs):
+        """
+        Spectral interpolation to arbitrary point on sphere.
+
+        .. note::
+           This function requires compiled Fortran extensions which are not available
+           in this environment.
+
+        Args:
+            lon: Longitude in degrees
+            dataspec: Spectral coefficients
+            legfuncs: Associated Legendre functions
+
+        Returns:
+            Interpolated value
+
+        Raises:
+            ImportError: If Fortran extensions are not available
+        """
         raise ImportError("spharm module not available - Fortran extensions required")
 
 
 __author__ = "Qianye Su"
 __license__ = "BSD-3-Clause"
+
+# Ensure all functions are available for documentation
+__all__ = [
+    "Spharmt",
+    "SpheremackError",
+    "ValidationError",
+    "regrid",
+    "gaussian_lats_wts",
+    "getspecindx",
+    "getgeodesicpts",
+    "legendre",
+    "specintrp",
+]
