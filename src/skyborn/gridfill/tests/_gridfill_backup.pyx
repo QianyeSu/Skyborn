@@ -1,6 +1,6 @@
 #cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False
 #cython: cdivision=True, nonecheck=False, overflowcheck=False
-#cython: profile=False, linetrace=False, binding=False, auto_pickle=False
+#cython: profile=False, linetrace=False, binding=False
 """
 Optimized Cython implementation for grid filling using iterative relaxation.
 
@@ -8,11 +8,10 @@ This module is based on the gridfill package by Andrew Dawson:
 https://github.com/ajdawson/gridfill
 
 Performance optimizations include:
-- Disabled bounds checking and wraparound for maximum speed
-- Enabled C-style division for better performance
-- Disabled overflow checking and initialization checks
-- Used nogil contexts where possible for parallelization
-- Optimized memory access patterns and function inlining
+- Disabled bounds checking and wraparound
+- Enabled C-style division
+- Disabled overflow checking for maximum speed
+- Used nogil contexts where possible
 """
 
 from libc.math cimport fabs, fmax
@@ -20,40 +19,31 @@ import numpy as np
 cimport numpy as np
 
 
-# Type definitions for numpy array types
+# Type definitions for numpy array types.
 ctypedef np.float64_t FLOAT64_t
 ctypedef np.uint32_t UINT32_t
 ctypedef np.uint8_t UINT8_t
 
 
-cdef inline int int_sum(int[:, :] a, unsigned int ny, unsigned int nx) noexcept nogil:
+cdef int int_sum(int[:, :] a, unsigned int ny, unsigned int nx) noexcept nogil:
     """
     Compute the sum of the elements in a 2-dimensional integer array.
-    Optimized with loop unrolling for better performance.
+
     """
     cdef unsigned int i, j
-    cdef int s = 0
-    cdef unsigned int nx_unroll = nx - (nx % 4)
-
+    cdef int s
+    s = 0
     for i in range(ny):
-        # Process 4 elements at a time for better cache utilization
-        j = 0
-        while j < nx_unroll:
-            s += a[i, j] + a[i, j+1] + a[i, j+2] + a[i, j+3]
-            j += 4
-        # Handle remaining elements
-        while j < nx:
+        for j in range(nx):
             s += a[i, j]
-            j += 1
     return s
 
 
-cdef inline void latitude_indices(unsigned int index, unsigned int nlat,
-                                 unsigned int *im1, unsigned int *ip1) noexcept nogil:
+cdef void latitude_indices(unsigned int index, unsigned int nlat,
+                           unsigned int *im1, unsigned int *ip1) noexcept nogil:
     """
-    Calculate the indices of the neighbouring points for a given index in the
+    The indices of the neighbouring points for a given index in the
     latitude direction, taking into account grid edges.
-    Optimized with early return and simplified logic.
 
     **Arguments:**
 
@@ -70,17 +60,19 @@ cdef inline void latitude_indices(unsigned int index, unsigned int nlat,
         The resulting index + 1 value.
 
     """
-    # Optimized boundary handling with fewer conditional branches
-    im1[0] = 1 if index == 0 else index - 1
-    ip1[0] = nlat - 2 if index == nlat - 1 else index + 1
+    im1[0] = index - 1
+    ip1[0] = index + 1
+    if index == 0:
+        im1[0] = 1
+    if index == nlat - 1:
+        ip1[0] = nlat - 2
 
 
-cdef inline void longitude_indices(unsigned int index, unsigned int nlon, int cyclic,
-                                  unsigned int *jm1, unsigned int *jp1) noexcept nogil:
+cdef void longitude_indices(unsigned int index, unsigned int nlon, int cyclic,
+                            unsigned int *jm1, unsigned int *jp1) noexcept nogil:
     """
-    Calculate the indices of the neighbouring points for a given index in the
+    The indices of the neighbouring points for a given index in the
     longitude direction, taking into account grid edges and cyclicity.
-    Optimized with streamlined conditional logic.
 
     **Arguments:**
 
@@ -91,7 +83,7 @@ cdef inline void longitude_indices(unsigned int index, unsigned int nlon, int cy
         The size of the longitude dimension.
 
     * cyclic [int]
-        If 0 the input grid is assumed not to be cyclic. If non-zero
+        If `0` the input grid is assumed not to be cyclic. If non-zero
         the input grid is assumed to be cyclic in its second dimension.
 
     * jm1 [unsigned int *]
@@ -101,13 +93,18 @@ cdef inline void longitude_indices(unsigned int index, unsigned int nlon, int cy
         The resulting index + 1 value.
 
     """
-    # Optimized boundary handling with reduced branching
-    if cyclic:
-        jm1[0] = nlon - 1 if index == 0 else index - 1
-        jp1[0] = 0 if index == nlon - 1 else index + 1
-    else:
-        jm1[0] = 1 if index == 0 else index - 1
-        jp1[0] = nlon - 2 if index == nlon - 1 else index + 1
+    jm1[0] = index - 1
+    jp1[0] = index + 1
+    if index == 0:
+        if not cyclic:
+            jm1[0] = 1
+        else:
+            jm1[0] = nlon - 1
+    if index == nlon - 1:
+        if not cyclic:
+            jp1[0] = nlon - 2
+        else:
+            jp1[0] = 0
 
 
 cdef void initialize_missing(double[:, :] grid,
@@ -164,23 +161,18 @@ cdef void initialize_missing(double[:, :] grid,
     cdef np.ndarray[np.float64_t, ndim=1] segment_e_val = np.zeros([nlon], dtype=np.float64)  # values of mask segment endings
 
     if initialize_zonal:
-        # Optimized zonal mean calculation with better memory access
         for i in range(nlat):
             n = 0
-            zonal_mean = 0.0
-            # First pass: calculate sum and count
+            zonal_mean = 0
             for j in range(nlon):
                 if not mask[i, j]:
                     n += 1
                     zonal_mean += grid[i, j]
-
-            # Calculate mean and apply if valid points exist
             if n > 0:
                 zonal_mean /= n
-                # Second pass: assign mean to missing values
-                for j in range(nlon):
-                    if mask[i, j]:
-                        grid[i, j] = zonal_mean
+            for j in range(nlon):
+                if mask[i, j]:
+                    grid[i, j] = zonal_mean
     elif initialize_zonal_linear:
         for i in range(nlat):
             n_segment_s = 0
@@ -221,7 +213,6 @@ cdef void initialize_missing(double[:, :] grid,
                         grid[i, jj] = njj * (segment_e_val[0] - segment_s_val[n_segment_s - 1]) / (nlon - segment_s[n_segment_s - 1] + segment_e[0]) + segment_s_val[n_segment_s - 1]
                         njj += 1
     else:
-        # Optimized simple initialization with memory-friendly pattern
         for i in range(nlat):
             for j in range(nlon):
                 if mask[i, j]:
@@ -292,42 +283,32 @@ cdef void poisson_fill(double[:, :] grid,
     """
     cdef unsigned int _numiter
     cdef unsigned int i, j, im1, ip1, jm1, jp1
-    cdef double _resmax, residual
-    cdef double quarter = 0.25  # Pre-calculate constant for better performance
-
-    # Early exit if there are no missing values in the grid
+    cdef double _resmax, dp25, residual
+    # Exit early if there are no missing values in the grid.
     if int_sum(mask, nlat, nlon) == 0:
         numiter[0] = 0
-        resmax[0] = 0.0
+        resmax[0] = 0
         return
-
-    # Set initial values for all missing values
+    # Set initial values for all missing values.
     initialize_missing(grid, mask, nlat, nlon, initialize_zonal, initialize_zonal_linear, cyclic, initial_value)
-
+    dp25 = 0.25
     _numiter = 0
-    _resmax = 0.0
-
-    # Main iterative relaxation loop with optimized memory access
+    _resmax = 0
     while _numiter < itermax:
-        _resmax = 0.0
+        _resmax = 0
         _numiter += 1
-
         for i in range(nlat):
             latitude_indices(i, nlat, &im1, &ip1)
             for j in range(nlon):
                 if mask[i, j]:
                     longitude_indices(j, nlon, cyclic, &jm1, &jp1)
-                    # Calculate residual using optimized 5-point stencil
-                    residual = quarter * (grid[im1, j] + grid[ip1, j] +
-                                        grid[i, jm1] + grid[i, jp1]) - grid[i, j]
+                    residual = dp25 * (grid[im1, j] + grid[ip1, j] +
+                                       grid[i, jm1] + grid[i, jp1]) - grid[i, j]
                     residual *= relaxc
                     grid[i, j] += residual
                     _resmax = fmax(fabs(residual), _resmax)
-
-        # Check for convergence
         if _resmax <= tolerance:
             break
-
     numiter[0] = _numiter
     resmax[0] = _resmax
 
