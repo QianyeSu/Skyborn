@@ -77,7 +77,7 @@ Trend Analysis
    * - :func:`skyborn.calc.mann_kendall_multidim`
      - Multidimensional trend analysis
    * - :func:`skyborn.calc.mann_kendall_xarray`
-     - XArray Mann-Kendall implementation
+     - Xarray Mann-Kendall implementation
    * - :func:`skyborn.calc.trend_analysis`
      - Comprehensive trend analysis
 
@@ -100,25 +100,14 @@ Conversion Functions
      - Convert GRIB to NetCDF
    * - :func:`skyborn.conversion.convert_grib_to_nc_simple`
      - Simple GRIB to NetCDF conversion
-   * - :func:`skyborn.conversion.batch_convert_grib_to_nc`
+   * - :func:`~skyborn.conversion.batch_convert_grib_to_nc`
      - Batch conversion utility
    * - :func:`skyborn.conversion.grib2nc`
      - GRIB to NetCDF converter
    * - :func:`skyborn.conversion.grib_to_netcdf`
      - GRIB to NetCDF transformation
 
-Conversion Classes
-~~~~~~~~~~~~~~~~~~
 
-.. list-table::
-   :header-rows: 1
-   :widths: 30 70
-   :class: skyborn-function-table
-
-   * - Class
-     - Description
-   * - :class:`skyborn.conversion.GribToNetCDFError`
-     - Conversion error handling
 
 GridFill - Atmospheric Data Interpolation
 ------------------------------------------
@@ -140,7 +129,7 @@ Core GridFill Functions
    * - :func:`skyborn.gridfill.fill_cube`
      - Fill multiple arrays simultaneously
 
-XArray GridFill Interface
+Xarray GridFill Interface
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. list-table::
@@ -151,7 +140,7 @@ XArray GridFill Interface
    * - Function
      - Description
    * - :func:`skyborn.gridfill.xarray.fill`
-     - XArray interface for data filling
+     - Xarray interface for data filling
    * - :func:`skyborn.gridfill.xarray.fill_multiple`
      - Fill multiple variables
    * - :func:`skyborn.gridfill.xarray.validate_grid_coverage`
@@ -243,14 +232,10 @@ Core Plotting Functions
 
    * - Function
      - Description
-   * - :func:`skyborn.plot.plot_field`
-     - Plot 2D scalar fields
-   * - :func:`skyborn.plot.plot_vector_field`
-     - Plot vector fields
-   * - :func:`skyborn.plot.plot_streamlines`
-     - Plot streamlines
-   * - :func:`skyborn.plot.plot_contour`
-     - Contour plotting
+   * - :func:`skyborn.plot.add_equal_axes`
+     - Add a new Axes with equal height or width next to the original Axes
+   * - :func:`skyborn.plot.createFigure`
+     - Create a figure with specified size and DPI
 
 Specialized Plotting
 ~~~~~~~~~~~~~~~~~~~~~
@@ -262,10 +247,10 @@ Specialized Plotting
 
    * - Function
      - Description
-   * - :func:`skyborn.plot.curved_quiver_plot`
-     - Curved quiver plots
-   * - :func:`skyborn.plot.modplot`
-     - Module-specific plotting utilities
+   * - :func:`skyborn.plot.curved_quiver`
+     - Plot streamlines with curved quiver arrows
+   * - :func:`skyborn.plot.add_curved_quiverkey`
+     - Add proportionally scaled curved quiver legend to axes
 
 Causality Analysis
 ------------------
@@ -317,38 +302,141 @@ Spherical Harmonics Functions
    * - :func:`skyborn.spharm.specintrp`
      - Spectral interpolation to arbitrary point on sphere given harmonic coefficients
 
-Vector Wind Analysis
---------------------
+Windspharm Analysis
+-------------------
 
 Standard Interface
 ~~~~~~~~~~~~~~~~~~
 
 .. currentmodule:: skyborn.windspharm.standard
 
+.. note::
+   The following table provides quick reference to windspharm methods.
+   For detailed documentation and proper linking, see the :doc:`api/windspharm` page.
+
 .. list-table::
    :header-rows: 1
    :widths: 30 70
    :class: skyborn-function-table
 
-   * - Class
+   * - Class/Method
      - Description
    * - :class:`skyborn.windspharm.standard.VectorWind`
-     - Standard vector wind analysis
+     - Standard vector wind analysis interface
+   * - :meth:`skyborn.windspharm.standard.VectorWind.magnitude`
+     - Wind magnitude computation
+   * - :meth:`skyborn.windspharm.standard.VectorWind.vorticity`
+     - Relative vorticity calculation
+   * - :meth:`skyborn.windspharm.standard.VectorWind.divergence`
+     - Horizontal divergence calculation
+   * - :meth:`skyborn.windspharm.standard.VectorWind.vrtdiv`
+     - Combined vorticity and divergence
+   * - :meth:`skyborn.windspharm.standard.VectorWind.planetaryvorticity`
+     - Planetary vorticity (Coriolis parameter)
+   * - :meth:`skyborn.windspharm.standard.VectorWind.absolutevorticity`
+     - Absolute vorticity (relative + planetary)
+   * - :meth:`skyborn.windspharm.standard.VectorWind.streamfunction`
+     - Stream function calculation
+   * - :meth:`skyborn.windspharm.standard.VectorWind.velocitypotential`
+     - Velocity potential calculation
+   * - :meth:`skyborn.windspharm.standard.VectorWind.sfvp`
+     - Combined stream function and velocity potential
+   * - :meth:`skyborn.windspharm.standard.VectorWind.helmholtz`
+     - Helmholtz decomposition of wind field
+   * - :meth:`skyborn.windspharm.standard.VectorWind.irrotationalcomponent`
+     - Irrotational (divergent) wind component
+   * - :meth:`skyborn.windspharm.standard.VectorWind.nondivergentcomponent`
+     - Non-divergent (rotational) wind component
+   * - :meth:`skyborn.windspharm.standard.VectorWind.gradient`
+     - Gradient of scalar field
+   * - :meth:`skyborn.windspharm.standard.VectorWind.truncate`
+     - Spectral truncation of wind field
+   * - :meth:`skyborn.windspharm.standard.VectorWind.rossbywavesource`
+     - Rossby wave source calculation
 
-XArray Interface
+Xarray Interface
 ~~~~~~~~~~~~~~~~
-
-.. currentmodule:: skyborn.windspharm.xarray
 
 .. list-table::
    :header-rows: 1
    :widths: 30 70
    :class: skyborn-function-table
 
-   * - Class
+   * - Class/Method
      - Description
    * - :class:`skyborn.windspharm.xarray.VectorWind`
-     - XArray vector wind analysis
+     - Xarray-based vector wind analysis interface
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.magnitude`
+     - Wind magnitude with xarray metadata preservation
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.vorticity`
+     - Relative vorticity with CF-compliant attributes
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.divergence`
+     - Horizontal divergence with coordinate preservation
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.vrtdiv`
+     - Vorticity and divergence with metadata
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.planetaryvorticity`
+     - Planetary vorticity with coordinate information
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.absolutevorticity`
+     - Absolute vorticity with full metadata
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.streamfunction`
+     - Stream function with CF attributes
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.velocitypotential`
+     - Velocity potential with metadata preservation
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.sfvp`
+     - Stream function and velocity potential
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.helmholtz`
+     - Helmholtz decomposition with xarray
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.irrotationalcomponent`
+     - Irrotational component with coordinates
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.nondivergentcomponent`
+     - Non-divergent component with metadata
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.gradient`
+     - Gradient computation with coordinate preservation
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.truncate`
+     - Spectral truncation with xarray
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.rossbywavesource`
+     - Rossby wave source with CF-compliant output
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.streamfunction`
+     - Stream function with CF attributes
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.velocitypotential`
+     - Velocity potential with metadata preservation
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.sfvp`
+     - Stream function and velocity potential
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.helmholtz`
+     - Helmholtz decomposition with xarray
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.irrotationalcomponent`
+     - Irrotational component with coordinates
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.nondivergentcomponent`
+     - Non-divergent component with metadata
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.gradient`
+     - Gradient computation with coordinate preservation
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.truncate`
+     - Spectral truncation with xarray
+   * - :meth:`skyborn.windspharm.xarray.VectorWind.rossbywavesource`
+     - Rossby wave source with CF-compliant output
+
+Utility Functions
+~~~~~~~~~~~~~~~~~
+
+.. currentmodule:: skyborn.windspharm.tools
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+   :class: skyborn-function-table
+
+   * - Function
+     - Description
+   * - :func:`skyborn.windspharm.tools.prep_data`
+     - Prepare data arrays for VectorWind input
+   * - :func:`skyborn.windspharm.tools.recover_data`
+     - Restore original data shape and dimension order
+   * - :func:`skyborn.windspharm.tools.get_recovery`
+     - Create recovery function for multiple arrays
+   * - :func:`skyborn.windspharm.tools.reverse_latdim`
+     - Reverse latitude dimension order
+   * - :func:`skyborn.windspharm.tools.order_latdim`
+     - Ensure north-to-south latitude ordering
 
 Documentation Structure Guide
 -----------------------------
@@ -418,7 +506,9 @@ Complete Page Reference
    * - :doc:`modules/index`
      - Auto-generated module index
    * - :doc:`modules/skyborn`
-     - Complete module structureFunction Usage Categories
+     - Complete module structure
+
+Function Usage Categories
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. list-table::
@@ -453,7 +543,7 @@ Complete Page Reference
    * - :func:`skyborn.gridfill.fill`
      - Missing data interpolation
    * - :func:`skyborn.gridfill.xarray.fill`
-     - XArray data filling
+     - Xarray data filling
    * - **Spatial Analysis**
      -
    * - :func:`skyborn.gradients.calculate_gradient`
@@ -473,7 +563,7 @@ Complete Page Reference
    * - :class:`skyborn.windspharm.standard.VectorWind`
      - Standard vector wind analysis
    * - :class:`skyborn.windspharm.xarray.VectorWind`
-     - XArray-based vector analysis
+     - Xarray-based vector analysis
    * - **Emergent Constraints**
      -
    * - :func:`skyborn.calc.emergent_constraint_posterior`

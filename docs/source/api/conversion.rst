@@ -9,19 +9,13 @@ GRIB to NetCDF Conversion
 
 .. autofunction:: skyborn.conversion.grib_to_netcdf
 
-
 .. autofunction:: skyborn.conversion.convert_grib_to_nc
 
-
 .. autofunction:: skyborn.conversion.convert_grib_to_nc_simple
-
 
 .. autofunction:: skyborn.conversion.batch_convert_grib_to_nc
 
 .. autofunction:: skyborn.conversion.grib2nc
-
-
-.. autofunction:: skyborn.conversion.batch_convert_grib_to_nc
 
 
 Example Usage

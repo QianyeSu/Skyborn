@@ -5,7 +5,6 @@ Windspharm
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
 
 Overview
 --------
@@ -46,11 +45,10 @@ Core Classes
 VectorWind
 ~~~~~~~~~~
 
-.. autoclass:: skyborn.windspharm.VectorWind
+.. autoclass:: skyborn.windspharm.standard.VectorWind
    :members:
    :inherited-members:
    :show-inheritance:
-   :noindex:
 
    .. rubric:: Methods
 
@@ -58,26 +56,26 @@ VectorWind
 
    .. autosummary::
 
-      ~VectorWind.vorticity
-      ~VectorWind.divergence
-      ~VectorWind.streamfunction
-      ~VectorWind.velocitypotential
-      ~VectorWind.sfvp
+      VectorWind.vorticity
+      VectorWind.divergence
+      VectorWind.streamfunction
+      VectorWind.velocitypotential
+      VectorWind.sfvp
 
    **Vector Field Operations**
 
    .. autosummary::
 
-      ~VectorWind.helmholtz
-      ~VectorWind.nondivergentcomponent
-      ~VectorWind.irrotationalcomponent
-      ~VectorWind.gradient
+      VectorWind.helmholtz
+      VectorWind.nondivergentcomponent
+      VectorWind.irrotationalcomponent
+      VectorWind.gradient
 
    **Utility Methods**
 
    .. autosummary::
 
-      ~VectorWind.truncate
+      VectorWind.truncate
 
 Standard Interface
 ------------------
@@ -86,7 +84,7 @@ Standard Interface
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
+   :exclude-members: VectorWind
 
 Tools and Utilities
 -------------------
@@ -95,9 +93,19 @@ Tools and Utilities
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
+   :exclude-members: prep_data, recover_data, get_recovery, reverse_latdim, order_latdim
 
 **Key Functions for Multi-dimensional Data Processing**
+
+.. autofunction:: skyborn.windspharm.tools.prep_data
+
+.. autofunction:: skyborn.windspharm.tools.recover_data
+
+.. autofunction:: skyborn.windspharm.tools.get_recovery
+
+.. autofunction:: skyborn.windspharm.tools.reverse_latdim
+
+.. autofunction:: skyborn.windspharm.tools.order_latdim
 
 * **prep_data**: Prepares wind data for spherical harmonic analysis by handling dimension reordering
 * **recover_data**: Recovers original data structure after spherical harmonic processing
@@ -231,7 +239,6 @@ Common Functions
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
 
 xarray Interface
 ----------------
@@ -240,7 +247,15 @@ xarray Interface
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
+   :exclude-members: VectorWind
+
+xarray VectorWind Class
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: skyborn.windspharm.xarray.VectorWind
+   :members:
+   :inherited-members:
+   :show-inheritance:
 
 Examples
 --------
@@ -251,7 +266,7 @@ Basic Wind Analysis
 .. code-block:: python
 
    import numpy as np
-   from skyborn.windspharm import VectorWind
+   from skyborn.windspharm.standard import VectorWind
 
    # Create sample wind data on a Gaussian grid
    nlat, nlon = 73, 144

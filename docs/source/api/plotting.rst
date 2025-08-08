@@ -8,15 +8,12 @@ Plotting Utilities
 
 .. autofunction:: skyborn.plot.add_equal_axes
 
-
 .. autofunction:: skyborn.plot.createFigure
-
 
 Curved Quiver Plots
 -------------------
 
 .. autofunction:: skyborn.plot.curved_quiver
-
 
 .. autofunction:: skyborn.plot.add_curved_quiverkey
 

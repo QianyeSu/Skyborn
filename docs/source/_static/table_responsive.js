@@ -169,26 +169,7 @@ document.addEventListener('DOMContentLoaded', function() {
             tableTitleData.headingElement.style.display = 'none';
         }
 
-        // 右侧：控制按钮
-        const controls = document.createElement('div');
-        controls.style.cssText = `
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        `;
-
-        // 组合控制按钮（减少按钮数量）
-        const controlBtn = createControlButton('⚙️ Optimize', () => {
-            // 智能优化：自动调整列宽并应用最佳设置
-            autoFitColumns(table);
-            table.dataset.userAdjusted = 'true'; // 标记为用户调整
-            showToast('✨ Table optimized');
-        });
-
-        controls.appendChild(controlBtn);
-
         controlBar.appendChild(info);
-        controlBar.appendChild(controls);
 
         wrapper.insertBefore(controlBar, container);
     }
@@ -746,25 +727,36 @@ document.addEventListener('DOMContentLoaded', function() {
             existingToast.remove();
         }
 
+        // 检测深色模式
+        const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' ||
+                          window.matchMedia('(prefers-color-scheme: dark)').matches ||
+                          document.body.classList.contains('dark') ||
+                          document.body.classList.contains('dark-mode');
+
         const toast = document.createElement('div');
         toast.className = 'table-toast';
         toast.textContent = message;
+
+        // 根据模式选择渐变
+        const lightGradient = 'linear-gradient(135deg, #e0f2fe 0%, #7dd3fc 25%, #38bdf8 50%, #0ea5e9 75%, #0284c7 100%)';
+        const darkGradient = 'linear-gradient(135deg, #1e293b 0%, #334155 25%, #475569 50%, #1e40af 75%, #1d4ed8 100%)';
+
         toast.style.cssText = `
             position: fixed;
             top: 20px;
             right: 20px;
-            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 25%, #93c5fd 50%, #60a5fa 75%, #3b82f6 100%);
-            color: white;
+            background: ${isDarkMode ? darkGradient : lightGradient};
+            color: ${isDarkMode ? '#e2e8f0' : 'white'};
             padding: 0.75rem 1.5rem;
             border-radius: 12px;
             box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
             z-index: 10000;
             font-size: 0.9rem;
-            font-weight: 900;
+            font-weight: 750;
             transform: translateX(100%);
             transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(59, 130, 246, 0.2);
+            border: 1px solid ${isDarkMode ? 'rgba(100, 116, 139, 0.3)' : 'rgba(59, 130, 246, 0.2)'};
         `;
 
         document.body.appendChild(toast);
