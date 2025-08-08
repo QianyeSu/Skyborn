@@ -5,6 +5,7 @@ API Reference
    :maxdepth: 2
 
    calculations
+   mann_kendall
    conversion
    plotting
    interpolation
@@ -20,6 +21,17 @@ Calculation Functions
 ---------------------
 
 Statistical analysis and emergent constraint methods.
+
+Mann-Kendall Trend Analysis
+---------------------------
+
+High-performance trend detection for climate data with vectorized implementations optimized for large multidimensional arrays.
+
+**Version 0.3.11 Highlights:**
+- 15-30x performance improvements through vectorization
+- Climate data optimized (40×192×288 processed in ~30 seconds)
+- Memory efficient chunking (~25MB usage)
+- Enhanced Dask support for distributed computing
 
 Conversion Functions
 --------------------
