@@ -489,11 +489,11 @@ figcaption {
 /* 输出单元格：蓝绿色主题 */
 .cell_output {
     background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%);
-    border-left: 4px solid #10b981;
+    border-left: 4px solid #3b82f6;
     border-radius: 12px;
     margin-bottom: 1.2rem;
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.2);
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
     position: relative;
     overflow: hidden;
 }
@@ -515,7 +515,7 @@ figcaption {
 
 .cell_output:hover {
     transform: translateY(-4px) scale(1.01);
-    box-shadow: 0 12px 40px rgba(16, 185, 129, 0.3),
+    box-shadow: 0 12px 40px rgba(59, 130, 246, 0.3),
                 0 6px 20px rgba(0, 0, 0, 0.1);
 }
 
@@ -1033,7 +1033,7 @@ code {
 /* Dark模式下的输出单元格 */
 [data-theme="dark"] .cell_output {
     background: linear-gradient(135deg, #134e4a 0%, #1f2937 50%, #374151 100%) !important;
-    border-left: 4px solid #10b981 !important;
+    border-left: 4px solid #3b82f6 !important;
 }
 
 /* Dark模式下的标题样式 */
@@ -1198,33 +1198,99 @@ code {
 }
 
 /* ========== LaTeX数学公式样式优化 ========== */
-/* MathJax公式容器样式 */
-.MathJax_Display {
+/* 强制所有LaTeX公式居中显示 - 最高优先级样式 */
+.MathJax_Display,
+.MathJax_Display *,
+mjx-container[display="block"],
+mjx-container[display="block"] *,
+.math,
+.displaymath,
+div.math,
+div.displaymath,
+span.math,
+.math-container,
+.latex-formula {
     text-align: center !important;
-    margin: 1.5rem 0 !important;
-    padding: 1rem !important;
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
-    border-radius: 12px !important;
-    border-left: 4px solid var(--primary-color) !important;
-    box-shadow: 0 4px 15px var(--shadow-blue-light) !important;
-    transition: all 0.3s ease !important;
-    position: relative !important;
-    overflow: hidden !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    display: block !important;
+    width: auto !important;
+    max-width: 100% !important;
+    left: auto !important;
+    right: auto !important;
+    transform: none !important;
+    position: static !important;
+    float: none !important;
+    clear: both !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
 }
 
-.MathJax_Display:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 8px 25px var(--shadow-blue) !important;
+/* 确保所有MathJax内部元素也居中 */
+.MathJax_Display > *,
+.MathJax_Display .MathJax,
+.MathJax_Display .MathJax_SVG,
+.MathJax_Display .MathJax_Element,
+.MathJax_Display mjx-container,
+mjx-container[display="block"] > *,
+mjx-container[display="block"] mjx-math,
+mjx-container[display="block"] mjx-assistive-mml {
+    display: block !important;
+    margin: 0 auto !important;
+    text-align: center !important;
+    left: auto !important;
+    right: auto !important;
+    transform: none !important;
+    position: static !important;
+    float: none !important;
+}
+
+/* 强制覆盖任何可能的右对齐样式 */
+.MathJax_Display,
+mjx-container[display="block"] {
+    text-align: center !important;
+    margin: 1.5rem auto !important;
+    padding: 0.5rem 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+/* 公式容器的居中样式 */
+.MathJax_Display:before,
+.MathJax_Display:after,
+mjx-container[display="block"]:before,
+mjx-container[display="block"]:after {
+    content: "" !important;
+    display: table !important;
+    clear: both !important;
+}
+
+/* 悬停效果优化 */
+.MathJax_Display:hover,
+mjx-container[display="block"]:hover {
+    transform: none !important;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2) !important;
+    border-radius: 8px !important;
+    background: rgba(59, 130, 246, 0.02) !important;
+    transition: all 0.3s ease !important;
 }
 
 /* MathJax行内公式样式 */
-.MathJax {
+.MathJax,
+mjx-container:not([display="block"]) {
     font-size: 1.1em !important;
     color: var(--secondary-color) !important;
     transition: all 0.3s ease !important;
+    display: inline !important;
+    vertical-align: middle !important;
 }
 
-.MathJax:hover {
+.MathJax:hover,
+mjx-container:not([display="block"]):hover {
     color: var(--primary-color) !important;
     transform: scale(1.05) !important;
 }
@@ -1915,7 +1981,7 @@ button.copybtn svg {
     }
 }
 
-/* ========== 表格显示修复 ========== */
+/* ========== 表格显示修复与响应式增强 ========== */
 /* 修复表格被裁剪的问题 */
 .bd-main .bd-content .bd-article-container {
     overflow: visible !important; /* 允许内容溢出显示 */
@@ -1926,8 +1992,300 @@ button.copybtn svg {
     overflow-x: auto !important;
 }
 
-/* 表格样式增强 */
-table {
+/* 响应式表格包装器 */
+.responsive-table-wrapper {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(37, 99, 235, 0.15);
+    margin: 1rem 0;
+    background: white;
+    transition: all 0.3s ease;
+}
+
+.responsive-table-wrapper:hover {
+    box-shadow: 0 8px 25px rgba(37, 99, 235, 0.2);
+    transform: translateY(-2px);
+}
+
+/* 表格控制栏样式 */
+.table-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 0.85rem;
+    color: #1e40af;
+    transition: all 0.3s ease;
+}
+
+/* 表格滚动容器 */
+.table-scroll-container {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: relative;
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: #3b82f6 #f1f5f9;
+}
+
+.table-scroll-container::-webkit-scrollbar {
+    height: 8px;
+}
+
+.table-scroll-container::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb {
+    background: #3b82f6;
+    border-radius: 4px;
+    transition: background 0.3s ease;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
+/* 响应式表格基础样式 */
+.responsive-table-processed {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    margin: 0 !important;
+    background: white !important;
+    transition: all 0.3s ease !important;
+}
+
+/* 表格单元格增强样式 */
+.responsive-table-processed th,
+.responsive-table-processed td {
+    padding: 12px 16px !important;
+    border: 1px solid #e2e8f0 !important;
+    text-align: left !important;
+    vertical-align: top !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+    line-height: 1.5 !important;
+    transition: all 0.2s ease !important;
+}
+
+/* 表格头部增强样式 */
+.responsive-table-processed th {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
+    font-weight: 600 !important;
+    color: #1e40af !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10 !important;
+    cursor: pointer !important;
+}
+
+/* 紧凑模式样式 */
+.responsive-table-processed.compact-mode th,
+.responsive-table-processed.compact-mode td {
+    padding: 6px 8px !important;
+    font-size: 0.9rem !important;
+}
+
+/* 行悬停效果 */
+.responsive-table-processed tbody tr {
+    transition: all 0.2s ease !important;
+}
+
+.responsive-table-processed tbody tr:hover {
+    background: rgba(37, 99, 235, 0.05) !important;
+    transform: translateX(2px) !important;
+    box-shadow: 2px 0 8px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* 斑马纹效果 */
+.responsive-table-processed tbody tr:nth-child(even) {
+    background-color: #f8fafc !important;
+}
+
+.responsive-table-processed tbody tr:nth-child(even):hover {
+    background: rgba(37, 99, 235, 0.05) !important;
+}
+
+/* 长函数名特殊样式 */
+.responsive-table-processed td:has(a[href*="skyborn."]),
+.responsive-table-processed th:has(a[href*="skyborn."]) {
+    font-family: 'Monaco', 'Lucida Console', monospace !important;
+    font-size: 0.9rem !important;
+    color: #1e40af !important;
+    font-weight: 500 !important;
+}
+
+/* 函数链接样式增强 */
+.responsive-table-processed a[href*="skyborn."] {
+    text-decoration: none !important;
+    border-bottom: 1px dotted #3b82f6 !important;
+    transition: all 0.2s ease !important;
+    padding: 2px 4px !important;
+    border-radius: 3px !important;
+}
+
+.responsive-table-processed a[href*="skyborn."]:hover {
+    background-color: rgba(59, 130, 246, 0.1) !important;
+    border-bottom: 1px solid #3b82f6 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Toast 通知样式 */
+.table-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+    z-index: 10000;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* 列高亮效果 */
+.responsive-table-processed .column-highlight {
+    background: rgba(37, 99, 235, 0.08) !important;
+    border-left: 2px solid #3b82f6 !important;
+    border-right: 2px solid #3b82f6 !important;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .table-controls {
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem;
+    }
+
+    .table-controls > div {
+        width: 100%;
+        text-align: center;
+    }
+
+    .responsive-table-processed th,
+    .responsive-table-processed td {
+        padding: 8px 12px !important;
+        font-size: 0.9rem !important;
+    }
+
+    .responsive-table-processed.compact-mode th,
+    .responsive-table-processed.compact-mode td {
+        padding: 4px 6px !important;
+        font-size: 0.8rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .responsive-table-wrapper {
+        margin: 0.5rem 0;
+        border-radius: 8px;
+    }
+
+    .table-controls {
+        font-size: 0.8rem;
+        padding: 0.5rem;
+    }
+
+    .responsive-table-processed th,
+    .responsive-table-processed td {
+        padding: 6px 8px !important;
+        font-size: 0.85rem !important;
+    }
+}
+
+/* Dark模式支持 */
+[data-theme="dark"] .responsive-table-wrapper {
+    background: #374151 !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme="dark"] .table-controls {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+    color: #e2e8f0 !important;
+    border-bottom: 1px solid #4b5563 !important;
+}
+
+[data-theme="dark"] .responsive-table-processed {
+    background: #374151 !important;
+}
+
+[data-theme="dark"] .responsive-table-processed th {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+    color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .responsive-table-processed th,
+[data-theme="dark"] .responsive-table-processed td {
+    border: 1px solid #4b5563 !important;
+    color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .responsive-table-processed tbody tr:nth-child(even) {
+    background-color: #1f2937 !important;
+}
+
+[data-theme="dark"] .responsive-table-processed tbody tr:hover {
+    background: rgba(96, 165, 250, 0.15) !important;
+}
+
+[data-theme="dark"] .responsive-table-processed a[href*="skyborn."] {
+    color: #60a5fa !important;
+    border-bottom: 1px dotted #60a5fa !important;
+}
+
+[data-theme="dark"] .responsive-table-processed a[href*="skyborn."]:hover {
+    background-color: rgba(96, 165, 250, 0.15) !important;
+    border-bottom: 1px solid #60a5fa !important;
+}
+
+/* 动画关键帧 */
+@keyframes tableScale {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.01);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+@keyframes columnPulse {
+    0%, 100% {
+        background: rgba(37, 99, 235, 0.05);
+    }
+    50% {
+        background: rgba(37, 99, 235, 0.1);
+    }
+}
+
+/* 表格加载动画 */
+.responsive-table-processed.loading {
+    animation: tableScale 0.3s ease-out;
+}
+
+/* 列自动调整动画 */
+.responsive-table-processed .auto-fitting {
+    animation: columnPulse 0.5s ease-in-out;
+}
+
+/* 原始表格样式（作为后备） */
+table:not(.responsive-table-processed) {
     width: 100% !important;
     max-width: none !important;
     border-collapse: collapse !important;
@@ -1937,9 +2295,9 @@ table {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
 }
 
-/* 表格单元格样式 */
-table th,
-table td {
+/* 原始表格单元格样式 */
+table:not(.responsive-table-processed) th,
+table:not(.responsive-table-processed) td {
     padding: 12px 16px !important;
     border: 1px solid #e2e8f0 !important;
     text-align: left !important;
@@ -1947,36 +2305,15 @@ table td {
     word-wrap: break-word !important;
 }
 
-/* 表格头部样式 */
-table th {
+/* 原始表格头部样式 */
+table:not(.responsive-table-processed) th {
     background: var(--gradient-blue-light) !important;
     font-weight: 600 !important;
     color: var(--dark-blue) !important;
 }
 
-/* 表格行悬停效果 */
-table tbody tr:hover {
+/* 原始表格行悬停效果 */
+table:not(.responsive-table-processed) tbody tr:hover {
     background: rgba(37, 99, 235, 0.05) !important;
     transition: background-color 0.2s ease !important;
-}
-
-/* 响应式表格 */
-@media (max-width: 768px) {
-    table {
-        font-size: 0.9rem !important;
-    }
-
-    table th,
-    table td {
-        padding: 8px 12px !important;
-    }
-}
-
-/* 表格容器确保完整显示 */
-.table-responsive,
-.docutils,
-.table-wrapper {
-    overflow-x: auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
 }

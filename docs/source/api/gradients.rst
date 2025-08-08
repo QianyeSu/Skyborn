@@ -7,16 +7,16 @@ Spatial Gradients
 -----------------
 
 .. autofunction:: skyborn.gradients.calculate_gradient
-   :no-index:
+
 
 .. autofunction:: skyborn.gradients.calculate_meridional_gradient
-   :no-index:
+
 
 .. autofunction:: skyborn.gradients.calculate_zonal_gradient
-   :no-index:
+
 
 .. autofunction:: skyborn.gradients.calculate_vertical_gradient
-   :no-index:
+
 
 Example Usage
 -------------

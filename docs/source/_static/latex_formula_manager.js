@@ -407,6 +407,35 @@ document.addEventListener('DOMContentLoaded', function() {
     function injectFormulaStyles() {
         const styles = `
             <style id="latex-formula-styles">
+            /* 强制 LaTeX 公式居中 */
+            .MathJax_Display,
+            mjx-container[display="block"] {
+                text-align: center !important;
+                margin: 1.5rem auto !important;
+                display: block !important;
+                width: auto !important;
+                left: auto !important;
+                right: auto !important;
+                transform: none !important;
+                position: static !important;
+            }
+
+            /* 确保 MathJax 内容居中 */
+            .MathJax_Display > *,
+            mjx-container[display="block"] > * {
+                margin-left: auto !important;
+                margin-right: auto !important;
+                text-align: center !important;
+            }
+
+            /* 修复可能的 flexbox 布局问题 */
+            .MathJax_Display {
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+                flex-direction: column !important;
+            }
+
             /* Enhanced Formula Styling */
             .enhanced-formula {
                 display: inline-block;
@@ -420,6 +449,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
                 position: relative;
                 overflow: hidden;
+                text-align: center !important;
             }
 
             /* Prevent MathJax elements from being handled by other scripts */
@@ -428,6 +458,8 @@ document.addEventListener('DOMContentLoaded', function() {
             .enhanced-formula [class*="MathJax"] {
                 pointer-events: none !important;
                 cursor: inherit !important;
+                margin: 0 auto !important;
+                text-align: center !important;
             }
 
             /* Ensure images inside formula wrapper are not selected by generic image handlers */
@@ -519,10 +551,57 @@ document.addEventListener('DOMContentLoaded', function() {
         document.head.insertAdjacentHTML('beforeend', styles);
     }
 
+    // ========== Force LaTeX Formula Centering ==========
+    function forceCenterLatexFormulas() {
+        // Find all possible LaTeX formula containers
+        const selectors = [
+            '.MathJax_Display',
+            'mjx-container[display="block"]',
+            '.math',
+            '.displaymath',
+            'div.math',
+            'div.displaymath',
+            '.MathJax',
+            '.latex-formula',
+            '.formula-container'
+        ];
+
+        selectors.forEach(selector => {
+            const elements = document.querySelectorAll(selector);
+            elements.forEach(element => {
+                // Force centering styles
+                element.style.textAlign = 'center';
+                element.style.marginLeft = 'auto';
+                element.style.marginRight = 'auto';
+                element.style.display = 'block';
+                element.style.width = 'auto';
+                element.style.position = 'static';
+                element.style.float = 'none';
+                element.style.left = 'auto';
+                element.style.right = 'auto';
+                element.style.transform = 'none';
+
+                // Ensure parent container is also centered
+                if (element.parentElement) {
+                    const parent = element.parentElement;
+                    if (parent.classList.contains('MathJax_Display') ||
+                        parent.tagName.toLowerCase() === 'mjx-container') {
+                        parent.style.textAlign = 'center';
+                        parent.style.display = 'block';
+                        parent.style.margin = '1.5rem auto';
+                    }
+                }
+            });
+        });
+    }
+
     // ========== Initialize Formula Enhancements ==========
     function initializeFormulaEnhancements() {
         injectFormulaStyles();
         enhanceLatexFormulas();
+
+        // Immediately force centering
+        forceCenterLatexFormulas();
 
         // Re-enhance when new content is loaded (for dynamic content)
         const observer = new MutationObserver((mutations) => {
@@ -530,6 +609,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (mutation.addedNodes.length > 0) {
                     setTimeout(() => {
                         enhanceLatexFormulas();
+                        forceCenterLatexFormulas(); // Force centering each time
                     }, 500);
                 }
             });
@@ -539,6 +619,9 @@ document.addEventListener('DOMContentLoaded', function() {
             childList: true,
             subtree: true
         });
+
+        // Periodically check and force centering (in case of delayed formulas)
+        setInterval(forceCenterLatexFormulas, 2000);
     }
 
     // Start initialization
@@ -550,6 +633,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
                 processedFormulas.clear(); // Clear processed formulas
                 enhanceLatexFormulas();
+                forceCenterLatexFormulas(); // Force centering
             }, 500);
         });
     }
