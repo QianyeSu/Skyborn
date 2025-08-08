@@ -20,6 +20,15 @@ from typing import Union, Optional, List, Literal
 import shutil
 import logging
 
+__all__ = [
+    "convert_grib_to_nc",
+    "convert_grib_to_nc_simple",
+    "batch_convert_grib_to_nc",
+    "grib2nc",
+    "grib_to_netcdf",
+    "GribToNetCDFError",
+]
+
 # Set up logging
 logger = logging.getLogger(__name__)
 

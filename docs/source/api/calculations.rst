@@ -54,6 +54,27 @@ Utility Functions
 .. autofunction:: skyborn.calc.convert_longitude_range
    :no-index:
 
+Mann-Kendall Trend Analysis
+---------------------------
+
+.. autofunction:: skyborn.calc.mann_kendall_test
+   :no-index:
+
+.. autofunction:: skyborn.calc.mann_kendall_multidim
+   :no-index:
+
+.. autofunction:: skyborn.calc.mann_kendall_xarray
+   :no-index:
+
+.. autofunction:: skyborn.calc.trend_analysis
+   :no-index:
+
+.. autofunction:: skyborn.calc.mk_test
+   :no-index:
+
+.. autofunction:: skyborn.calc.mk_multidim
+   :no-index:
+
 Example Usage
 -------------
 

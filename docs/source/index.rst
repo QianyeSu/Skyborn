@@ -16,9 +16,9 @@ Skyborn is a comprehensive Python package for climate data analysis, featuring a
    gallery
    api/index
    modules/index
+   functions_classes
    changelog
    contributing
-   genindex
 
 
 Features
@@ -72,6 +72,7 @@ Based on Cox, P. M., et al. (2013). Nature, 494(7437), 341-344.
 Indices and tables
 ==================
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+* :doc:`functions_classes` - Complete list of functions and classes
+* :ref:`genindex` - General index
+* :ref:`modindex` - Module index
+* :ref:`search` - Search documentation

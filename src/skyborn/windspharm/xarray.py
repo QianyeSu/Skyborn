@@ -28,6 +28,8 @@ from __future__ import annotations
 from typing import Optional, Tuple, Union, Callable, Any, List
 import warnings
 
+__all__ = ["VectorWind"]
+
 try:
     import xarray as xr
 except ImportError:

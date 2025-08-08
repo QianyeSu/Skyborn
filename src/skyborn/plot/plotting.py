@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import matplotlib.transforms as mtransforms
 import numpy as np
 
+__all__ = ["add_equal_axes", "createFigure"]
+
 
 def add_equal_axes(ax, loc, pad, width):
     """

@@ -18,6 +18,9 @@ Curved Quiver Plots
 .. autofunction:: skyborn.plot.curved_quiver
    :no-index:
 
+.. autofunction:: skyborn.plot.add_curved_quiverkey
+   :no-index:
+
 Modular Plotting
 ----------------
 

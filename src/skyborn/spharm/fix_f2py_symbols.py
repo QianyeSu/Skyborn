@@ -16,6 +16,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+__all__ = ["find_all_f90_files", "generate_pyf_signature", "verify_pyf_file", "main"]
+
 
 def find_all_f90_files(src_dir):
     """Find all .f90 files in the source directory"""
