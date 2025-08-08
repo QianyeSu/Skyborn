@@ -137,7 +137,7 @@ Core GridFill Functions
      - Description
    * - :func:`skyborn.gridfill.fill`
      - Fill missing data using Poisson grid filling
-   * - :func:`skyborn.gridfill.fill_multiple`
+   * - :func:`skyborn.gridfill.fill_cube`
      - Fill multiple arrays simultaneously
 
 XArray GridFill Interface
