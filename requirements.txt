@@ -11,3 +11,4 @@ scipy
 cfgrib
 eccodes
 scikit-learn
+dask
