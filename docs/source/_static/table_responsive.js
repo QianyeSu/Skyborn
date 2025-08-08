@@ -158,22 +158,22 @@ document.addEventListener('DOMContentLoaded', function() {
             // Find Quick Navigation element
             const quickNavigation = document.getElementById('quick-navigation');
             if (quickNavigation) {
-            quickNavigation.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            // Highlight Quick Navigation
-            quickNavigation.style.transition = 'background-color 0.5s ease';
-            quickNavigation.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
-            quickNavigation.style.borderRadius = '8px';
-            quickNavigation.style.padding = '1rem';
-            setTimeout(() => {
-                quickNavigation.style.backgroundColor = '';
-                quickNavigation.style.padding = '';
-            }, 2000);
-            // Show success notification
-            showToast('🧭 Returned to Quick Navigation');
+                quickNavigation.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                // Find and highlight corresponding item in Quick Navigation (without background highlight)
+                highlightCorrespondingNavigationItem(tableTitleData.title, quickNavigation);
+
+                // Clear highlighted navigation items after 3 seconds
+                setTimeout(() => {
+                    clearNavigationHighlights(quickNavigation);
+                }, 3000);
+
+                // Show success notification
+                showToast('🧭 Returned to Quick Navigation');
             } else {
-            // If Quick Navigation not found, jump to page top
-            document.querySelector('h1').scrollIntoView({ behavior: 'smooth', block: 'start' });
-            showToast('Returned to page top');
+                // If Quick Navigation not found, jump to page top
+                document.querySelector('h1').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                showToast('Returned to page top');
             }
         });
 
@@ -748,6 +748,199 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 }
             }
+        });
+    }
+
+    // ========== Quick Navigation Highlighting Functions ==========
+    function highlightCorrespondingNavigationItem(tableTitle, quickNavigation) {
+        // Clear any existing highlights first
+        clearNavigationHighlights(quickNavigation);
+
+        console.log(`🔍 Looking for navigation item matching table: "${tableTitle}"`);
+
+        // Get all possible navigation elements
+        const allElements = quickNavigation.querySelectorAll('a, li, span, div, p, h1, h2, h3, h4, h5, h6');
+        let bestMatch = null;
+        let bestScore = 0;
+
+        // Extract key words from table title for matching
+        const tableWords = extractKeyWords(tableTitle);
+        console.log(`📝 Table keywords: [${tableWords.join(', ')}]`);
+
+        allElements.forEach(element => {
+            const elementText = element.textContent.trim();
+            if (elementText.length < 3) return; // Skip very short text
+
+            const elementWords = extractKeyWords(elementText);
+            const matchScore = calculateMatchScore(tableWords, elementWords, tableTitle, elementText);
+
+            if (matchScore > bestScore && matchScore > 0.3) { // Minimum threshold for matching
+                bestMatch = element;
+                bestScore = matchScore;
+            }
+        });
+
+        if (bestMatch) {
+            // Highlight the best matching navigation item
+            bestMatch.style.transition = 'all 0.5s ease';
+            bestMatch.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+            bestMatch.style.color = '#1e40af';
+            bestMatch.style.borderRadius = '6px';
+            bestMatch.style.padding = '0.5rem';
+            bestMatch.style.fontWeight = '600';
+            bestMatch.style.boxShadow = '0 2px 8px rgba(59, 130, 246, 0.3)';
+            bestMatch.style.border = '1px solid rgba(59, 130, 246, 0.4)';
+
+            // Add a special class for cleanup
+            bestMatch.classList.add('skyborn-nav-highlighted');
+
+            console.log(`🎯 Highlighted: "${bestMatch.textContent.trim()}" (score: ${bestScore.toFixed(2)})`);
+        } else {
+            console.log(`ℹ️ No suitable match found for table: "${tableTitle}"`);
+        }
+    }
+
+    // Extract meaningful keywords from text
+    function extractKeyWords(text) {
+        // Convert to lowercase and remove special characters
+        const cleanText = text.toLowerCase()
+            .replace(/[^\w\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // Common stop words to ignore
+        const stopWords = new Set([
+            'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+            'from', 'up', 'about', 'into', 'through', 'during', 'before', 'after', 'above',
+            'below', 'under', 'between', 'among', 'a', 'an', 'as', 'is', 'are', 'was', 'were',
+            'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+            'could', 'should', 'may', 'might', 'must', 'can', 'shall', 'this', 'that', 'these',
+            'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'
+        ]);
+
+        // Split into words and filter
+        const words = cleanText.split(/\s+/)
+            .filter(word => word.length > 2) // Remove very short words
+            .filter(word => !stopWords.has(word)) // Remove stop words
+            .filter(word => !/^\d+$/.test(word)); // Remove pure numbers
+
+        return [...new Set(words)]; // Remove duplicates
+    }
+
+    // Calculate similarity score between two sets of keywords
+    function calculateMatchScore(tableWords, elementWords, originalTableTitle, originalElementText) {
+        if (tableWords.length === 0 || elementWords.length === 0) return 0;
+
+        let score = 0;
+        let maxPossibleScore = 0;
+
+        // Check for exact phrase matches (higher weight)
+        const tableTitle = originalTableTitle.toLowerCase();
+        const elementText = originalElementText.toLowerCase();
+
+        // Exact title match gets maximum score
+        if (elementText.includes(tableTitle) || tableTitle.includes(elementText)) {
+            score += 2.0;
+        }
+
+        // Check for word matches
+        tableWords.forEach(tableWord => {
+            maxPossibleScore += 1;
+
+            // Exact word match
+            if (elementWords.includes(tableWord)) {
+                score += 1.0;
+                return;
+            }
+
+            // Partial word match (for compound words or similar terms)
+            const partialMatches = elementWords.filter(elementWord =>
+                elementWord.includes(tableWord) || tableWord.includes(elementWord)
+            );
+            if (partialMatches.length > 0) {
+                score += 0.7;
+                return;
+            }
+
+            // Similarity-based matching for related terms
+            const similarityScore = findBestSimilarity(tableWord, elementWords);
+            if (similarityScore > 0.7) {
+                score += similarityScore * 0.5;
+            }
+        });
+
+        // Normalize score
+        const normalizedScore = maxPossibleScore > 0 ? score / maxPossibleScore : 0;
+
+        // Bonus for shorter element text (more specific matches)
+        const lengthBonus = Math.max(0, 1 - (originalElementText.length / 100));
+
+        return Math.min(1.0, normalizedScore + lengthBonus * 0.1);
+    }
+
+    // Find the best similarity score between a word and a list of words
+    function findBestSimilarity(word, wordList) {
+        let bestSimilarity = 0;
+
+        wordList.forEach(candidate => {
+            const similarity = calculateStringSimilarity(word, candidate);
+            if (similarity > bestSimilarity) {
+                bestSimilarity = similarity;
+            }
+        });
+
+        return bestSimilarity;
+    }
+
+    // Calculate string similarity using a simple algorithm
+    function calculateStringSimilarity(str1, str2) {
+        if (str1 === str2) return 1.0;
+        if (str1.length === 0 || str2.length === 0) return 0;
+
+        const maxLength = Math.max(str1.length, str2.length);
+        const distance = levenshteinDistance(str1, str2);
+
+        return 1 - (distance / maxLength);
+    }
+
+    // Calculate Levenshtein distance between two strings
+    function levenshteinDistance(str1, str2) {
+        const matrix = [];
+
+        for (let i = 0; i <= str2.length; i++) {
+            matrix[i] = [i];
+        }
+
+        for (let j = 0; j <= str1.length; j++) {
+            matrix[0][j] = j;
+        }
+
+        for (let i = 1; i <= str2.length; i++) {
+            for (let j = 1; j <= str1.length; j++) {
+                if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                    matrix[i][j] = matrix[i - 1][j - 1];
+                } else {
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j - 1] + 1, // substitution
+                        matrix[i][j - 1] + 1,     // insertion
+                        matrix[i - 1][j] + 1      // deletion
+                    );
+                }
+            }
+        }
+
+        return matrix[str2.length][str1.length];
+    }    function clearNavigationHighlights(quickNavigation) {
+        const highlightedItems = quickNavigation.querySelectorAll('.skyborn-nav-highlighted');
+        highlightedItems.forEach(item => {
+            item.style.backgroundColor = '';
+            item.style.color = '';
+            item.style.borderRadius = '';
+            item.style.padding = '';
+            item.style.fontWeight = '';
+            item.style.boxShadow = '';
+            item.style.border = '';
+            item.classList.remove('skyborn-nav-highlighted');
         });
     }
 
