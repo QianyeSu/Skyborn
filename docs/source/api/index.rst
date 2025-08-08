@@ -17,12 +17,12 @@ API Reference
 
 This section provides detailed API documentation for all Skyborn modules.
 
-Calculation Functions
+Calculation
 ---------------------
 
 Statistical analysis and emergent constraint methods.
 
-Mann-Kendall Trend Analysis
+Mann-Kendall
 ---------------------------
 
 High-performance trend detection for climate data with vectorized implementations optimized for large multidimensional arrays.
@@ -33,22 +33,22 @@ High-performance trend detection for climate data with vectorized implementation
 - Memory efficient chunking (~25MB usage)
 - Enhanced Dask support for distributed computing
 
-Conversion Functions
+Conversion
 --------------------
 
 Data format conversion utilities.
 
-Plotting Functions
+Plotting
 ------------------
 
 Visualization and plotting utilities.
 
-Interpolation Functions
+Interpolation
 -----------------------
 
 Data interpolation and regridding.
 
-GridFill Functions
+GridFill
 ------------------
 
 Advanced atmospheric data interpolation using Poisson equation solvers. Provides gap-filling and smoothing capabilities for irregular atmospheric datasets with physically-based methods.
@@ -59,12 +59,12 @@ Advanced atmospheric data interpolation using Poisson equation solvers. Provides
 - Improved performance and convergence handling
 - Publication-ready visualization tools
 
-Gradient Functions
+Gradient
 ------------------
 
 Spatial and temporal gradient calculations.
 
-Causality Functions
+Causality
 -------------------
 
 Causality analysis methods.
@@ -83,7 +83,7 @@ Spherical harmonic vector wind analysis including vorticity, divergence, streamf
    The ROF (Regularized Optimal Fingerprinting) module; currently under development and testing.
    Documentation will be available in future releases.
 
-ROF Functions
+ROF
 -------------
 
 Reduced Order Form methods for climate model analysis.
