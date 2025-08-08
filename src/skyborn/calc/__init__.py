@@ -31,17 +31,12 @@ from .emergent_constraints import (
 
 from .mann_kendall import (
     mann_kendall_test,
-    mann_kendall_multidim_numpy,
+    mann_kendall_multidim,
     trend_analysis,
+    mk_test,  # alias
+    mk_multidim,  # alias
 )
 
-# Try to import xarray-specific functions if xarray is available
-try:
-    from .mann_kendall import mann_kendall_xarray
-
-    _has_xarray_mk = True
-except ImportError:
-    _has_xarray_mk = False
 
 __all__ = [
     # From calculations.py
@@ -62,10 +57,8 @@ __all__ = [
     "calc_PDF_EC_PRIOR",
     # From mann_kendall.py
     "mann_kendall_test",
-    "mann_kendall_multidim_numpy",
+    "mann_kendall_multidim",
     "trend_analysis",
+    "mk_test",
+    "mk_multidim",
 ]
-
-# Add xarray function to __all__ if available
-if _has_xarray_mk:
-    __all__.append("mann_kendall_xarray")
