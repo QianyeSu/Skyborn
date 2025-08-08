@@ -5,20 +5,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========== Table Auto-Adjustment System ==========
     function initializeTableAdjustment() {
 
-        // 查找所有表格
+        // Find all tables
         const tables = document.querySelectorAll('table');
 
         tables.forEach(table => {
             makeTableResponsive(table);
         });
 
-        // 监听窗口大小变化 - 但不自动调整已手动调整的表格
+        // Listen for window size changes - but don't auto-adjust manually adjusted tables
         let resizeTimer;
         window.addEventListener('resize', function() {
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(() => {
                 tables.forEach(table => {
-                    // 只调整未被用户手动调整的表格
+                    // Only adjust tables that haven't been manually adjusted by user
                     if (!table.dataset.userAdjusted) {
                         adjustTableColumns(table);
                     }
@@ -32,12 +32,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========== Make Table Responsive ==========
     function makeTableResponsive(table) {
 
-        // 跳过已经处理过的表格
+        // Skip already processed tables
         if (table.classList.contains('responsive-table-processed')) {
             return;
         }
 
-        // 添加响应式容器
+        // Add responsive container
         const wrapper = document.createElement('div');
         wrapper.className = 'responsive-table-wrapper';
         wrapper.style.cssText = `
@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', function() {
             transition: all 0.3s ease;
         `;
 
-        // 创建表格容器
+        // Create table container
         const container = document.createElement('div');
         container.className = 'table-scroll-container';
         container.style.cssText = `
@@ -60,12 +60,12 @@ document.addEventListener('DOMContentLoaded', function() {
             overflow-y: hidden;
             position: relative;
             scroll-behavior: smooth;
-            /* 自定义滚动条样式 */
+            /* Custom scrollbar styles */
             scrollbar-width: thin;
             scrollbar-color: #3b82f6 #f1f5f9;
         `;
 
-        // WebKit 浏览器滚动条样式
+        // WebKit browser scrollbar styles
         const scrollbarStyle = document.createElement('style');
         scrollbarStyle.textContent = `
             .table-scroll-container::-webkit-scrollbar {
@@ -86,21 +86,21 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         document.head.appendChild(scrollbarStyle);
 
-        // 包装表格
+        // Wrap table
         table.parentNode.insertBefore(wrapper, table);
         wrapper.appendChild(container);
         container.appendChild(table);
 
-        // 添加表格控制栏
+        // Add table controls
         addTableControls(wrapper, table, container);
 
-        // 初始调整表格 - 但尊重 RST 定义的列宽
+        // Initial table adjustment - but respect RST defined column widths
         applyInitialLayout(table);
 
-        // 添加交互效果
+        // Add interaction effects
         addTableInteraction(table, container);
 
-        // 标记为已处理
+        // Mark as processed
         table.classList.add('responsive-table-processed');
 
         console.log('📊 Table made responsive:', table);
@@ -121,11 +121,11 @@ document.addEventListener('DOMContentLoaded', function() {
             color: #1e40af;
         `;
 
-        // 左侧：表格标题（从前面的标题中获取）
+        // Left side: Table title (obtained from preceding heading)
         const info = document.createElement('div');
         const tableTitleData = getTableTitle(table);
 
-        // 创建可点击的标题
+        // Create clickable title
         const titleElement = document.createElement('div');
         titleElement.innerHTML = tableTitleData.title;
         titleElement.style.cssText = `
@@ -135,36 +135,68 @@ document.addEventListener('DOMContentLoaded', function() {
             font-size: ${getHeadingSize(tableTitleData.headingLevel)};
             margin: 0;
             padding: 0.25rem 0;
-            transition: color 0.3s ease;
+            transition: all 0.3s ease;
             border-bottom: 2px solid transparent;
+            user-select: none;
+            position: relative;
         `;
 
-        // 点击跳转到原标题位置
+        // Add hover indicator (# symbol)
+        const hoverIndicator = document.createElement('span');
+        hoverIndicator.innerHTML = ' #';
+        hoverIndicator.style.cssText = `
+            color: #3b82f6;
+            font-size: 0.9em;
+            opacity: 0;
+            transition: all 0.3s ease;
+            margin-left: 0.3rem;
+        `;
+        titleElement.appendChild(hoverIndicator);
+
+        // Click to jump to Quick Navigation
         titleElement.addEventListener('click', () => {
-            if (tableTitleData.headingElement) {
-                tableTitleData.headingElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                // 高亮原标题
-                tableTitleData.headingElement.style.transition = 'background-color 0.5s ease';
-                tableTitleData.headingElement.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
-                setTimeout(() => {
-                    tableTitleData.headingElement.style.backgroundColor = '';
-                }, 2000);
+            // Find Quick Navigation element
+            const quickNavigation = document.getElementById('quick-navigation');
+            if (quickNavigation) {
+            quickNavigation.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Highlight Quick Navigation
+            quickNavigation.style.transition = 'background-color 0.5s ease';
+            quickNavigation.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+            quickNavigation.style.borderRadius = '8px';
+            quickNavigation.style.padding = '1rem';
+            setTimeout(() => {
+                quickNavigation.style.backgroundColor = '';
+                quickNavigation.style.padding = '';
+            }, 2000);
+            // Show success notification
+            showToast('🧭 Returned to Quick Navigation');
+            } else {
+            // If Quick Navigation not found, jump to page top
+            document.querySelector('h1').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            showToast('Returned to page top');
             }
         });
 
         titleElement.addEventListener('mouseenter', () => {
             titleElement.style.color = '#3b82f6';
             titleElement.style.borderBottomColor = '#3b82f6';
+            titleElement.style.transform = 'scale(1.02)';
+            titleElement.title = 'Click to return to Quick Navigation';
+            hoverIndicator.style.opacity = '1';
+            hoverIndicator.style.transform = 'translateY(-1px)';
         });
 
         titleElement.addEventListener('mouseleave', () => {
             titleElement.style.color = '#1e40af';
             titleElement.style.borderBottomColor = 'transparent';
+            titleElement.style.transform = 'scale(1)';
+            hoverIndicator.style.opacity = '0';
+            hoverIndicator.style.transform = 'translateY(0)';
         });
 
         info.appendChild(titleElement);
 
-        // 隐藏原来的标题
+        // Hide original title
         if (tableTitleData.headingElement) {
             tableTitleData.headingElement.style.display = 'none';
         }
@@ -224,25 +256,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ========== Get Table Title ==========
     function getTableTitle(table) {
-        // 查找表格前面的标题
+        // Find table heading in front
         let currentElement = table.parentElement;
         let targetHeading = null;
 
-        // 向上查找容器中的标题
+        // Search up for heading in container
         while (currentElement && currentElement !== document.body) {
-            // 查找前面的标题元素
+            // Find preceding heading elements
             const prevElements = [];
             let prev = currentElement.previousElementSibling;
 
-            // 收集前面的几个元素
+            // Collect several preceding elements
             while (prev && prevElements.length < 5) {
                 prevElements.unshift(prev);
                 prev = prev.previousElementSibling;
             }
 
-            // 在前面的元素中查找标题
+            // Search for heading in preceding elements
             for (const element of prevElements) {
-                // 检查是否是标题元素
+                // Check if it's a heading element
                 if (element.tagName && /^H[1-6]$/.test(element.tagName)) {
                     targetHeading = element;
                     return {
@@ -252,7 +284,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     };
                 }
 
-                // 检查是否包含标题文本
+                // Check if contains heading text
                 if (element.classList.contains('section-header') ||
                     element.classList.contains('table-title')) {
                     return {
@@ -262,7 +294,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     };
                 }
 
-                // 查找子元素中的标题
+                // Find heading in child elements
                 const heading = element.querySelector('h1, h2, h3, h4, h5, h6');
                 if (heading) {
                     return {
@@ -276,12 +308,12 @@ document.addEventListener('DOMContentLoaded', function() {
             currentElement = currentElement.parentElement;
         }
 
-        // 如果找不到标题，根据表格内容推断
+        // If no heading found, infer from table content
         const firstHeaderCell = table.querySelector('th');
         if (firstHeaderCell) {
             const headerText = firstHeaderCell.textContent.trim();
 
-            // 根据第一列标题推断表格类型
+            // Infer table type based on first column heading
             if (headerText.includes('Function')) {
                 return { title: 'Functions Reference', headingElement: null, headingLevel: 'H3' };
             } else if (headerText.includes('Class')) {
@@ -297,7 +329,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // 检查表格是否在特定的模块section中
+        // Check if table is in specific module section
         const section = table.closest('[id*="calc"], [id*="spharm"], [id*="gridfill"], [id*="gradients"], [id*="causality"], [id*="windspharm"]');
         if (section) {
             const sectionId = section.id;
@@ -309,7 +341,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (sectionId.includes('windspharm')) return { title: 'Wind Spherical Harmonics', headingElement: null, headingLevel: 'H3' };
         }
 
-        // 默认标题
+        // Default title
         return { title: 'Data Table', headingElement: null, headingLevel: 'H3' };
     }
 
@@ -324,7 +356,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (columnCount === 0) return;
 
-        // 为 functions_classes 表格应用预设的 30:70 比例
+        // Apply preset 30:70 ratio for functions_classes tables
         if (table.closest('.skyborn-function-table') ||
             table.querySelector('th')?.textContent.includes('Function')) {
 
@@ -338,7 +370,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            // 应用到所有行
+            // Apply to all rows
             rows.forEach(row => {
                 const rowCells = row.querySelectorAll('th, td');
                 rowCells.forEach((cell, index) => {
@@ -354,7 +386,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             console.log('📐 Applied 30:70 layout to function table');
         } else {
-            // 对其他表格应用轻微的自动调整
+            // Apply slight auto-adjustment for other tables
             adjustTableColumns(table);
         }
     }
@@ -364,14 +396,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const rows = table.querySelectorAll('tr');
         if (rows.length === 0) return;
 
-        // 获取第一行来确定列数
+        // Get first row to determine column count
         const firstRow = rows[0];
         const cells = firstRow.querySelectorAll('th, td');
         const columnCount = cells.length;
 
         if (columnCount === 0) return;
 
-        // 计算每列的最大内容宽度
+        // Calculate maximum content width for each column
         const columnWidths = new Array(columnCount).fill(0);
         const columnContents = new Array(columnCount).fill().map(() => []);
 
@@ -382,7 +414,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const textLength = cell.textContent.trim().length;
                     const hasLongFunction = cell.textContent.includes('skyborn.') && textLength > 25;
 
-                    // 为长函数名分配更多空间
+                    // Allocate more space for long function names
                     const adjustedLength = hasLongFunction ? textLength * 1.2 : textLength;
                     columnWidths[index] = Math.max(columnWidths[index], adjustedLength);
                     columnContents[index].push(cell.textContent.trim());
@@ -390,33 +422,33 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 计算容器可用宽度
+        // Calculate available container width
         const container = table.closest('.table-scroll-container');
         const availableWidth = container ? container.clientWidth - 40 : window.innerWidth - 100;
 
-        // 智能分配列宽
+        // Smart column width allocation
         const totalContentWidth = columnWidths.reduce((sum, width) => sum + width, 0);
-        const avgCharWidth = 8; // 估算的字符宽度
+        const avgCharWidth = 8; // Estimated character width
         const estimatedTableWidth = totalContentWidth * avgCharWidth;
 
-        // 如果内容宽度超过可用空间，使用比例分配
+        // If content width exceeds available space, use proportional allocation
         if (estimatedTableWidth > availableWidth) {
             const scale = availableWidth / estimatedTableWidth;
             columnWidths.forEach((width, index) => {
-                columnWidths[index] = Math.max(width * scale, 100); // 最小宽度100px
+                columnWidths[index] = Math.max(width * scale, 100); // Minimum width 100px
             });
         }
 
-        // 应用列宽
+        // Apply column widths
         applyColumnWidths(table, columnWidths);
 
-        // 添加表格样式增强
+        // Add table appearance enhancement
         enhanceTableAppearance(table);
     }
 
     // ========== Apply Column Widths ==========
     function applyColumnWidths(table, widths) {
-        // 设置表格样式
+        // Set table styles
         table.style.cssText = `
             width: 100%;
             table-layout: fixed;
@@ -426,7 +458,7 @@ document.addEventListener('DOMContentLoaded', function() {
             transition: all 0.3s ease;
         `;
 
-        // 创建或更新 colgroup
+        // Create or update colgroup
         let colgroup = table.querySelector('colgroup');
         if (!colgroup) {
             colgroup = document.createElement('colgroup');
@@ -440,7 +472,7 @@ document.addEventListener('DOMContentLoaded', function() {
             colgroup.appendChild(col);
         });
 
-        // 应用单元格样式
+        // Apply cell styles
         const cells = table.querySelectorAll('th, td');
         cells.forEach(cell => {
             cell.style.cssText = `
@@ -456,7 +488,7 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         });
 
-        // 头部样式
+        // Header styles
         const headers = table.querySelectorAll('th');
         headers.forEach(header => {
             header.style.cssText += `
@@ -472,15 +504,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ========== Auto Fit Columns ==========
     function autoFitColumns(table) {
-        // 临时移除 table-layout: fixed 来测量内容
+        // Temporarily remove table-layout: fixed to measure content
         table.style.tableLayout = 'auto';
         table.style.width = 'auto';
 
-        // 强制浏览器重新计算
+        // Force browser to recalculate
         table.offsetHeight;
 
         setTimeout(() => {
-            // 获取自然宽度
+            // Get natural widths
             const rows = table.querySelectorAll('tr');
             const firstRow = rows[0];
             const cells = firstRow.querySelectorAll('th, td');
@@ -490,10 +522,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 naturalWidths.push(cell.offsetWidth);
             });
 
-            // 重新应用固定布局
+            // Reapply fixed layout
             applyColumnWidths(table, naturalWidths);
 
-            // 添加动画效果
+            // Add animation effect
             table.style.transform = 'scale(1.01)';
             setTimeout(() => {
                 table.style.transform = 'scale(1)';
@@ -504,7 +536,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ========== Reset Table Columns ==========
     function resetTableColumns(table) {
-        // 移除自定义样式
+        // Remove custom styles
         table.style.cssText = '';
 
         const colgroup = table.querySelector('colgroup');
@@ -512,7 +544,7 @@ document.addEventListener('DOMContentLoaded', function() {
             colgroup.remove();
         }
 
-        // 重新初始化
+        // Reinitialize
         setTimeout(() => {
             adjustTableColumns(table);
         }, 50);
@@ -538,7 +570,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        // 重新调整列宽
+        // Readjust column widths
         setTimeout(() => {
             adjustTableColumns(table);
         }, 100);
@@ -547,7 +579,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========== Add Table Interaction ==========
     function addTableInteraction(table, container) {
 
-        // 行悬停效果
+        // Row hover effects
         const rows = table.querySelectorAll('tbody tr');
         rows.forEach(row => {
             row.addEventListener('mouseenter', function() {
@@ -563,7 +595,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 列悬停效果
+        // Column hover effects
         let currentColumn = -1;
         table.addEventListener('mouseover', function(e) {
             const cell = e.target.closest('th, td');
@@ -572,10 +604,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const cellIndex = Array.from(cell.parentNode.children).indexOf(cell);
 
             if (cellIndex !== currentColumn) {
-                // 清除之前的高亮
+                // Clear previous highlight
                 clearColumnHighlight(table);
 
-                // 高亮当前列
+                // Highlight current column
                 highlightColumn(table, cellIndex);
                 currentColumn = cellIndex;
             }
@@ -586,7 +618,7 @@ document.addEventListener('DOMContentLoaded', function() {
             currentColumn = -1;
         });
 
-        // 双击列头自动调整该列宽度
+        // Double-click column header to auto-adjust that column width
         const headers = table.querySelectorAll('th');
         headers.forEach((header, index) => {
             header.addEventListener('dblclick', function() {
@@ -594,7 +626,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 showToast(`🔧 Column ${index + 1} auto-fitted`);
             });
 
-            // 添加工具提示
+            // Add tooltip
             header.title = 'Double-click to auto-fit this column';
             header.style.cursor = 'pointer';
         });
@@ -630,7 +662,7 @@ document.addEventListener('DOMContentLoaded', function() {
         rows.forEach(row => {
             const cell = row.children[columnIndex];
             if (cell) {
-                // 临时移除宽度限制来测量内容
+                // Temporarily remove width restrictions to measure content
                 const originalStyle = cell.style.cssText;
                 cell.style.width = 'auto';
                 cell.style.minWidth = 'auto';
@@ -639,18 +671,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 const width = cell.scrollWidth;
                 maxWidth = Math.max(maxWidth, width);
 
-                // 恢复样式
+                // Restore styles
                 cell.style.cssText = originalStyle;
             }
         });
 
-        // 更新 colgroup
+        // Update colgroup
         const colgroup = table.querySelector('colgroup');
         if (colgroup && colgroup.children[columnIndex]) {
             colgroup.children[columnIndex].style.width = (maxWidth + 20) + 'px';
         }
 
-        // 添加动画效果
+        // Add animation effect
         rows.forEach(row => {
             const cell = row.children[columnIndex];
             if (cell) {
@@ -664,7 +696,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ========== Enhance Table Appearance ==========
     function enhanceTableAppearance(table) {
-        // 添加表格包装器悬停效果
+        // Add table wrapper hover effects
         const wrapper = table.closest('.responsive-table-wrapper');
         if (wrapper) {
             wrapper.addEventListener('mouseenter', function() {
@@ -678,7 +710,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        // 添加斑马纹效果
+        // Add zebra stripe effects
         const rows = table.querySelectorAll('tbody tr');
         rows.forEach((row, index) => {
             if (index % 2 === 1) {
@@ -686,7 +718,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // 为长函数名添加特殊样式
+        // Add special styles for long function names
         const cells = table.querySelectorAll('td, th');
         cells.forEach(cell => {
             const text = cell.textContent.trim();
@@ -696,7 +728,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 cell.style.color = '#1e40af';
                 cell.style.fontWeight = '500';
 
-                // 添加函数名特殊标识
+                // Add special identifier for function names
                 if (cell.querySelector('a')) {
                     const link = cell.querySelector('a');
                     link.style.textDecoration = 'none';
@@ -721,13 +753,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ========== Toast Notification System ==========
     function showToast(message, duration = 2000) {
-        // 移除已存在的toast
+        // Remove existing toast
         const existingToast = document.querySelector('.table-toast');
         if (existingToast) {
             existingToast.remove();
         }
 
-        // 检测深色模式
+        // Detect dark mode
         const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark' ||
                           window.matchMedia('(prefers-color-scheme: dark)').matches ||
                           document.body.classList.contains('dark') ||
@@ -737,7 +769,7 @@ document.addEventListener('DOMContentLoaded', function() {
         toast.className = 'table-toast';
         toast.textContent = message;
 
-        // 根据模式选择渐变
+        // Choose gradient based on mode
         const lightGradient = 'linear-gradient(135deg, #e0f2fe 0%, #7dd3fc 25%, #38bdf8 50%, #0ea5e9 75%, #0284c7 100%)';
         const darkGradient = 'linear-gradient(135deg, #1e293b 0%, #334155 25%, #475569 50%, #1e40af 75%, #1d4ed8 100%)';
 
@@ -761,12 +793,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         document.body.appendChild(toast);
 
-        // 动画显示
+        // Animation show
         setTimeout(() => {
             toast.style.transform = 'translateX(0)';
         }, 10);
 
-        // 自动隐藏
+        // Auto hide
         setTimeout(() => {
             toast.style.transform = 'translateX(100%)';
             setTimeout(() => {
@@ -784,7 +816,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (mutation.type === 'childList') {
                     mutation.addedNodes.forEach(function(node) {
                         if (node.nodeType === Node.ELEMENT_NODE) {
-                            // 检查新添加的表格
+                            // Check new added tables
                             const newTables = node.querySelectorAll ? node.querySelectorAll('table') : [];
                             newTables.forEach(table => {
                                 if (!table.classList.contains('responsive-table-processed')) {
@@ -794,7 +826,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 }
                             });
 
-                            // 检查节点本身是否是表格
+                            // Check if node itself is a table
                             if (node.tagName === 'TABLE' && !node.classList.contains('responsive-table-processed')) {
                                 setTimeout(() => {
                                     makeTableResponsive(node);
@@ -816,7 +848,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function initializeResponsiveTablesSystem() {
         console.log('🚀 Initializing responsive tables system...');
 
-        // 延迟初始化以确保所有内容加载完成
+        // Delayed initialization to ensure all content is loaded
         setTimeout(() => {
             initializeTableAdjustment();
             monitorTableChanges();
@@ -834,21 +866,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 else if (window.location.hash.includes('gridfill')) { moduleName = 'gridfill'; icon = '🌐'; }
                 else if (window.location.hash.includes('gradients')) { moduleName = 'gradients'; icon = '📈'; }
                 else if (window.location.hash.includes('causality')) { moduleName = 'causality'; icon = '🔗'; }
-                else if (window.location.hash.includes('windspharm')) { moduleName = 'windspharm'; icon = '�'; }
+                else if (window.location.hash.includes('windspharm')) { moduleName = 'windspharm'; icon = '💨'; }
 
                 if (moduleName !== 'Smart tables') {
                     moduleName = `${moduleName} functions`;
                 }
             }
 
-            showToast('🌟 Welcome to Skyborn!', 2000);
+            showToast('🌟 Welcome to Skyborn!', 3000);
         }, 500);
     }
 
     // ========== Start the System ==========
     initializeResponsiveTablesSystem();
 
-    // 为调试添加全局函数
+    // Add global functions for debugging
     window.SkybornTables = {
         adjustAll: () => {
             document.querySelectorAll('table').forEach(adjustTableColumns);
