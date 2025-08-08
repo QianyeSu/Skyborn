@@ -758,8 +758,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         console.log(`🔍 Looking for navigation item matching table: "${tableTitle}"`);
 
-        // Get all possible navigation elements
-        const allElements = quickNavigation.querySelectorAll('a, li, span, div, p, h1, h2, h3, h4, h5, h6');
+        // First try to find exact matches in navigation links (TOC structure)
+        const tocLinks = quickNavigation.querySelectorAll('a[href^="#"]');
         let bestMatch = null;
         let bestScore = 0;
 
@@ -767,40 +767,111 @@ document.addEventListener('DOMContentLoaded', function() {
         const tableWords = extractKeyWords(tableTitle);
         console.log(`📝 Table keywords: [${tableWords.join(', ')}]`);
 
-        allElements.forEach(element => {
-            const elementText = element.textContent.trim();
-            if (elementText.length < 3) return; // Skip very short text
+        // Check TOC links first (they are the most specific navigation elements)
+        tocLinks.forEach(link => {
+            const linkText = link.textContent.trim();
+            const matchScore = calculateDirectMatchScore(tableTitle, linkText);
 
-            const elementWords = extractKeyWords(elementText);
-            const matchScore = calculateMatchScore(tableWords, elementWords, tableTitle, elementText);
+            console.log(`🔗 Checking TOC link: "${linkText}" - Score: ${matchScore.toFixed(2)}`);
 
-            if (matchScore > bestScore && matchScore > 0.3) { // Minimum threshold for matching
-                bestMatch = element;
+            if (matchScore > bestScore && matchScore > 0.4) {
+                bestMatch = link;
                 bestScore = matchScore;
             }
         });
 
+        // If no good TOC match found, try broader elements but with higher threshold
+        if (!bestMatch || bestScore < 0.6) {
+            const allElements = quickNavigation.querySelectorAll('li, span, div, p, h1, h2, h3, h4, h5, h6');
+
+            allElements.forEach(element => {
+                const elementText = element.textContent.trim();
+                if (elementText.length < 3 || elementText.length > 100) return; // Skip very short or very long text
+
+                const matchScore = calculateDirectMatchScore(tableTitle, elementText);
+
+                if (matchScore > bestScore && matchScore > 0.5) {
+                    bestMatch = element;
+                    bestScore = matchScore;
+                }
+            });
+        }
+
         if (bestMatch) {
             // Highlight the best matching navigation item
-            bestMatch.style.transition = 'all 0.5s ease';
-            bestMatch.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
-            bestMatch.style.color = '#1e40af';
-            bestMatch.style.borderRadius = '6px';
-            bestMatch.style.padding = '0.5rem';
-            bestMatch.style.fontWeight = '600';
-            bestMatch.style.boxShadow = '0 2px 8px rgba(59, 130, 246, 0.3)';
-            bestMatch.style.border = '1px solid rgba(59, 130, 246, 0.4)';
-
-            // Add a special class for cleanup
-            bestMatch.classList.add('skyborn-nav-highlighted');
-
+            highlightElement(bestMatch);
             console.log(`🎯 Highlighted: "${bestMatch.textContent.trim()}" (score: ${bestScore.toFixed(2)})`);
         } else {
             console.log(`ℹ️ No suitable match found for table: "${tableTitle}"`);
         }
     }
 
-    // Extract meaningful keywords from text
+    // Highlight a specific element with visual effects
+    function highlightElement(element) {
+        element.style.transition = 'all 0.5s ease';
+        element.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+        element.style.color = '#1e40af';
+        element.style.borderRadius = '6px';
+        element.style.padding = '0.5rem';
+        element.style.fontWeight = '600';
+        element.style.boxShadow = '0 2px 8px rgba(59, 130, 246, 0.3)';
+        element.style.border = '1px solid rgba(59, 130, 246, 0.4)';
+        element.style.display = 'inline-block';
+        element.style.minWidth = 'auto';
+
+        // Add a special class for cleanup
+        element.classList.add('skyborn-nav-highlighted');
+    }
+
+    // Calculate direct matching score between table title and navigation text
+    function calculateDirectMatchScore(tableTitle, navText) {
+        const tableLower = tableTitle.toLowerCase().trim();
+        const navLower = navText.toLowerCase().trim();
+
+        // Exact match gets highest score
+        if (tableLower === navLower) {
+            return 1.0;
+        }
+
+        // Check if one contains the other
+        if (navLower.includes(tableLower)) {
+            return 0.9;
+        }
+        if (tableLower.includes(navLower)) {
+            return 0.8;
+        }
+
+        // Extract keywords and calculate overlap
+        const tableWords = extractKeyWords(tableTitle);
+        const navWords = extractKeyWords(navText);
+
+        if (tableWords.length === 0 || navWords.length === 0) {
+            return 0;
+        }
+
+        // Calculate word overlap
+        const commonWords = tableWords.filter(word => navWords.includes(word));
+        const overlapRatio = commonWords.length / Math.max(tableWords.length, navWords.length);
+
+        // Bonus for exact word matches
+        let exactMatches = 0;
+        tableWords.forEach(tableWord => {
+            if (navWords.includes(tableWord)) {
+                exactMatches++;
+            }
+        });
+
+        const exactMatchRatio = exactMatches / tableWords.length;
+
+        // Combined score with preference for exact word matches
+        const score = (overlapRatio * 0.4) + (exactMatchRatio * 0.6);
+
+        // Penalty for very different lengths
+        const lengthDiff = Math.abs(tableLower.length - navLower.length);
+        const lengthPenalty = Math.min(0.3, lengthDiff / 50);
+
+        return Math.max(0, score - lengthPenalty);
+    }    // Extract meaningful keywords from text
     function extractKeyWords(text) {
         // Convert to lowercase and remove special characters
         const cleanText = text.toLowerCase()
