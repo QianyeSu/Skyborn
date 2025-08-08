@@ -10,8 +10,4 @@ This section provides the complete module hierarchy and source code documentatio
 
 For a quick reference of all available functions and classes, see :doc:`../functions_classes`.
 
-Complete Module Documentation
------------------------------
-
-.. automodule:: skyborn
-   :members:
+For detailed API documentation, see :doc:`../api/index`.

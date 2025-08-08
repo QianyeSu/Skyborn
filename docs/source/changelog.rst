@@ -28,6 +28,21 @@ Version 0.3.11 (Current)
 * **Robust Error Handling**: Graceful handling of edge cases and problematic time series
 * **Comprehensive Testing**: Full test suite validation with 85% code coverage maintained
 
+**🎨 UI/UX Improvements**
+
+* **Dark Mode Compatibility**: Fixed notification color gradients for better visibility in dark themes:
+
+  - Updated notification system to use deep blue to light blue gradient for improved contrast
+  - Enhanced table responsiveness styling for better dark mode support
+
+* **Documentation Accuracy**: Corrected function documentation to match actual codebase:
+
+  - Fixed plot module function listings to reflect actual available functions
+  - Removed non-existent functions from documentation (plot_field, plot_vector_field, plot_streamlines, plot_contour)
+  - Added proper documentation for actual functions (add_equal_axes, createFigure, curved_quiver, add_curved_quiverkey)
+  - Updated windspharm interface references for accurate Sphinx linking
+  - Standardized "XArray" to "Xarray" throughout documentation
+
 **📊 Performance Benchmarks**
 
 For typical climate data analysis scenarios:

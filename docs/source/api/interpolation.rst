@@ -11,24 +11,20 @@ Regridding Classes
    :undoc-members:
    :show-inheritance:
 
-
 .. autoclass:: skyborn.interp.Regridder
    :members:
    :undoc-members:
    :show-inheritance:
-
 
 .. autoclass:: skyborn.interp.NearestRegridder
    :members:
    :undoc-members:
    :show-inheritance:
 
-
 .. autoclass:: skyborn.interp.BilinearRegridder
    :members:
    :undoc-members:
    :show-inheritance:
-
 
 .. autoclass:: skyborn.interp.ConservativeRegridder
    :members:
@@ -41,18 +37,14 @@ Regridding Functions
 
 .. autofunction:: skyborn.interp.regrid_dataset
 
-
 .. autofunction:: skyborn.interp.nearest_neighbor_indices
-
 
 Interpolation Functions
 -----------------------
 
 .. autofunction:: skyborn.interp.interp_hybrid_to_pressure
 
-
 .. autofunction:: skyborn.interp.interp_sigma_to_hybrid
-
 
 .. autofunction:: skyborn.interp.interp_multidim
 
