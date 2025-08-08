@@ -108,15 +108,19 @@ Grid and Coordinate Utilities
 
 .. autofunction:: skyborn.spharm.getgeodesicpts
     :no-index:
+
 .. autofunction:: skyborn.spharm.getspecindx
     :no-index:
+
 Mathematical Functions
 ~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: skyborn.spharm.legendre
     :no-index:
+
 .. autofunction:: skyborn.spharm.specintrp
     :no-index:
+
 Data Processing
 ~~~~~~~~~~~~~~~
 
