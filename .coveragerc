@@ -2,6 +2,7 @@
 source = src
 omit =
     */windspharm/iris.py
+    */spharm/__init__.py
     */tests/*
     */build/*
     */site-packages/*
