@@ -8,6 +8,13 @@ from .calc import (
     spearman_correlation,
     kendall_correlation,
     calculate_potential_temperature,
+    # Mann-Kendall functions
+    mann_kendall_test,
+    mann_kendall_multidim,
+    mann_kendall_xarray,
+    trend_analysis,
+    mk_test,
+    mk_multidim,
     # New emergent constraint function names
     gaussian_pdf,
     emergent_constraint_posterior,
@@ -35,7 +42,9 @@ from .conversion import (
     batch_convert_grib_to_nc,
     grib2nc,
     grib_to_netcdf,
+    GribToNetCDFError,
 )
+
 
 # Import submodules
 from . import plot
@@ -48,14 +57,11 @@ from . import windspharm
 from . import gridfill
 
 # Import key gridfill functions for convenient access
-# (Users can use either skyborn.fill or skyborn.gridfill.fill)
 from .gridfill import fill as gridfill_fill, fill_cube as gridfill_fill_cube
 
 # Expose gridfill functions at top level with clear names
 fill = gridfill_fill
 fill_cube = gridfill_fill_cube
 
-# Note: Enhanced gridfill module now includes modern xarray interface:
-# from skyborn.gridfill.xarray import fill  # For xarray DataArrays
 
-__version__ = "0.3.10"  # Updated to version 0.3.10
+__version__ = "0.3.10"

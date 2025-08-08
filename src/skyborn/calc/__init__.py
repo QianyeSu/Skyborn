@@ -32,6 +32,7 @@ from .emergent_constraints import (
 from .mann_kendall import (
     mann_kendall_test,
     mann_kendall_multidim,
+    mann_kendall_xarray,
     trend_analysis,
     mk_test,  # alias
     mk_multidim,  # alias
@@ -58,6 +59,7 @@ __all__ = [
     # From mann_kendall.py
     "mann_kendall_test",
     "mann_kendall_multidim",
+    "mann_kendall_xarray",
     "trend_analysis",
     "mk_test",
     "mk_multidim",
