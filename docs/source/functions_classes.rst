@@ -365,62 +365,60 @@ Complete Page Reference
      - Content & Purpose
    * - **Main Documentation Pages**
      -
-   * - ``index.rst``
+   * - :doc:`index`
      - Main documentation homepage
-   * - ``installation.rst``
+   * - :doc:`installation`
      - Installation instructions
-   * - ``quickstart.rst``
+   * - :doc:`quickstart`
      - Quick start guide
-   * - ``functions_classes.rst``
+   * - :doc:`functions_classes`
      - This page - complete function reference
-   * - ``contributing.rst``
+   * - :doc:`contributing`
      - Contribution guidelines
-   * - ``changelog.rst``
+   * - :doc:`changelog`
      - Version history and changes
    * - **API Reference**
      -
-   * - ``api/index.rst``
+   * - :doc:`api/index`
      - API documentation overview
-   * - ``api/calculations.rst``
+   * - :doc:`api/calculations`
      - Statistical and calculation functions
-   * - ``api/mann_kendall.rst``
+   * - :doc:`api/mann_kendall`
      - Mann-Kendall trend analysis
-   * - ``api/causality.rst``
+   * - :doc:`api/causality`
      - Causality analysis methods
-   * - ``api/conversion.rst``
+   * - :doc:`api/conversion`
      - Data format conversion
-   * - ``api/gridfill.rst``
+   * - :doc:`api/gridfill`
      - Grid interpolation functions
-   * - ``api/interpolation.rst``
+   * - :doc:`api/interpolation`
      - Regridding and interpolation
-   * - ``api/gradients.rst``
+   * - :doc:`api/gradients`
      - Spatial gradient calculations
-   * - ``api/plotting.rst``
+   * - :doc:`api/plotting`
      - Visualization functions
-   * - ``api/spharm.rst``
+   * - :doc:`api/spharm`
      - Spherical harmonics analysis
-   * - ``api/windspharm.rst``
+   * - :doc:`api/windspharm`
      - Vector wind analysis
    * - **Tutorials & Examples**
      -
-   * - ``notebooks/index.rst``
+   * - :doc:`notebooks/index`
      - Jupyter notebook tutorials overview
-   * - ``notebooks/gridfill_tutorial.ipynb``
+   * - :doc:`notebooks/gridfill_tutorial`
      - GridFill interpolation tutorial
-   * - ``notebooks/mann_kendall_tutorial.ipynb``
+   * - :doc:`notebooks/mann_kendall_tutorial`
      - Trend analysis tutorial
-   * - ``notebooks/windspharm_tutorial.ipynb``
+   * - :doc:`notebooks/windspharm_tutorial`
      - Vector wind analysis tutorial
-   * - ``notebooks/ecs_emergent_constraints_analysis.ipynb``
+   * - :doc:`notebooks/ecs_emergent_constraints_analysis`
      - Emergent constraints tutorial
    * - **Module Documentation**
      -
-   * - ``modules/index.rst``
+   * - :doc:`modules/index`
      - Auto-generated module index
-   * - ``modules/skyborn.rst``
-     - Complete module structure
-
-Function Usage Categories
+   * - :doc:`modules/skyborn`
+     - Complete module structureFunction Usage Categories
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. list-table::
@@ -483,17 +481,10 @@ Function Usage Categories
    * - :func:`skyborn.calc.emergent_constraint_prior`
      - Prior distributions
 
-.. admonition:: 📚 函数参考说明
-   :class: important
+.. note::
 
-   此页面提供了Skyborn包中所有可用函数和类的完整清单。每个条目都链接到详细的API文档，包含参数说明、示例和使用指南。
+   This page provides a comprehensive list of all functions and classes available in Skyborn. Each entry links to detailed API documentation with parameter descriptions, examples, and usage guidelines.
 
-.. admonition:: 💡 智能表格交互
-   :class: tip
+.. tip::
 
-   **表格优化功能**:
-
-   - **智能适配**: 双击列标题自动调整该列宽度
-   - **紧凑模式**: 点击 "📱 紧凑" 按钮适应小屏幕
-   - **重置布局**: 点击 "🔄 重置" 按钮恢复默认宽度
-   - **视觉反馈**: 鼠标悬停查看行列高亮效果
+   **Quick Navigation**: Use Ctrl+F (Cmd+F on Mac) to quickly search for specific functions or keywords within this page. You can also use the Quick Navigation menu above to jump to different sections.

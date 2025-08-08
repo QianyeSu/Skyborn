@@ -123,9 +123,51 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // 左侧：表格标题（从前面的标题中获取）
         const info = document.createElement('div');
-        const tableTitle = getTableTitle(table);
-        info.innerHTML = `📋 ${tableTitle}`;
-        info.style.fontWeight = '600';
+        const tableTitleData = getTableTitle(table);
+
+        // 创建可点击的标题
+        const titleElement = document.createElement('div');
+        titleElement.innerHTML = tableTitleData.title;
+        titleElement.style.cssText = `
+            font-weight: 700;
+            cursor: pointer;
+            color: #1e40af;
+            font-size: ${getHeadingSize(tableTitleData.headingLevel)};
+            margin: 0;
+            padding: 0.25rem 0;
+            transition: color 0.3s ease;
+            border-bottom: 2px solid transparent;
+        `;
+
+        // 点击跳转到原标题位置
+        titleElement.addEventListener('click', () => {
+            if (tableTitleData.headingElement) {
+                tableTitleData.headingElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // 高亮原标题
+                tableTitleData.headingElement.style.transition = 'background-color 0.5s ease';
+                tableTitleData.headingElement.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+                setTimeout(() => {
+                    tableTitleData.headingElement.style.backgroundColor = '';
+                }, 2000);
+            }
+        });
+
+        titleElement.addEventListener('mouseenter', () => {
+            titleElement.style.color = '#3b82f6';
+            titleElement.style.borderBottomColor = '#3b82f6';
+        });
+
+        titleElement.addEventListener('mouseleave', () => {
+            titleElement.style.color = '#1e40af';
+            titleElement.style.borderBottomColor = 'transparent';
+        });
+
+        info.appendChild(titleElement);
+
+        // 隐藏原来的标题
+        if (tableTitleData.headingElement) {
+            tableTitleData.headingElement.style.display = 'none';
+        }
 
         // 右侧：控制按钮
         const controls = document.createElement('div');
@@ -149,6 +191,19 @@ document.addEventListener('DOMContentLoaded', function() {
         controlBar.appendChild(controls);
 
         wrapper.insertBefore(controlBar, container);
+    }
+
+    // ========== Get Heading Size ==========
+    function getHeadingSize(headingLevel) {
+        const sizes = {
+            'H1': '2rem',
+            'H2': '1.75rem',
+            'H3': '1.5rem',
+            'H4': '1.25rem',
+            'H5': '1.125rem',
+            'H6': '1rem'
+        };
+        return sizes[headingLevel] || '1.25rem';
     }
 
     // ========== Create Control Button ==========
@@ -190,6 +245,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function getTableTitle(table) {
         // 查找表格前面的标题
         let currentElement = table.parentElement;
+        let targetHeading = null;
 
         // 向上查找容器中的标题
         while (currentElement && currentElement !== document.body) {
@@ -207,19 +263,32 @@ document.addEventListener('DOMContentLoaded', function() {
             for (const element of prevElements) {
                 // 检查是否是标题元素
                 if (element.tagName && /^H[1-6]$/.test(element.tagName)) {
-                    return element.textContent.trim();
+                    targetHeading = element;
+                    return {
+                        title: element.textContent.trim(),
+                        headingElement: element,
+                        headingLevel: element.tagName
+                    };
                 }
 
                 // 检查是否包含标题文本
                 if (element.classList.contains('section-header') ||
                     element.classList.contains('table-title')) {
-                    return element.textContent.trim();
+                    return {
+                        title: element.textContent.trim(),
+                        headingElement: element,
+                        headingLevel: 'H3'
+                    };
                 }
 
                 // 查找子元素中的标题
                 const heading = element.querySelector('h1, h2, h3, h4, h5, h6');
                 if (heading) {
-                    return heading.textContent.trim();
+                    return {
+                        title: heading.textContent.trim(),
+                        headingElement: heading,
+                        headingLevel: heading.tagName
+                    };
                 }
             }
 
@@ -233,15 +302,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // 根据第一列标题推断表格类型
             if (headerText.includes('Function')) {
-                return 'Functions Reference';
+                return { title: 'Functions Reference', headingElement: null, headingLevel: 'H3' };
             } else if (headerText.includes('Class')) {
-                return 'Classes Reference';
+                return { title: 'Classes Reference', headingElement: null, headingLevel: 'H3' };
             } else if (headerText.includes('Method')) {
-                return 'Methods Reference';
+                return { title: 'Methods Reference', headingElement: null, headingLevel: 'H3' };
             } else if (headerText.includes('Parameter')) {
-                return 'Parameters';
+                return { title: 'Parameters', headingElement: null, headingLevel: 'H3' };
             } else if (headerText.includes('Attribute')) {
-                return 'Attributes';
+                return { title: 'Attributes', headingElement: null, headingLevel: 'H3' };
+            } else if (headerText.includes('Page') || headerText.includes('Section')) {
+                return { title: 'Documentation Structure', headingElement: null, headingLevel: 'H3' };
             }
         }
 
@@ -249,16 +320,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const section = table.closest('[id*="calc"], [id*="spharm"], [id*="gridfill"], [id*="gradients"], [id*="causality"], [id*="windspharm"]');
         if (section) {
             const sectionId = section.id;
-            if (sectionId.includes('calc')) return 'Calculation Functions';
-            if (sectionId.includes('spharm')) return 'Spherical Harmonics Functions';
-            if (sectionId.includes('gridfill')) return 'Grid Filling Functions';
-            if (sectionId.includes('gradients')) return 'Gradient Functions';
-            if (sectionId.includes('causality')) return 'Causality Functions';
-            if (sectionId.includes('windspharm')) return 'Wind Spherical Harmonics';
+            if (sectionId.includes('calc')) return { title: 'Calculation Functions', headingElement: null, headingLevel: 'H3' };
+            if (sectionId.includes('spharm')) return { title: 'Spherical Harmonics Functions', headingElement: null, headingLevel: 'H3' };
+            if (sectionId.includes('gridfill')) return { title: 'Grid Filling Functions', headingElement: null, headingLevel: 'H3' };
+            if (sectionId.includes('gradients')) return { title: 'Gradient Functions', headingElement: null, headingLevel: 'H3' };
+            if (sectionId.includes('causality')) return { title: 'Causality Functions', headingElement: null, headingLevel: 'H3' };
+            if (sectionId.includes('windspharm')) return { title: 'Wind Spherical Harmonics', headingElement: null, headingLevel: 'H3' };
         }
 
         // 默认标题
-        return 'Data Table';
+        return { title: 'Data Table', headingElement: null, headingLevel: 'H3' };
     }
 
     // ========== Apply Initial Layout ==========
@@ -683,13 +754,13 @@ document.addEventListener('DOMContentLoaded', function() {
             top: 20px;
             right: 20px;
             background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 25%, #93c5fd 50%, #60a5fa 75%, #3b82f6 100%);
-            color: #1e40af;
+            color: white;
             padding: 0.75rem 1.5rem;
             border-radius: 12px;
             box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
             z-index: 10000;
             font-size: 0.9rem;
-            font-weight: 600;
+            font-weight: 900;
             transform: translateX(100%);
             transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             backdrop-filter: blur(10px);
