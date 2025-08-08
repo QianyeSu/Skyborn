@@ -18,6 +18,8 @@ Skyborn is a comprehensive Python package for climate data analysis, featuring a
    modules/index
    changelog
    contributing
+   genindex
+
 
 Features
 --------
