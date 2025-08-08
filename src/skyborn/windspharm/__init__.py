@@ -37,22 +37,14 @@ try:
 except ImportError:
     __version__ = "unknown"
 
-# List to define the behaviour of imports of the form:
-#     from skyborn.windspharm import *
-__all__ = ["VectorWind", "standard", "tools"]
-
 try:
     from . import iris
-
-    __all__.append("iris")
 except (ImportError, RuntimeError):
     # Skip iris if not available or if there are package conflicts
     pass
 
 try:
     from . import xarray
-
-    __all__.append("xarray")
 except ImportError:
     pass
 

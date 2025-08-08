@@ -91,13 +91,5 @@ try:
 except ImportError:
     __version__ = "1.0.0"
 
-# Define the objects to be imported by imports of the form:
-#   from skyborn.gridfill import *
-__all__ = ["fill", "fill_cube"]
-
-# Add xarray to __all__ if available
-if _has_xarray:
-    __all__.append("xarray")
-
 # Note: xarray interface is available as a submodule:
 #   from skyborn.gridfill.xarray import fill
