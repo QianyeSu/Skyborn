@@ -121,158 +121,6 @@ The emergent constraint method implemented in Skyborn follows established climat
 * **Validation**: Cross-validation against independent datasets
 * **Uncertainty Quantification**: Full probabilistic treatment
 
-GridFill Atmospheric Data Interpolation
-========================================
-
-Skyborn's **GridFill** module provides advanced atmospheric data interpolation capabilities using Poisson equation solvers. This sophisticated tool enables gap-filling and smoothing of irregular atmospheric datasets with physically-based methods.
-
-Overview
---------
-
-The GridFill module addresses common atmospheric data challenges:
-
-.. image:: images/gridfill_comparison.png
-   :alt: GridFill Interpolation Comparison
-   :width: 100%
-
-*Figure 1: GridFill interpolation comparison showing original data with missing values (left), multiple interpolation methods (center), and final analysis (right).*
-
-.. note::
-   **Key Features:**
-
-   * **Physical Basis**: Solves the Poisson equation for mathematically rigorous interpolation
-   * **Multiple Interfaces**: Standard, xarray, and iris compatibility for different workflows
-   * **Advanced Methods**: Includes Navier-Stokes inspired formulations
-   * **Real Atmospheric Data**: Optimized for meteorological and climate datasets
-   * **Gap-Filling**: Efficiently handles missing data in irregular patterns
-
-Core Functionality
-------------------
-
-**1. Basic Interpolation**
-
-The fundamental GridFill approach solves the Poisson equation:
-
-.. math::
-
-   \nabla^2 \phi = 0
-
-where φ represents the atmospheric field being interpolated.
-
-**2. Advanced Methods**
-
-.. image:: images/gridfill_methods.png
-   :alt: GridFill Method Comparison
-   :width: 100%
-
-*Figure 2: Comparison of different GridFill interpolation methods showing convergence and accuracy characteristics.*
-
-* **Standard GridFill**: Classical Poisson equation solver
-* **Xarray Interface**: Seamless integration with modern Python climate data workflows
-* **Iris Interface**: Compatibility with the Met Office Iris library
-* **Extended Methods**: Advanced formulations for complex atmospheric phenomena
-
-**3. Quality Assessment**
-
-.. image:: images/gridfill_convergence.png
-   :alt: GridFill Convergence Analysis
-   :width: 100%
-
-*Figure 3: GridFill convergence analysis showing iteration progress and solution stability.*
-
-Performance Analysis
---------------------
-
-**Method Comparison and Validation**
-
-.. image:: images/gridfill_validation.png
-   :alt: GridFill Validation Results
-   :width: 100%
-
-*Figure 4: Comprehensive validation of GridFill methods against known analytical solutions and real atmospheric data.*
-
-The GridFill module provides robust performance across different atmospheric scenarios:
-
-* **Convergence Rate**: Rapid convergence for most meteorological applications
-* **Accuracy**: High precision for smooth atmospheric fields
-* **Stability**: Robust handling of irregular missing data patterns
-* **Scalability**: Efficient processing of large climate datasets
-
-Interactive Tutorial
---------------------
-
-**Complete GridFill Tutorial**: :doc:`notebooks/gridfill_tutorial`
-
-The comprehensive GridFill tutorial demonstrates:
-
-1. **Data Preparation**: Loading and preprocessing atmospheric datasets
-2. **Basic Usage**: Standard GridFill interface and parameters
-3. **Advanced Interfaces**: Xarray and iris integration examples
-4. **Method Comparison**: Quantitative analysis of different approaches
-5. **Real-World Applications**: Practical atmospheric data interpolation
-6. **Performance Optimization**: Tips for large dataset processing
-
-Example Applications
---------------------
-
-**Satellite Data Gap-Filling**
-   Fill missing pixels in satellite-derived atmospheric products
-
-**Station Data Interpolation**
-   Create gridded fields from sparse observational networks
-
-**Model Data Quality Control**
-   Smooth numerical artifacts in climate model output
-
-**Reanalysis Enhancement**
-   Improve spatial coverage of atmospheric reanalysis products
-
-**Field Campaign Support**
-   Interpolate irregular measurement patterns from aircraft or ship data
-
-Getting Started with GridFill
------------------------------
-
-.. code-block:: python
-
-   from skyborn.gridfill.xarray import gridfill_xarray
-   import xarray as xr
-   import numpy as np
-
-   # Load atmospheric data with missing values
-   data = xr.open_dataset('atmospheric_data.nc')
-
-   # Create mask for missing/invalid data
-   mask = np.isnan(data.temperature)
-
-   # Apply GridFill interpolation
-   filled_data = gridfill_xarray(
-       data.temperature,
-       missing_value_mask=mask,
-       max_iterations=1000,
-       convergence_threshold=1e-6
-   )
-
-   # Compare original vs filled data
-   comparison = xr.concat([data.temperature, filled_data],
-                         dim='method')
-
-Mathematical Foundation
------------------------
-
-GridFill implements sophisticated numerical methods:
-
-**Poisson Equation Solver:**
-   Iterative solution of the discrete Poisson equation with boundary conditions
-
-**Navier-Stokes Formulation:**
-   Advanced physics-based interpolation for fluid-like atmospheric fields
-
-**Convergence Criteria:**
-   Multiple stopping conditions ensure optimal balance of accuracy and efficiency
-
-**Boundary Handling:**
-   Sophisticated treatment of domain boundaries and irregular geometries
 
 Spherical Harmonic Wind Analysis (Windspharm)
 =============================================
@@ -510,17 +358,184 @@ Technical Notes
 - Error messages guide proper usage
 - Reference solutions for testing
 
+GridFill Atmospheric Data Interpolation
+========================================
+
+Skyborn's **GridFill** module provides advanced atmospheric data interpolation capabilities using Poisson equation solvers. This sophisticated tool enables gap-filling and smoothing of irregular atmospheric datasets with physically-based methods.
+
+Overview
+--------
+
+The GridFill module addresses common atmospheric data challenges:
+
+.. image:: images/gridfill_missing_data_overview.png
+   :alt: GridFill Missing Data Overview
+   :width: 100%
+
+*Figure 1: GridFill missing data overview showing various scenarios of missing atmospheric data patterns that require sophisticated interpolation techniques.*
+
+.. note::
+   **Key Features:**
+
+   * **Physical Basis**: Solves the Poisson equation for mathematically rigorous interpolation
+   * **Multiple Interfaces**: Standard, xarray, and iris compatibility for different workflows
+   * **Advanced Methods**: Includes Navier-Stokes inspired formulations
+   * **Real Atmospheric Data**: Optimized for meteorological and climate datasets
+   * **Gap-Filling**: Efficiently handles missing data in irregular patterns
+
+Core Functionality
+------------------
+
+**1. Basic Interpolation**
+
+The fundamental GridFill approach solves the Poisson equation:
+
+.. math::
+
+   \nabla^2 \phi = 0
+
+where φ represents the atmospheric field being interpolated.
+
+**2. Advanced Methods**
+
+.. image:: images/gridfill_comprehensive_comparison.png
+   :alt: GridFill Comprehensive Comparison
+   :width: 100%
+
+*Figure 2: Comprehensive comparison of different GridFill interpolation methods showing convergence characteristics, accuracy metrics, and performance analysis across various atmospheric scenarios.*
+
+* **Standard GridFill**: Classical Poisson equation solver
+* **Xarray Interface**: Seamless integration with modern Python climate data workflows
+* **Iris Interface**: Compatibility with the Met Office Iris library
+* **Extended Methods**: Advanced formulations for complex atmospheric phenomena
+
+**3. Quality Assessment**
+
+.. image:: images/gridfill_component_vs_direct_comparison.png
+   :alt: GridFill Component vs Direct Comparison
+   :width: 100%
+
+*Figure 3: Component-wise vs direct approach comparison for vector wind fields, demonstrating how GridFill preserves physical constraints and maintains the integrity of atmospheric vector quantities.*
+
+Performance Analysis
+--------------------
+
+**Method Comparison and Validation**
+
+.. image:: images/gridfill_uv_component_analysis.png
+   :alt: GridFill UV Component Analysis
+   :width: 100%
+
+*Figure 4: Detailed UV component analysis showing how GridFill handles vector wind field interpolation, preserving the physical relationships between zonal (U) and meridional (V) wind components.*
+
+The GridFill module provides robust performance across different atmospheric scenarios:
+
+* **Convergence Rate**: Rapid convergence for most meteorological applications
+* **Accuracy**: High precision for smooth atmospheric fields
+* **Stability**: Robust handling of irregular missing data patterns
+* **Scalability**: Efficient processing of large climate datasets
+
+Interactive Tutorial
+--------------------
+
+**Complete GridFill Tutorial**: :doc:`notebooks/gridfill_tutorial`
+
+The comprehensive GridFill tutorial demonstrates:
+
+1. **Data Preparation**: Loading and preprocessing atmospheric datasets
+2. **Basic Usage**: Standard GridFill interface and parameters
+3. **Advanced Interfaces**: Xarray and iris integration examples
+4. **Method Comparison**: Quantitative analysis of different approaches
+5. **Real-World Applications**: Practical atmospheric data interpolation
+6. **Performance Optimization**: Tips for large dataset processing
+
+Example Applications
+--------------------
+
+**Satellite Data Gap-Filling**
+   Fill missing pixels in satellite-derived atmospheric products
+
+**Station Data Interpolation**
+   Create gridded fields from sparse observational networks
+
+**Model Data Quality Control**
+   Smooth numerical artifacts in climate model output
+
+**Reanalysis Enhancement**
+   Improve spatial coverage of atmospheric reanalysis products
+
+**Field Campaign Support**
+   Interpolate irregular measurement patterns from aircraft or ship data
+
+Getting Started with GridFill
+-----------------------------
+
+.. code-block:: python
+
+   from skyborn.gridfill.xarray import gridfill_xarray
+   import xarray as xr
+   import numpy as np
+
+   # Load atmospheric data with missing values
+   data = xr.open_dataset('atmospheric_data.nc')
+
+   # Create mask for missing/invalid data
+   mask = np.isnan(data.temperature)
+
+   # Apply GridFill interpolation
+   filled_data = gridfill_xarray(
+       data.temperature,
+       missing_value_mask=mask,
+       max_iterations=1000,
+       convergence_threshold=1e-6
+   )
+
+   # Compare original vs filled data
+   comparison = xr.concat([data.temperature, filled_data],
+                         dim='method')
+
+Mathematical Foundation
+-----------------------
+
+GridFill implements sophisticated numerical methods:
+
+**Poisson Equation Solver:**
+   Iterative solution of the discrete Poisson equation with boundary conditions
+
+**Navier-Stokes Formulation:**
+   Advanced physics-based interpolation for fluid-like atmospheric fields
+
+**Convergence Criteria:**
+   Multiple stopping conditions ensure optimal balance of accuracy and efficiency
+
+**Boundary Handling:**
+   Sophisticated treatment of domain boundaries and irregular geometries
+
 References
 ----------
 
 **Emergent Constraints:**
+
 * **Methodology**: Cox, P. M., et al. (2013). Nature, 494(7437), 341-344
 * **Implementation**: Based on https://github.com/blackcata/Emergent_Constraints/tree/master
 * **Climate Data**: CMIP5/CMIP6 model ensembles
 * **IPCC Assessment**: AR6 Working Group I Report
 
 **Spherical Harmonics:**
+
 * **Mathematical Foundation**: Spherical harmonic expansion theory
-* **Atmospheric Applications**: Lynch, P. (2006). The Emergence of Numerical Weather Prediction
+* **Key References**: Swarztrauber, P. N. (2000). Generalized Discrete Spherical Harmonic Transforms. Journal of Computational Physics 213-230.
 * **Implementation**: Based on established meteorological practices
 * **Validation**: Cross-verified against reference implementations
+
+**GridFill Interpolation:**
+
+* **Mathematical Foundation**: Poisson equation solver for atmospheric data gap-filling
+* **Implementation**: Based on the gridfill package by Andrew Dawson (https://github.com/ajdawson/gridfill)
+* **Numerical Methods**: Finite difference relaxation schemes for 2D Poisson equation (∇²φ = 0)
+* **Atmospheric Applications**: Optimized for meteorological and oceanographic data interpolation
+* **Boundary Conditions**: Support for cyclic (global) and non-cyclic (regional) grids
+* **Key References**:
+   - Numerical methods for partial differential equations in atmospheric sciences
+   - Finite difference methods for fluid dynamics applications
+   - Climate data quality control and gap-filling techniques
