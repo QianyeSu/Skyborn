@@ -68,8 +68,8 @@ exclude_patterns = []
 # Suppress specific warnings
 suppress_warnings = [
     'myst.mathjax',
-    'autodoc.duplicate_object',
-    'autodoc',  # Add more general autodoc suppression
+    # 'autodoc.duplicate_object',
+    # 'autodoc',  # Add more general autodoc suppression
 ]
 
 # -- Internationalization ---------------------------------------------------
