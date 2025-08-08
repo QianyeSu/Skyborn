@@ -1,4 +1,4 @@
-Interpolation Functions
+Interpolation
 =======================
 
 The Skyborn interpolation module provides data interpolation and regridding capabilities for atmospheric and climate data.

@@ -1,4 +1,4 @@
-Gradient Functions
+Gradient
 ==================
 
 Spatial and temporal gradient calculation utilities for atmospheric and climate data.

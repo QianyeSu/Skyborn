@@ -1,4 +1,4 @@
-Calculation Functions
+Calculation
 =====================
 
 The Skyborn calculation module provides statistical and mathematical functions for climate data analysis.
