@@ -1,4 +1,4 @@
-Plotting Functions
+Plotting
 ==================
 
 The Skyborn plotting module provides specialized visualization functions for atmospheric and climate data.

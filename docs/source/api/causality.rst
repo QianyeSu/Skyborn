@@ -1,4 +1,4 @@
-Causality Analysis
+Causality
 ==================
 
 .. automodule:: skyborn.causality

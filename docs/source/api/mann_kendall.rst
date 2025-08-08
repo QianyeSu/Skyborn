@@ -1,4 +1,4 @@
-Mann-Kendall Trend Analysis
+Mann-Kendall
 ============================
 
 .. currentmodule:: skyborn.calc
@@ -54,7 +54,7 @@ Multidimensional Climate Data
         climate_data[t] += warming_pattern * year
 
     # Analyze trends across all grid points
-    results = mann_kendall_multidim(climate_data, time_axis=0)
+    results = mann_kendall_multidim(climate_data, axis=0)
 
     print(f"Grid shape: {results['trend'].shape}")  # (192, 288)
     print(f"Significant trends: {np.sum(results['h'])} grid points")
@@ -97,12 +97,12 @@ The implementation automatically optimizes performance for large climate dataset
     # For very large datasets, control memory usage
     results = mann_kendall_multidim(
         large_climate_data,
-        time_axis=0,
+        axis=0,
         chunk_size=2000  # Process 2000 grid points at once
     )
 
 Expected Performance
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 Typical processing speeds for climate data:
 
@@ -116,22 +116,22 @@ API Reference
 -------------
 
 Single Time Series Analysis
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: mann_kendall_test
 
 Multidimensional Analysis
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: mann_kendall_multidim
 
 XArray Interface
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 .. autofunction:: mann_kendall_xarray
 
 Unified Interface
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 .. autofunction:: trend_analysis
 
@@ -189,7 +189,7 @@ Use Cases
 ---------
 
 Climate Science Applications
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * **Temperature trends**: Global and regional warming patterns
 * **Precipitation changes**: Long-term rainfall trend detection
@@ -204,24 +204,11 @@ Quality Control
 * **Station records**: Long-term consistency checking
 * **Reanalysis validation**: Trend comparison across datasets
 
-Examples Gallery
-----------------
-
-The following examples demonstrate various applications:
-
-.. toctree::
-   :maxdepth: 1
-
-   examples/climate_warming_trends
-   examples/precipitation_variability
-   examples/sea_level_analysis
-   examples/model_comparison
-
 Best Practices
 --------------
 
 Data Preparation
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 1. **Quality control**: Remove obviously erroneous values
 2. **Homogenization**: Ensure data consistency over time
@@ -229,7 +216,7 @@ Data Preparation
 4. **Deseasonalization**: Remove seasonal cycles if needed
 
 Interpretation
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 1. **Physical significance**: Consider whether trends are physically meaningful
 2. **Spatial coherence**: Look for consistent patterns across neighboring regions

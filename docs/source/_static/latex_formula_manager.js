@@ -23,35 +23,95 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Mark as processed
                 processedFormulas.add(formula);
 
-                // Create wrapper with enhanced styling
-                const wrapper = document.createElement('div');
-                wrapper.className = 'formula-wrapper enhanced-formula';
+                // Check if formula is inline (within a paragraph or text block)
+                const isInline = isFormulaInline(formula);
 
-                // Insert wrapper before formula
-                formula.parentNode.insertBefore(wrapper, formula);
+                // Only add wrapper and styling for standalone formulas (not inline ones)
+                if (!isInline) {
+                    // Create wrapper with enhanced styling
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'formula-wrapper enhanced-formula';
 
-                // Move formula into wrapper
-                wrapper.appendChild(formula);
+                    // Insert wrapper before formula
+                    formula.parentNode.insertBefore(wrapper, formula);
 
-                // Add click event for zoom
-                wrapper.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    openFormulaModal(formula);
-                });
+                    // Move formula into wrapper
+                    wrapper.appendChild(formula);
 
-                // Add hover effects
-                wrapper.addEventListener('mouseenter', () => {
-                    wrapper.style.transform = 'scale(1.05)';
-                    wrapper.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
-                });
+                    // Add click event for zoom
+                    wrapper.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openFormulaModal(formula);
+                    });
 
-                wrapper.addEventListener('mouseleave', () => {
-                    wrapper.style.transform = 'scale(1)';
-                    wrapper.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.1)';
-                });
+                    // Add hover effects
+                    wrapper.addEventListener('mouseenter', () => {
+                        wrapper.style.transform = 'scale(1.05)';
+                        wrapper.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+                    });
+
+                    wrapper.addEventListener('mouseleave', () => {
+                        wrapper.style.transform = 'scale(1)';
+                        wrapper.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.1)';
+                    });
+                }
             });
         }, 1000); // Wait for MathJax to finish rendering
+    }
+
+    // Function to determine if a formula is inline (within text)
+    function isFormulaInline(formula) {
+        const parent = formula.parentElement;
+
+        // Check if parent is a paragraph, span, or other text container
+        const textContainers = ['p', 'span', 'div', 'td', 'th', 'li', 'dd', 'dt'];
+        const parentTag = parent.tagName.toLowerCase();
+
+        // If parent is a text container, check if there's text content around the formula
+        if (textContainers.includes(parentTag)) {
+            const parentText = parent.textContent.trim();
+            const formulaText = formula.textContent.trim();
+
+            // If the parent contains more text than just the formula, it's likely inline
+            if (parentText.length > formulaText.length + 10) {
+                return true;
+            }
+
+            // Check if there are text nodes before or after the formula
+            const siblings = Array.from(parent.childNodes);
+            const formulaIndex = siblings.indexOf(formula);
+
+            // Check for text content before the formula
+            for (let i = 0; i < formulaIndex; i++) {
+                const node = siblings[i];
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0) {
+                    return true;
+                }
+                if (node.nodeType === Node.ELEMENT_NODE && node.textContent.trim().length > 0) {
+                    return true;
+                }
+            }
+
+            // Check for text content after the formula
+            for (let i = formulaIndex + 1; i < siblings.length; i++) {
+                const node = siblings[i];
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0) {
+                    return true;
+                }
+                if (node.nodeType === Node.ELEMENT_NODE && node.textContent.trim().length > 0) {
+                    return true;
+                }
+            }
+        }
+
+        // Check if the formula is within a math block (which should be standalone)
+        if (parent.classList.contains('math') || parent.classList.contains('displaymath')) {
+            return false;
+        }
+
+        // Default to standalone (not inline) for safety
+        return false;
     }
 
     // ========== Formula Modal with Image-like Effect ==========
