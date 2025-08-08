@@ -1,4 +1,3 @@
-sh
 <p align="center">
   <a href="https://github.com/QianyeSu/Skyborn" target="_blank">
     <img src="docs/source/_static/SkyBornLogo.svg" alt="Skyborn Logo" width="400"/>
