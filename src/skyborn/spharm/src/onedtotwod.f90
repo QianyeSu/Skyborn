@@ -17,7 +17,7 @@ subroutine onedtotwod(dataspec, a, b, nlat, nmdim, nt)
     complex :: spec_val
 
     ! Calculate truncation from nmdim
-    ntrunc = int(-1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim))))
+    ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
     ! Pre-compute inverse scale factor
     scale_inv = 2.0  ! 1.0 / 0.5
