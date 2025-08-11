@@ -24,7 +24,7 @@ subroutine onedtotwod_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
     rsphere_inv = 1.0 / rsphere
 
     ! Calculate truncation from nmdim
-    ntrunc = int(-1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim))))
+    ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
     ! Main computation loops - optimized order for cache efficiency
     !$OMP PARALLEL DO PRIVATE(nmstrt, m, n, nm, n_real, n_factor, &

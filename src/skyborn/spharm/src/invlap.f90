@@ -22,7 +22,7 @@ subroutine invlap(dataspec, dataspec_ilap, nmdim, nt, rsphere)
     rsphere_sq = rsphere * rsphere
 
     ! Calculate truncation from nmdim
-    ntrunc = int(-1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim))))
+    ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
     ! Main computation loops - optimized for vectorization
     !$OMP PARALLEL DO PRIVATE(nmstrt, m, n1, n, nm, n_real, invlap_factor) &
