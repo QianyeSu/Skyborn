@@ -16,12 +16,11 @@ subroutine onedtotwod_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
 
     ! Local variables
     integer :: ntrunc, m, n, nm, nmstrt, i
-    real :: scale, rsphere_inv, n_real, n_factor
+    real :: scale, n_real, n_factor
     real :: vrt_real, vrt_imag, div_real, div_imag
 
     ! Constants
     scale = 0.5
-    rsphere_inv = 1.0 / rsphere
 
     ! Calculate truncation from nmdim
     ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
@@ -29,7 +28,7 @@ subroutine onedtotwod_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
     ! Main computation loops - optimized order for cache efficiency
     !$OMP PARALLEL DO PRIVATE(nmstrt, m, n, nm, n_real, n_factor, &
     !$OMP                      vrt_real, vrt_imag, div_real, div_imag) &
-    !$OMP             SHARED(ntrunc)
+    !$OMP             SHARED(ntrunc, rsphere, scale)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -37,8 +36,8 @@ subroutine onedtotwod_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
                 nm = nmstrt + n - m + 1
                 n_real = real(n)
 
-                ! Pre-compute common factor to avoid repeated calculations
-                n_factor = rsphere_inv / sqrt(n_real * (n_real - 1.0))
+                ! Pre-compute common factor - CORRECTED to match .f version
+                n_factor = rsphere / sqrt(n_real * (n_real - 1.0))
 
                 ! Extract real and imaginary parts once
                 div_real = real(divspec(nm, i))
@@ -46,7 +45,7 @@ subroutine onedtotwod_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
                 vrt_real = real(vrtspec(nm, i))
                 vrt_imag = aimag(vrtspec(nm, i))
 
-                ! Compute coefficients with optimized operations
+                ! Compute coefficients with corrected operations
                 br(m, n, i) = -n_factor * div_real / scale
                 bi(m, n, i) = -n_factor * div_imag / scale
                 cr(m, n, i) = n_factor * vrt_real / scale
