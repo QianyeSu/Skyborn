@@ -69,7 +69,7 @@ python module _spherepack ! in
 
 ! gaqd - computing gaussian lats and weights.
 
-        subroutine gaqd(nlat,theta,wts,dwork,ldwork,ierror) ! in :_spherepack:gaqd.f
+        subroutine gaqd(nlat,theta,wts,dwork,ldwork,ierror) ! in :_spherepack:gaqd.f90
             integer, required, intent(in) :: nlat
             integer, intent(hide) :: ldwork=nlat*(nlat+2)
             double precision, intent(out), dimension(nlat), depend(nlat) :: theta

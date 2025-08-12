@@ -3,13 +3,13 @@
 ! Computes Gaussian quadrature points and weights
 ! Optimizations: Modern Fortran syntax, improved convergence, vectorization
 !
-subroutine gaqd(nlat, theta, wts, w, lwork, ierror)
+subroutine gaqd(nlat, theta, wts, dwork, ldwork, ierror)
     implicit none
 
     ! Input/Output parameters
-    integer, intent(in) :: nlat, lwork
-    real(8), intent(in) :: w
+    integer, intent(in) :: nlat, ldwork
     real(8), intent(out) :: theta(nlat), wts(nlat)
+    real(8), intent(inout) :: dwork(ldwork)
     integer, intent(out) :: ierror
 
     ! Function declarations
@@ -73,28 +73,43 @@ subroutine gaqd(nlat, theta, wts, w, lwork, ierror)
     do while (nix > 0)
         it = 0
 
-        ! Newton iterations with improved convergence
+        ! Newton iterations with improved convergence and safeguards
         do
             it = it + 1
             zlast = zero
 
             ! Evaluate polynomial and derivative
             call tpdp(nlat, zero, cz, theta(ns2+1), wts(ns2+1), pb, dpb)
-            dcor = pb / dpb
+
+            ! Safeguard against zero derivative
+            if (abs(dpb) < epsilon(dpb) * 1000.0d0) then
+                dcor = sign(eps, pb)
+            else
+                dcor = pb / dpb
+            end if
+
             sgnd = 1.0d0
             if (dcor /= 0.0d0) sgnd = dcor / abs(dcor)
             dcor = sgnd * min(abs(dcor), cmax)
             zero = zero - dcor
 
-            ! Check convergence
-            if (abs(zero - zlast) <= eps * abs(zero)) exit
+            ! Enhanced convergence check with relative and absolute tolerance
+            if (abs(zero - zlast) <= eps * max(abs(zero), 1.0d0)) exit
+
+            ! Prevent infinite iterations
+            if (it > 50) exit
         end do
 
         theta(nix) = zero
         zhold = zero
 
-        ! Yakimiw's formula for weights (more stable)
-        wts(nix) = (nlat + nlat + 1) / (dpb + pb * cos(zlast) / sin(zlast))**2
+        ! Yakimiw's formula for weights (more stable) with safeguards
+        if (abs(sin(zlast)) > epsilon(sin(zlast)) * 1000.0d0) then
+            wts(nix) = (nlat + nlat + 1) / (dpb + pb * cos(zlast) / sin(zlast))**2
+        else
+            ! Fallback to standard formula if sin(zlast) is too small
+            wts(nix) = (nlat + nlat + 1) / (dpb * dpb)
+        end if
 
         nix = nix - 1
         if (nix == 0) exit
@@ -116,22 +131,32 @@ subroutine gaqd(nlat, theta, wts, w, lwork, ierror)
     end if
 
     ! Extend points and weights via symmetries
-    !$OMP PARALLEL DO
+    !$OMP PARALLEL DO IF(ns2 > 100)
     do i = 1, ns2
         wts(nlat - i + 1) = wts(i)
         theta(nlat - i + 1) = pi - theta(i)
     end do
     !$OMP END PARALLEL DO
 
-    ! Normalize weights
+    ! Normalize weights with Kahan summation for better accuracy
     sum = 0.0d0
-    !$OMP PARALLEL DO REDUCTION(+:sum)
-    do i = 1, nlat
-        sum = sum + wts(i)
-    end do
-    !$OMP END PARALLEL DO
+    if (nlat > 1000) then
+        ! Use Kahan summation for large arrays
+        call kahan_sum(wts, nlat, sum)
+    else
+        !$OMP PARALLEL DO REDUCTION(+:sum) IF(nlat > 100)
+        do i = 1, nlat
+            sum = sum + wts(i)
+        end do
+        !$OMP END PARALLEL DO
+    end if
 
-    !$OMP PARALLEL DO
+    ! Safeguard against division by zero
+    if (abs(sum) < epsilon(sum) * nlat) then
+        sum = 2.0d0  ! Theoretical total weight
+    end if
+
+    !$OMP PARALLEL DO IF(nlat > 100)
     do i = 1, nlat
         wts(i) = 2.0d0 * wts(i) / sum
     end do
@@ -246,20 +271,53 @@ subroutine tpdp(n, theta, cz, cp, dcp, pb, dpb)
 
 end subroutine tpdp
 
-! Unit roundoff estimation function
-real(8) function dzeps(x)
+! Unit roundoff estimation function (optimized for IEEE 754)
+pure real(8) function dzeps(x)
     implicit none
     real(8), intent(in) :: x
     real(8) :: a, b, c, eps
     real(8), parameter :: zero_threshold = 1.0d-16
+    integer, parameter :: max_iterations = 100
+    integer :: iter
 
     a = 4.0d0 / 3.0d0
+    iter = 0
     do
+        iter = iter + 1
         b = a - 1.0d0
         c = b + b + b
         eps = abs(c - 1.0d0)
-        if (eps > zero_threshold) exit
+        if (eps > zero_threshold .or. iter >= max_iterations) exit
+        a = a + epsilon(a) ! Increment slightly if stuck
     end do
+
+    ! Use intrinsic epsilon for IEEE 754 compliance if algorithm fails
+    if (iter >= max_iterations) then
+        eps = epsilon(1.0d0)
+    end if
+
     dzeps = eps * abs(x)
 
 end function dzeps
+
+! Kahan summation algorithm for improved numerical accuracy
+pure subroutine kahan_sum(array, n, result)
+    implicit none
+    integer, intent(in) :: n
+    real(8), intent(in) :: array(n)
+    real(8), intent(out) :: result
+
+    real(8) :: c, y, t
+    integer :: i
+
+    result = 0.0d0
+    c = 0.0d0  ! Compensation for lost low-order bits
+
+    do i = 1, n
+        y = array(i) - c     ! Subtract the compensation
+        t = result + y       ! Add y to sum
+        c = (t - result) - y ! Recover the lost low-order bits
+        result = t
+    end do
+
+end subroutine kahan_sum

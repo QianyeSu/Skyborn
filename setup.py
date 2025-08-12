@@ -219,7 +219,7 @@ class MesonBuildExt(build_ext):
                 src_dir / "twodtooned.f90",
                 src_dir / "twodtooned_vrtdiv.f90",
                 src_dir / "multsmoothfact.f90",
-                src_dir / "gaqd.f",
+                src_dir / "gaqd.f90",
                 src_dir / "shses.f",
                 src_dir / "shaes.f",
                 src_dir / "vhaes.f",
@@ -319,7 +319,8 @@ class MesonBuildExt(build_ext):
                     "-ftree-loop-im "
                     "-ftree-loop-distribution "
                     "-falign-functions=32 "
-                    "-fopenmp"
+                    "-fopenmp "
+                    "-std=legacy"
                 )
                 c_optim_flags = (
                     "-O3 "
@@ -347,7 +348,8 @@ class MesonBuildExt(build_ext):
                     "-ftree-loop-im "
                     "-ftree-loop-distribution "
                     "-falign-functions=32 "
-                    "-fopenmp"
+                    "-fopenmp "
+                    "-std=legacy"
                 )
                 c_optim_flags = (
                     # Highest level optimization, covers most performance enhancements
