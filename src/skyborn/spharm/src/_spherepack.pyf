@@ -4,21 +4,21 @@ python module _spherepack ! in
 
 ! utility routines (not part of spherepack)
 
-        subroutine invlap(dataspec,dataspec_ilap,nmdim,nt,rsphere) ! in :_spherepack:invlap.f
+        subroutine invlap(dataspec,dataspec_ilap,nmdim,nt,rsphere) ! in :_spherepack:invlap.f90
             complex dimension(nmdim,nt) :: dataspec
             complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: dataspec_ilap
             integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
             integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
             real :: rsphere
         end subroutine invlap
-        subroutine lap(dataspec,dataspec_lap,nmdim,nt,rsphere) ! in :_spherepack:lap.f
+        subroutine lap(dataspec,dataspec_lap,nmdim,nt,rsphere) ! in :_spherepack:lap.f90
             complex dimension(nmdim,nt) :: dataspec
             complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: dataspec_lap
             integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
             integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
             real :: rsphere
         end subroutine lap
-        subroutine multsmoothfact(dataspec,dataspec_smooth,smooth,nlat,nmdim,nt) ! in :_spherepack:multsmoothfact.f
+        subroutine multsmoothfact(dataspec,dataspec_smooth,smooth,nlat,nmdim,nt) ! in :_spherepack:multsmoothfact.f90
             complex dimension(nmdim,nt) :: dataspec
             complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: dataspec_smooth
             real dimension(nlat) :: smooth
@@ -26,7 +26,7 @@ python module _spherepack ! in
             integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
             integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
         end subroutine multsmoothfact
-        subroutine onedtotwod(dataspec,a,b,nlat,nmdim,nt) ! in :_spherepack:onedtotwod.f
+        subroutine onedtotwod(dataspec,a,b,nlat,nmdim,nt) ! in :_spherepack:onedtotwod.f90
             complex dimension(nmdim,nt) :: dataspec
             integer, required, intent(in) :: nlat
             real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: a
@@ -34,7 +34,7 @@ python module _spherepack ! in
             integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
             integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
         end subroutine onedtotwod
-        subroutine onedtotwod_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,nmdim,nt,rsphere) ! in :_spherepack:onedtotwod_vrtdiv.f
+        subroutine onedtotwod_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,nmdim,nt,rsphere) ! in :_spherepack:onedtotwod_vrtdiv.f90
             complex dimension(nmdim,nt) :: vrtspec
             complex dimension(nmdim,nt) :: divspec
             integer, required, intent(in) :: nlat
@@ -46,7 +46,7 @@ python module _spherepack ! in
             integer optional,check(shape(vrtspec,1)==nt),depend(vrtspec) :: nt=shape(vrtspec,1)
             real :: rsphere
         end subroutine onedtotwod_vrtdiv
-        subroutine twodtooned(dataspec,a,b,nlat,ntrunc,nt) ! in :_spherepack:twodtooned.f
+        subroutine twodtooned(dataspec,a,b,nlat,ntrunc,nt) ! in :_spherepack:twodtooned.f90
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: dataspec
             real dimension(nlat,nlat,nt) :: a
             real dimension(nlat,nlat,nt) :: b
@@ -54,7 +54,7 @@ python module _spherepack ! in
             integer optional,check(shape(a,2)==nt),depend(a) :: nt=shape(a,2)
             integer :: ntrunc
         end subroutine twodtooned
-        subroutine twodtooned_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned_vrtdiv.f
+        subroutine twodtooned_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned_vrtdiv.f90
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
             real dimension(nlat,nlat,nt) :: br
@@ -493,9 +493,9 @@ python module _spherepack ! in
             real dimension(lvhagc), depend(lvhagc), intent(out) :: wvhagc
             integer, intent(out) :: ierror
         end subroutine vhagci
-        subroutine vhsec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsec,lvhsec,work,lwork,ierror) ! in :_spherepack:vhsec.f
+        subroutine vhsec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsec,lvhsec,work,lwork,ierror) ! in :_spherepack:vhsec.f90
             integer, required, intent(in) :: nlon
-            integer,intent(hide) :: ityp=0
+            integer, intent(hide) :: ityp=0
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
             integer, intent(hide) :: idvw=nlat
@@ -514,7 +514,7 @@ python module _spherepack ! in
             real dimension(lwork), depend(lwork), intent(cache,hide) :: work
             integer, intent(out):: ierror
         end subroutine vhsec
-        subroutine vhseci(nlat,nlon,wvhsec,lvhsec,dwork,ldwork,ierror) ! in :_spherepack:vhsec.f
+        subroutine vhseci(nlat,nlon,wvhsec,lvhsec,dwork,ldwork,ierror) ! in :_spherepack:vhsec.f90
             integer :: nlat
             integer :: nlon
             integer, required :: lvhsec
@@ -553,18 +553,18 @@ python module _spherepack ! in
             double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
             integer, intent(out) :: ierror
         end subroutine vhsgci
-        subroutine ihgeod(m,idp,jdp,x,y,z) ! in :_spherepack:ihgeod.f
+        subroutine ihgeod(m,idp,jdp,x,y,z) ! in :_spherepack:ihgeod.f90
             integer, required, intent(in) :: m
             integer, intent(hide), depend(m) :: idp=m+m-1
             integer, intent(hide), depend(m) :: jdp=m
             real, intent(out), dimension(idp,jdp,5), depend(idp,jdp) :: x,y,z
         end subroutine ihgeod
-        subroutine getlegfunc(legfunc,lat,ntrunc) ! in :_spherepack:getlegfunc.f
+        subroutine getlegfunc(legfunc,lat,ntrunc) ! in :_spherepack:getlegfunc.f90
             integer, intent(in), required :: ntrunc
             real, intent(in), required :: lat
             real, intent(out), dimension((ntrunc+1)*(ntrunc+2)/2), depend(ntrunc) :: legfunc
         end subroutine getlegfunc
-        subroutine specintrp(rlon,ntrunc,datnm,scrm,pnm,ob) ! in :_spherepack:specintrp.f
+        subroutine specintrp(rlon,ntrunc,datnm,scrm,pnm,ob) ! in :_spherepack:specintrp.f90
             integer, intent(in), required :: ntrunc
             real, intent(in), required :: rlon
             real, intent(in), dimension((ntrunc+1)*(ntrunc+2)/2), depend(ntrunc) :: pnm
