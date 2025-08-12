@@ -221,7 +221,7 @@ class MesonBuildExt(build_ext):
                 src_dir / "multsmoothfact.f90",
                 src_dir / "gaqd.f90",
                 src_dir / "shses.f",
-                src_dir / "shaes.f",
+                src_dir / "shaes.f90",
                 src_dir / "vhaes.f",
                 src_dir / "vhses.f",
                 src_dir / "shsgs.f",
