@@ -31,7 +31,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libeccodes-dev gfortran build-essential libopenblas-dev libblas-dev liblapack-dev meson ninja-build
+          sudo apt-get install -y libeccodes-dev gcc gfortran build-essential libopenblas-dev libblas-dev liblapack-dev meson ninja-build
 
       - name: Install dependencies
         run: |
