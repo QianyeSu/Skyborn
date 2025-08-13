@@ -433,7 +433,7 @@ python module _spherepack ! in
             double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
             integer, intent(out) :: ierror
         end subroutine shsgci
-        subroutine vhaec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaec,lvhaec,work,lwork,ierror) ! in :_spherepack:vhaec.f
+        subroutine vhaec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaec,lvhaec,work,lwork,ierror) ! in :_spherepack:vhaec.f90
             integer, intent(hide) :: ityp=0
             real dimension(nlat,nlon,nt) :: v
             real dimension(nlat,nlon,nt) :: w
@@ -454,7 +454,7 @@ python module _spherepack ! in
             real dimension(lwork),depend(lwork),intent(cache,hide) :: work
             integer, intent(out) :: ierror
         end subroutine vhaec
-        subroutine vhaeci(nlat,nlon,wvhaec,lvhaec,dwork,ldwork,ierror) ! in :_spherepack:vhaec.f
+        subroutine vhaeci(nlat,nlon,wvhaec,lvhaec,dwork,ldwork,ierror) ! in :_spherepack:vhaec.f90
             integer, intent(in) :: nlat
             integer, intent(in) :: nlon
             integer, required, intent(in) :: ldwork

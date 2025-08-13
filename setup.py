@@ -232,7 +232,7 @@ class MesonBuildExt(build_ext):
                 src_dir / "shagc.f90",  # UPDATED: Use optimized version
                 src_dir / "shsec.f90",  # UPDATED: Use optimized version
                 src_dir / "shsgc.f90",  # UPDATED: Use optimized version
-                src_dir / "vhaec.f",
+                src_dir / "vhaec.f90",  # UPDATED: Use optimized version
                 src_dir / "vhagc.f",
                 src_dir / "vhsec.f90",
                 src_dir / "vhsgc.f",
