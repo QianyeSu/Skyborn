@@ -171,8 +171,7 @@ subroutine shsgc1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
     lm1 = l
     if (nlon == l + l - 2) lm1 = l - 1
 
-    ! Vectorized array initialization with OpenMP for large arrays
-    !$OMP PARALLEL DO COLLAPSE(3) IF(lat*nlon*nt > 10000)
+    ! Vectorized array initialization
     do k = 1, nt
         do j = 1, nlon
             do i = 1, lat
@@ -180,7 +179,6 @@ subroutine shsgc1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
 
     ! Branch on mode: full sphere vs half sphere
     if (mode == 0) then
@@ -358,15 +356,12 @@ subroutine shsgc1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
         end if
     end if
 
-    ! Perform inverse Fourier transform with OpenMP for multiple syntheses
-    !$OMP PARALLEL DO IF(nt > 1)
+    ! Perform inverse Fourier transform
     do k = 1, nt
         call hrfftb(lat, nlon, g(1, 1, k), lat, wfft, pmn)
     end do
-    !$OMP END PARALLEL DO
 
-    ! Scale output and copy to final array with vectorization
-    !$OMP PARALLEL DO COLLAPSE(3) IF(lat*nlon*nt > 10000)
+    ! Scale output and copy to final array
     do k = 1, nt
         do j = 1, nlon
             !DIR$ VECTOR ALWAYS
@@ -375,7 +370,6 @@ subroutine shsgc1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine shsgc1
 
@@ -509,11 +503,6 @@ subroutine shsgci1(nlat, nlon, l, late, wts, p0n, p1n, abel, bbel, cbel, &
     ! External function interfaces
     external :: hrffti, gaqd, dnlfk, dnlft
 
-    ! Internal index functions - IDENTICAL to original for compatibility
-    ! Index function for 2 <= n <= l-1
-    indx(m, n) = (n - 1) * (n - 2) / 2 + m - 1
-    ! Index function for l <= n <= nlat
-    imndx(m, n) = l * (l - 1) / 2 + (n - l - 1) * (l - 1) + m - 1
 
     ! Initialize FFT workspace
     call hrffti(nlon, wfft)
@@ -526,21 +515,17 @@ subroutine shsgci1(nlat, nlon, l, late, wts, p0n, p1n, abel, bbel, cbel, &
     ! Store Gaussian weights in single precision with vectorization
     ! This saves computation in inner loops during analysis
     !DIR$ VECTOR ALWAYS
-    !$OMP PARALLEL DO IF(nlat > 1000)
     do i = 1, nlat
         wts(i) = real(dwts(i))
     end do
-    !$OMP END PARALLEL DO
 
     ! Initialize Legendre polynomial arrays with vectorized zeroing
-    !$OMP PARALLEL DO COLLAPSE(2) IF(nlat*late > 10000)
     do i = 1, late
         do np1 = 1, nlat
             p0n(np1, i) = 0.0
             p1n(np1, i) = 0.0
         end do
     end do
-    !$OMP END PARALLEL DO
 
     ! Compute m=n=0 Legendre polynomials for all theta(i)
     np1 = 1
@@ -585,11 +570,11 @@ subroutine shsgci1(nlat, nlon, l, late, wts, p0n, p1n, abel, bbel, cbel, &
 
         !DIR$ VECTOR ALWAYS
         do m = 2, mlim
-            ! Compute index using appropriate function
+            ! Compute index using original formulas - IDENTICAL to original for compatibility
             if (n >= l) then
-                imn = imndx(m, n)
+                imn = l * (l - 1) / 2 + (n - l - 1) * (l - 1) + m - 1
             else
-                imn = indx(m, n)
+                imn = (n - 1) * (n - 2) / 2 + m - 1
             end if
 
             ! Swarztrauber recursion coefficients with enhanced numerical stability
@@ -604,19 +589,5 @@ subroutine shsgci1(nlat, nlon, l, late, wts, p0n, p1n, abel, bbel, cbel, &
                             real((n + m - 1) * (n + m)))
         end do
     end do
-
-contains
-
-    ! Internal index functions for recursion coefficient storage
-    ! These must be pure functions for vectorization compatibility
-    pure integer function indx(m, n)
-        integer, intent(in) :: m, n
-        indx = (n - 1) * (n - 2) / 2 + m - 1
-    end function indx
-
-    pure integer function imndx(m, n)
-        integer, intent(in) :: m, n
-        imndx = l * (l - 1) / 2 + (n - l - 1) * (l - 1) + m - 1
-    end function imndx
 
 end subroutine shsgci1
