@@ -355,39 +355,39 @@ subroutine vhaec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     select case (ityp)
         case (0)
             call vhaec1_case0(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                              ve, vo, we, wo, br, bi, cr, ci, zv, zw, wzvin, wzwin, &
+                              ve, vo, we, wo, br, bi, cr, ci, imid, zv, zw, wzvin, wzwin, &
                               iv, iw, idv, mdab, ndab)
         case (1)
             call vhaec1_case1(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                              ve, vo, we, wo, br, bi, zv, zw, wzvin, wzwin, &
+                              ve, vo, we, wo, br, bi, imid, zv, zw, wzvin, wzwin, &
                               iv, iw, idv, mdab, ndab)
         case (2)
             call vhaec1_case2(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                              ve, vo, we, wo, cr, ci, zv, zw, wzvin, wzwin, &
+                              ve, vo, we, wo, cr, ci, imid, zv, zw, wzvin, wzwin, &
                               iv, iw, idv, mdab, ndab)
         case (3)
             call vhaec1_case3(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                              ve, vo, we, wo, br, bi, cr, ci, zv, zw, wzvin, wzwin, &
+                              ve, vo, we, wo, br, bi, cr, ci, imid, zv, zw, wzvin, wzwin, &
                               iv, iw, idv, mdab, ndab)
         case (4)
             call vhaec1_case4(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                              ve, vo, we, wo, br, bi, zv, zw, wzvin, wzwin, &
+                              ve, vo, we, wo, br, bi, imid, zv, zw, wzvin, wzwin, &
                               iv, iw, idv, mdab, ndab)
         case (5)
             call vhaec1_case5(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                              ve, vo, we, wo, cr, ci, zv, zw, wzvin, wzwin, &
+                              ve, vo, we, wo, cr, ci, imid, zv, zw, wzvin, wzwin, &
                               iv, iw, idv, mdab, ndab)
         case (6)
             call vhaec1_case6(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                              ve, vo, we, wo, br, bi, cr, ci, zv, zw, wzvin, wzwin, &
+                              ve, vo, we, wo, br, bi, cr, ci, imid, zv, zw, wzvin, wzwin, &
                               iv, iw, idv, mdab, ndab)
         case (7)
             call vhaec1_case7(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                              ve, vo, we, wo, br, bi, zv, zw, wzvin, wzwin, &
+                              ve, vo, we, wo, br, bi, imid, zv, zw, wzvin, wzwin, &
                               iv, iw, idv, mdab, ndab)
         case (8)
             call vhaec1_case8(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                              ve, vo, we, wo, cr, ci, zv, zw, wzvin, wzwin, &
+                              ve, vo, we, wo, cr, ci, imid, zv, zw, wzvin, wzwin, &
                               iv, iw, idv, mdab, ndab)
     end select
 
@@ -399,19 +399,19 @@ end subroutine vhaec1
 !> @brief Case 0: No symmetries - compute all coefficients
 !> @details Implements the exact mathematical operations from original lines 421-489
 subroutine vhaec1_case0(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                        ve, vo, we, wo, br, bi, cr, ci, zv, zw, wzvin, wzwin, &
+                        ve, vo, we, wo, br, bi, cr, ci, idz, zv, zw, wzvin, wzwin, &
                         iv, iw, idv, mdab, ndab)
     use omp_lib, only: omp_get_max_threads
     implicit none
 
     ! Parameters
     integer, intent(in) :: nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat
-    integer, intent(in) :: idv, mdab, ndab
+    integer, intent(in) :: idv, mdab, ndab, idz
     real, intent(in) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
     real, intent(in) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
     real, intent(inout) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
-    real, intent(inout) :: zv(imid, nlat, 3), zw(imid, nlat, 3)
+    real, intent(inout) :: zv(idz, nlat, 3), zw(idz, nlat, 3)
     real, intent(in) :: wzvin(*), wzwin(*)
     integer, intent(out) :: iv, iw
 
@@ -527,17 +527,17 @@ end subroutine vhaec1_case0
 !> @brief Case 1: No symmetries but cr and ci equal zero
 !> @details Implements the exact mathematical operations from original lines 493-547
 subroutine vhaec1_case1(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                        ve, vo, we, wo, br, bi, zv, zw, wzvin, wzwin, &
+                        ve, vo, we, wo, br, bi, idz, zv, zw, wzvin, wzwin, &
                         iv, iw, idv, mdab, ndab)
     use omp_lib, only: omp_get_max_threads
     implicit none
 
     integer, intent(in) :: nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat
-    integer, intent(in) :: idv, mdab, ndab
+    integer, intent(in) :: idv, mdab, ndab, idz
     real, intent(in) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
     real, intent(in) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
-    real, intent(inout) :: zv(imid, nlat, 3), zw(imid, nlat, 3)
+    real, intent(inout) :: zv(idz, nlat, 3), zw(idz, nlat, 3)
     real, intent(in) :: wzvin(*), wzwin(*)
     integer, intent(out) :: iv, iw
 
@@ -634,107 +634,637 @@ end subroutine vhaec1_case1
 ! In production, these would contain the full mathematical implementations
 
 !> @brief Case 2: No symmetries but br and bi equal zero
+!> @details Computes only curl coefficients cr,ci from original lines 551-605
 subroutine vhaec1_case2(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                        ve, vo, we, wo, cr, ci, zv, zw, wzvin, wzwin, &
+                        ve, vo, we, wo, cr, ci, idz, zv, zw, wzvin, wzwin, &
                         iv, iw, idv, mdab, ndab)
+    use omp_lib, only: omp_get_max_threads
     implicit none
+
     integer, intent(in) :: nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat
-    integer, intent(in) :: idv, mdab, ndab
+    integer, intent(in) :: idv, mdab, ndab, idz
     real, intent(in) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
     real, intent(in) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(inout) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
-    real, intent(inout) :: zv(imid, nlat, 3), zw(imid, nlat, 3)
+    real, intent(inout) :: zv(idz, nlat, 3), zw(idz, nlat, 3)
     real, intent(in) :: wzvin(*), wzwin(*)
     integer, intent(out) :: iv, iw
 
-    ! Implementation follows original lines 551-605
+    integer :: k, i, mp1, np1, m, mp2
+
+    ! Case m=0 - only compute curl coefficients
     call zvin(0, nlat, nlon, 0, zv, iv, wzvin)
-    ! [Full implementation would mirror original case 2 logic]
+
+    ! m=0 even terms for curl
+    !$omp parallel do private(i, np1) if (nt >= 2 .and. imid*ndo2 >= 64)
+    do k = 1, nt
+        do i = 1, imid
+            do np1 = 2, ndo2, 2
+                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * we(i, 1, k)
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+    ! m=0 odd terms for curl
+    !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*ndo1 >= 64)
+    do k = 1, nt
+        do i = 1, imm1
+            do np1 = 3, ndo1, 2
+                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * wo(i, 1, k)
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+    ! Case m = 1 through nlat-1
+    if (mmax < 2) return
+
+    do mp1 = 2, mmax
+        m = mp1 - 1
+        mp2 = mp1 + 1
+        call zvin(0, nlat, nlon, m, zv, iv, wzvin)
+        call zwin(0, nlat, nlon, m, zw, iw, wzwin)
+
+        ! Odd harmonic terms
+        if (mp1 <= ndo1) then
+            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo1-mp1+1) >= 64)
+            do k = 1, nt
+                do i = 1, imm1
+                    do np1 = mp1, ndo1, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * ve(i, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * ve(i, 2*mp1-2, k)
+                    end do
+                end do
+            end do
+            !$omp end parallel do
+
+            ! Equator point for odd nlat
+            if (mlat /= 0) then
+                !$omp parallel do private(np1) if (nt >= 2)
+                do k = 1, nt
+                    do np1 = mp1, ndo1, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) + zw(imid, np1, iw) * ve(imid, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zw(imid, np1, iw) * ve(imid, 2*mp1-2, k)
+                    end do
+                end do
+                !$omp end parallel do
+            end if
+        end if
+
+        ! Even harmonic terms
+        if (mp2 <= ndo2) then
+            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo2-mp2+1) >= 64)
+            do k = 1, nt
+                do i = 1, imm1
+                    do np1 = mp2, ndo2, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * we(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * vo(i, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * we(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * vo(i, 2*mp1-2, k)
+                    end do
+                end do
+            end do
+            !$omp end parallel do
+
+            ! Equator point for even nlat
+            if (mlat == 0) then
+                !$omp parallel do private(np1) if (nt >= 2)
+                do k = 1, nt
+                    do np1 = mp2, ndo2, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(imid, np1, iv) * we(imid, 2*mp1-2, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(imid, np1, iv) * we(imid, 2*mp1-1, k)
+                    end do
+                end do
+                !$omp end parallel do
+            end if
+        end if
+    end do
 
 end subroutine vhaec1_case2
 
-!> @brief Cases 3-8: Symmetry-based analysis cases
-!> @details These implement the original logic for various symmetry assumptions
+!> @brief Case 3: Half sphere with v even, w odd
+!> @details Hemisphere analysis from original lines 607-675
 subroutine vhaec1_case3(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                        ve, vo, we, wo, br, bi, cr, ci, zv, zw, wzvin, wzwin, &
+                        ve, vo, we, wo, br, bi, cr, ci, idz, zv, zw, wzvin, wzwin, &
                         iv, iw, idv, mdab, ndab)
+    use omp_lib, only: omp_get_max_threads
     implicit none
+
     integer, intent(in) :: nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat
-    integer, intent(in) :: idv, mdab, ndab
+    integer, intent(in) :: idv, mdab, ndab, idz
     real, intent(in) :: ve(idv, nlon, nt), vo(idv, nlon, nt), we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt), cr(mdab, ndab, nt), ci(mdab, ndab, nt)
-    real, intent(inout) :: zv(imid, nlat, 3), zw(imid, nlat, 3)
+    real, intent(inout) :: zv(idz, nlat, 3), zw(idz, nlat, 3)
     real, intent(in) :: wzvin(*), wzwin(*)
     integer, intent(out) :: iv, iw
+
+    integer :: k, i, mp1, np1, m, mp2
+
+    ! Case m=0
     call zvin(0, nlat, nlon, 0, zv, iv, wzvin)
+
+    ! m=0 even terms
+    !$omp parallel do private(i, np1) if (nt >= 2 .and. imid*ndo2 >= 64)
+    do k = 1, nt
+        do i = 1, imid
+            do np1 = 2, ndo2, 2
+                br(1, np1, k) = br(1, np1, k) + zv(i, np1, iv) * ve(i, 1, k)
+                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * we(i, 1, k)
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+    ! m=0 odd terms
+    !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*ndo1 >= 64)
+    do k = 1, nt
+        do i = 1, imm1
+            do np1 = 3, ndo1, 2
+                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * wo(i, 1, k)
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+    ! Case m = 1 through nlat-1
+    if (mmax < 2) return
+
+    do mp1 = 2, mmax
+        m = mp1 - 1
+        mp2 = mp1 + 1
+        call zvin(0, nlat, nlon, m, zv, iv, wzvin)
+        call zwin(0, nlat, nlon, m, zw, iw, wzwin)
+
+        ! Odd harmonic terms
+        if (mp1 <= ndo1) then
+            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo1-mp1+1) >= 64)
+            do k = 1, nt
+                do i = 1, imm1
+                    do np1 = mp1, ndo1, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * ve(i, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * ve(i, 2*mp1-2, k)
+                    end do
+                end do
+            end do
+            !$omp end parallel do
+
+            ! Equator point for odd nlat
+            if (mlat /= 0) then
+                !$omp parallel do private(np1) if (nt >= 2)
+                do k = 1, nt
+                    do np1 = mp1, ndo1, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) + zw(imid, np1, iw) * ve(imid, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zw(imid, np1, iw) * ve(imid, 2*mp1-2, k)
+                    end do
+                end do
+                !$omp end parallel do
+            end if
+        end if
+
+        ! Even harmonic terms
+        if (mp2 <= ndo2) then
+            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo2-mp2+1) >= 64)
+            do k = 1, nt
+                do i = 1, imm1
+                    do np1 = mp2, ndo2, 2
+                        br(mp1, np1, k) = br(mp1, np1, k) + zv(i, np1, iv) * ve(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * wo(i, 2*mp1-1, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(i, np1, iv) * ve(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * wo(i, 2*mp1-2, k)
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * we(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * vo(i, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * we(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * vo(i, 2*mp1-2, k)
+                    end do
+                end do
+            end do
+            !$omp end parallel do
+
+            ! Equator point for even nlat
+            if (mlat == 0) then
+                !$omp parallel do private(np1) if (nt >= 2)
+                do k = 1, nt
+                    do np1 = mp2, ndo2, 2
+                        br(mp1, np1, k) = br(mp1, np1, k) + zv(imid, np1, iv) * ve(imid, 2*mp1-2, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(imid, np1, iv) * ve(imid, 2*mp1-1, k)
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(imid, np1, iv) * we(imid, 2*mp1-2, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(imid, np1, iv) * we(imid, 2*mp1-1, k)
+                    end do
+                end do
+                !$omp end parallel do
+            end if
+        end if
+    end do
+
 end subroutine vhaec1_case3
 
+!> @brief Case 4: Half sphere v even, w odd - only br,bi coefficients
+!> @details Hemisphere analysis from original lines 677-721
 subroutine vhaec1_case4(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                        ve, vo, we, wo, br, bi, zv, zw, wzvin, wzwin, &
+                        ve, vo, we, wo, br, bi, idz, zv, zw, wzvin, wzwin, &
                         iv, iw, idv, mdab, ndab)
+    use omp_lib, only: omp_get_max_threads
     implicit none
+
     integer, intent(in) :: nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat
-    integer, intent(in) :: idv, mdab, ndab
+    integer, intent(in) :: idv, mdab, ndab, idz
     real, intent(in) :: ve(idv, nlon, nt), vo(idv, nlon, nt), we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
-    real, intent(inout) :: zv(imid, nlat, 3), zw(imid, nlat, 3)
+    real, intent(inout) :: zv(idz, nlat, 3), zw(idz, nlat, 3)
     real, intent(in) :: wzvin(*), wzwin(*)
     integer, intent(out) :: iv, iw
+
+    integer :: k, i, mp1, np1, m, mp2
+
+    ! Case m=0 - only radial coefficients
     call zvin(1, nlat, nlon, 0, zv, iv, wzvin)
+
+    ! m=0 even terms for radial
+    !$omp parallel do private(i, np1) if (nt >= 2 .and. imid*ndo2 >= 64)
+    do k = 1, nt
+        do i = 1, imid
+            do np1 = 2, ndo2, 2
+                br(1, np1, k) = br(1, np1, k) + zv(i, np1, iv) * ve(i, 1, k)
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+    ! Case m = 1 through nlat-1
+    if (mmax < 2) return
+
+    do mp1 = 2, mmax
+        m = mp1 - 1
+        mp2 = mp1 + 1
+        call zvin(1, nlat, nlon, m, zv, iv, wzvin)
+        call zwin(1, nlat, nlon, m, zw, iw, wzwin)
+
+        ! Even harmonic terms for radial coefficients
+        if (mp2 <= ndo2) then
+            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo2-mp2+1) >= 64)
+            do k = 1, nt
+                do i = 1, imm1
+                    do np1 = mp2, ndo2, 2
+                        br(mp1, np1, k) = br(mp1, np1, k) + zv(i, np1, iv) * ve(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * wo(i, 2*mp1-1, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(i, np1, iv) * ve(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * wo(i, 2*mp1-2, k)
+                    end do
+                end do
+            end do
+            !$omp end parallel do
+
+            ! Equator point for even nlat
+            if (mlat == 0) then
+                !$omp parallel do private(np1) if (nt >= 2)
+                do k = 1, nt
+                    do np1 = mp2, ndo2, 2
+                        br(mp1, np1, k) = br(mp1, np1, k) + zv(imid, np1, iv) * ve(imid, 2*mp1-2, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(imid, np1, iv) * ve(imid, 2*mp1-1, k)
+                    end do
+                end do
+                !$omp end parallel do
+            end if
+        end if
+    end do
+
 end subroutine vhaec1_case4
 
+!> @brief Case 5: Half sphere v even, w odd - only cr,ci coefficients
+!> @details Hemisphere analysis from original lines 723-767
 subroutine vhaec1_case5(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                        ve, vo, we, wo, cr, ci, zv, zw, wzvin, wzwin, &
+                        ve, vo, we, wo, cr, ci, idz, zv, zw, wzvin, wzwin, &
                         iv, iw, idv, mdab, ndab)
+    use omp_lib, only: omp_get_max_threads
     implicit none
+
     integer, intent(in) :: nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat
-    integer, intent(in) :: idv, mdab, ndab
+    integer, intent(in) :: idv, mdab, ndab, idz
     real, intent(in) :: ve(idv, nlon, nt), vo(idv, nlon, nt), we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(inout) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
-    real, intent(inout) :: zv(imid, nlat, 3), zw(imid, nlat, 3)
+    real, intent(inout) :: zv(idz, nlat, 3), zw(idz, nlat, 3)
     real, intent(in) :: wzvin(*), wzwin(*)
     integer, intent(out) :: iv, iw
+
+    integer :: k, i, mp1, np1, m, mp2
+
+    ! Case m=0 - only curl coefficients
     call zvin(2, nlat, nlon, 0, zv, iv, wzvin)
+
+    ! m=0 even terms for curl
+    !$omp parallel do private(i, np1) if (nt >= 2 .and. imid*ndo2 >= 64)
+    do k = 1, nt
+        do i = 1, imid
+            do np1 = 2, ndo2, 2
+                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * we(i, 1, k)
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+    ! m=0 odd terms for curl
+    !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*ndo1 >= 64)
+    do k = 1, nt
+        do i = 1, imm1
+            do np1 = 3, ndo1, 2
+                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * wo(i, 1, k)
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+    ! Case m = 1 through nlat-1
+    if (mmax < 2) return
+
+    do mp1 = 2, mmax
+        m = mp1 - 1
+        mp2 = mp1 + 1
+        call zvin(2, nlat, nlon, m, zv, iv, wzvin)
+        call zwin(2, nlat, nlon, m, zw, iw, wzwin)
+
+        ! Odd harmonic terms for curl coefficients
+        if (mp1 <= ndo1) then
+            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo1-mp1+1) >= 64)
+            do k = 1, nt
+                do i = 1, imm1
+                    do np1 = mp1, ndo1, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * ve(i, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * ve(i, 2*mp1-2, k)
+                    end do
+                end do
+            end do
+            !$omp end parallel do
+
+            ! Equator point for odd nlat
+            if (mlat /= 0) then
+                !$omp parallel do private(np1) if (nt >= 2)
+                do k = 1, nt
+                    do np1 = mp1, ndo1, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) + zw(imid, np1, iw) * ve(imid, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zw(imid, np1, iw) * ve(imid, 2*mp1-2, k)
+                    end do
+                end do
+                !$omp end parallel do
+            end if
+        end if
+
+        ! Even harmonic terms for curl coefficients
+        if (mp2 <= ndo2) then
+            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo2-mp2+1) >= 64)
+            do k = 1, nt
+                do i = 1, imm1
+                    do np1 = mp2, ndo2, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * we(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * vo(i, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * we(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * vo(i, 2*mp1-2, k)
+                    end do
+                end do
+            end do
+            !$omp end parallel do
+
+            ! Equator point for even nlat
+            if (mlat == 0) then
+                !$omp parallel do private(np1) if (nt >= 2)
+                do k = 1, nt
+                    do np1 = mp2, ndo2, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(imid, np1, iv) * we(imid, 2*mp1-2, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(imid, np1, iv) * we(imid, 2*mp1-1, k)
+                    end do
+                end do
+                !$omp end parallel do
+            end if
+        end if
+    end do
+
 end subroutine vhaec1_case5
 
+!> @brief Case 6: Half sphere v odd, w even - all coefficients
+!> @details Hemisphere analysis from original lines 769-835
 subroutine vhaec1_case6(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                        ve, vo, we, wo, br, bi, cr, ci, zv, zw, wzvin, wzwin, &
+                        ve, vo, we, wo, br, bi, cr, ci, idz, zv, zw, wzvin, wzwin, &
                         iv, iw, idv, mdab, ndab)
+    use omp_lib, only: omp_get_max_threads
     implicit none
+
     integer, intent(in) :: nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat
-    integer, intent(in) :: idv, mdab, ndab
+    integer, intent(in) :: idv, mdab, ndab, idz
     real, intent(in) :: ve(idv, nlon, nt), vo(idv, nlon, nt), we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt), cr(mdab, ndab, nt), ci(mdab, ndab, nt)
-    real, intent(inout) :: zv(imid, nlat, 3), zw(imid, nlat, 3)
+    real, intent(inout) :: zv(idz, nlat, 3), zw(idz, nlat, 3)
     real, intent(in) :: wzvin(*), wzwin(*)
     integer, intent(out) :: iv, iw
+
+    integer :: k, i, mp1, np1, m, mp2
+
+    ! Case m=0 - both radial and curl coefficients
     call zvin(0, nlat, nlon, 0, zv, iv, wzvin)
+
+    ! m=0 odd terms
+    !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*ndo1 >= 64)
+    do k = 1, nt
+        do i = 1, imm1
+            do np1 = 3, ndo1, 2
+                br(1, np1, k) = br(1, np1, k) + zv(i, np1, iv) * vo(i, 1, k)
+                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * wo(i, 1, k)
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+    ! Case m = 1 through nlat-1
+    if (mmax < 2) return
+
+    do mp1 = 2, mmax
+        m = mp1 - 1
+        mp2 = mp1 + 1
+        call zvin(0, nlat, nlon, m, zv, iv, wzvin)
+        call zwin(0, nlat, nlon, m, zw, iw, wzwin)
+
+        ! Odd harmonic terms
+        if (mp1 <= ndo1) then
+            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo1-mp1+1) >= 64)
+            do k = 1, nt
+                do i = 1, imm1
+                    do np1 = mp1, ndo1, 2
+                        br(mp1, np1, k) = br(mp1, np1, k) + zv(i, np1, iv) * vo(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * we(i, 2*mp1-1, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(i, np1, iv) * vo(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * we(i, 2*mp1-2, k)
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * ve(i, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * ve(i, 2*mp1-2, k)
+                    end do
+                end do
+            end do
+            !$omp end parallel do
+
+            ! Equator point for odd nlat
+            if (mlat /= 0) then
+                !$omp parallel do private(np1) if (nt >= 2)
+                do k = 1, nt
+                    do np1 = mp1, ndo1, 2
+                        br(mp1, np1, k) = br(mp1, np1, k) + zw(imid, np1, iw) * we(imid, 2*mp1-1, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) - zw(imid, np1, iw) * we(imid, 2*mp1-2, k)
+                        cr(mp1, np1, k) = cr(mp1, np1, k) + zw(imid, np1, iw) * ve(imid, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zw(imid, np1, iw) * ve(imid, 2*mp1-2, k)
+                    end do
+                end do
+                !$omp end parallel do
+            end if
+        end if
+    end do
+
 end subroutine vhaec1_case6
 
+!> @brief Case 7: Half sphere v odd, w even - only br,bi coefficients
+!> @details Hemisphere analysis from original lines 837-869
 subroutine vhaec1_case7(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                        ve, vo, we, wo, br, bi, zv, zw, wzvin, wzwin, &
+                        ve, vo, we, wo, br, bi, idz, zv, zw, wzvin, wzwin, &
                         iv, iw, idv, mdab, ndab)
+    use omp_lib, only: omp_get_max_threads
     implicit none
+
     integer, intent(in) :: nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat
-    integer, intent(in) :: idv, mdab, ndab
+    integer, intent(in) :: idv, mdab, ndab, idz
     real, intent(in) :: ve(idv, nlon, nt), vo(idv, nlon, nt), we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
-    real, intent(inout) :: zv(imid, nlat, 3), zw(imid, nlat, 3)
+    real, intent(inout) :: zv(idz, nlat, 3), zw(idz, nlat, 3)
     real, intent(in) :: wzvin(*), wzwin(*)
     integer, intent(out) :: iv, iw
+
+    integer :: k, i, mp1, np1, m, mp2
+
+    ! Case m=0 - only radial coefficients
     call zvin(2, nlat, nlon, 0, zv, iv, wzvin)
+
+    ! m=0 odd terms for radial
+    !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*ndo1 >= 64)
+    do k = 1, nt
+        do i = 1, imm1
+            do np1 = 3, ndo1, 2
+                br(1, np1, k) = br(1, np1, k) + zv(i, np1, iv) * vo(i, 1, k)
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+    ! Case m = 1 through nlat-1
+    if (mmax < 2) return
+
+    do mp1 = 2, mmax
+        m = mp1 - 1
+        mp2 = mp1 + 1
+        call zvin(2, nlat, nlon, m, zv, iv, wzvin)
+        call zwin(2, nlat, nlon, m, zw, iw, wzwin)
+
+        ! Odd harmonic terms for radial coefficients only
+        if (mp1 <= ndo1) then
+            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo1-mp1+1) >= 64)
+            do k = 1, nt
+                do i = 1, imm1
+                    do np1 = mp1, ndo1, 2
+                        br(mp1, np1, k) = br(mp1, np1, k) + zv(i, np1, iv) * vo(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * we(i, 2*mp1-1, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(i, np1, iv) * vo(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * we(i, 2*mp1-2, k)
+                    end do
+                end do
+            end do
+            !$omp end parallel do
+
+            ! Equator point for odd nlat
+            if (mlat /= 0) then
+                !$omp parallel do private(np1) if (nt >= 2)
+                do k = 1, nt
+                    do np1 = mp1, ndo1, 2
+                        br(mp1, np1, k) = br(mp1, np1, k) + zw(imid, np1, iw) * we(imid, 2*mp1-1, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) - zw(imid, np1, iw) * we(imid, 2*mp1-2, k)
+                    end do
+                end do
+                !$omp end parallel do
+            end if
+        end if
+    end do
+
 end subroutine vhaec1_case7
 
+!> @brief Case 8: Half sphere v odd, w even - only cr,ci coefficients
+!> @details Hemisphere analysis from original lines 871-903
 subroutine vhaec1_case8(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
-                        ve, vo, we, wo, cr, ci, zv, zw, wzvin, wzwin, &
+                        ve, vo, we, wo, cr, ci, idz, zv, zw, wzvin, wzwin, &
                         iv, iw, idv, mdab, ndab)
+    use omp_lib, only: omp_get_max_threads
     implicit none
+
     integer, intent(in) :: nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat
-    integer, intent(in) :: idv, mdab, ndab
+    integer, intent(in) :: idv, mdab, ndab, idz
     real, intent(in) :: ve(idv, nlon, nt), vo(idv, nlon, nt), we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(inout) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
-    real, intent(inout) :: zv(imid, nlat, 3), zw(imid, nlat, 3)
+    real, intent(inout) :: zv(idz, nlat, 3), zw(idz, nlat, 3)
     real, intent(in) :: wzvin(*), wzwin(*)
     integer, intent(out) :: iv, iw
+
+    integer :: k, i, mp1, np1, m, mp2
+
+    ! Case m=0 - only curl coefficients
     call zvin(1, nlat, nlon, 0, zv, iv, wzvin)
+
+    ! m=0 odd terms for curl
+    !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*ndo1 >= 64)
+    do k = 1, nt
+        do i = 1, imm1
+            do np1 = 3, ndo1, 2
+                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * wo(i, 1, k)
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+    ! Case m = 1 through nlat-1
+    if (mmax < 2) return
+
+    do mp1 = 2, mmax
+        m = mp1 - 1
+        mp2 = mp1 + 1
+        call zvin(1, nlat, nlon, m, zv, iv, wzvin)
+        call zwin(1, nlat, nlon, m, zw, iw, wzwin)
+
+        ! Odd harmonic terms for curl coefficients only
+        if (mp1 <= ndo1) then
+            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo1-mp1+1) >= 64)
+            do k = 1, nt
+                do i = 1, imm1
+                    do np1 = mp1, ndo1, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-2, k) &
+                                                          + zw(i, np1, iw) * ve(i, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-1, k) &
+                                                          - zw(i, np1, iw) * ve(i, 2*mp1-2, k)
+                    end do
+                end do
+            end do
+            !$omp end parallel do
+
+            ! Equator point for odd nlat
+            if (mlat /= 0) then
+                !$omp parallel do private(np1) if (nt >= 2)
+                do k = 1, nt
+                    do np1 = mp1, ndo1, 2
+                        cr(mp1, np1, k) = cr(mp1, np1, k) + zw(imid, np1, iw) * ve(imid, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zw(imid, np1, iw) * ve(imid, 2*mp1-2, k)
+                    end do
+                end do
+                !$omp end parallel do
+            end if
+        end if
+    end do
+
 end subroutine vhaec1_case8
