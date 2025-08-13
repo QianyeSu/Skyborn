@@ -352,7 +352,7 @@ python module _spherepack ! in
             double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
             integer,intent(out) :: ierror
         end subroutine shaeci
-        subroutine shagc(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshagc,lshagc,work,lwork,ierror) ! in :_spherepack:shagc.f
+        subroutine shagc(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshagc,lshagc,work,lwork,ierror) ! in :_spherepack:shagc.f90
             integer, intent(hide) :: isym=0
             real dimension(nlat,nlon,nt) :: g
             integer optional,check(shape(g,0)==nlat),depend(g) :: nlat=shape(g,0)
@@ -370,7 +370,7 @@ python module _spherepack ! in
             real dimension(lwork), depend(lwork), intent(cache,hide) :: work
             integer, intent(out) :: ierror
         end subroutine shagc
-        subroutine shagci(nlat,nlon,wshagc,lshagc,dwork,ldwork,ierror) ! in :_spherepack:shagc.f
+        subroutine shagci(nlat,nlon,wshagc,lshagc,dwork,ldwork,ierror) ! in :_spherepack:shagc.f90
             integer :: nlat
             integer :: nlon
             integer, required :: lshagc
@@ -379,7 +379,7 @@ python module _spherepack ! in
             double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
             integer, intent(out) :: ierror
         end subroutine shagci
-        subroutine shsec(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshsec,lshsec,work,lwork,ierror) ! in :_spherepack:shsec.f
+        subroutine shsec(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshsec,lshsec,work,lwork,ierror) ! in :_spherepack:shsec.f90
             integer, required, intent(in) :: nlon
             integer, hide :: isym=0
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: g
