@@ -109,7 +109,7 @@ python module _spherepack ! in
             double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
             integer,intent(out) :: ierror
         end subroutine shaesi
-        subroutine shags(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshags,lshags,work,lwork,ierror) ! in :_spherepack:shags.f
+        subroutine shags(nlat,nlon,isym,nt,g,idg,jdg,a,b,mdab,ndab,wshags,lshags,work,lwork,ierror) ! in :_spherepack:shags.f90
             integer, intent(hide) :: isym=0
             real dimension(nlat,nlon,nt) :: g
             integer optional,check(shape(g,0)==nlat),depend(g) :: nlat=shape(g,0)
@@ -127,7 +127,7 @@ python module _spherepack ! in
             real dimension(lwork), depend(lwork), intent(cache,hide) :: work
             integer, intent(out) :: ierror
         end subroutine shags
-        subroutine shagsi(nlat,nlon,wshags,lshags,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:shags.f
+        subroutine shagsi(nlat,nlon,wshags,lshags,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:shags.f90
             integer :: nlat
             integer :: nlon
             integer, required :: lshags
