@@ -24,8 +24,6 @@ subroutine twodtooned_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
     rsphere_inv = 1.0 / rsphere
 
     ! Main computation loops - optimized for cache efficiency
-    !$OMP PARALLEL DO PRIVATE(nmstrt, m, n, nm, n_real, n_factor) &
-    !$OMP             SHARED(ntrunc)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -43,6 +41,5 @@ subroutine twodtooned_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
             nmstrt = nmstrt + ntrunc - m + 2
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine twodtooned_vrtdiv

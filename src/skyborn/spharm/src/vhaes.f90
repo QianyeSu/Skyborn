@@ -223,53 +223,53 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
    case (1)
       ! ityp=0: no symmetries
       call vhaes_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, idz, zv, zw)
    case (2)
       ! ityp=1: no symmetries but cr and ci equal zero
       call vhaes_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, mdab, ndab, idz, zv, zw)
    case (3)
       ! ityp=2: no symmetries but br and bi equal zero
       call vhaes_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, cr, ci, mdab, ndab, idz, zv, zw)
    case (4)
       ! ityp=3: v even, w odd
       call vhaes_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, idz, zv, zw)
    case (5)
       ! ityp=4: v even, w odd, and cr and ci equal 0
       call vhaes_case4(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, mdab, ndab, idz, zv, zw)
    case (6)
       ! ityp=5: v even, w odd, and br and bi equal zero
       call vhaes_case5(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, cr, ci, mdab, ndab, idz, zv, zw)
    case (7)
       ! ityp=6: v odd, w even
       call vhaes_case6(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, idz, zv, zw)
    case (8)
       ! ityp=7: v odd, w even, and cr and ci equal zero
       call vhaes_case7(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, mdab, ndab, idz, zv, zw)
    case (9)
       ! ityp=8: v odd, w even, and both br and bi equal zero
       call vhaes_case8(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, cr, ci, mdab, ndab, idz, zv, zw)
    end select
 
 end subroutine vhaes1
 
 !> @brief Case 0: ityp=0, no symmetries (optimized with OpenMP)
 subroutine vhaes_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, idz, zv, zw)
    implicit none
-   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
+   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab, idz
    real, intent(in) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
    real, intent(in) :: we(imid, nlon, nt), wo(imid, nlon, nt)
    real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
    real, intent(inout) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
-   real, intent(in) :: zv(ndab, *), zw(ndab, *)
+   real, intent(in) :: zv(idz, *), zw(idz, *)
 
    integer :: k, i, np1, mp1, m, mb, mp2
 
@@ -306,13 +306,13 @@ subroutine vhaes_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp1, ndo1, 2
                      br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * we(i, 2*mp1-1, k)
                      bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * we(i, 2*mp1-2, k)
                      cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * ve(i, 2*mp1-1, k)
                      ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * ve(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -321,10 +321,10 @@ subroutine vhaes_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
             if (mlat /= 0) then
                do k = 1, nt
                   do np1 = mp1, ndo1, 2
-                     br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid) * we(imid, 2*mp1-1, k)
-                     bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid) * we(imid, 2*mp1-2, k)
-                     cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
-                     ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
+                     br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid, 1) * we(imid, 2*mp1-1, k)
+                     bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid, 1) * we(imid, 2*mp1-2, k)
+                     cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid, 1) * ve(imid, 2*mp1-1, k)
+                     ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid, 1) * ve(imid, 2*mp1-2, k)
                   end do
                end do
             end if
@@ -336,13 +336,13 @@ subroutine vhaes_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp2, ndo2, 2
                      br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * wo(i, 2*mp1-1, k)
                      bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * wo(i, 2*mp1-2, k)
                      cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * vo(i, 2*mp1-1, k)
                      ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * vo(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -365,13 +365,13 @@ end subroutine vhaes_case0
 
 !> @brief Case 1: ityp=1, no symmetries but cr and ci equal zero
 subroutine vhaes_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, mdab, ndab, idz, zv, zw)
    implicit none
-   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
+   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab, idz
    real, intent(in) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
    real, intent(in) :: we(imid, nlon, nt), wo(imid, nlon, nt)
    real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
-   real, intent(in) :: zv(ndab, *), zw(ndab, *)
+   real, intent(in) :: zv(idz, *), zw(idz, *)
 
    integer :: k, i, np1, mp1, m, mb, mp2
 
@@ -405,9 +405,9 @@ subroutine vhaes_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp1, ndo1, 2
                      br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * we(i, 2*mp1-1, k)
                      bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * we(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -415,8 +415,8 @@ subroutine vhaes_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
             if (mlat /= 0) then
                do k = 1, nt
                   do np1 = mp1, ndo1, 2
-                     br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid) * we(imid, 2*mp1-1, k)
-                     bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid) * we(imid, 2*mp1-2, k)
+                     br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid, 1) * we(imid, 2*mp1-1, k)
+                     bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid, 1) * we(imid, 2*mp1-2, k)
                   end do
                end do
             end if
@@ -427,9 +427,9 @@ subroutine vhaes_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp2, ndo2, 2
                      br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * wo(i, 2*mp1-1, k)
                      bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * wo(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -449,13 +449,13 @@ end subroutine vhaes_case1
 
 !> @brief Case 2: ityp=2, no symmetries but br and bi equal zero
 subroutine vhaes_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, cr, ci, mdab, ndab, idz, zv, zw)
    implicit none
-   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
+   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab, idz
    real, intent(in) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
    real, intent(in) :: we(imid, nlon, nt), wo(imid, nlon, nt)
    real, intent(inout) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
-   real, intent(in) :: zv(ndab, *), zw(ndab, *)
+   real, intent(in) :: zv(idz, *), zw(idz, *)
 
    integer :: k, i, np1, mp1, m, mb, mp2
 
@@ -489,9 +489,9 @@ subroutine vhaes_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp1, ndo1, 2
                      cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * ve(i, 2*mp1-1, k)
                      ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * ve(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -499,8 +499,8 @@ subroutine vhaes_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
             if (mlat /= 0) then
                do k = 1, nt
                   do np1 = mp1, ndo1, 2
-                     cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
-                     ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
+                     cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid, 1) * ve(imid, 2*mp1-1, k)
+                     ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid, 1) * ve(imid, 2*mp1-2, k)
                   end do
                end do
             end if
@@ -511,9 +511,9 @@ subroutine vhaes_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp2, ndo2, 2
                      cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * vo(i, 2*mp1-1, k)
                      ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * vo(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -534,14 +534,14 @@ end subroutine vhaes_case2
 !> @brief Case 3: ityp=3, v even, w odd
 !> Vector field with v symmetric and w antisymmetric about equator
 subroutine vhaes_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, idz, zv, zw)
    implicit none
 
    ! Input parameters
-   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
+   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab, idz
    real, intent(in) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
    real, intent(in) :: we(imid, nlon, nt), wo(imid, nlon, nt)
-   real, intent(in) :: zv(ndab, *), zw(ndab, *)
+   real, intent(in) :: zv(idz, *), zw(idz, *)
 
    ! Output parameters
    real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
@@ -581,9 +581,9 @@ subroutine vhaes_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp1, ndo1, 2
                      cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * ve(i, 2*mp1-1, k)
                      ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * ve(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -592,8 +592,8 @@ subroutine vhaes_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
             if (mlat /= 0) then
                do k = 1, nt
                   do np1 = mp1, ndo1, 2
-                     cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
-                     ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
+                     cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid, 1) * ve(imid, 2*mp1-1, k)
+                     ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid, 1) * ve(imid, 2*mp1-2, k)
                   end do
                end do
             end if
@@ -605,9 +605,9 @@ subroutine vhaes_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp2, ndo2, 2
                      br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * wo(i, 2*mp1-1, k)
                      bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * wo(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -630,14 +630,14 @@ end subroutine vhaes_case3
 !> @brief Case 4: ityp=4, v even, w odd, and cr and ci equal zero
 !> Vector field with v symmetric and w antisymmetric, curl-free (cr=ci=0)
 subroutine vhaes_case4(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, mdab, ndab, idz, zv, zw)
    implicit none
 
    ! Input parameters
-   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
+   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab, idz
    real, intent(in) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
    real, intent(in) :: we(imid, nlon, nt), wo(imid, nlon, nt)
-   real, intent(in) :: zv(ndab, *), zw(ndab, *)
+   real, intent(in) :: zv(idz, *), zw(idz, *)
 
    ! Output parameters (only br, bi computed, cr, ci remain zero)
    real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
@@ -667,9 +667,9 @@ subroutine vhaes_case4(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp2, ndo2, 2
                      br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * wo(i, 2*mp1-1, k)
                      bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * wo(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -692,14 +692,14 @@ end subroutine vhaes_case4
 !> @brief Case 5: ityp=5, v even, w odd, and br and bi equal zero
 !> Vector field with v symmetric and w antisymmetric, divergence-free (br=bi=0)
 subroutine vhaes_case5(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, cr, ci, mdab, ndab, idz, zv, zw)
    implicit none
 
    ! Input parameters
-   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
+   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab, idz
    real, intent(in) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
    real, intent(in) :: we(imid, nlon, nt), wo(imid, nlon, nt)
-   real, intent(in) :: zv(ndab, *), zw(ndab, *)
+   real, intent(in) :: zv(idz, *), zw(idz, *)
 
    ! Output parameters (only cr, ci computed, br, bi remain zero)
    real, intent(inout) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
@@ -728,9 +728,9 @@ subroutine vhaes_case5(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp1, ndo1, 2
                      cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * ve(i, 2*mp1-1, k)
                      ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * ve(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -739,8 +739,8 @@ subroutine vhaes_case5(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
             if (mlat /= 0) then
                do k = 1, nt
                   do np1 = mp1, ndo1, 2
-                     cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
-                     ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
+                     cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid, 1) * ve(imid, 2*mp1-1, k)
+                     ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid, 1) * ve(imid, 2*mp1-2, k)
                   end do
                end do
             end if
@@ -753,14 +753,14 @@ end subroutine vhaes_case5
 !> @brief Case 6: ityp=6, v odd, w even
 !> Vector field with v antisymmetric and w symmetric about equator
 subroutine vhaes_case6(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, idz, zv, zw)
    implicit none
 
    ! Input parameters
-   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
+   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab, idz
    real, intent(in) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
    real, intent(in) :: we(imid, nlon, nt), wo(imid, nlon, nt)
-   real, intent(in) :: zv(ndab, *), zw(ndab, *)
+   real, intent(in) :: zv(idz, *), zw(idz, *)
 
    ! Output parameters
    real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
@@ -800,9 +800,9 @@ subroutine vhaes_case6(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp1, ndo1, 2
                      br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * we(i, 2*mp1-1, k)
                      bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * we(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -811,8 +811,8 @@ subroutine vhaes_case6(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
             if (mlat /= 0) then
                do k = 1, nt
                   do np1 = mp1, ndo1, 2
-                     br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid) * we(imid, 2*mp1-1, k)
-                     bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid) * we(imid, 2*mp1-2, k)
+                     br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid, 1) * we(imid, 2*mp1-1, k)
+                     bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid, 1) * we(imid, 2*mp1-2, k)
                   end do
                end do
             end if
@@ -824,9 +824,9 @@ subroutine vhaes_case6(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp2, ndo2, 2
                      cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * vo(i, 2*mp1-1, k)
                      ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * vo(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -849,14 +849,14 @@ end subroutine vhaes_case6
 !> @brief Case 7: ityp=7, v odd, w even, and cr and ci equal zero
 !> Vector field with v antisymmetric and w symmetric, curl-free (cr=ci=0)
 subroutine vhaes_case7(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, br, bi, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, br, bi, mdab, ndab, idz, zv, zw)
    implicit none
 
    ! Input parameters
-   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
+   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab, idz
    real, intent(in) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
    real, intent(in) :: we(imid, nlon, nt), wo(imid, nlon, nt)
-   real, intent(in) :: zv(ndab, *), zw(ndab, *)
+   real, intent(in) :: zv(idz, *), zw(idz, *)
 
    ! Output parameters (only br, bi computed, cr, ci remain zero)
    real, intent(inout) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
@@ -885,9 +885,9 @@ subroutine vhaes_case7(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp1, ndo1, 2
                      br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * we(i, 2*mp1-1, k)
                      bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * we(i, 2*mp1-2, k)
                   end do
                end do
             end do
@@ -896,8 +896,8 @@ subroutine vhaes_case7(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
             if (mlat /= 0) then
                do k = 1, nt
                   do np1 = mp1, ndo1, 2
-                     br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid) * we(imid, 2*mp1-1, k)
-                     bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid) * we(imid, 2*mp1-2, k)
+                     br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid, 1) * we(imid, 2*mp1-1, k)
+                     bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid, 1) * we(imid, 2*mp1-2, k)
                   end do
                end do
             end if
@@ -910,14 +910,14 @@ end subroutine vhaes_case7
 !> @brief Case 8: ityp=8, v odd, w even, and both br and bi equal zero
 !> Vector field with v antisymmetric and w symmetric, divergence-free (br=bi=0)
 subroutine vhaes_case8(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
-                      ve, vo, we, wo, cr, ci, mdab, ndab, zv, zw)
+                      ve, vo, we, wo, cr, ci, mdab, ndab, idz, zv, zw)
    implicit none
 
    ! Input parameters
-   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
+   integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab, idz
    real, intent(in) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
    real, intent(in) :: we(imid, nlon, nt), wo(imid, nlon, nt)
-   real, intent(in) :: zv(ndab, *), zw(ndab, *)
+   real, intent(in) :: zv(idz, *), zw(idz, *)
 
    ! Output parameters (only cr, ci computed, br, bi remain zero)
    real, intent(inout) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
@@ -947,9 +947,9 @@ subroutine vhaes_case8(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                do i = 1, imm1
                   do np1 = mp2, ndo2, 2
                      cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-2, k) &
-                                                       + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
+                                                       + zw(np1 + mb, i, 1) * vo(i, 2*mp1-1, k)
                      ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-1, k) &
-                                                       - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
+                                                       - zw(np1 + mb, i, 1) * vo(i, 2*mp1-2, k)
                   end do
                end do
             end do
