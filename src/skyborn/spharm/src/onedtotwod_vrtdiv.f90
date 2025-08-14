@@ -26,9 +26,6 @@ subroutine onedtotwod_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
     ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
     ! Main computation loops - optimized order for cache efficiency
-    !$OMP PARALLEL DO PRIVATE(nmstrt, m, n, nm, n_real, n_factor, &
-    !$OMP                      vrt_real, vrt_imag, div_real, div_imag) &
-    !$OMP             SHARED(ntrunc, rsphere, scale)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -54,6 +51,5 @@ subroutine onedtotwod_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
             nmstrt = nmstrt + ntrunc - m + 2
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine onedtotwod_vrtdiv

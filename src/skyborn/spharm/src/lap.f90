@@ -23,8 +23,6 @@ subroutine lap(dataspec, dataspec_lap, nmdim, nt, rsphere)
     ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
     ! Main computation loops - optimized for vectorization
-    !$OMP PARALLEL DO PRIVATE(nmstrt, m, n, nm, n_real, lap_factor) &
-    !$OMP             SHARED(ntrunc, rsphere_inv_sq)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -42,6 +40,5 @@ subroutine lap(dataspec, dataspec_lap, nmdim, nt, rsphere)
             nmstrt = nmstrt + ntrunc - m + 2
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine lap

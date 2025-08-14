@@ -16,7 +16,6 @@ subroutine twodtooned(dataspec, a, b, nlat, ntrunc, nt)
     real, parameter :: scale = 0.5
 
     ! Main computation loops - optimized for cache efficiency
-    !$OMP PARALLEL DO PRIVATE(nmstrt, m, n, nm) SHARED(ntrunc)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -30,6 +29,5 @@ subroutine twodtooned(dataspec, a, b, nlat, ntrunc, nt)
             nmstrt = nmstrt + ntrunc - m + 2
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine twodtooned

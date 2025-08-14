@@ -131,12 +131,10 @@ subroutine gaqd(nlat, theta, wts, dwork, ldwork, ierror)
     end if
 
     ! Extend points and weights via symmetries
-    !$OMP PARALLEL DO IF(ns2 > 100)
     do i = 1, ns2
         wts(nlat - i + 1) = wts(i)
         theta(nlat - i + 1) = pi - theta(i)
     end do
-    !$OMP END PARALLEL DO
 
     ! Normalize weights with Kahan summation for better accuracy
     sum = 0.0d0
@@ -144,11 +142,9 @@ subroutine gaqd(nlat, theta, wts, dwork, ldwork, ierror)
         ! Use Kahan summation for large arrays
         call kahan_sum(wts, nlat, sum)
     else
-        !$OMP PARALLEL DO REDUCTION(+:sum) IF(nlat > 100)
         do i = 1, nlat
             sum = sum + wts(i)
         end do
-        !$OMP END PARALLEL DO
     end if
 
     ! Safeguard against division by zero
@@ -156,11 +152,9 @@ subroutine gaqd(nlat, theta, wts, dwork, ldwork, ierror)
         sum = 2.0d0  ! Theoretical total weight
     end if
 
-    !$OMP PARALLEL DO IF(nlat > 100)
     do i = 1, nlat
         wts(i) = 2.0d0 * wts(i) / sum
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine gaqd
 

@@ -25,8 +25,6 @@ subroutine invlap(dataspec, dataspec_ilap, nmdim, nt, rsphere)
     ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
     ! Main computation loops - optimized for vectorization
-    !$OMP PARALLEL DO PRIVATE(nmstrt, m, n1, n, nm, n_real, invlap_factor) &
-    !$OMP             SHARED(ntrunc, rsphere_sq)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -50,6 +48,5 @@ subroutine invlap(dataspec, dataspec_ilap, nmdim, nt, rsphere)
         ! Set first mode to zero (corresponds to global mean)
         dataspec_ilap(1, i) = zero
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine invlap
