@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combined Black Hole with Wormhole Particles</title>
+    <style>
+        body {
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+
+        combined-hole {
+            position: absolute;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        combined-hole::before {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            z-index: -1;
+            display: block;
+            width: 150%;
+            height: 140%;
+            background: radial-gradient(ellipse at 50% 55%, transparent 10%, black 50%);
+            transform: translate3d(-50%, -50%, 0);
+            content: "";
+            pointer-events: none;
+        }
+
+        combined-hole::after {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            z-index: -2;
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(
+                ellipse at 50% 75%,
+                #a900ff 20%,
+                transparent 75%
+            );
+            mix-blend-mode: overlay;
+            transform: translate3d(-50%, -50%, 0);
+            content: "";
+            pointer-events: none;
+        }
+
+        .aura {
+            position: absolute;
+            top: -71.5%;
+            left: 50%;
+            z-index: 3;
+            width: 30%;
+            height: 140%;
+            background: linear-gradient(
+                20deg,
+                #0099ff,
+                #0066cc20 16.5%,
+                #00ccff 33%,
+                #0099ff20 49.5%,
+                #0080ff 66%,
+                #00aaff60 85.5%,
+                #0066ff 100%
+            ) 0 100% / 100% 200%;
+            border-radius: 0 0 100% 100%;
+            filter: blur(50px);
+            mix-blend-mode: plus-lighter;
+            opacity: 0.75;
+            transform: translate3d(-50%, 0, 0);
+            animation: aura-glow 5s infinite linear;
+        }
+
+        @keyframes aura-glow {
+            0% { background-position: 0 100%; }
+            100% { background-position: 0 300%; }
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                transparent,
+                transparent 1px,
+                white 1px,
+                white 2px
+            );
+            mix-blend-mode: overlay;
+            opacity: 0.5;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <combined-hole>
+        <canvas class="js-canvas"></canvas>
+        <div class="aura"></div>
+        <div class="overlay"></div>
+    </combined-hole>
+
+    <script type="module">
+        import easingUtils from "https://esm.sh/easing-utils";
+
+        class CombinedHole extends HTMLElement {
+            connectedCallback() {
+                this.canvas = this.querySelector(".js-canvas");
+                this.ctx = this.canvas.getContext("2d");
+
+                this.discs = [];
+                this.lines = [];
+                this.wormholeParticles = [];
+
+                this.setSize();
+                this.setDiscs();
+                this.setLines();
+                this.setBlackholeParticles();
+                this.setWormholeParticles();
+
+                this.bindEvents();
+                requestAnimationFrame(this.tick.bind(this));
+            }
+
+            bindEvents() {
+                window.addEventListener("resize", this.onResize.bind(this));
+            }
+
+            onResize() {
+                this.setSize();
+                this.setDiscs();
+                this.setLines();
+                this.setBlackholeParticles();
+                this.setWormholeParticles();
+            }
+
+            setSize() {
+                this.rect = this.getBoundingClientRect();
+                this.render = {
+                    width: this.rect.width,
+                    height: this.rect.height,
+                    dpi: window.devicePixelRatio
+                };
+                this.canvas.width = this.render.width * this.render.dpi;
+                this.canvas.height = this.render.height * this.render.dpi;
+            }
+
+            setDiscs() {
+                const { width, height } = this.rect;
+                this.discs = [];
+
+                this.startDisc = {
+                    x: width * 0.5,
+                    y: height * 0.45,
+                    w: width * 0.75,
+                    h: height * 0.7
+                };
+
+                this.endDisc = {
+                    x: width * 0.5,
+                    y: height * 0.95,
+                    w: 0,
+                    h: 0
+                };
+
+                const totalDiscs = 100;
+                let prevBottom = height;
+                this.clip = {};
+
+                for (let i = 0; i < totalDiscs; i++) {
+                    const p = i / totalDiscs;
+                    const disc = this.tweenDisc({ p });
+                    const bottom = disc.y + disc.h;
+
+                    if (bottom <= prevBottom) {
+                        this.clip = {
+                            disc: { ...disc },
+                            i
+                        };
+                    }
+
+                    prevBottom = bottom;
+                    this.discs.push(disc);
+                }
+
+                this.clip.path = new Path2D();
+                this.clip.path.ellipse(
+                    this.clip.disc.x,
+                    this.clip.disc.y,
+                    this.clip.disc.w,
+                    this.clip.disc.h,
+                    0,
+                    0,
+                    Math.PI * 2
+                );
+                this.clip.path.rect(
+                    this.clip.disc.x - this.clip.disc.w,
+                    0,
+                    this.clip.disc.w * 2,
+                    this.clip.disc.y
+                );
+            }
+
+            setLines() {
+                const { width, height } = this.rect;
+                this.lines = [];
+
+                const totalLines = 100;
+                const linesAngle = (Math.PI * 2) / totalLines;
+
+                for (let i = 0; i < totalLines; i++) {
+                    this.lines.push([]);
+                }
+
+                this.discs.forEach((disc) => {
+                    for (let i = 0; i < totalLines; i++) {
+                        const angle = i * linesAngle;
+                        const p = {
+                            x: disc.x + Math.cos(angle) * disc.w,
+                            y: disc.y + Math.sin(angle) * disc.h
+                        };
+                        this.lines[i].push(p);
+                    }
+                });
+
+                this.linesCanvas = new OffscreenCanvas(width, height);
+                const ctx = this.linesCanvas.getContext("2d");
+
+                this.lines.forEach((line, i) => {
+                    ctx.save();
+                    let lineIsIn = false;
+                    line.forEach((p1, j) => {
+                        if (j === 0) return;
+
+                        const p0 = line[j - 1];
+
+                        if (!lineIsIn && (ctx.isPointInPath(this.clip.path, p1.x, p1.y) || ctx.isPointInStroke(this.clip.path, p1.x, p1.y))) {
+                            lineIsIn = true;
+                        } else if (lineIsIn) {
+                            ctx.clip(this.clip.path);
+                        }
+
+                        ctx.beginPath();
+                        ctx.moveTo(p0.x, p0.y);
+                        ctx.lineTo(p1.x, p1.y);
+                        ctx.strokeStyle = "#444";
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                        ctx.closePath();
+                    });
+                    ctx.restore();
+                });
+
+                this.linesCtx = ctx;
+            }
+
+            setBlackholeParticles() {
+                const { width, height } = this.rect;
+                this.particles = [];
+
+                this.particleArea = {
+                    sw: this.clip.disc.w * 0.5,
+                    ew: this.clip.disc.w * 2,
+                    h: height * 0.85
+                };
+                this.particleArea.sx = (width - this.particleArea.sw) / 2;
+                this.particleArea.ex = (width - this.particleArea.ew) / 2;
+
+                const totalParticles = 300; // Increase black hole particle count
+
+                for (let i = 0; i < totalParticles; i++) {
+                    const particle = this.initBlackholeParticle(true);
+                    this.particles.push(particle);
+                }
+            }
+
+            initBlackholeParticle(start = false) {
+                const sx = this.particleArea.sx + this.particleArea.sw * Math.random();
+                const ex = this.particleArea.ex + this.particleArea.ew * Math.random();
+                const dx = ex - sx;
+                const vx = 0.1 + Math.random() * 0.5;
+                const y = start ? this.particleArea.h * Math.random() : this.particleArea.h;
+                const r = 0.5 + Math.random() * 4;
+                const vy = 0.5 + Math.random();
+
+                return {
+                    x: sx,
+                    sx,
+                    dx,
+                    y,
+                    vy,
+                    p: 0,
+                    r,
+                    c: `rgba(255, 255, 255, ${Math.random()})`
+                };
+            }
+
+            setWormholeParticles() {
+                this.wormholeDots = [];
+                const totalDots = 10000; // Based on entrance_ro.html implementation
+
+                for (let i = 0; i < totalDots; i++) {
+                    const disc = this.discs[Math.floor(this.discs.length * Math.random())];
+                    // Use same angle distribution as grid lines (100 lines)
+                    const angleIndex = Math.floor(Math.random() * 100);
+                    const baseAngle = (Math.PI * 2 * angleIndex) / 100;
+                    const dot = {
+                        d: disc,
+                        a: baseAngle,
+                        c: `rgb(${Math.random() * 30}, ${100 + Math.random() * 80}, ${200 + Math.random() * 55})`, // Blue theme
+                        p: Math.random(),
+                        o: Math.random(),
+                        active: true,
+                        // Add spiral inward parameters
+                        orbitDecay: 0.9995 + Math.random() * 0.0004, // Orbit decay rate
+                        radiusScale: 1.0 // Current orbit scale ratio
+                    };
+
+                    this.wormholeDots.push(dot);
+                }
+
+                console.log('Created', this.wormholeDots.length, 'wormhole dots');
+            }
+
+            tweenValue(start, end, p, ease = false) {
+                const delta = end - start;
+                const easeFn = easingUtils[
+                    ease ? "ease" + ease.charAt(0).toUpperCase() + ease.slice(1) : "linear"
+                ];
+                return start + delta * easeFn(p);
+            }
+
+            tweenDisc(disc) {
+                disc.x = this.tweenValue(this.startDisc.x, this.endDisc.x, disc.p);
+                disc.y = this.tweenValue(this.startDisc.y, this.endDisc.y, disc.p, "inExpo");
+                disc.w = this.tweenValue(this.startDisc.w, this.endDisc.w, disc.p);
+                disc.h = this.tweenValue(this.startDisc.h, this.endDisc.h, disc.p);
+                return disc;
+            }
+
+            drawDiscs() {
+                const { ctx } = this;
+                ctx.strokeStyle = "#444";
+                ctx.lineWidth = 2;
+
+                const outerDisc = this.startDisc;
+                ctx.beginPath();
+                ctx.ellipse(outerDisc.x, outerDisc.y, outerDisc.w, outerDisc.h, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.closePath();
+
+                this.discs.forEach((disc, i) => {
+                    if (i % 5 !== 0) return;
+
+                    if (disc.w < this.clip.disc.w - 5) {
+                        ctx.save();
+                        ctx.clip(this.clip.path);
+                    }
+
+                    ctx.beginPath();
+                    ctx.ellipse(disc.x, disc.y, disc.w, disc.h, 0, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.closePath();
+
+                    if (disc.w < this.clip.disc.w - 5) {
+                        ctx.restore();
+                    }
+                });
+            }
+
+            drawLines() {
+                const { ctx, linesCanvas } = this;
+                ctx.drawImage(linesCanvas, 0, 0);
+            }
+
+            drawBlackholeParticles() {
+                const { ctx } = this;
+                ctx.save();
+                ctx.clip(this.clip.path);
+
+                this.particles.forEach((particle) => {
+                    ctx.fillStyle = particle.c;
+                    ctx.beginPath();
+                    ctx.rect(particle.x, particle.y, particle.r, particle.r);
+                    ctx.closePath();
+                    ctx.fill();
+                });
+
+                ctx.restore();
+            }
+
+
+            drawWormholeParticles() {
+                const { ctx } = this;
+                const { width, height } = this.render;
+                const centerX = width * 0.5;
+                const centerY = height * 0.5;
+                const blackHoleRadius = Math.min(width, height) * 0.01;
+
+                this.wormholeDots.forEach((dot) => {
+                    if (!dot.active) return;
+
+                    const { d, a, p, c, o } = dot;
+
+                    if (!d || typeof d.w === 'undefined' || typeof d.h === 'undefined') return;
+
+                    const _p = d.sx * d.sy;
+
+                    // Draw current particle - Based on entrance_ro.html implementation, adding spiral inward effect
+                    const newA = a + (Math.PI * 2 * p);
+                    const x = d.x + Math.cos(newA) * d.w * dot.radiusScale;
+                    const y = d.y + Math.sin(newA) * d.h * dot.radiusScale;
+
+                    // Check if particle is absorbed into black hole center
+                    const distanceToCenter = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+
+                    if (distanceToCenter < blackHoleRadius) {
+                        dot.active = false;
+                        return;
+                    }
+
+                    // Check if reached white particle generation area - considering elliptical orbit depth
+                    const whiteParticleSpawnY = this.particleArea.h * 0.81; // Increase disappearance height to81%
+
+                    // Calculate particle's relative position on elliptical orbit
+                    const ellipseSize = Math.sqrt(d.w * d.w + d.h * d.h);
+                    const maxEllipseSize = Math.max(...this.discs.map(disc => Math.sqrt(disc.w * disc.w + disc.h * disc.h)));
+                    const sizeRatio = ellipseSize / maxEllipseSize;
+
+                    // Only inner orbit particles (those close to black hole) reach white particle generation area and disappear
+                    const isInnerOrbit = sizeRatio < 0.15; // Only inner orbit15%orbits
+
+                    if (isInnerOrbit && y >= whiteParticleSpawnY) {
+                        // Check if within white particle generation range
+                        const spawnCenterX = this.particleArea.sx + this.particleArea.sw * 0.6;
+                        const spawnRadius = this.particleArea.sw * 10;
+                        const distanceToSpawnCenter = Math.abs(x - spawnCenterX);
+
+                        if (distanceToSpawnCenter <= spawnRadius) {
+                            dot.active = false;
+                            return;
+                        }
+                    }
+
+                    ctx.fillStyle = c;
+                    ctx.globalAlpha = d.a * o;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, 1 + _p * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.closePath();
+                });
+
+                ctx.globalAlpha = 1;
+            }
+
+            moveDiscs() {
+                this.discs.forEach((disc) => {
+                    disc.p = (disc.p + 0.002) % 1; // Speed up contraction (from 0.0005 increased to 0.002)
+                    this.tweenDisc(disc);
+
+                    const scaleX = this.tweenValue(1, 0, disc.p, 'outCubic');
+                    const scaleY = this.tweenValue(1, 0, disc.p, 'outExpo');
+
+                    disc.sx = scaleX;
+                    disc.sy = scaleY;
+
+                    const p = disc.sx * disc.sy;
+                    let a = 1;
+                    if (p < 0.01) {
+                        a = Math.pow(Math.min(p / 0.01, 1), 3);
+                    } else if (p > 0.2) {
+                        a = 1 - Math.min((p - 0.2) / 0.8, 1);
+                    }
+                    disc.a = a;
+                });
+            }
+
+            moveBlackholeParticles() {
+                this.particles.forEach((particle) => {
+                    particle.p = 1 - particle.y / this.particleArea.h;
+                    particle.x = particle.sx + particle.dx * particle.p;
+                    particle.y -= particle.vy;
+
+                    if (particle.y < 0) {
+                        particle.y = this.initBlackholeParticle().y;
+                    }
+                });
+            }
+
+            moveWormholeParticles() {
+                this.wormholeDots.forEach((dot) => {
+                    if (!dot.active) return;
+
+                    // Based on entrance_ro.html particle movement logic
+                    const v = this.tweenValue(0, 0.001, 1 - dot.d.sx * dot.d.sy, 'inExpo');
+                    dot.p = (dot.p + v) % 1;
+
+                    // Add spiral inward effect: orbit radius gradually shrinks
+                    dot.radiusScale *= dot.orbitDecay;
+
+                    // When orbit shrinks to a certain extent, particles are 'absorbed' and disappear
+                    if (dot.radiusScale < 0.1) {
+                        dot.active = false;
+                    }
+                });
+            }
+
+            // Function to immediately respawn inactive particles
+            respawnInactiveDots() {
+                this.wormholeDots.forEach((dot) => {
+                    if (dot.active) return;
+
+                    // Immediately reassign to outer ellipse
+                    const outerDiscs = this.discs.slice(0, Math.floor(this.discs.length * 0.3));
+                    const randomDisc = outerDiscs.length > 0
+                        ? outerDiscs[Math.floor(Math.random() * outerDiscs.length)]
+                        : this.discs[Math.floor(this.discs.length * Math.random())];
+
+                    const angleIndex = Math.floor(Math.random() * 100);
+                    const baseAngle = (Math.PI * 2 * angleIndex) / 100;
+
+                    dot.d = randomDisc;
+                    dot.a = baseAngle;
+                    dot.p = Math.random();
+                    dot.o = Math.random();
+                    dot.c = `rgb(${Math.random() * 30}, ${100 + Math.random() * 80}, ${200 + Math.random() * 55})`;
+                    dot.active = true;
+                    // Reset spiral parameters
+                    dot.orbitDecay = 0.9995 + Math.random() * 0.0004;
+                    dot.radiusScale = 1.0; // Start again from outer orbit
+                });
+            }
+
+            tick(time) {
+                const { ctx } = this;
+
+                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                ctx.save();
+                ctx.scale(this.render.dpi, this.render.dpi);
+
+                this.moveDiscs();
+                this.moveBlackholeParticles();
+                this.moveWormholeParticles();
+
+                // Draw order: discs -> grid lines -> black hole particles -> Wormhole particles (top layer)
+                this.drawDiscs();
+                this.drawLines();
+                this.drawBlackholeParticles();
+                this.drawWormholeParticles(); // Wormhole particles on top layer
+
+                // Immediately respawn disappeared particles, keeping total count unchanged
+                this.respawnInactiveDots();
+
+                ctx.restore();
+                requestAnimationFrame(this.tick.bind(this));
+            }
+        }
+
+        customElements.define("combined-hole", CombinedHole);
+    </script>
+</body>
+</html>

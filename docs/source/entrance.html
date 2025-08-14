@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Skyborn Documentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@100..800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="Cargantua.css">
     <style>
         * {
             margin: 0;
@@ -12,25 +16,23 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background:
-                radial-gradient(ellipse at center,
-                    rgba(30, 58, 138, 0.3) 0%,
-                    rgba(30, 58, 138, 0.6) 30%,
-                    rgba(15, 23, 42, 0.9) 70%,
-                    rgba(0, 0, 0, 1) 100%
-                );
+            background: #000;
+            width: 100vw;
             height: 100vh;
             overflow: hidden;
+            margin: 0;
+            padding: 0;
+            font-family: 'Martian Mono', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             position: relative;
         }
 
-        #particles-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
+        canvas {
+            display: block;
             width: 100%;
             height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
             z-index: 1;
         }
 
@@ -40,50 +42,64 @@
             left: 50%;
             transform: translate(-50%, -50%);
             text-align: center;
-            z-index: 2;
+            z-index: 10;
             color: white;
         }
 
         .logo {
-            font-size: 4rem;
+            font-size: 3rem;
             font-weight: bold;
-            margin-bottom: 1rem;
+            margin-bottom: 0.8rem;
             text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
             animation: float 3s ease-in-out infinite;
         }
 
         .subtitle {
-            font-size: 1.5rem;
-            margin-bottom: 3rem;
+            font-size: 1.2rem;
+            margin-bottom: 2.5rem;
             opacity: 0.9;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
             font-weight: bold;
         }
 
         .enter-button {
-            background: linear-gradient(45deg, #2563eb, #3b82f6);
-            color: white;
-            border: none;
-            padding: 1rem 2.5rem;
-            font-size: 1.2rem;
-            font-weight: 600;
-            border-radius: 50px;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.9) 50%, rgba(51, 65, 85, 0.9) 100%);
+            color: #e5e7eb;
+            border: 1px solid #e5e7eb;
+            padding: 0.8rem 2rem;
+            font-size: 1rem;
+            font-weight: 700;
+            border-radius: 8px;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 8px 32px rgba(37, 99, 235, 0.3);
+            box-shadow:
+                0 0 20px rgba(229, 231, 235, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1),
+                0 4px 15px rgba(0, 0, 0, 0.2);
             text-decoration: none;
             display: inline-block;
             position: relative;
             overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .enter-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 40px rgba(37, 99, 235, 0.4);
+            transform: translateY(-3px);
+            color: #ffffff;
+            border-color: #e5e7eb;
+            box-shadow:
+                0 0 40px rgba(229, 231, 235, 0.5),
+                0 0 80px rgba(229, 231, 235, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%);
         }
 
         .enter-button:active {
-            transform: translateY(0);
+            transform: translateY(-1px);
+            box-shadow:
+                0 0 25px rgba(229, 231, 235, 0.6),
+                inset 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         .enter-button::before {
@@ -93,12 +109,93 @@
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s ease;
+            background: linear-gradient(90deg, transparent, rgba(229, 231, 235, 0.6), transparent);
+            transition: left 0.6s ease;
+            z-index: 1;
         }
 
         .enter-button:hover::before {
             left: 100%;
+        }
+
+        .enter-button::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                linear-gradient(45deg, transparent 30%, rgba(229, 231, 235, 0.1) 50%, transparent 70%),
+                linear-gradient(-45deg, transparent 30%, rgba(229, 231, 235, 0.05) 50%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            border-radius: 8px;
+        }
+
+        .enter-button:hover::after {
+            opacity: 1;
+        }
+
+        /* Particle effects container */
+        .particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+
+        .particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: #e5e7eb;
+            border-radius: 50%;
+            opacity: 0;
+            animation: particleFloat 3s linear infinite;
+            box-shadow: 0 0 6px #e5e7eb;
+        }
+
+        .particle:nth-child(1) { left: 10%; animation-delay: 0s; }
+        .particle:nth-child(2) { left: 20%; animation-delay: 0.5s; }
+        .particle:nth-child(3) { left: 30%; animation-delay: 1s; }
+        .particle:nth-child(4) { left: 40%; animation-delay: 1.5s; }
+        .particle:nth-child(5) { left: 50%; animation-delay: 2s; }
+        .particle:nth-child(6) { left: 60%; animation-delay: 0.3s; }
+        .particle:nth-child(7) { left: 70%; animation-delay: 0.8s; }
+        .particle:nth-child(8) { left: 80%; animation-delay: 1.3s; }
+        .particle:nth-child(9) { left: 90%; animation-delay: 1.8s; }
+
+        @keyframes particleFloat {
+            0% {
+                transform: translateY(100px);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+        }
+
+        /* Activate particles on hover */
+        .enter-button:hover .particles {
+            animation: activateParticles 0.1s ease;
+        }
+
+        @keyframes activateParticles {
+            to {
+                opacity: 1;
+            }
         }
 
         .version-info {
@@ -108,6 +205,7 @@
             transform: translateX(-50%);
             color: rgba(255, 255, 255, 0.7);
             font-size: 0.9rem;
+            z-index: 10;
         }
 
         @keyframes float {
@@ -138,235 +236,475 @@
         .entrance-container > *:nth-child(2) { animation-delay: 0.4s; }
         .entrance-container > *:nth-child(3) { animation-delay: 0.6s; }
 
-    </style>
-</head>
-<body>
-    <canvas id="particles-canvas"></canvas>
-
-    <div class="entrance-container">
-        <div class="logo">🌟 Skyborn</div>
-        <div class="subtitle">Climate Data Analysis & Visualization Toolkit</div>
-        <a href="documentation.html" class="enter-button">
-            Enter Documentation
-        </a>
-    </div>
-
-    <div class="version-info">
-        Version 0.3.6 | Built with ❤️ by Qianye Su
-    </div>
-
-    <script>
-        // Black hole particle system for background animation
-        class BlackHoleParticleSystem {
-            constructor(canvas) {
-                this.canvas = canvas;
-                this.ctx = canvas.getContext('2d');
-                this.particles = [];
-                this.particleCount = 300;
-                this.mouse = { x: 0, y: 0 };
-                this.blackHole = {
-                    x: window.innerWidth / 2,
-                    y: window.innerHeight / 2,
-                    radius: 80,
-                    mass: 1000
-                };
-
-                this.resize();
-                this.init();
-                this.animate();
-
-                // Event listeners
-                window.addEventListener('resize', () => this.resize());
-                canvas.addEventListener('mousemove', (e) => {
-                    this.mouse.x = e.clientX;
-                    this.mouse.y = e.clientY;
-                });
-            }
-
-            resize() {
-                this.canvas.width = window.innerWidth;
-                this.canvas.height = window.innerHeight;
-                this.blackHole.x = window.innerWidth / 2;
-                this.blackHole.y = window.innerHeight / 2;
-            }
-
-            init() {
-                this.particles = [];
-                for (let i = 0; i < this.particleCount; i++) {
-                    const angle = Math.random() * Math.PI * 2;
-                    const distance = Math.random() * 400 + 150;
-                    const x = this.blackHole.x + Math.cos(angle) * distance;
-                    const y = this.blackHole.y + Math.sin(angle) * distance;
-
-                    this.particles.push({
-                        x: x,
-                        y: y,
-                        vx: Math.random() * 2 - 1,
-                        vy: Math.random() * 2 - 1,
-                        size: Math.random() * 2 + 0.5,
-                        alpha: Math.random() * 0.8 + 0.2,
-                        color: `hsl(${Math.random() * 60 + 200}, 80%, ${Math.random() * 30 + 60}%)`,
-                        trail: []
-                    });
-                }
-            }
-
-            resetParticle(particle) {
-                // Reset particle to a random position around the black hole
-                const angle = Math.random() * Math.PI * 2;
-                const distance = Math.random() * 400 + 150;
-                particle.x = this.blackHole.x + Math.cos(angle) * distance;
-                particle.y = this.blackHole.y + Math.sin(angle) * distance;
-                particle.vx = Math.random() * 2 - 1;
-                particle.vy = Math.random() * 2 - 1;
-                particle.trail = [];
-                particle.alpha = Math.random() * 0.8 + 0.2;
-                particle.size = Math.random() * 2 + 0.5;
-                particle.color = `hsl(${Math.random() * 60 + 200}, 80%, ${Math.random() * 30 + 60}%)`;
-            }
-
-            animate() {
-                // Create space tunnel effect background
-                const gradient = this.ctx.createRadialGradient(
-                    this.blackHole.x, this.blackHole.y, 0,
-                    this.blackHole.x, this.blackHole.y, Math.max(this.canvas.width, this.canvas.height)
-                );
-                gradient.addColorStop(0, 'rgba(0, 0, 0, 0.9)');
-                gradient.addColorStop(0.3, 'rgba(10, 25, 60, 0.5)');
-                gradient.addColorStop(0.6, 'rgba(30, 58, 138, 0.3)');
-                gradient.addColorStop(1, 'rgba(15, 23, 42, 0.1)');
-
-                this.ctx.fillStyle = gradient;
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-                // Draw concentric circles for tunnel effect
-                const time = Date.now() * 0.001;
-                for (let i = 1; i <= 10; i++) {
-                    const radius = i * 50 + Math.sin(time * 2 + i) * 20;
-                    this.ctx.beginPath();
-                    this.ctx.arc(this.blackHole.x, this.blackHole.y, radius, 0, Math.PI * 2);
-                    this.ctx.strokeStyle = `rgba(100, 150, 255, ${0.1 / i})`;
-                    this.ctx.lineWidth = 2;
-                    this.ctx.stroke();
-                }
-
-                // Draw black hole
-                const blackHoleGradient = this.ctx.createRadialGradient(
-                    this.blackHole.x, this.blackHole.y, 0,
-                    this.blackHole.x, this.blackHole.y, this.blackHole.radius
-                );
-                blackHoleGradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
-                blackHoleGradient.addColorStop(0.3, 'rgba(20, 20, 50, 0.8)');
-                blackHoleGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-
-                this.ctx.beginPath();
-                this.ctx.arc(this.blackHole.x, this.blackHole.y, this.blackHole.radius, 0, Math.PI * 2);
-                this.ctx.fillStyle = blackHoleGradient;
-                this.ctx.fill();
-
-                // Update and draw particles with curved motion
-                this.particles.forEach((particle, index) => {
-                    // Calculate gravity effect from black hole
-                    const dx = this.blackHole.x - particle.x;
-                    const dy = this.blackHole.y - particle.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-
-                    if (distance < this.blackHole.radius) {
-                        // Reset particle if it gets too close to black hole
-                        this.resetParticle(particle);
-                    } else {
-                        // Apply gravitational force
-                        const force = this.blackHole.mass / (distance * distance);
-                        const forceX = (dx / distance) * force * 0.001;
-                        const forceY = (dy / distance) * force * 0.001;
-
-                        // Add curved motion with sine waves for more organic movement
-                        const curveForce = 0.05;
-                        const waveX = Math.sin(time * 3 + index * 0.1) * curveForce;
-                        const waveY = Math.cos(time * 3 + index * 0.1) * curveForce;
-
-                        particle.vx += forceX + waveX;
-                        particle.vy += forceY + waveY;
-
-                        // Enhanced orbital velocity with spiral effect
-                        const orbitalForce = 0.03 * (1 + Math.sin(time * 2 + index * 0.05) * 0.5);
-                        particle.vx += -dy / distance * orbitalForce;
-                        particle.vy += dx / distance * orbitalForce;
-
-                        // Add turbulence for more natural curved movement
-                        const turbulence = 0.02;
-                        particle.vx += (Math.random() - 0.5) * turbulence;
-                        particle.vy += (Math.random() - 0.5) * turbulence;
-
-                        // Apply velocity dampening for smoother curves
-                        particle.vx *= 0.985;
-                        particle.vy *= 0.985;
-
-                        // Update position
-                        particle.x += particle.vx;
-                        particle.y += particle.vy;
-
-                        // Check boundaries and reset if particle goes off screen
-                        if (particle.x < -50 || particle.x > this.canvas.width + 50 ||
-                            particle.y < -50 || particle.y > this.canvas.height + 50) {
-                            this.resetParticle(particle);
-                        }
-
-                        // Add to trail
-                        particle.trail.push({ x: particle.x, y: particle.y });
-                        if (particle.trail.length > 25) {
-                            particle.trail.shift();
-                        }
-
-                        // Draw curved particle trail using bezier curves
-                        if (particle.trail.length > 2) {
-                            this.ctx.beginPath();
-                            this.ctx.moveTo(particle.trail[0].x, particle.trail[0].y);
-
-                            for (let i = 1; i < particle.trail.length - 1; i++) {
-                                const current = particle.trail[i];
-                                const next = particle.trail[i + 1];
-                                const xc = (current.x + next.x) / 2;
-                                const yc = (current.y + next.y) / 2;
-                                this.ctx.quadraticCurveTo(current.x, current.y, xc, yc);
-                            }
-
-                            this.ctx.strokeStyle = `rgba(100, 150, 255, ${0.4 * (particle.trail.length / 25)})`;
-                            this.ctx.lineWidth = 1;
-                            this.ctx.stroke();
-                        }
-
-                        // Draw particle with glow effect
-                        const glowGradient = this.ctx.createRadialGradient(
-                            particle.x, particle.y, 0,
-                            particle.x, particle.y, particle.size * 4
-                        );
-                        glowGradient.addColorStop(0, particle.color);
-                        glowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-
-                        this.ctx.beginPath();
-                        this.ctx.arc(particle.x, particle.y, particle.size * 4, 0, Math.PI * 2);
-                        this.ctx.fillStyle = glowGradient;
-                        this.ctx.globalAlpha = particle.alpha * 0.3;
-                        this.ctx.fill();
-
-                        // Draw particle core
-                        this.ctx.beginPath();
-                        this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-                        this.ctx.fillStyle = particle.color;
-                        this.ctx.globalAlpha = particle.alpha;
-                        this.ctx.fill();
-                        this.ctx.globalAlpha = 1;
-                    }
-                });
-
-                requestAnimationFrame(() => this.animate());
+        @keyframes ripple {
+            to {
+                transform: scale(4);
+                opacity: 0;
             }
         }
 
-        // Initialize black hole particle system
-        const canvas = document.getElementById('particles-canvas');
-        const blackHoleSystem = new BlackHoleParticleSystem(canvas);
+    </style>
+</head>
+<body>
+    <canvas id="shader"></canvas>
+
+    <div class="entrance-container">
+        <div class="logo">🌟 Skyborn</div>
+        <div class="subtitle">Advanced Climate & Atmospheric Science Toolkit</div>
+        <a href="documentation.html" class="enter-button">
+            Enter Documentation
+            <div class="particles">
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+            </div>
+        </a>
+    </div>
+
+    <!-- <div class="version-info">
+        Version 0.3.6 | Built with ❤️ by Qianye Su
+    </div> -->
+
+    <script>
+        // Inline FPS Counter
+        class FPSCounter {
+            constructor(container = document.body, options = {}) {
+                if (!(container instanceof HTMLElement)) {
+                    throw new Error('Container must be a valid DOM element.');
+                }
+                this.fps = 0;
+                this.frameCount = 0;
+                this.lastTime = performance.now();
+                this.fpsInterval = 1000;
+                this.lastFpsUpdate = this.lastTime;
+                this.framesSinceLastUpdate = 0;
+                this.container = container;
+                this.manual = !!options.manual;
+                this.bare = !!options.bare;
+
+                if (this.bare) {
+                    this.fpsElement = container;
+                    this.frameCountElement = null;
+                    this.memElement = null;
+                } else {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'fps-counter';
+                    wrapper.style.cssText = `position: fixed; top: 0; left: 0; background: rgba(0,0,0,0.7); color: lime; font: 12px monospace; padding: 5px; z-index: 9999;`;
+                    this.frameCountElement = document.createElement('div');
+                    this.frameCountElement.className = 'fps-frame-count';
+                    wrapper.appendChild(this.frameCountElement);
+                    this.fpsElement = document.createElement('div');
+                    this.fpsElement.className = 'fps-value';
+                    wrapper.appendChild(this.fpsElement);
+                    this.memElement = document.createElement('div');
+                    this.memElement.className = 'fps-memory-usage';
+                    this.memElement.style.cssText = `cursor: help;`;
+                    this.memElement.title = 'Only works in Chrome-ish browsers';
+                    wrapper.appendChild(this.memElement);
+                    this.container.appendChild(wrapper);
+                }
+                if (!this.manual) { this.animate(); }
+            }
+
+            animate() {
+                const currentTime = performance.now();
+                this.frameCount++;
+                this.framesSinceLastUpdate++;
+                if (currentTime - this.lastFpsUpdate >= this.fpsInterval) {
+                    this.fps = Math.round((this.framesSinceLastUpdate * 1000) / (currentTime - this.lastFpsUpdate));
+                    this.lastFpsUpdate = currentTime;
+                    this.framesSinceLastUpdate = 0;
+                    if (this.bare) {
+                        this.fpsElement.textContent = `${this.fps} FPS`;
+                    } else {
+                        this.fpsElement.textContent = `${this.fps} FPS`;
+                        if (performance.memory && this.memElement) {
+                            const { usedJSHeapSize, totalJSHeapSize } = performance.memory;
+                            const usedMB = (usedJSHeapSize / 1024 / 1024).toFixed(2);
+                            const totalMB = (totalJSHeapSize / 1024 / 1024).toFixed(2);
+                            this.memElement.textContent = `Heap: ${usedMB} / ${totalMB} MB`;
+                        }
+                    }
+                }
+                if (!this.bare && this.frameCountElement) {
+                    this.frameCountElement.textContent = `Frames: ${this.frameCount}`;
+                }
+                this.lastTime = currentTime;
+                if (!this.manual) { requestAnimationFrame(() => this.animate()); }
+            }
+        }
+
+        // Inline Canvas Manager
+        function validate(dim, name) {
+            if (dim === 'full') {
+                return name === 'width' ? window.innerWidth : window.innerHeight;
+            }
+            const parsed = parseInt(dim, 10);
+            if (!isNaN(parsed) && parsed > 0) {
+                return parsed;
+            }
+            throw new TypeError(`${name} must be a positive number or 'full'`);
+        }
+
+        function canvasManager() {
+            return {
+                attach: function(elementOrId, config = {}) {
+                    if (!elementOrId) {
+                        throw new TypeError('attach requires a canvas element or string ID');
+                    }
+                    const el = typeof elementOrId === 'string'
+                        ? document.getElementById(elementOrId)
+                        : elementOrId;
+                    if (!(el instanceof HTMLCanvasElement)) {
+                        throw new TypeError('attach expects a canvas element or string ID');
+                    }
+
+                    let ctx = null;
+                    let width = 0;
+                    let height = 0;
+                    let dpr = window.devicePixelRatio || 1;
+                    let resizeTimeout = null;
+                    let resizeHandler = null;
+                    let isDestroyed = false;
+
+                    function checkDestroyed() {
+                        if (isDestroyed) {
+                            throw new Error('Canvas manager has been destroyed');
+                        }
+                    }
+
+                    const controller = {
+                        resize(w = 'full', h = 'full', clear = true) {
+                            checkDestroyed();
+                            width = validate(w, 'width');
+                            height = validate(h, 'height');
+                            dpr = window.devicePixelRatio || 1;
+                            el.width = width * dpr;
+                            el.height = height * dpr;
+                            el.style.width = `${width}px`;
+                            el.style.height = `${height}px`;
+
+                            // Update WebGL viewport if context exists
+                            if (ctx && (ctx instanceof WebGLRenderingContext || ctx instanceof WebGL2RenderingContext)) {
+                                ctx.viewport(0, 0, el.width, el.height);
+                            }
+
+                            return controller;
+                        },
+                        context(type = '2d', options = {}) {
+                            checkDestroyed();
+                            if (!ctx) {
+                                ctx = el.getContext(type, options);
+                                if (!ctx) {
+                                    throw new Error(`Failed to get '${type}' context`);
+                                }
+                                if (width === 0 || height === 0) {
+                                    const w = el.clientWidth;
+                                    const h = el.clientHeight;
+                                    controller.resize(w || 300, h || 150);
+                                }
+                            }
+                            return ctx;
+                        },
+                        listen(signal = 'resize', time = 250) {
+                            checkDestroyed();
+                            if (signal === 'resize') {
+                                if (resizeHandler) {
+                                    window.removeEventListener('resize', resizeHandler);
+                                }
+                                resizeHandler = () => {
+                                    clearTimeout(resizeTimeout);
+                                    resizeTimeout = setTimeout(() => {
+                                        if (!isDestroyed) {
+                                            controller.resize(width === 0 ? 'full' : width, height === 0 ? 'full' : height);
+                                        }
+                                    }, time);
+                                };
+                                window.addEventListener('resize', resizeHandler);
+                            }
+                            return controller;
+                        },
+                        get el() { checkDestroyed(); return el; },
+                        get ctx() { checkDestroyed(); return ctx; }
+                    };
+                    return controller;
+                }
+            };
+        }
+
+        // Inline Shader Builder (essential parts only)
+        class ShaderBuilder {
+            constructor(gl, vsource, fsource) {
+                if (!gl || !(gl instanceof WebGL2RenderingContext)) {
+                    throw new Error("ShaderBuilder requires a WebGL2 context.");
+                }
+                this.gl = gl;
+                this.vsource = vsource;
+                this.fsource = fsource;
+                this.program = null;
+                this._uniformCache = {};
+                this._attributeCache = {};
+                this._vaos = new Map();
+                this._vbos = new Map();
+            }
+
+            build() {
+                const gl = this.gl;
+                if (!this.vsource || !this.fsource) throw new Error("Shader sources must not be empty.");
+
+                if (this.program) {
+                    gl.deleteProgram(this.program);
+                }
+
+                const vertexShader = this._compileShader(gl.VERTEX_SHADER, this.vsource);
+                const fragmentShader = this._compileShader(gl.FRAGMENT_SHADER, this.fsource);
+                this.program = gl.createProgram();
+                gl.attachShader(this.program, vertexShader);
+                gl.attachShader(this.program, fragmentShader);
+                gl.linkProgram(this.program);
+                gl.deleteShader(vertexShader);
+                gl.deleteShader(fragmentShader);
+                if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
+                    const info = gl.getProgramInfoLog(this.program);
+                    throw new Error("Failed to link shader program: " + info);
+                }
+                this._uniformCache = {};
+                this._attributeCache = {};
+            }
+
+            _compileShader(type, source) {
+                const gl = this.gl;
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+                gl.compileShader(shader);
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    const info = gl.getShaderInfoLog(shader);
+                    throw new Error("Failed to compile shader: " + info);
+                }
+                return shader;
+            }
+
+            setUniform1f(name, value) {
+                const location = this._getUniformLocation(name);
+                if (location !== null) {
+                    this.gl.uniform1f(location, value);
+                }
+            }
+
+            setUniform3f(name, x, y, z) {
+                const location = this._getUniformLocation(name);
+                if (location !== null) {
+                    this.gl.uniform3f(location, x, y, z);
+                }
+            }
+
+            _getUniformLocation(name) {
+                if (!this.program) throw new Error("Shader program not built.");
+
+                if (!(name in this._uniformCache)) {
+                    this._uniformCache[name] = this.gl.getUniformLocation(this.program, name);
+                }
+
+                return this._uniformCache[name];
+            }
+
+            createVAO(name) {
+                const vao = this.gl.createVertexArray();
+                this._vaos.set(name, vao);
+                return vao;
+            }
+
+            bindVAO(name) {
+                const vao = this._vaos.get(name);
+                if (!vao) throw new Error(`VAO '${name}' not found.`);
+                this.gl.bindVertexArray(vao);
+            }
+
+            createVBO(name, data, usage = this.gl.STATIC_DRAW) {
+                const buffer = this.gl.createBuffer();
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+                this.gl.bufferData(this.gl.ARRAY_BUFFER, data, usage);
+                this._vbos.set(name, buffer);
+            }
+
+            setAttribute(name, size, type, normalized = false, stride = 0, offset = 0) {
+                const gl = this.gl;
+                const location = gl.getAttribLocation(this.program, name);
+                if (location === -1) throw new Error(`Attribute '${name}' not found.`);
+                gl.enableVertexAttribArray(location);
+                gl.vertexAttribPointer(location, size, type, normalized, stride, offset);
+                this._attributeCache[name] = location;
+            }
+
+            use() {
+                if (!this.program) throw new Error("Shader program not built.");
+                this.gl.useProgram(this.program);
+            }
+        }
+
+        // Inline Cargantua.js logic
+        (() => {
+            try {
+                // new FPSCounter(); // Removed FPS counter
+
+                const manager = canvasManager().attach('shader');
+                const gl = manager.context('webgl2');
+                manager.resize('full', 'full');
+                manager.listen('resize', 250);
+
+                const frag = `#version 300 es
+                precision highp float;
+
+                uniform vec3 u_resolution;
+                uniform float u_time;
+                uniform float u_mix;
+                out vec4 fragColor;
+
+                void main() {
+                    vec2 fragCoord = gl_FragCoord.xy;
+                    vec2 r = u_resolution.xy;
+                    vec2 p = (fragCoord + fragCoord - r) / r.y;
+                    vec2 z = vec2(0.5);
+                    vec2 i = vec2(0.1);
+                    vec2 f = p * (z += 5. - 6. * exp(.4 - dot(p, p)));
+                    vec4 O = vec4(0.0);
+                    for (i.y = 1.0; i.y <= 8.0; i.y += 1.0) {
+                        O += (tanh(f) + 1.0).xyyx * abs(f.x - f.y);
+                        f += tanh(f.yx * i.y + i + u_time) / i.y + 0.7;
+                    }
+                    O = tanh(3.0 * exp(z.x - 3.0 - p.y * vec4(-0.5, 1.0, 2.0, 0.0)) / O);
+
+                    float mixPhase = dot(p, p) + z.x + u_time + sin(p.x * 1.5 + p.y * 2.5 + u_time * 0.5);
+                    float channel = cos(mixPhase * 4.0);
+                    // Add edge brightness compensation
+                    float edgeBrightness = 1.0 + 0.3 * (abs(p.x) + abs(p.y));
+
+                    vec3 glow = vec3(
+                        0.0 + 0.0 * sin(channel + 2.0), // Minimal red component for warmth
+                        0.1 + 0.5 * sin(channel + 0.0), // Dominant green component
+                        0.6 + 0.4 * sin(channel + 1.0)  // Deep blue background
+                        //         0.0,                     // No red component
+                        //   0.7 + 0.5 * sin(channel + 0.0), // Strong cyan
+                        //   0.9 + 0.4 * sin(channel + 0.5)  // Strong blue
+                    );
+                    O.rgb *= glow * edgeBrightness;
+
+                    fragColor = O;
+                }`;
+
+                const vert = `#version 300 es
+                precision highp float;
+
+                layout(location = 0) in vec2 a_position;
+                out vec2 vUv;
+                void main() {
+                    gl_Position = vec4(a_position, 0.0, 1.0);
+                    vUv = a_position * 0.5 + 0.5;
+                }`;
+
+                const shader = new ShaderBuilder(gl, vert, frag);
+                shader.build();
+
+                const quadVerts = new Float32Array([
+                    -1, -1,
+                    1, -1,
+                    -1,  1,
+                    1,  1,
+                ]);
+                shader.createVAO('quad');
+                shader.bindVAO('quad');
+                shader.createVBO('quad', quadVerts);
+                shader.setAttribute('a_position', 2, gl.FLOAT);
+
+                const draw = (time) => {
+                    // Ensure viewport matches canvas size
+                    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+                    gl.clearColor(0, 0, 0, 1);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+
+                    shader.use();
+                    shader.setUniform3f('u_resolution', gl.canvas.width, gl.canvas.height, 1);
+                    shader.setUniform1f('u_time', time * 0.001);
+                    shader.setUniform1f('u_mix', 0.5);
+
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                    requestAnimationFrame(draw);
+                };
+
+                requestAnimationFrame(draw);
+
+            } catch (error) {
+                console.error('WebGL error:', error);
+                // Fallback handled by existing code below
+            }
+        })();
+    </script>
+
+    <script>
+        // Fallback WebGL animation if modules fail
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const canvas = document.getElementById('shader');
+                if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                    console.log('WebGL not working, starting fallback animation');
+                    startFallbackAnimation();
+                }
+            }, 2000);
+        });
+
+        function startFallbackAnimation() {
+            const canvas = document.getElementById('shader');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            function animate(time) {
+                const t = time * 0.001;
+
+                // Create gradient background
+                const gradient = ctx.createRadialGradient(
+                    canvas.width/2, canvas.height/2, 0,
+                    canvas.width/2, canvas.height/2, Math.max(canvas.width, canvas.height)/2
+                );
+
+                const hue1 = (t * 20) % 360;
+                const hue2 = (t * 30 + 120) % 360;
+                const hue3 = (t * 10 + 240) % 360;
+
+                gradient.addColorStop(0, `hsl(${hue1}, 70%, 20%)`);
+                gradient.addColorStop(0.5, `hsl(${hue2}, 60%, 15%)`);
+                gradient.addColorStop(1, `hsl(${hue3}, 50%, 10%)`);
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Add moving particles
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                for (let i = 0; i < 50; i++) {
+                    const x = (Math.sin(t * 0.5 + i) * 0.3 + 0.5) * canvas.width;
+                    const y = (Math.cos(t * 0.3 + i * 0.5) * 0.3 + 0.5) * canvas.height;
+                    const size = Math.sin(t + i) * 2 + 3;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                requestAnimationFrame(animate);
+            }
+
+            animate(0);
+        }
 
         // Button click effect
         document.querySelector('.enter-button').addEventListener('click', function(e) {
@@ -397,18 +735,6 @@
                 ripple.remove();
             }, 600);
         });
-
-        // Add ripple animation CSS
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes ripple {
-                to {
-                    transform: scale(4);
-                    opacity: 0;
-                }
-            }
-        `;
-        document.head.appendChild(style);
     </script>
 </body>
 </html>
