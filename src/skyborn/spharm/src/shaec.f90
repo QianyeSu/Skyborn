@@ -182,7 +182,6 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
     ! Process input data based on symmetry mode
     if (isym == 0) then
         ! Full sphere - compute even and odd parts
-        !$OMP PARALLEL DO COLLAPSE(3) IF(nt*imm1*nlon > 10000) PRIVATE(k,i,j)
         !DIR$ VECTOR ALWAYS
         do k = 1, nt
             do i = 1, imm1
@@ -192,10 +191,8 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
     else
         ! Half sphere - antisymmetric or symmetric
-        !$OMP PARALLEL DO COLLAPSE(3) IF(nt*imm1*nlon > 10000) PRIVATE(k,i,j)
         !DIR$ VECTOR ALWAYS
         do k = 1, nt
             do i = 1, imm1
@@ -204,19 +201,16 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
     end if
 
     ! Handle center point for odd nlat (when modl /= 0 and isym /= 1)
     if (modl /= 0 .and. isym /= 1) then
-        !$OMP PARALLEL DO COLLAPSE(2) IF(nt*nlon > 1000) PRIVATE(k,j)
         !DIR$ VECTOR ALWAYS
         do k = 1, nt
             do j = 1, nlon
                 ge(imid, j, k) = tsn * g(imid, j, k)
             end do
         end do
-        !$OMP END PARALLEL DO
     end if
 
     ! Perform FFT analysis with optimized processing
@@ -234,7 +228,6 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
     end do
 
     ! Initialize coefficient arrays to zero with vectorization
-    !$OMP PARALLEL DO COLLAPSE(3) IF(nt*mmax*nlat > 10000) PRIVATE(k,mp1,np1)
     !DIR$ VECTOR ALWAYS
     do k = 1, nt
         do mp1 = 1, mmax
@@ -244,13 +237,11 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
 
     ! Process even part (symmetric component) if needed
     if (isym /= 1) then
         ! m=0 case for even part
         call zfin(2, nlat, nlon, 0, zb, i3, wzfin)
-        !$OMP PARALLEL DO COLLAPSE(3) IF(nt*imid*nlat > 5000) PRIVATE(k,i,np1)
         !DIR$ VECTOR ALWAYS
         do k = 1, nt
             do i = 1, imid
@@ -259,7 +250,6 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
 
         ! m > 0 cases for even part
         ndo = nlat
@@ -268,7 +258,6 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
         do mp1 = 2, mdo
             m = mp1 - 1
             call zfin(2, nlat, nlon, m, zb, i3, wzfin)
-            !$OMP PARALLEL DO COLLAPSE(3) IF(nt*imid*ndo > 5000) PRIVATE(k,i,np1)
             !DIR$ VECTOR ALWAYS
             do k = 1, nt
                 do i = 1, imid
@@ -278,13 +267,11 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
                     end do
                 end do
             end do
-            !$OMP END PARALLEL DO
         end do
 
         ! Handle special case for mmax
         if (mdo /= mmax .and. mmax <= ndo) then
             call zfin(2, nlat, nlon, mdo, zb, i3, wzfin)
-            !$OMP PARALLEL DO COLLAPSE(3) IF(nt*imid*ndo > 5000) PRIVATE(k,i,np1)
             !DIR$ VECTOR ALWAYS
             do k = 1, nt
                 do i = 1, imid
@@ -293,7 +280,6 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
                     end do
                 end do
             end do
-            !$OMP END PARALLEL DO
         end if
     end if
 
@@ -303,7 +289,6 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
     ! Process odd part (antisymmetric component)
     ! m=0 case for odd part
     call zfin(1, nlat, nlon, 0, zb, i3, wzfin)
-    !$OMP PARALLEL DO COLLAPSE(3) IF(nt*imm1*nlat > 5000) PRIVATE(k,i,np1)
     !DIR$ VECTOR ALWAYS
     do k = 1, nt
         do i = 1, imm1
@@ -312,7 +297,6 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
 
     ! m > 0 cases for odd part
     ndo = nlat
@@ -322,7 +306,6 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
         m = mp1 - 1
         mp2 = mp1 + 1
         call zfin(1, nlat, nlon, m, zb, i3, wzfin)
-        !$OMP PARALLEL DO COLLAPSE(3) IF(nt*imm1*ndo > 5000) PRIVATE(k,i,np1)
         !DIR$ VECTOR ALWAYS
         do k = 1, nt
             do i = 1, imm1
@@ -332,14 +315,12 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
     end do
 
     ! Handle special case for mmax in odd part
     mp2 = mmax + 1
     if (mdo /= mmax .and. mp2 <= ndo) then
         call zfin(1, nlat, nlon, mdo, zb, i3, wzfin)
-        !$OMP PARALLEL DO COLLAPSE(3) IF(nt*imm1*ndo > 5000) PRIVATE(k,i,np1)
         !DIR$ VECTOR ALWAYS
         do k = 1, nt
             do i = 1, imm1
@@ -348,7 +329,6 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
     end if
 
 end subroutine shaec1
