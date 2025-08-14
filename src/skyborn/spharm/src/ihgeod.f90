@@ -43,9 +43,6 @@ subroutine ihgeod(m, idp, jdp, x, y, z)
     tdphi = 3.0 * hdphi
 
     ! Generate geodesic points for each of the 5 icosahedral faces
-    !$OMP PARALLEL DO PRIVATE(phi, x1, y1, z1, x2, y2, z2, x3, y3, z3, &
-    !$OMP                      x4, y4, z4, x5, y5, z5, x6, y6, z6, &
-    !$OMP                      dxi, dyi, dzi, dxj, dyj, dzj, xs, ys, zs, i, j)
     do k = 1, 5
         phi = (k - 1) * dphi
 
@@ -146,10 +143,8 @@ subroutine ihgeod(m, idp, jdp, x, y, z)
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
 
     ! Normalize all points to unit sphere with improved precision
-    !$OMP PARALLEL DO PRIVATE(j, i, rad, theta, phi_temp)
     do k = 1, 5
         do j = 1, m + m - 1
             !DIR$ VECTOR ALWAYS
@@ -159,7 +154,6 @@ subroutine ihgeod(m, idp, jdp, x, y, z)
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine ihgeod
 

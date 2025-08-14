@@ -111,7 +111,6 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
     select case (isym)
     case (0)
         ! No symmetries - process entire sphere
-        !$OMP PARALLEL DO COLLAPSE(3) PRIVATE(k, i, j) IF(nt*imm1*nlon > 10000)
         do k = 1, nt
             do i = 1, imm1
                 do j = 1, nlon
@@ -120,11 +119,9 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
     case (1)
         ! Antisymmetric case (isym=1): f(π-θ,φ) = -f(θ,φ)
         ! Only northern hemisphere data provided, function is antisymmetric about equator
-        !$OMP PARALLEL DO COLLAPSE(3) PRIVATE(k, i, j) IF(nt*imm1*nlon > 10000)
         do k = 1, nt
             do i = 1, imm1
                 do j = 1, nlon
@@ -133,12 +130,10 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
 
     case (2)
         ! Symmetric case (isym=2): f(π-θ,φ) = f(θ,φ)
         ! Only northern hemisphere data provided, function is symmetric about equator
-        !$OMP PARALLEL DO COLLAPSE(3) PRIVATE(k, i, j) IF(nt*imm1*nlon > 10000)
         do k = 1, nt
             do i = 1, imm1
                 do j = 1, nlon
@@ -147,18 +142,15 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
     end select
 
     ! Handle equator for odd nlat (CRITICAL - missing in previous version)
     if (modl /= 0 .and. (isym == 0 .or. isym == 1)) then
-        !$OMP PARALLEL DO COLLAPSE(2) PRIVATE(k, j) IF(nt*nlon > 1000)
         do k = 1, nt
             do j = 1, nlon
                 ge(imid, j, k) = tsn * g(imid, j, k)
             end do
         end do
-        !$OMP END PARALLEL DO
     end if
 
     ! Apply FFT transformation (ONLY to ge array - CRITICAL!)
@@ -166,18 +158,15 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
         call hrfftf(ls, nlon, ge(1, 1, k), ls, whrfft, work)
         ! Handle even nlon case (CRITICAL adjustment)
         if (mod(nlon, 2) == 0) then
-            !$OMP PARALLEL DO PRIVATE(i) IF(ls > 100)
             do i = 1, ls
                 ge(i, nlon, k) = 0.5 * ge(i, nlon, k)
             end do
-            !$OMP END PARALLEL DO
         end if
     end do
 
     ! NOTE: go array is NOT transformed by FFT in original algorithm!
 
     ! Initialize coefficient arrays
-    !$OMP PARALLEL DO COLLAPSE(3) PRIVATE(k, mp1, np1) IF(nt*mmax*nlat > 10000)
     do k = 1, nt
         do mp1 = 1, mmax
             do np1 = mp1, nlat
@@ -186,12 +175,10 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
 
     ! Compute spherical harmonic coefficients
     if (isym /= 1) then
         ! Process even functions (m=0 case)
-        !$OMP PARALLEL DO COLLAPSE(3) PRIVATE(k, i, np1) REDUCTION(+:a) IF(nt*imid*nlat > 5000)
         do k = 1, nt
             do i = 1, imid
                 do np1 = 1, nlat, 2
@@ -199,13 +186,11 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
 
         ! Process higher order modes (m > 0)
         ndo = nlat
         if (mod(nlat, 2) == 0) ndo = nlat - 1
 
-        !$OMP PARALLEL DO PRIVATE(mp1, m, mb, k, i, np1) REDUCTION(+:a,b) IF(mdo*nt*imid > 5000)
         do mp1 = 2, mdo
             m = mp1 - 1
             mb = m * (nlat - 1) - (m * (m - 1)) / 2
@@ -219,7 +204,6 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
 
         ! Handle special case when mdo < mmax (CRITICAL - was missing)
         if (mdo /= mmax .and. mmax <= ndo) then
@@ -237,7 +221,6 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
     ! Process odd function case (isym /= 2)
     if (isym /= 2) then
         ! Handle odd parity functions (m=0 case)
-        !$OMP PARALLEL DO COLLAPSE(3) PRIVATE(k, i, np1) REDUCTION(+:a) IF(nt*imm1*nlat > 5000)
         do k = 1, nt
             do i = 1, imm1
                 do np1 = 2, nlat, 2
@@ -245,12 +228,10 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
 
         ndo = nlat
         if (mod(nlat, 2) /= 0) ndo = nlat - 1
 
-        !$OMP PARALLEL DO PRIVATE(mp1, m, mp2, mb, k, i, np1) REDUCTION(+:a,b) IF(mdo*nt*imm1 > 5000)
         do mp1 = 2, mdo
             m = mp1 - 1
             mp2 = mp1 + 1
@@ -265,7 +246,6 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
 
         ! Handle special case for highest mode (CRITICAL - was missing)
         mp2 = mmax + 1

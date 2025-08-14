@@ -23,8 +23,6 @@ subroutine onedtotwod(dataspec, a, b, nlat, nmdim, nt)
     scale_inv = 2.0  ! 1.0 / 0.5
 
     ! Main computation loops - optimized for cache efficiency
-    !$OMP PARALLEL DO PRIVATE(nmstrt, m, n, nm, spec_val) &
-    !$OMP             SHARED(ntrunc)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -42,6 +40,5 @@ subroutine onedtotwod(dataspec, a, b, nlat, nmdim, nt)
             nmstrt = nmstrt + ntrunc - m + 2
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine onedtotwod
