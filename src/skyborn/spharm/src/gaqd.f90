@@ -131,6 +131,7 @@ subroutine gaqd(nlat, theta, wts, dwork, ldwork, ierror)
     end if
 
     ! Extend points and weights via symmetries
+    !$OMP SIMD
     do i = 1, ns2
         wts(nlat - i + 1) = wts(i)
         theta(nlat - i + 1) = pi - theta(i)
@@ -142,6 +143,7 @@ subroutine gaqd(nlat, theta, wts, dwork, ldwork, ierror)
         ! Use Kahan summation for large arrays
         call kahan_sum(wts, nlat, sum)
     else
+        !$OMP SIMD REDUCTION(+:sum)
         do i = 1, nlat
             sum = sum + wts(i)
         end do
@@ -152,6 +154,7 @@ subroutine gaqd(nlat, theta, wts, dwork, ldwork, ierror)
         sum = 2.0d0  ! Theoretical total weight
     end if
 
+    !$OMP SIMD
     do i = 1, nlat
         wts(i) = 2.0d0 * wts(i) / sum
     end do
@@ -189,7 +192,7 @@ subroutine cpdp(n, cz, cp, dcp)
         t4 = t4 - 2.0d0
         cz = (t1 * t2) / (t3 * t4) * cp(1)
 
-        !DIR$ VECTOR ALWAYS
+        !$OMP SIMD
         do j = 1, ncp
             dcp(j) = (j + j) * cp(j)
         end do
@@ -203,7 +206,7 @@ subroutine cpdp(n, cz, cp, dcp)
             cp(j) = (t1 * t2) / (t3 * t4) * cp(j+1)
         end do
 
-        !DIR$ VECTOR ALWAYS
+        !$OMP SIMD
         do j = 1, ncp
             dcp(j) = (j + j - 1) * cp(j)
         end do
@@ -236,7 +239,7 @@ subroutine tpdp(n, theta, cz, cp, dcp, pb, dpb)
             cth = cdt
             sth = sdt
 
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD PRIVATE(chh)
             do k = 1, kdo
                 pb = pb + cp(k) * cth
                 dpb = dpb - dcp(k) * sth
@@ -253,7 +256,7 @@ subroutine tpdp(n, theta, cz, cp, dcp, pb, dpb)
         cth = cos(theta)
         sth = sin(theta)
 
-        !DIR$ VECTOR ALWAYS
+        !$OMP SIMD PRIVATE(chh)
         do k = 1, kdo
             pb = pb + cp(k) * cth
             dpb = dpb - dcp(k) * sth
