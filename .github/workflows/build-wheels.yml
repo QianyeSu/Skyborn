@@ -144,15 +144,17 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_BEFORE_BUILD_LINUX: |
-            # Install gfortran and geospatial dependencies
-            yum install -y gcc-gfortran epel-release || dnf install -y gcc-gfortran || echo 'gfortran install failed'
-            # Install PROJ executable and development files (critical for pyproj)
-            yum install -y proj proj-devel geos-devel || dnf install -y proj proj-devel geos-devel || echo 'geo libs install failed'
-            # Install GDAL for cartopy
-            yum install -y gdal-devel || dnf install -y gdal-devel || echo 'gdal install failed'
-          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PROJ_DIR=/usr PKG_CONFIG_PATH=/usr/lib64/pkgconfig:/usr/lib/pkgconfig
+            # Install gfortran
+            dnf install -y gcc-gfortran || yum install -y gcc-gfortran || echo 'gfortran install failed'
+            # Install modern geospatial stack from conda-forge (more reliable)
+            curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -o mambaforge.sh
+            bash mambaforge.sh -b -p /opt/mambaforge
+            /opt/mambaforge/bin/mamba install -y -c conda-forge proj=9.4 geos gdal sqlite
+            # Verify PROJ version
+            /opt/mambaforge/bin/proj --version || echo 'PROJ not available'
+          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PROJ_DIR=/opt/mambaforge PKG_CONFIG_PATH=/opt/mambaforge/lib/pkgconfig PATH=/opt/mambaforge/bin:$PATH LD_LIBRARY_PATH=/opt/mambaforge/lib:$LD_LIBRARY_PATH
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
