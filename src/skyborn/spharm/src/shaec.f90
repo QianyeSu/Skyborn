@@ -37,7 +37,7 @@
 !> @param[inout] work Temporary workspace
 !> @param[in] lwork   Dimension of work
 !> @param[out] ierror Error code (0=success)
-subroutine shaec_optimized(nlat, nlon, isym, nt, g, idg, jdg, a, b, mdab, ndab, &
+subroutine shaec(nlat, nlon, isym, nt, g, idg, jdg, a, b, mdab, ndab, &
                  wshaec, lshaec, work, lwork, ierror)
     implicit none
 
@@ -113,7 +113,7 @@ subroutine shaec_optimized(nlat, nlon, isym, nt, g, idg, jdg, a, b, mdab, ndab, 
                 work, work(ist + 1), work(nln + 1), work(nln + 1), &
                 wshaec, wshaec(iw1))
 
-end subroutine shaec_optimized
+end subroutine shaec
 
 !> @brief Core spherical harmonic analysis computation - OPTIMIZED
 !> @details Performs the main computation for spherical harmonic analysis.
@@ -376,7 +376,7 @@ end subroutine shaec1
 !> @param[inout] dwork Double precision work array
 !> @param[in] ldwork  Dimension of dwork (>= nlat+1)
 !> @param[out] ierror Error code (0=success, 1-4=various errors)
-subroutine shaeci_optimized(nlat, nlon, wshaec, lshaec, dwork, ldwork, ierror)
+subroutine shaeci(nlat, nlon, wshaec, lshaec, dwork, ldwork, ierror)
     implicit none
 
     ! Input/Output parameters - IDENTICAL interface to original
@@ -421,4 +421,4 @@ subroutine shaeci_optimized(nlat, nlon, wshaec, lshaec, dwork, ldwork, ierror)
     iw1 = lzz1 + labc + 1
     call hrffti(nlon, wshaec(iw1))
 
-end subroutine shaeci_optimized
+end subroutine shaeci
