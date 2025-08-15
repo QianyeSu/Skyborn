@@ -1597,24 +1597,58 @@ subroutine hradb5(mp, ido, l1, cc, mdimcc, ch, mdimch, wa1, wa2, wa3, wa4)
 
             !$omp simd
             do m = 1, mp
-                ch(m,i-1,k,1) = cc(m,i-1,1,k)+(cc(m,i-1,3,k)+cc(m,ic-1,2,k)) + (cc(m,i-1,5,k)+cc(m,ic-1,4,k))
-                ch(m,i,k,1)   = cc(m,i,1,k)+(cc(m,i,3,k)-cc(m,ic,2,k)) + (cc(m,i,5,k)-cc(m,ic,4,k))
-                ch(m,i-1,k,2) = wa1(i-2)*(cc(m,i-1,1,k)+TR11*(cc(m,i-1,3,k)+cc(m,ic-1,2,k))+TR12*(cc(m,i-1,5,k)+cc(m,ic-1,4,k))-(TI11*(cc(m,i,3,k)+cc(m,ic,2,k))+TI12*(cc(m,i,5,k)+cc(m,ic,4,k)))) &
-                               - wa1(i-1)*(cc(m,i,1,k)+TR11*(cc(m,i,3,k)-cc(m,ic,2,k))+TR12*(cc(m,i,5,k)-cc(m,ic,4,k))+(TI11*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))+TI12*(cc(m,i-1,5,k)-cc(m,ic-1,4,k))))
-                ch(m,i,k,2) = wa1(i-2)*(cc(m,i,1,k)+TR11*(cc(m,i,3,k)-cc(m,ic,2,k))+TR12*(cc(m,i,5,k)-cc(m,ic,4,k))+(TI11*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))+TI12*(cc(m,i-1,5,k)-cc(m,ic-1,4,k)))) &
-                               + wa1(i-1)*(cc(m,i-1,1,k)+TR11*(cc(m,i-1,3,k)+cc(m,ic-1,2,k))+TR12*(cc(m,i-1,5,k)+cc(m,ic-1,4,k))-(TI11*(cc(m,i,3,k)+cc(m,ic,2,k))+TI12*(cc(m,i,5,k)+cc(m,ic,4,k))))
-                ch(m,i-1,k,3) = wa2(i-2)*(cc(m,i-1,1,k)+TR12*(cc(m,i-1,3,k)+cc(m,ic-1,2,k))+TR11*(cc(m,i-1,5,k)+cc(m,ic-1,4,k))-(TI12*(cc(m,i,3,k)+cc(m,ic,2,k))-TI11*(cc(m,i,5,k)+cc(m,ic,4,k)))) &
-                               - wa2(i-1)*(cc(m,i,1,k)+TR12*(cc(m,i,3,k)-cc(m,ic,2,k))+TR11*(cc(m,i,5,k)-cc(m,ic,4,k))+(TI12*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))-TI11*(cc(m,i-1,5,k)-cc(m,ic-1,4,k))))
-                ch(m,i,k,3) = wa2(i-2)*(cc(m,i,1,k)+TR12*(cc(m,i,3,k)-cc(m,ic,2,k))+TR11*(cc(m,i,5,k)-cc(m,ic,4,k))+(TI12*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))-TI11*(cc(m,i-1,5,k)-cc(m,ic-1,4,k)))) &
-                               + wa2(i-1)*(cc(m,i-1,1,k)+TR12*(cc(m,i-1,3,k)+cc(m,ic-1,2,k))+TR11*(cc(m,i-1,5,k)+cc(m,ic-1,4,k))-(TI12*(cc(m,i,3,k)+cc(m,ic,2,k))-TI11*(cc(m,i,5,k)+cc(m,ic,4,k))))
-                ch(m,i-1,k,4) = wa3(i-2)*(cc(m,i-1,1,k)+TR12*(cc(m,i-1,3,k)+cc(m,ic-1,2,k))+TR11*(cc(m,i-1,5,k)+cc(m,ic-1,4,k))+(TI12*(cc(m,i,3,k)+cc(m,ic,2,k))-TI11*(cc(m,i,5,k)+cc(m,ic,4,k)))) &
-                               - wa3(i-1)*(cc(m,i,1,k)+TR12*(cc(m,i,3,k)-cc(m,ic,2,k))+TR11*(cc(m,i,5,k)-cc(m,ic,4,k))-(TI12*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))-TI11*(cc(m,i-1,5,k)-cc(m,ic-1,4,k))))
-                ch(m,i,k,4) = wa3(i-2)*(cc(m,i,1,k)+TR12*(cc(m,i,3,k)-cc(m,ic,2,k))+TR11*(cc(m,i,5,k)-cc(m,ic,4,k))-(TI12*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))-TI11*(cc(m,i-1,5,k)-cc(m,ic-1,4,k)))) &
-                               + wa3(i-1)*(cc(m,i-1,1,k)+TR12*(cc(m,i-1,3,k)+cc(m,ic-1,2,k))+TR11*(cc(m,i-1,5,k)+cc(m,ic-1,4,k))+(TI12*(cc(m,i,3,k)+cc(m,ic,2,k))-TI11*(cc(m,i,5,k)+cc(m,ic,4,k))))
-                ch(m,i-1,k,5) = wa4(i-2)*(cc(m,i-1,1,k)+TR11*(cc(m,i-1,3,k)+cc(m,ic-1,2,k))+TR12*(cc(m,i-1,5,k)+cc(m,ic-1,4,k))+(TI11*(cc(m,i,3,k)+cc(m,ic,2,k))+TI12*(cc(m,i,5,k)+cc(m,ic,4,k)))) &
-                               - wa4(i-1)*(cc(m,i,1,k)+TR11*(cc(m,i,3,k)-cc(m,ic,2,k))+TR12*(cc(m,i,5,k)-cc(m,ic,4,k))-(TI11*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))+TI12*(cc(m,i-1,5,k)-cc(m,ic-1,4,k))))
-                ch(m,i,k,5) = wa4(i-2)*(cc(m,i,1,k)+TR11*(cc(m,i,3,k)-cc(m,ic,2,k))+TR12*(cc(m,i,5,k)-cc(m,ic,4,k))-(TI11*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))+TI12*(cc(m,i-1,5,k)-cc(m,ic-1,4,k)))) &
-                               + wa4(i-1)*(cc(m,i-1,1,k)+TR11*(cc(m,i-1,3,k)+cc(m,ic-1,2,k))+TR12*(cc(m,i-1,5,k)+cc(m,ic-1,4,k))+(TI11*(cc(m,i,3,k)+cc(m,ic,2,k))+TI12*(cc(m,i,5,k)+cc(m,ic,4,k))))
+                ch(m,i-1,k,1) = cc(m,i-1,1,k)+(cc(m,i-1,3,k)+cc(m,ic-1,2,k)) &
+                               + (cc(m,i-1,5,k)+cc(m,ic-1,4,k))
+                ch(m,i,k,1)   = cc(m,i,1,k)+(cc(m,i,3,k)-cc(m,ic,2,k)) &
+                               + (cc(m,i,5,k)-cc(m,ic,4,k))
+                ch(m,i-1,k,2) = wa1(i-2)*(cc(m,i-1,1,k)+TR11*(cc(m,i-1,3,k)+cc(m,ic-1,2,k)) &
+                               +TR12*(cc(m,i-1,5,k)+cc(m,ic-1,4,k)) &
+                               -(TI11*(cc(m,i,3,k)+cc(m,ic,2,k))+TI12*(cc(m,i,5,k)+cc(m,ic,4,k)))) &
+                               - wa1(i-1)*(cc(m,i,1,k)+TR11*(cc(m,i,3,k)-cc(m,ic,2,k)) &
+                               +TR12*(cc(m,i,5,k)-cc(m,ic,4,k)) &
+                               +(TI11*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))+TI12*(cc(m,i-1,5,k)-cc(m,ic-1,4,k))))
+                ch(m,i,k,2) = wa1(i-2)*(cc(m,i,1,k)+TR11*(cc(m,i,3,k)-cc(m,ic,2,k)) &
+                               +TR12*(cc(m,i,5,k)-cc(m,ic,4,k)) &
+                               +(TI11*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))+TI12*(cc(m,i-1,5,k)-cc(m,ic-1,4,k)))) &
+                               + wa1(i-1)*(cc(m,i-1,1,k)+TR11*(cc(m,i-1,3,k)+cc(m,ic-1,2,k)) &
+                               +TR12*(cc(m,i-1,5,k)+cc(m,ic-1,4,k)) &
+                               -(TI11*(cc(m,i,3,k)+cc(m,ic,2,k))+TI12*(cc(m,i,5,k)+cc(m,ic,4,k))))
+                ch(m,i-1,k,3) = wa2(i-2)*(cc(m,i-1,1,k)+TR12*(cc(m,i-1,3,k)+cc(m,ic-1,2,k)) &
+                               +TR11*(cc(m,i-1,5,k)+cc(m,ic-1,4,k)) &
+                               -(TI12*(cc(m,i,3,k)+cc(m,ic,2,k))-TI11*(cc(m,i,5,k)+cc(m,ic,4,k)))) &
+                               - wa2(i-1)*(cc(m,i,1,k)+TR12*(cc(m,i,3,k)-cc(m,ic,2,k)) &
+                               +TR11*(cc(m,i,5,k)-cc(m,ic,4,k)) &
+                               +(TI12*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))-TI11*(cc(m,i-1,5,k)-cc(m,ic-1,4,k))))
+                ch(m,i,k,3) = wa2(i-2)*(cc(m,i,1,k)+TR12*(cc(m,i,3,k)-cc(m,ic,2,k)) &
+                               +TR11*(cc(m,i,5,k)-cc(m,ic,4,k)) &
+                               +(TI12*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))-TI11*(cc(m,i-1,5,k)-cc(m,ic-1,4,k)))) &
+                               + wa2(i-1)*(cc(m,i-1,1,k)+TR12*(cc(m,i-1,3,k)+cc(m,ic-1,2,k)) &
+                               +TR11*(cc(m,i-1,5,k)+cc(m,ic-1,4,k)) &
+                               -(TI12*(cc(m,i,3,k)+cc(m,ic,2,k))-TI11*(cc(m,i,5,k)+cc(m,ic,4,k))))
+                ch(m,i-1,k,4) = wa3(i-2)*(cc(m,i-1,1,k)+TR12*(cc(m,i-1,3,k)+cc(m,ic-1,2,k)) &
+                               +TR11*(cc(m,i-1,5,k)+cc(m,ic-1,4,k)) &
+                               +(TI12*(cc(m,i,3,k)+cc(m,ic,2,k))-TI11*(cc(m,i,5,k)+cc(m,ic,4,k)))) &
+                               - wa3(i-1)*(cc(m,i,1,k)+TR12*(cc(m,i,3,k)-cc(m,ic,2,k)) &
+                               +TR11*(cc(m,i,5,k)-cc(m,ic,4,k)) &
+                               -(TI12*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))-TI11*(cc(m,i-1,5,k)-cc(m,ic-1,4,k))))
+                ch(m,i,k,4) = wa3(i-2)*(cc(m,i,1,k)+TR12*(cc(m,i,3,k)-cc(m,ic,2,k)) &
+                               +TR11*(cc(m,i,5,k)-cc(m,ic,4,k)) &
+                               -(TI12*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))-TI11*(cc(m,i-1,5,k)-cc(m,ic-1,4,k)))) &
+                               + wa3(i-1)*(cc(m,i-1,1,k)+TR12*(cc(m,i-1,3,k)+cc(m,ic-1,2,k)) &
+                               +TR11*(cc(m,i-1,5,k)+cc(m,ic-1,4,k)) &
+                               +(TI12*(cc(m,i,3,k)+cc(m,ic,2,k))-TI11*(cc(m,i,5,k)+cc(m,ic,4,k))))
+                ch(m,i-1,k,5) = wa4(i-2)*(cc(m,i-1,1,k)+TR11*(cc(m,i-1,3,k)+cc(m,ic-1,2,k)) &
+                               +TR12*(cc(m,i-1,5,k)+cc(m,ic-1,4,k)) &
+                               +(TI11*(cc(m,i,3,k)+cc(m,ic,2,k))+TI12*(cc(m,i,5,k)+cc(m,ic,4,k)))) &
+                               - wa4(i-1)*(cc(m,i,1,k)+TR11*(cc(m,i,3,k)-cc(m,ic,2,k)) &
+                               +TR12*(cc(m,i,5,k)-cc(m,ic,4,k)) &
+                               -(TI11*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))+TI12*(cc(m,i-1,5,k)-cc(m,ic-1,4,k))))
+                ch(m,i,k,5) = wa4(i-2)*(cc(m,i,1,k)+TR11*(cc(m,i,3,k)-cc(m,ic,2,k)) &
+                               +TR12*(cc(m,i,5,k)-cc(m,ic,4,k)) &
+                               -(TI11*(cc(m,i-1,3,k)-cc(m,ic-1,2,k))+TI12*(cc(m,i-1,5,k)-cc(m,ic-1,4,k)))) &
+                               + wa4(i-1)*(cc(m,i-1,1,k)+TR11*(cc(m,i-1,3,k)+cc(m,ic-1,2,k)) &
+                               +TR12*(cc(m,i-1,5,k)+cc(m,ic-1,4,k)) &
+                               +(TI11*(cc(m,i,3,k)+cc(m,ic,2,k))+TI12*(cc(m,i,5,k)+cc(m,ic,4,k))))
             end do
         end do
     end do
