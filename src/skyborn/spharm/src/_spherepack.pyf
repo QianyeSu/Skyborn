@@ -196,7 +196,7 @@ python module _spherepack ! in
             double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
             integer, intent(out) :: ierror
         end subroutine shsgsi
-        subroutine vhaes(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaes,lvhaes,work,lwork,ierror) ! in :_spherepack:vhaes.f
+        subroutine vhaes(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaes,lvhaes,work,lwork,ierror) ! in :_spherepack:vhaes.f90
             integer, intent(hide) :: ityp=0
             real dimension(nlat,nlon,nt) :: v
             real dimension(nlat,nlon,nt) :: w
@@ -217,7 +217,7 @@ python module _spherepack ! in
             real dimension(lwork),depend(lwork),intent(cache,hide) :: work
             integer, intent(out) :: ierror
         end subroutine vhaes
-        subroutine vhaesi(nlat,nlon,wvhaes,lvhaes,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:vhaes.f
+        subroutine vhaesi(nlat,nlon,wvhaes,lvhaes,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:vhaes.f90
             integer, intent(in) :: nlat
             integer, intent(in) :: nlon
             integer, required, intent(in) :: lwork
@@ -523,7 +523,7 @@ python module _spherepack ! in
             double precision dimension(ldwork), depend(ldwork), intent(cache,hide) :: dwork
             integer, intent(out) :: ierror
         end subroutine vhseci
-        subroutine vhsgc(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgc,lvhsgc,work,lwork,ierror) ! in :_spherepack:vhsgc.f
+        subroutine vhsgc(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgc,lvhsgc,work,lwork,ierror) ! in :_spherepack:vhsgc.f90
             integer, required, intent(in) :: nlon
             integer, intent(hide) :: ityp=0
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
@@ -544,7 +544,7 @@ python module _spherepack ! in
             integer, required :: lwork
             integer, intent(out) :: ierror
         end subroutine vhsgc
-        subroutine vhsgci(nlat,nlon,wvhsgc,lvhsgc,dwork,ldwork,ierror) ! in :_spherepack:vhsgc.f
+        subroutine vhsgci(nlat,nlon,wvhsgc,lvhsgc,dwork,ldwork,ierror) ! in :_spherepack:vhsgc.f90
             integer :: nlat
             integer :: nlon
             integer, required :: lvhsgc
