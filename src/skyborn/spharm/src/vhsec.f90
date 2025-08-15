@@ -319,7 +319,7 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
     ! OPTIMIZATION 4: Vectorized final combination with better cache locality and OpenMP
     if (ityp <= 2) then
         ! Full sphere case - vectorized operations with OpenMP
-        !$OMP PARALLEL DO PRIVATE(k, j, i) SHARED(nt, nlon, imm1, v, w, ve, vo, we, wo, nlp1)
+        ! PARALLEL DO PRIVATE(k, j, i) SHARED(nt, nlon, imm1, v, w, ve, vo, we, wo, nlp1)
         do k = 1, nt
             do j = 1, nlon
                 !$DIR$ VECTOR ALWAYS
@@ -332,10 +332,10 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
+        ! END PARALLEL DO
     else
         ! Half sphere case - vectorized operations with OpenMP
-        !$OMP PARALLEL DO PRIVATE(k, j, i) SHARED(nt, nlon, imm1, v, w, ve, we)
+        ! PARALLEL DO PRIVATE(k, j, i) SHARED(nt, nlon, imm1, v, w, ve, we)
         do k = 1, nt
             do j = 1, nlon
                 !$DIR$ VECTOR ALWAYS
@@ -346,19 +346,19 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
+        ! END PARALLEL DO
     end if
 
     ! Handle equator point if needed - optimized branch with OpenMP
     if (mlat /= 0) then
-        !$OMP PARALLEL DO PRIVATE(k, j) SHARED(nt, nlon, v, w, ve, we, imid)
+        ! PARALLEL DO PRIVATE(k, j) SHARED(nt, nlon, v, w, ve, we, imid)
         do k = 1, nt
             do j = 1, nlon
                 v(imid, j, k) = 0.5 * ve(imid, j, k)
                 w(imid, j, k) = 0.5 * we(imid, j, k)
             end do
         end do
-        !$OMP END PARALLEL DO
+        ! END PARALLEL DO
     end if
 
 end subroutine vhsec1
@@ -454,7 +454,7 @@ subroutine vhsec_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
 
             ! Process even harmonics with FUSED LOOPS for better cache usage
             if (mp2 <= ndo2) then
-                !$OMP PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, vo, ve, wo, we, br, bi, cr, ci, vb, wb, iv, iw, mlat, imid)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, vo, ve, wo, we, br, bi, cr, ci, vb, wb, iv, iw, mlat, imid)
                 do k = 1, nt
                     do np1 = mp2, ndo2, 2
                         !DIR$ VECTOR ALWAYS
@@ -481,7 +481,7 @@ subroutine vhsec_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                         end if
                     end do
                 end do
-                !$OMP END PARALLEL DO
+                ! END PARALLEL DO
             end if
         end do
     end if
@@ -551,7 +551,7 @@ subroutine vhsec_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
 
             ! Process odd harmonics with OPTIMIZED LOOPS (only br,bi terms)
             if (mp1 <= ndo1) then
-                !$OMP PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, vo, ve, br, bi, vb, iv, mlat, imid)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, vo, ve, br, bi, vb, iv, mlat, imid)
                 do k = 1, nt
                     do np1 = mp1, ndo1, 2
                         !DIR$ VECTOR ALWAYS
@@ -575,12 +575,12 @@ subroutine vhsec_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                         end if
                     end do
                 end do
-                !$OMP END PARALLEL DO
+                ! END PARALLEL DO
             end if
 
             ! Process even harmonics with OPTIMIZED LOOPS (only br,bi terms)
             if (mp2 <= ndo2) then
-                !$OMP PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, ve, br, bi, vb, iv, mlat, imid)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, ve, br, bi, vb, iv, mlat, imid)
                 do k = 1, nt
                     do np1 = mp2, ndo2, 2
                         !DIR$ VECTOR ALWAYS
@@ -603,7 +603,7 @@ subroutine vhsec_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                         end if
                     end do
                 end do
-                !$OMP END PARALLEL DO
+                ! END PARALLEL DO
             end if
         end do
     end if
@@ -668,7 +668,7 @@ subroutine vhsec_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
 
             ! Process odd harmonics with OPTIMIZED LOOPS (only cr,ci terms)
             if (mp1 <= ndo1) then
-                !$OMP PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, ve, wo, cr, ci, wb, vb, iw, iv, mlat, imid)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, ve, wo, cr, ci, wb, vb, iw, iv, mlat, imid)
                 do k = 1, nt
                     do np1 = mp1, ndo1, 2
                         !DIR$ VECTOR ALWAYS
@@ -696,12 +696,12 @@ subroutine vhsec_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                         end if
                     end do
                 end do
-                !$OMP END PARALLEL DO
+                ! END PARALLEL DO
             end if
 
             ! Process even harmonics with OPTIMIZED LOOPS (only cr,ci terms)
             if (mp2 <= ndo2) then
-                !$OMP PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, vo, we, cr, ci, wb, vb, iw, iv, mlat, imid)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, vo, we, cr, ci, wb, vb, iw, iv, mlat, imid)
                 do k = 1, nt
                     do np1 = mp2, ndo2, 2
                         !DIR$ VECTOR ALWAYS
@@ -728,7 +728,7 @@ subroutine vhsec_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                         end if
                     end do
                 end do
-                !$OMP END PARALLEL DO
+                ! END PARALLEL DO
             end if
         end do
     end if
@@ -792,7 +792,7 @@ subroutine vhsec_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
 
             ! Process odd harmonics with OPTIMIZED LOOPS (v even, w odd)
             if (mp1 <= ndo1) then
-                !$OMP PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, vo, ve, wo, we, br, bi, cr, ci, vb, wb, iv, iw, mlat, imid)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, vo, ve, wo, we, br, bi, cr, ci, vb, wb, iv, iw, mlat, imid)
                 do k = 1, nt
                     do np1 = mp1, ndo1, 2
                         !DIR$ VECTOR ALWAYS
@@ -819,12 +819,12 @@ subroutine vhsec_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                         end if
                     end do
                 end do
-                !$OMP END PARALLEL DO
+                ! END PARALLEL DO
             end if
 
             ! Process even harmonics with OPTIMIZED LOOPS (v even, w odd)
             if (mp2 <= ndo2) then
-                !$OMP PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, ve, vo, we, wo, br, bi, cr, ci, vb, wb, iv, iw, mlat, imid)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, ve, vo, we, wo, br, bi, cr, ci, vb, wb, iv, iw, mlat, imid)
                 do k = 1, nt
                     do np1 = mp2, ndo2, 2
                         !DIR$ VECTOR ALWAYS
@@ -851,7 +851,7 @@ subroutine vhsec_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                         end if
                     end do
                 end do
-                !$OMP END PARALLEL DO
+                ! END PARALLEL DO
             end if
         end do
     end if
@@ -896,7 +896,7 @@ subroutine vhsec_case4(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
             call wbin(1, nlat, nlon, m, wb, iw, wwbin)
 
             if (mp2 <= ndo2) then
-                !$OMP PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, ve, br, bi, vb, iv, mlat, imid)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, ve, br, bi, vb, iv, mlat, imid)
                 do k = 1, nt
                     do np1 = mp2, ndo2, 2
                         !DIR$ VECTOR ALWAYS
@@ -911,7 +911,7 @@ subroutine vhsec_case4(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                         end if
                     end do
                 end do
-                !$OMP END PARALLEL DO
+                ! END PARALLEL DO
             end if
         end do
     end if
@@ -943,7 +943,7 @@ subroutine vhsec_case5(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
             call wbin(2, nlat, nlon, m, wb, iw, wwbin)
 
             if (mp1 <= ndo1) then
-                !$OMP PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, we, cr, ci, vb, iv)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, we, cr, ci, vb, iv)
                 do k = 1, nt
                     do np1 = mp1, ndo1, 2
                         !DIR$ VECTOR ALWAYS
@@ -954,7 +954,7 @@ subroutine vhsec_case5(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                         end do
                     end do
                 end do
-                !$OMP END PARALLEL DO
+                ! END PARALLEL DO
             end if
         end do
     end if
@@ -1010,7 +1010,7 @@ subroutine vhsec_case6(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
 
             ! Process harmonics with antisymmetric v, symmetric w pattern
             if (mp1 <= ndo1) then
-                !$OMP PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, vo, we, br, bi, cr, ci, vb, iv)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, vo, we, br, bi, cr, ci, vb, iv)
                 do k = 1, nt
                     do np1 = mp1, ndo1, 2
                         !DIR$ VECTOR ALWAYS
@@ -1023,7 +1023,7 @@ subroutine vhsec_case6(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                         end do
                     end do
                 end do
-                !$OMP END PARALLEL DO
+                ! END PARALLEL DO
             end if
         end do
     end if
@@ -1066,7 +1066,7 @@ subroutine vhsec_case7(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
             call wbin(2, nlat, nlon, m, wb, iw, wwbin)
 
             if (mp1 <= ndo1) then
-                !$OMP PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, vo, br, bi, vb, iv)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, vo, br, bi, vb, iv)
                 do k = 1, nt
                     do np1 = mp1, ndo1, 2
                         !DIR$ VECTOR ALWAYS
@@ -1077,7 +1077,7 @@ subroutine vhsec_case7(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
                         end do
                     end do
                 end do
-                !$OMP END PARALLEL DO
+                ! END PARALLEL DO
             end if
         end do
     end if
