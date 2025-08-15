@@ -26,7 +26,7 @@ subroutine onedtotwod(dataspec, a, b, nlat, nmdim, nt)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD PRIVATE(nm, spec_val)
             do n = m, ntrunc + 1
                 nm = nmstrt + n - m + 1
 
