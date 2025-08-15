@@ -151,7 +151,7 @@ jobs:
             # Install modern geospatial stack from conda-forge (more reliable)
             curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -o mambaforge.sh
             bash mambaforge.sh -b -p /opt/mambaforge
-            /opt/mambaforge/bin/mamba install -y -c conda-forge proj=9.4 geos gdal sqlite
+            /opt/mambaforge/bin/mamba install -y -c conda-forge "proj>=9.4.0" "pyproj>=3.6.0" geos gdal sqlite
             # Verify PROJ version
             /opt/mambaforge/bin/proj --version || echo 'PROJ not available'
           CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PROJ_DIR=/opt/mambaforge PKG_CONFIG_PATH=/opt/mambaforge/lib/pkgconfig PATH=/opt/mambaforge/bin:$PATH LD_LIBRARY_PATH=/opt/mambaforge/lib:$LD_LIBRARY_PATH
