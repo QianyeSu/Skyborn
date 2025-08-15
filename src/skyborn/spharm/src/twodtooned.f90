@@ -19,7 +19,7 @@ subroutine twodtooned(dataspec, a, b, nlat, ntrunc, nt)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD PRIVATE(nm)
             do n = m, ntrunc + 1
                 nm = nmstrt + n - m + 1
 

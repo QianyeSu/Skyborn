@@ -26,7 +26,7 @@ subroutine getlegfunc(legfunc, lat, ntrunc)
     ! Main computation loop - optimized memory access pattern
     nmstrt = 0
     do m = 1, ntrunc + 1
-        !DIR$ VECTOR ALWAYS  ! Force vectorization for performance
+        !$OMP SIMD PRIVATE(nm)
         do n = m, ntrunc + 1
             nm = nmstrt + n - m + 1
 
