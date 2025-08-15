@@ -22,8 +22,8 @@ htmlcov/** linguist-generated=true
 *.egg-info/** linguist-generated=true
 __pycache__/** linguist-generated=true
 
-# Exclude test files from language statistics (optional)
-tests/** linguist-language=Python
+# Exclude test files from language statistics
+tests/*.py linguist-documentation
 
 # Exclude configuration files
 *.yml linguist-language=YAML
