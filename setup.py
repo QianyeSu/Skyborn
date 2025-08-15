@@ -211,7 +211,7 @@ class MesonBuildExt(build_ext):
                 src_dir / "lap.f90",
                 src_dir / "invlap.f90",
                 src_dir / "sphcom.f",
-                src_dir / "hrfft.f",
+                src_dir / "hrfft.f90",
                 src_dir / "getlegfunc.f90",
                 src_dir / "specintrp.f90",
                 src_dir / "onedtotwod.f90",
