@@ -4482,7 +4482,7 @@ subroutine wtini1(nlat, nlon, imid, wb, abc, cwb, work)
 
     ! Input/Output parameters - IDENTICAL interface to original
     integer, intent(in) :: nlat, nlon, imid
-    real(wp), intent(out) :: wb(*), abc(*)
+    real(wp), intent(out) :: wb(imid, nlat, 3), abc(*)
     real(dp), intent(inout) :: cwb(*), work(*)
 
     ! Local variables - same precision as original
@@ -4606,7 +4606,7 @@ subroutine vtgit1(nlat, nlon, imid, theta, vb, abc, cvb, work)
     ! Input/Output parameters - IDENTICAL interface to F77 original
     integer, intent(in) :: nlat, nlon, imid
     real(dp), intent(in) :: theta(*)  ! theta(imid) Gaussian quadrature points
-    real(wp), intent(out) :: vb(*), abc(*)
+    real(wp), intent(out) :: vb(imid, nlat, 3), abc(*)
     real(dp), intent(inout) :: cvb(*), work(*)
 
     ! Local variables - same precision as original
@@ -4744,7 +4744,7 @@ subroutine wtgit1(nlat, nlon, imid, theta, wb, abc, cwb, work)
     ! Input/Output parameters - IDENTICAL interface to F77 original
     integer, intent(in) :: nlat, nlon, imid
     real(dp), intent(in) :: theta(*)  ! theta(imid) Gaussian quadrature points
-    real(wp), intent(out) :: wb(*), abc(*)
+    real(wp), intent(out) :: wb(imid, nlat, 3), abc(*)
     real(dp), intent(inout) :: cwb(*), work(*)
 
     ! Local variables - same precision as original
@@ -5505,7 +5505,7 @@ subroutine vbgit1(nlat, nlon, imid, theta, vb, abc, cvb, work)
     ! Input/Output parameters - CORRECTED precision consistency
     integer, intent(in) :: nlat, nlon, imid
     real(wp), intent(in) :: theta(*)
-    real(wp), intent(out) :: vb(*)  ! FIXED: consistent double precision
+    real(wp), intent(out) :: vb(imid, nlat, 3)  ! FIXED: consistent double precision
     real(wp), intent(out) :: abc(*)     ! FIXED: consistent double precision
     real(wp), intent(inout) :: cvb(*), work(*)
 
@@ -5672,12 +5672,13 @@ subroutine wbgit1(nlat, nlon, imid, theta, wb, abc, cwb, work)
     ! Input/Output parameters - CORRECTED precision consistency
     integer, intent(in) :: nlat, nlon, imid
     real(wp), intent(in) :: theta(*)
-    real(wp), intent(out) :: wb(*)  ! FIXED: consistent double precision
+    real(wp), intent(out) :: wb(imid, nlat, 3)  ! FIXED: consistent double precision
     real(wp), intent(out) :: abc(*)     ! FIXED: consistent double precision
     real(wp), intent(inout) :: cwb(*), work(*)
 
     ! Local variables - same precision and meaning as original
     integer :: mdo, mp1, m, np1, n, i
+    integer :: iblock, block_start, block_end  ! Cache blocking variables
     real(wp) :: wbh
 
     ! OPTIMIZATION 1: Cache-efficient constants for W-functions
