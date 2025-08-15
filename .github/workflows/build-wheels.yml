@@ -145,8 +145,14 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
-          CIBW_BEFORE_BUILD_LINUX: yum install -y gcc-gfortran || dnf install -y gcc-gfortran || echo 'gfortran install failed'
-          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
+          CIBW_BEFORE_BUILD_LINUX: |
+            # Install gfortran and geospatial dependencies
+            yum install -y gcc-gfortran epel-release || dnf install -y gcc-gfortran || echo 'gfortran install failed'
+            # Install PROJ executable and development files (critical for pyproj)
+            yum install -y proj proj-devel geos-devel || dnf install -y proj proj-devel geos-devel || echo 'geo libs install failed'
+            # Install GDAL for cartopy
+            yum install -y gdal-devel || dnf install -y gdal-devel || echo 'gdal install failed'
+          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PROJ_DIR=/usr PKG_CONFIG_PATH=/usr/lib64/pkgconfig:/usr/lib/pkgconfig
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
