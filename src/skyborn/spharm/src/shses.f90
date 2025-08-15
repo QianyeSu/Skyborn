@@ -175,7 +175,7 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
     if (modl /= 0) imm1 = imid - 1
 
     ! Initialize workspace arrays to zero with OpenMP
-    !$OMP PARALLEL DO COLLAPSE(3) IF(nt*nlon*ls > 10000) PRIVATE(k,j,i)
+    ! PARALLEL DO COLLAPSE(3) IF(nt*nlon*ls > 10000) PRIVATE(k,j,i)
     !DIR$ VECTOR ALWAYS
     do k = 1, nt
         do j = 1, nlon
@@ -184,12 +184,12 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
+    ! END PARALLEL DO
 
     ! Process even part (symmetric component) if needed
     if (isym /= 1) then
         ! m=0 case for even part
-        !$OMP PARALLEL DO COLLAPSE(3) IF(nt*nlat*imid > 5000) PRIVATE(k,np1,i)
+        ! PARALLEL DO COLLAPSE(3) IF(nt*nlat*imid > 5000) PRIVATE(k,np1,i)
         !DIR$ VECTOR ALWAYS
         do k = 1, nt
             do np1 = 1, nlat, 2
@@ -198,7 +198,7 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
+        ! END PARALLEL DO
 
         ! m > 0 cases for even part
         ndo = nlat
@@ -208,7 +208,7 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
             m = mp1 - 1
             mb = m * (nlat - 1) - (m * (m - 1)) / 2
 
-            !$OMP PARALLEL DO COLLAPSE(3) IF(nt*ndo*imid > 5000) PRIVATE(k,np1,i,mn)
+            ! PARALLEL DO COLLAPSE(3) IF(nt*ndo*imid > 5000) PRIVATE(k,np1,i,mn)
             !DIR$ VECTOR ALWAYS
             do k = 1, nt
                 do np1 = mp1, ndo, 2
@@ -219,14 +219,14 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
                     end do
                 end do
             end do
-            !$OMP END PARALLEL DO
+            ! END PARALLEL DO
         end do
 
         ! Handle special case for mmax
         if (mdo /= mmax .and. mmax <= ndo) then
             mb = mdo * (nlat - 1) - (mdo * (mdo - 1)) / 2
 
-            !$OMP PARALLEL DO COLLAPSE(3) IF(nt*ndo*imid > 5000) PRIVATE(k,np1,i,mn)
+            ! PARALLEL DO COLLAPSE(3) IF(nt*ndo*imid > 5000) PRIVATE(k,np1,i,mn)
             !DIR$ VECTOR ALWAYS
             do k = 1, nt
                 do np1 = mmax, ndo, 2
@@ -236,7 +236,7 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
                     end do
                 end do
             end do
-            !$OMP END PARALLEL DO
+            ! END PARALLEL DO
         end if
     end if
 
@@ -249,7 +249,7 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
     ! Process odd part (antisymmetric component) if needed
     if (isym /= 2) then
         ! m=0 case for odd part
-        !$OMP PARALLEL DO COLLAPSE(3) IF(nt*nlat*imm1 > 5000) PRIVATE(k,np1,i)
+        ! PARALLEL DO COLLAPSE(3) IF(nt*nlat*imm1 > 5000) PRIVATE(k,np1,i)
         !DIR$ VECTOR ALWAYS
         do k = 1, nt
             do np1 = 2, nlat, 2
@@ -258,7 +258,7 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
+        ! END PARALLEL DO
 
         ! m > 0 cases for odd part
         ndo = nlat
@@ -269,7 +269,7 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
             m = mp1 - 1
             mb = m * (nlat - 1) - (m * (m - 1)) / 2
 
-            !$OMP PARALLEL DO COLLAPSE(3) IF(nt*ndo*imm1 > 5000) PRIVATE(k,np1,i,mn)
+            ! PARALLEL DO COLLAPSE(3) IF(nt*ndo*imm1 > 5000) PRIVATE(k,np1,i,mn)
             !DIR$ VECTOR ALWAYS
             do k = 1, nt
                 do np1 = mp2, ndo, 2
@@ -280,7 +280,7 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
                     end do
                 end do
             end do
-            !$OMP END PARALLEL DO
+            ! END PARALLEL DO
         end do
 
         ! Handle special case for mmax in odd part
@@ -288,7 +288,7 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
         if (mdo /= mmax .and. mp2 <= ndo) then
             mb = mdo * (nlat - 1) - (mdo * (mdo - 1)) / 2
 
-            !$OMP PARALLEL DO COLLAPSE(3) IF(nt*ndo*imm1 > 5000) PRIVATE(k,np1,i,mn)
+            ! PARALLEL DO COLLAPSE(3) IF(nt*ndo*imm1 > 5000) PRIVATE(k,np1,i,mn)
             !DIR$ VECTOR ALWAYS
             do k = 1, nt
                 do np1 = mp2, ndo, 2
@@ -298,7 +298,7 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
                     end do
                 end do
             end do
-            !$OMP END PARALLEL DO
+            ! END PARALLEL DO
         end if
     end if
 
@@ -325,7 +325,7 @@ contains
 
         if (isym == 0) then
             ! Full sphere - combine even and odd parts
-            !$OMP PARALLEL DO COLLAPSE(2) IF(nt*nlon > 5000) PRIVATE(k,j,i)
+            ! PARALLEL DO COLLAPSE(2) IF(nt*nlon > 5000) PRIVATE(k,j,i)
             do k = 1, nt
                 do j = 1, nlon
                     !DIR$ VECTOR ALWAYS
@@ -340,10 +340,10 @@ contains
                     end if
                 end do
             end do
-            !$OMP END PARALLEL DO
+            ! END PARALLEL DO
         else
             ! Half sphere case
-            !$OMP PARALLEL DO COLLAPSE(3) IF(nt*imid*nlon > 5000) PRIVATE(k,i,j)
+            ! PARALLEL DO COLLAPSE(3) IF(nt*imid*nlon > 5000) PRIVATE(k,i,j)
             !DIR$ VECTOR ALWAYS
             do k = 1, nt
                 do i = 1, imid
@@ -352,7 +352,7 @@ contains
                     end do
                 end do
             end do
-            !$OMP END PARALLEL DO
+            ! END PARALLEL DO
         end if
     end subroutine process_inverse_fft_and_output
 

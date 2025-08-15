@@ -252,7 +252,7 @@ subroutine shags1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
     external :: hrfftf
 
     ! Copy gs array to internal g array with OpenMP optimization
-    !$OMP PARALLEL DO COLLAPSE(3) IF(nt*lat*nlon > 10000) PRIVATE(k,j,i)
+    ! PARALLEL DO COLLAPSE(3) IF(nt*lat*nlon > 10000) PRIVATE(k,j,i)
     !DIR$ VECTOR ALWAYS
     do k = 1, nt
         do j = 1, nlon
@@ -261,7 +261,7 @@ subroutine shags1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
+    ! END PARALLEL DO
 
     ! Perform Fourier transform - cannot be parallelized due to workspace sharing
     do k = 1, nt
@@ -270,7 +270,7 @@ subroutine shags1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
 
     ! Scale result with pre-computed factor
     sfn = 2.0 / real(nlon)
-    !$OMP PARALLEL DO COLLAPSE(3) IF(nt*lat*nlon > 10000) PRIVATE(k,j,i)
+    ! PARALLEL DO COLLAPSE(3) IF(nt*lat*nlon > 10000) PRIVATE(k,j,i)
     !DIR$ VECTOR ALWAYS
     do k = 1, nt
         do j = 1, nlon
@@ -279,10 +279,10 @@ subroutine shags1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
+    ! END PARALLEL DO
 
     ! Initialize coefficients to zero with OpenMP
-    !$OMP PARALLEL DO COLLAPSE(3) IF(nt*nlat*l > 10000) PRIVATE(k,np1,mp1)
+    ! PARALLEL DO COLLAPSE(3) IF(nt*nlat*l > 10000) PRIVATE(k,np1,mp1)
     !DIR$ VECTOR ALWAYS
     do k = 1, nt
         do np1 = 1, nlat
@@ -292,7 +292,7 @@ subroutine shags1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
+    ! END PARALLEL DO
 
     ! Set mp1 limit on b(mp1) calculation
     lm1 = l
@@ -314,7 +314,7 @@ contains
         ! overwrite g(i) with (g(i)+g(nlat-i+1))*wts(i)
         ! overwrite g(nlat-i+1) with (g(i)-g(nlat-i+1))*wts(i)
         nl2 = nlat / 2
-        !$OMP PARALLEL DO COLLAPSE(2) IF(nt*nlon > 5000) PRIVATE(k,j,i,is,t1,t2)
+        ! PARALLEL DO COLLAPSE(2) IF(nt*nlon > 5000) PRIVATE(k,j,i,is,t1,t2)
         do k = 1, nt
             do j = 1, nlon
                 !DIR$ VECTOR ALWAYS
@@ -332,13 +332,13 @@ contains
                 end if
             end do
         end do
-        !$OMP END PARALLEL DO
+        ! END PARALLEL DO
 
         ! Set m = 0 coefficients first
         mp1 = 1
         m = 0
         mml1 = m * (2 * nlat - m - 1) / 2
-        !$OMP PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1)
+        ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1)
         do k = 1, nt
             do i = 1, late
                 is = nlat - i + 1
@@ -354,14 +354,14 @@ contains
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
+        ! END PARALLEL DO
 
         ! Compute m >= 1 coefficients next
         do mp1 = 2, lm1
             m = mp1 - 1
             mml1 = m * (2 * nlat - m - 1) / 2
             mp2 = mp1 + 1
-            !$OMP PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1)
+            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1)
             do k = 1, nt
                 do i = 1, late
                     is = nlat - i + 1
@@ -379,7 +379,7 @@ contains
                     end do
                 end do
             end do
-            !$OMP END PARALLEL DO
+            ! END PARALLEL DO
         end do
 
         ! Handle special case for nlon == l+l-2
@@ -387,7 +387,7 @@ contains
             ! Compute m=l-1, n=l-1,l,...,nlat-1 coefficients
             m = l - 1
             mml1 = m * (2 * nlat - m - 1) / 2
-            !$OMP PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1,mn)
+            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1,mn)
             do k = 1, nt
                 do i = 1, late
                     is = nlat - i + 1
@@ -406,7 +406,7 @@ contains
                     end do
                 end do
             end do
-            !$OMP END PARALLEL DO
+            ! END PARALLEL DO
         end if
     end subroutine process_full_sphere_mode
 
@@ -414,7 +414,7 @@ contains
     subroutine process_half_sphere_mode()
         ! Half sphere: overwrite g(i) with wts(i)*(g(i)+g(i)) for i=1,...,nlate/2
         nl2 = nlat / 2
-        !$OMP PARALLEL DO COLLAPSE(2) IF(nt*nlon > 5000) PRIVATE(k,j,i)
+        ! PARALLEL DO COLLAPSE(2) IF(nt*nlon > 5000) PRIVATE(k,j,i)
         do k = 1, nt
             do j = 1, nlon
                 !DIR$ VECTOR ALWAYS
@@ -428,7 +428,7 @@ contains
                 end if
             end do
         end do
-        !$OMP END PARALLEL DO
+        ! END PARALLEL DO
 
         ! Set m = 0 coefficients first
         mp1 = 1
@@ -437,7 +437,7 @@ contains
         ms = 1
         if (mode == 1) ms = 2
 
-        !$OMP PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1)
+        ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1)
         do k = 1, nt
             do i = 1, late
                 !DIR$ VECTOR ALWAYS
@@ -446,7 +446,7 @@ contains
                 end do
             end do
         end do
-        !$OMP END PARALLEL DO
+        ! END PARALLEL DO
 
         ! Compute m >= 1 coefficients next
         do mp1 = 2, lm1
@@ -454,7 +454,7 @@ contains
             mml1 = m * (2 * nlat - m - 1) / 2
             ms = mp1
             if (mode == 1) ms = mp1 + 1
-            !$OMP PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1)
+            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1)
             do k = 1, nt
                 do i = 1, late
                     !DIR$ VECTOR ALWAYS
@@ -464,7 +464,7 @@ contains
                     end do
                 end do
             end do
-            !$OMP END PARALLEL DO
+            ! END PARALLEL DO
         end do
 
         ! Handle special case for nlon == l+l-2
@@ -476,7 +476,7 @@ contains
             ns = l
             ! Set starting n for mode odd
             if (mode == 1) ns = l + 1
-            !$OMP PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1,mn)
+            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1,mn)
             do k = 1, nt
                 do i = 1, late
                     !DIR$ VECTOR ALWAYS
@@ -486,7 +486,7 @@ contains
                     end do
                 end do
             end do
-            !$OMP END PARALLEL DO
+            ! END PARALLEL DO
         end if
     end subroutine process_half_sphere_mode
 

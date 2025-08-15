@@ -171,58 +171,47 @@ subroutine lfim1(init, theta, l, n, nm, id, p3, phz, ph1, p1, p2, cp)
         ! Initialization phase
         ssqrt2 = 1.0 / sqrt(2.0)
 
-        !$OMP PARALLEL DO
-        do i = 1, l
+                do i = 1, l
             phz(i, 1) = ssqrt2
         end do
-        !$OMP END PARALLEL DO
 
         do np1 = 2, nmp1
             nh = np1 - 1
             call alfk(nh, 0, cp)
 
-            !$OMP PARALLEL DO
-            do i = 1, l
+                        do i = 1, l
                 call lfpt(nh, 0, theta(i), cp, phz(i, np1))
             end do
-            !$OMP END PARALLEL DO
 
             call alfk(nh, 1, cp)
 
-            !$OMP PARALLEL DO
-            do i = 1, l
+                        do i = 1, l
                 call lfpt(nh, 1, theta(i), cp, ph1(i, np1))
             end do
-            !$OMP END PARALLEL DO
-        end do
+                    end do
         return
     end if
 
     ! Computation phase
     select case (n)
     case (0)
-        !$OMP PARALLEL DO
-        do i = 1, l
+                do i = 1, l
             p3(i, 1) = phz(i, 1)
         end do
-        !$OMP END PARALLEL DO
-        return
+                return
 
     case (1)
-        !$OMP PARALLEL DO
-        do i = 1, l
+                do i = 1, l
             p3(i, 1) = phz(i, 2)
             p3(i, 2) = ph1(i, 2)
         end do
-        !$OMP END PARALLEL DO
-        return
+                return
 
     case (2)
         sq5s6 = sqrt(5.0/6.0)
         sq1s6 = sqrt(1.0/6.0)
 
-        !$OMP PARALLEL DO
-        do i = 1, l
+                do i = 1, l
             p3(i, 1) = phz(i, 3)
             p3(i, 2) = ph1(i, 3)
             p3(i, 3) = sq5s6 * phz(i, 1) - sq1s6 * p3(i, 1)
@@ -232,8 +221,7 @@ subroutine lfim1(init, theta, l, n, nm, id, p3, phz, ph1, p1, p2, cp)
             p2(i, 2) = ph1(i, 3)
             p2(i, 3) = p3(i, 3)
         end do
-        !$OMP END PARALLEL DO
-        return
+                return
     end select
 
     ! General case for n > 2
@@ -243,12 +231,10 @@ subroutine lfim1(init, theta, l, n, nm, id, p3, phz, ph1, p1, p2, cp)
     tn = fn + fn
     cn = (tn + 1.0) / (tn - 3.0)
 
-    !$OMP PARALLEL DO
-    do i = 1, l
+        do i = 1, l
         p3(i, 1) = phz(i, np1)
         p3(i, 2) = ph1(i, np1)
     end do
-    !$OMP END PARALLEL DO
 
     if (nm1 >= 3) then
         do mp1 = 3, nm1
@@ -261,12 +247,10 @@ subroutine lfim1(init, theta, l, n, nm, id, p3, phz, ph1, p1, p2, cp)
             dd = sqrt(cn * fnmm * (fnmm - 1.0) / temp)
             ee = sqrt((fnmm + 1.0) * (fnmm + 2.0) / temp)
 
-            !$OMP PARALLEL DO
-            do i = 1, l
+                        do i = 1, l
                 p3(i, mp1) = cc * p1(i, mp1 - 2) + dd * p1(i, mp1) - ee * p3(i, mp1 - 2)
             end do
-            !$OMP END PARALLEL DO
-        end do
+                    end do
     end if
 
     ! Handle remaining terms
@@ -275,32 +259,26 @@ subroutine lfim1(init, theta, l, n, nm, id, p3, phz, ph1, p1, p2, cp)
     cc = sqrt(cn * (fnpm - 3.0) * (fnpm - 2.0) / temp)
     ee = sqrt(6.0 / temp)
 
-    !$OMP PARALLEL DO
-    do i = 1, l
+        do i = 1, l
         p3(i, n) = cc * p1(i, n - 2) - ee * p3(i, n - 2)
     end do
-    !$OMP END PARALLEL DO
 
     fnpm = fn + fn
     temp = fnpm * (fnpm - 1.0)
     cc = sqrt(cn * (fnpm - 3.0) * (fnpm - 2.0) / temp)
     ee = sqrt(2.0 / temp)
 
-    !$OMP PARALLEL DO
-    do i = 1, l
+        do i = 1, l
         p3(i, n + 1) = cc * p1(i, n - 1) - ee * p3(i, n - 1)
     end do
-    !$OMP END PARALLEL DO
 
     ! Update arrays for next iteration
-    !$OMP PARALLEL DO
-    do mp1 = 1, np1
+        do mp1 = 1, np1
         do i = 1, l
             p1(i, mp1) = p2(i, mp1)
             p2(i, mp1) = p3(i, mp1)
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine lfim1
 
@@ -342,30 +320,24 @@ subroutine lfin1(init, theta, l, m, nm, id, p3, phz, ph1, p1, p2, cp)
         ! Initialization phase
         ssqrt2 = 1.0 / sqrt(2.0)
 
-        !$OMP PARALLEL DO
-        do i = 1, l
+                do i = 1, l
             phz(i, 1) = ssqrt2
         end do
-        !$OMP END PARALLEL DO
 
         do np1 = 2, nmp1
             nh = np1 - 1
             call alfk(nh, 0, cp)
 
-            !$OMP PARALLEL DO
-            do i = 1, l
+                        do i = 1, l
                 call lfpt(nh, 0, theta(i), cp, phz(i, np1))
             end do
-            !$OMP END PARALLEL DO
 
             call alfk(nh, 1, cp)
 
-            !$OMP PARALLEL DO
-            do i = 1, l
+                        do i = 1, l
                 call lfpt(nh, 1, theta(i), cp, ph1(i, np1))
             end do
-            !$OMP END PARALLEL DO
-        end do
+                    end do
         return
     end if
 
@@ -376,26 +348,22 @@ subroutine lfin1(init, theta, l, m, nm, id, p3, phz, ph1, p1, p2, cp)
 
     select case (m)
     case (0)
-        !$OMP PARALLEL DO
-        do np1 = 1, nmp1
+                do np1 = 1, nmp1
             do i = 1, l
                 p3(i, np1) = phz(i, np1)
                 p1(i, np1) = phz(i, np1)
             end do
         end do
-        !$OMP END PARALLEL DO
-        return
+                return
 
     case (1)
-        !$OMP PARALLEL DO
-        do np1 = 2, nmp1
+                do np1 = 2, nmp1
             do i = 1, l
                 p3(i, np1) = ph1(i, np1)
                 p2(i, np1) = ph1(i, np1)
             end do
         end do
-        !$OMP END PARALLEL DO
-        return
+                return
     end select
 
     ! General case for m > 1
@@ -403,11 +371,9 @@ subroutine lfin1(init, theta, l, m, nm, id, p3, phz, ph1, p1, p2, cp)
     cc = sqrt((tm + 1.0) * (tm - 2.0) / temp)
     ee = sqrt(2.0 / temp)
 
-    !$OMP PARALLEL DO
-    do i = 1, l
+        do i = 1, l
         p3(i, m + 1) = cc * p1(i, m - 1) - ee * p1(i, m + 1)
     end do
-    !$OMP END PARALLEL DO
 
     if (m == nm) return
 
@@ -415,11 +381,9 @@ subroutine lfin1(init, theta, l, m, nm, id, p3, phz, ph1, p1, p2, cp)
     cc = sqrt((tm + 3.0) * (tm - 2.0) / temp)
     ee = sqrt(6.0 / temp)
 
-    !$OMP PARALLEL DO
-    do i = 1, l
+        do i = 1, l
         p3(i, m + 2) = cc * p1(i, m) - ee * p1(i, m + 2)
     end do
-    !$OMP END PARALLEL DO
 
     mp3 = m + 3
     if (nmp1 >= mp3) then
@@ -435,23 +399,19 @@ subroutine lfin1(init, theta, l, m, nm, id, p3, phz, ph1, p1, p2, cp)
             dd = sqrt(cn * fnmm * (fnmm - 1.0) / temp)
             ee = sqrt((fnmm + 1.0) * (fnmm + 2.0) / temp)
 
-            !$OMP PARALLEL DO
-            do i = 1, l
+                        do i = 1, l
                 p3(i, np1) = cc * p1(i, np1 - 2) + dd * p3(i, np1 - 2) - ee * p1(i, np1)
             end do
-            !$OMP END PARALLEL DO
-        end do
+                    end do
     end if
 
     ! Update arrays for next iteration
-    !$OMP PARALLEL DO
-    do np1 = m, nmp1
+        do np1 = m, nmp1
         do i = 1, l
             p1(i, np1) = p2(i, np1)
             p2(i, np1) = p3(i, np1)
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine lfin1
 
