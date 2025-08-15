@@ -27,6 +27,7 @@ subroutine twodtooned_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
+            !$OMP SIMD PRIVATE(nm, n_real, n_factor)
             do n = m, ntrunc + 1
                 nm = nmstrt + n - m + 1
                 n_real = real(n)

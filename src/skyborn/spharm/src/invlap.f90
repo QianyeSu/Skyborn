@@ -31,7 +31,7 @@ subroutine invlap(dataspec, dataspec_ilap, nmdim, nt, rsphere)
             n1 = m
             if (m == 1) n1 = 2  ! Skip n=1 for m=1 to avoid division by zero
 
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD PRIVATE(nm, n_real, invlap_factor)
             do n = n1, ntrunc + 1
                 nm = nmstrt + n - m + 1
                 n_real = real(n)
