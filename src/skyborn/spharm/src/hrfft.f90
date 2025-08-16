@@ -1,7 +1,7 @@
 !
 ! . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
 ! .                                                             .
-! .                  Copyright (C) 1998 by UCAR                 .
+! .                  Copyright (C) 2025 by Qianye Su            .
 ! .                                                             .
 ! .       University Corporation for Atmospheric Research       .
 ! .                                                             .
