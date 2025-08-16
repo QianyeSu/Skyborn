@@ -295,6 +295,14 @@
             box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
         }
 
+        /* Low-end device mode: remove expensive shadows and particles */
+        .low-end .star.large {
+            box-shadow: none;
+        }
+        .low-end .particles {
+            display: none !important;
+        }
+
         @keyframes twinkle {
             from {
             opacity: 0.3;
@@ -462,6 +470,47 @@
             transform: translateY(0) scale(1);
         }
 
+        /* Mobile / touch device adjustments */
+        @media (max-width: 700px), (pointer: coarse) {
+            :root {
+                --logo-height: 80px;
+                --stars-count: 30;
+                --stars-opacity: 0.45;
+            }
+
+            .entrance-container {
+                padding: 0 12px;
+            }
+
+            /* Make debug panel span most of the width and be scrollable on small screens */
+            .debug-panel {
+                left: 12px !important;
+                right: 12px !important;
+                bottom: 12px !important;
+                min-width: unset !important;
+                width: auto !important;
+                max-height: 60vh;
+                overflow-y: auto;
+            }
+
+            /* Increase hotspot area for easier touch activation */
+            .corner-hotspot {
+                width: 160px;
+                height: 160px;
+                right: 6px;
+                bottom: 6px;
+            }
+        }
+
+        /* On devices without hover (touch), show the FAB by default so users can tap it */
+        @media (hover: none) {
+            .corner-fab {
+                opacity: 1;
+                pointer-events: auto;
+                transform: translateY(0) scale(1);
+            }
+        }
+
 
 
     /* Logo interaction styles */
@@ -572,6 +621,30 @@
         })();
 
         // ========== Star Generation Module - Easily Removable ==========
+        // Low-end device detection: reduce effects for battery/memory constrained devices
+        (function detectLowEnd() {
+            try {
+                const isLowMemory = navigator.deviceMemory && navigator.deviceMemory <= 1; // 1GB or less
+                const lowDPR = (window.devicePixelRatio || 1) < 1.25;
+                const isSlowCPU = false; // placeholder — could use heuristic via userAgent if needed
+                const batteryPromise = (navigator.getBattery && typeof navigator.getBattery === 'function')
+                    ? navigator.getBattery().catch(() => null)
+                    : Promise.resolve(null);
+
+                batteryPromise.then(batt => {
+                    const lowBattery = batt ? (batt.level !== undefined && batt.level < 0.25 && !batt.charging) : false;
+                    if (isLowMemory || lowDPR || lowBattery) {
+                        document.documentElement.classList.add('low-end');
+                        // reduce stars and logo size for performance
+                        try {
+                            document.documentElement.style.setProperty('--stars-count', '18');
+                            document.documentElement.style.setProperty('--logo-height', '70px');
+                            document.documentElement.style.setProperty('--stars-opacity', '0.35');
+                        } catch (err) {}
+                    }
+                });
+            } catch (err) {}
+        })();
         function createStars() {
             const starsContainer = document.getElementById('starsContainer');
             if (!starsContainer) return;
@@ -744,6 +817,33 @@
                     if (!debugPanel) return;
                     debugPanel.classList.toggle('open');
                 });
+            }
+
+            // Touch / mobile support: show FAB by default and allow hotspot touch to toggle
+            const cornerHotspot = document.querySelector('.corner-hotspot');
+            const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
+            if (isTouch) {
+                // make FAB visible on touch devices
+                if (cornerFab) {
+                    cornerFab.style.opacity = '1';
+                    cornerFab.style.pointerEvents = 'auto';
+                    cornerFab.style.transform = 'translateY(0) scale(1)';
+                }
+
+                // Expand hotspot and bind touchstart to toggle panel
+                if (cornerHotspot) {
+                    cornerHotspot.addEventListener('touchstart', function(e) {
+                        e.stopPropagation();
+                        if (!debugPanel) return;
+                        debugPanel.classList.toggle('open');
+                    });
+                }
+
+                // Reduce star count on touch devices for performance
+                try {
+                    document.documentElement.style.setProperty('--stars-count', '30');
+                    document.documentElement.style.setProperty('--logo-height', getComputedStyle(document.documentElement).getPropertyValue('--logo-height') || '80px');
+                } catch (err) {}
             }
 
             // Bind preset buttons (glow-preset) without inline onclick
@@ -1084,6 +1184,25 @@
                 manager.resize('full', 'full');
                 manager.listen('resize', 250);
 
+                // Also react to window resize (covers F11 browser fullscreen which may not trigger fullscreenchange)
+                window.addEventListener('resize', function() {
+                    try { manager.resize('full', 'full'); } catch (err) {}
+                });
+
+                // Ensure canvas/GL viewport resizes when entering/exiting fullscreen (F11)
+                function handleFullscreenResize() {
+                    try {
+                        manager.resize('full', 'full');
+                    } catch (err) {
+                        // ignore if manager not available
+                    }
+                }
+                document.addEventListener('fullscreenchange', handleFullscreenResize);
+                // Vendor-prefixed events for older browsers
+                document.addEventListener('webkitfullscreenchange', handleFullscreenResize);
+                document.addEventListener('mozfullscreenchange', handleFullscreenResize);
+                document.addEventListener('MSFullscreenChange', handleFullscreenResize);
+
                 const frag = `#version 300 es
                 precision highp float;
 
@@ -1148,7 +1267,12 @@
                 shader.createVBO('quad', quadVerts);
                 shader.setAttribute('a_position', 2, gl.FLOAT);
 
+                let desiredFPS = 60;
                 const draw = (time) => {
+                    // If low-end, throttle to 20-30 FPS
+                    const isLowEnd = document.documentElement.classList.contains('low-end');
+                    const target = isLowEnd ? 25 : desiredFPS;
+
                     // Ensure viewport matches canvas size
                     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
@@ -1162,7 +1286,12 @@
 
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-                    requestAnimationFrame(draw);
+                    if (isLowEnd) {
+                        // pace frames using setTimeout for lower FPS
+                        setTimeout(() => requestAnimationFrame(draw), 1000 / target);
+                    } else {
+                        requestAnimationFrame(draw);
+                    }
                 };
 
                 requestAnimationFrame(draw);
@@ -1216,9 +1345,11 @@
                 ctx.fillStyle = gradient;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                // Add moving particles
+                // Add moving particles (reduce count on low-end)
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                for (let i = 0; i < 50; i++) {
+                const lowEnd = document.documentElement.classList.contains('low-end');
+                const particleCount = lowEnd ? 18 : 50;
+                for (let i = 0; i < particleCount; i++) {
                     const x = (Math.sin(t * 0.5 + i) * 0.3 + 0.5) * canvas.width;
                     const y = (Math.cos(t * 0.3 + i * 0.5) * 0.3 + 0.5) * canvas.height;
                     const size = Math.sin(t + i) * 2 + 3;
