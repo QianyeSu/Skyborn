@@ -17,18 +17,16 @@ subroutine onedtotwod(dataspec, a, b, nlat, nmdim, nt)
     complex :: spec_val
 
     ! Calculate truncation from nmdim
-    ntrunc = int(-1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim))))
+    ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
     ! Pre-compute inverse scale factor
     scale_inv = 2.0  ! 1.0 / 0.5
 
     ! Main computation loops - optimized for cache efficiency
-    !$OMP PARALLEL DO PRIVATE(nmstrt, m, n, nm, spec_val) &
-    !$OMP             SHARED(ntrunc)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD PRIVATE(nm, spec_val)
             do n = m, ntrunc + 1
                 nm = nmstrt + n - m + 1
 
@@ -42,6 +40,5 @@ subroutine onedtotwod(dataspec, a, b, nlat, nmdim, nt)
             nmstrt = nmstrt + ntrunc - m + 2
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine onedtotwod

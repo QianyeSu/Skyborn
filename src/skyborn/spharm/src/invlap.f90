@@ -22,18 +22,16 @@ subroutine invlap(dataspec, dataspec_ilap, nmdim, nt, rsphere)
     rsphere_sq = rsphere * rsphere
 
     ! Calculate truncation from nmdim
-    ntrunc = int(-1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim))))
+    ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
     ! Main computation loops - optimized for vectorization
-    !$OMP PARALLEL DO PRIVATE(nmstrt, m, n1, n, nm, n_real, invlap_factor) &
-    !$OMP             SHARED(ntrunc, rsphere_sq)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
             n1 = m
             if (m == 1) n1 = 2  ! Skip n=1 for m=1 to avoid division by zero
 
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD PRIVATE(nm, n_real, invlap_factor)
             do n = n1, ntrunc + 1
                 nm = nmstrt + n - m + 1
                 n_real = real(n)
@@ -50,6 +48,5 @@ subroutine invlap(dataspec, dataspec_ilap, nmdim, nt, rsphere)
         ! Set first mode to zero (corresponds to global mean)
         dataspec_ilap(1, i) = zero
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine invlap
