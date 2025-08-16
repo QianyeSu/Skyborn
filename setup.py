@@ -222,7 +222,7 @@ class MesonBuildExt(build_ext):
                 src_dir / "gaqd.f90",
                 src_dir / "shses.f90",  # UPDATED: Use optimized version
                 src_dir / "shaes.f90",
-                src_dir / "vhaes.f",
+                src_dir / "vhaes.f90",
                 src_dir / "vhses.f",
                 src_dir / "shsgs.f90",  # UPDATED: Use optimized version
                 src_dir / "shags.f90",  # UPDATED: Use optimized version
@@ -233,7 +233,7 @@ class MesonBuildExt(build_ext):
                 src_dir / "shsec.f90",  # UPDATED: Use optimized version
                 src_dir / "shsgc.f90",  # UPDATED: Use optimized version
                 src_dir / "vhaec.f90",  # UPDATED: Use optimized version
-                src_dir / "vhagc.f",
+                src_dir / "vhagc.f90",
                 src_dir / "vhsec.f90",
                 src_dir / "vhsgc.f90",
                 src_dir / "ihgeod.f90",
