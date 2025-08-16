@@ -207,10 +207,11 @@ class MesonBuildExt(build_ext):
 
             src_dir = module_path / "src"
             # f_files = list(src_dir.glob("*.f"))
+            # f_files = list(src_dir.glob("*.f90"))
             f_files = [
                 src_dir / "lap.f90",
                 src_dir / "invlap.f90",
-                src_dir / "sphcom.f",
+                src_dir / "sphcom.f90",
                 src_dir / "hrfft.f90",
                 src_dir / "getlegfunc.f90",
                 src_dir / "specintrp.f90",
@@ -220,19 +221,19 @@ class MesonBuildExt(build_ext):
                 src_dir / "twodtooned_vrtdiv.f90",
                 src_dir / "multsmoothfact.f90",
                 src_dir / "gaqd.f90",
-                src_dir / "shses.f90",  # UPDATED: Use optimized version
+                src_dir / "shses.f90",
                 src_dir / "shaes.f90",
                 src_dir / "vhaes.f90",
                 src_dir / "vhses.f90",
-                src_dir / "shsgs.f90",  # UPDATED: Use optimized version
-                src_dir / "shags.f90",  # UPDATED: Use optimized version
+                src_dir / "shsgs.f90",
+                src_dir / "shags.f90",
                 src_dir / "vhags.f90",
                 src_dir / "vhsgs.f90",
-                src_dir / "shaec.f90",  # UPDATED: Use optimized version
-                src_dir / "shagc.f90",  # UPDATED: Use optimized version
-                src_dir / "shsec.f90",  # UPDATED: Use optimized version
-                src_dir / "shsgc.f90",  # UPDATED: Use optimized version
-                src_dir / "vhaec.f90",  # UPDATED: Use optimized version
+                src_dir / "shaec.f90",
+                src_dir / "shagc.f90",
+                src_dir / "shsec.f90",
+                src_dir / "shsgc.f90",
+                src_dir / "vhaec.f90",
                 src_dir / "vhagc.f90",
                 src_dir / "vhsec.f90",
                 src_dir / "vhsgc.f90",
