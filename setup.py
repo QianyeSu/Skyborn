@@ -349,8 +349,26 @@ class MesonBuildExt(build_ext):
                     "-ftree-loop-im "
                     "-ftree-loop-distribution "
                     "-falign-functions=32 "
+                    "-falign-loops=32 "  # Loop alignment optimization
                     "-fopenmp "
                     "-std=legacy"
+                    # "-mavx2 "
+                    # "-mfma "
+                    # "-flto "
+                    # "-ffast-math "                   # Fast math operations (may allow some loss of precision)
+                    # "-funsafe-math-optimizations "    # More aggressive math optimizations
+                    # "-freciprocal-math "              # Use reciprocal approximations
+                    # "-fno-math-errno "                # Disable math function error checking
+                    # "-fno-trapping-math "             # Disable math traps
+                    # "-ftree-loop-optimize "           # Loop tree optimization
+                    # "-ftree-loop-vectorize "          # Loop vectorization
+                    # "-floop-nest-optimize "           # Loop nest optimization
+                    # "-floop-parallelize-all "         # Parallelize all loops
+                    # "-ftree-parallelize-loops=4 "     # Specify number of parallel loops (adjust for CPU cores)
+                    # "-fprefetch-loop-arrays "         # Prefetch loop arrays
+                    # "-fpack-struct "                  # Pack structs tightly
+                    # "-mcx16 "                         # Enable 16-byte atomic operations
+                    # "-mfpmath=sse "                   # Use SSE for floating-point math
                 )
                 c_optim_flags = (
                     # Highest level optimization, covers most performance enhancements
@@ -370,16 +388,16 @@ class MesonBuildExt(build_ext):
                     # OpenMP parallel processing support
                     "-fopenmp"
                 )
-            # f2py_cmd += [
-            #     "--opt=" + fortran_optim_flags,
-            #     "--f90flags=" + fortran_optim_flags,
-            #     "--cflags=" + c_optim_flags,
-            # ]
+            f2py_cmd += [
+                "--opt=" + fortran_optim_flags,
+                "--f90flags=" + fortran_optim_flags,
+                # "--cflags=" + c_optim_flags,
+            ]
             print(
                 "INFO: Setting compiler flags via environment variables for the Meson backend."
             )
             build_env = os.environ.copy()
-            build_env["FFLAGS"] = fortran_optim_flags
+            # build_env["FFLAGS"] = fortran_optim_flags
             build_env["CFLAGS"] = c_optim_flags
             import platform
 
@@ -389,7 +407,7 @@ class MesonBuildExt(build_ext):
                 f2py_cmd += ["--fcompiler=gnu95", "--compiler=unix"]
 
             print("f2py build command:", " ".join(f2py_cmd))
-            print(f"Using FFLAGS: {build_env.get('FFLAGS')}")
+            # print(f"Using FFLAGS: {build_env.get('FFLAGS')}")
             print(f"Using CFLAGS: {build_env.get('CFLAGS')}")
             subprocess.run(
                 f2py_cmd,
