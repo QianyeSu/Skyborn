@@ -494,7 +494,7 @@ subroutine legin(mode, l, nlat, m, w, pmn, km)
     ! Pass workspace segments as separate arrays for better memory access
     call legin1(mode, l, nlat, late, m, &
                 w(i1:i2-1), w(i2:i3-1), w(i3:i4-1), w(i4:i5-1), &
-                w(i5:i5+10000), pmn, km)
+                w(i5), pmn, km)
 
 end subroutine legin
 
@@ -638,7 +638,8 @@ subroutine zfin(isym, nlat, nlon, m, z, i3, wzfin)
     integer, parameter :: wp = kind(1.0d0)  ! double precision
 
     ! Input/Output parameters - IDENTICAL interface to original
-    integer, intent(in) :: isym, nlat, nlon, m, i3
+    integer, intent(in) :: isym, nlat, nlon, m
+    integer, intent(inout) :: i3
     real(wp), intent(inout) :: z(*)
     real(wp), intent(in) :: wzfin(*)
 
@@ -705,7 +706,7 @@ subroutine zfin1(isym, nlat, m, z, imid, i3, zz, z1, a, b, c)
     integer, intent(in) :: isym, nlat, m, imid
     integer, intent(inout) :: i3
     real(wp), intent(inout) :: z(imid, nlat, 3)
-    real(wp), intent(in) :: zz(imid, 1), z1(imid, 1)
+    real(wp), intent(in) :: zz(imid, *), z1(imid, *)
     real(wp), intent(in) :: a(*), b(*), c(*)
 
     ! Local variables - same precision as original
@@ -1198,7 +1199,8 @@ subroutine alin(isym, nlat, nlon, m, p, i3, walin)
     integer, parameter :: wp = kind(1.0d0)  ! double precision
 
     ! Input/Output parameters - IDENTICAL interface to original
-    integer, intent(in) :: isym, nlat, nlon, m, i3
+    integer, intent(in) :: isym, nlat, nlon, m
+    integer, intent(inout) :: i3
     real(wp), intent(inout) :: p(*)
     real(wp), intent(in) :: walin(*)
 
@@ -1227,7 +1229,7 @@ subroutine alin(isym, nlat, nlon, m, p, i3, walin)
     ! OPTIMIZATION 3: Call optimized core routine with workspace slices
     call alin1(isym, nlat, m, p, imid, i3, &
                walin(1:lim), walin(iw1:iw2-1), &
-               walin(iw2:iw3-1), walin(iw3:iw4-1), walin(iw4:iw4+10000))
+               walin(iw2), walin(iw3), walin(iw4))
 
 end subroutine alin
 
@@ -1432,21 +1434,20 @@ subroutine alinit(nlat, nlon, walin, dwork)
     ! Parameters
     integer, parameter :: wp = kind(1.0d0)  ! double precision
 
-    ! Input/Output parameters - IDENTICAL interface to original
+    ! Input/Output parameters - IDENTICAL interface to original F77
     integer, intent(in) :: nlat, nlon
-    real(wp), intent(out) :: walin(*)
-    real(wp), intent(inout) :: dwork(*)
+    real(wp), intent(out) :: walin(*)       ! F77: double precision
+    double precision, intent(inout) :: dwork(*)  ! F77: double precision
 
     ! Local variables - same precision as original
     integer :: imid, iw1
 
-    ! OPTIMIZATION 1: Compute grid parameters
+    ! Compute grid parameters exactly as F77
     imid = (nlat + 1) / 2
     iw1 = 2 * nlat * imid + 1
 
-    ! OPTIMIZATION 2: Call optimized core routine with workspace slices
-    call alini1(nlat, nlon, imid, &
-                walin(1:iw1-1), walin(iw1:iw1+10000), dwork)
+    ! Call core routine exactly as F77 - NO array slicing!
+    call alini1(nlat, nlon, imid, walin, walin(iw1), dwork)
 
 end subroutine alinit
 
@@ -1479,19 +1480,18 @@ subroutine alini1(nlat, nlon, imid, p, abc, cp)
     ! Parameters
     integer, parameter :: wp = kind(1.0d0)  ! double precision
 
-    ! Input/Output parameters - IDENTICAL interface to original
+    ! Input/Output parameters - IDENTICAL interface to original F77
     integer, intent(in) :: nlat, nlon, imid
-    real(wp), intent(out) :: p(imid, nlat, 2), abc(*)
-    real(wp), intent(inout) :: cp(*)
+    real(wp), intent(out) :: p(imid, nlat, 2), abc(*)    ! F77: double precision
+    double precision, intent(inout) :: cp(*)             ! F77: double precision
 
-    ! Local variables - same precision as original
+    ! Local variables - same precision as original F77
     integer :: mp1, m, np1, n, i
-    real(wp) :: pi, dt, th, ph
+    double precision :: pi, dt, th, ph     ! F77: double precision
 
-    ! OPTIMIZATION 1: Precompute constants with higher precision
-    ! Use more accurate pi computation for better numerical stability
-    pi = 4.0_wp * atan(1.0_wp)
-    dt = pi / real(nlat - 1, wp)
+    ! Precompute constants exactly as F77 original
+    pi = 4.0d0 * datan(1.0d0)
+    dt = pi / dble(nlat - 1)
 
     ! OPTIMIZATION 2: Main computation loop for m=0,1 - identical to original F77
     ! Use simple nested loop structure matching original exactly
@@ -1503,10 +1503,9 @@ subroutine alini1(nlat, nlon, imid, p, abc, cp)
             ! Compute associated Legendre function coefficients
             call dnlfk(m, n, cp)
 
-            ! Evaluate at grid points - matching original loop structure
-            ! OPTIMIZATION 2a: Potential for compiler vectorization with cleaner loop
+            ! Evaluate at grid points - matching original loop structure exactly
             do i = 1, imid
-                th = real(i - 1, wp) * dt
+                th = dble(i - 1) * dt
                 call dnlft(m, n, th, cp, ph)
                 p(i, np1, mp1) = ph
             end do
@@ -1549,7 +1548,7 @@ subroutine rabcp(nlat, nlon, abc)
     ! Parameters
     integer, parameter :: wp = kind(1.0d0)  ! double precision
 
-    ! Input/Output parameters - IDENTICAL interface to original
+    ! Input/Output parameters - IDENTICAL interface to original F77 (double precision)
     integer, intent(in) :: nlat, nlon
     real(wp), intent(out) :: abc(*)
 
@@ -1562,8 +1561,9 @@ subroutine rabcp(nlat, nlon, abc)
     iw1 = labc + 1
     iw2 = iw1 + labc
 
-    ! OPTIMIZATION 2: Call optimized core routine with workspace slices
-    call rabcp1(nlat, nlon, abc(1:labc), abc(iw1:iw2-1), abc(iw2:iw2+10000))
+    ! OPTIMIZATION 2: Call optimized core routine with workspace arrays (F77 compatible)
+    ! Original F77: call rabcp1(nlat,nlon,abc,abc(iw1),abc(iw2))
+    call rabcp1(nlat, nlon, abc, abc(iw1), abc(iw2))
 
 end subroutine rabcp
 
@@ -1589,65 +1589,65 @@ end subroutine rabcp
 !> @param[out] b Recursion coefficients B array
 !> @param[out] c Recursion coefficients C array
 subroutine rabcp1(nlat, nlon, a, b, c)
+!
+! CORRECTED VERSION: Exactly matches F77 original - no optimizations that change results
+!
     implicit none
 
     ! Parameters
     integer, parameter :: wp = kind(1.0d0)  ! double precision
 
-    ! Input/Output parameters - IDENTICAL interface to original
+    ! Use same precision as original F77 (double precision for interface)
     integer, intent(in) :: nlat, nlon
     real(wp), intent(out) :: a(*), b(*), c(*)
 
-    ! Local variables - same precision as original
+    ! Local variables - match F77 exactly
     integer :: mmax, mp1, m, ns, mp3, np1, n
-    real(wp) :: fm, tm, temp, fn, tn, cn, fnpm, fnmm
+    real :: fm, tm, temp, fn, tn, cn, fnpm, fnmm
 
-    ! OPTIMIZATION 1a: Pre-computed constants for better performance
-    real(wp), parameter :: ONE = 1.0_wp, TWO = 2.0_wp, THREE = 3.0_wp, SIX = 6.0_wp
-
-    ! OPTIMIZATION 1: Compute maximum m value
+    ! Compute mmax exactly as F77 original
     mmax = min(nlat, nlon/2 + 1)
 
-    ! OPTIMIZATION 2: Main computation loop - identical structure to original F77
+    ! Main loop - EXACT F77 translation
     do mp1 = 3, mmax
         m = mp1 - 1
         ns = ((m - 2) * (nlat + nlat - m - 1)) / 2 + 1
-        fm = real(m, wp)
+        fm = float(m)  ! Use F77 function name for exact equivalence
         tm = fm + fm
-        temp = tm * (tm - ONE)
+        temp = tm * (tm - 1.0)
 
-        ! Compute first coefficients for this m
-        a(ns) = sqrt((tm + ONE) * (tm - TWO) / temp)
-        c(ns) = sqrt(TWO / temp)
+        ! First coefficients - EXACT F77 formulas
+        a(ns) = sqrt((tm + 1.0) * (tm - 2.0) / temp)
+        c(ns) = sqrt(2.0 / temp)
 
-        ! Original F77 logic: if(m .eq. nlat-1) go to 215
-        if (m == nlat - 1) cycle
+        ! Check boundary condition exactly as F77
+        if (m == nlat - 1) cycle  ! equivalent to "go to 215"
 
-        ! Compute second coefficients for this m
+        ! Second coefficients - EXACT F77 formulas
         ns = ns + 1
-        temp = tm * (tm + ONE)
-        a(ns) = sqrt((tm + THREE) * (tm - TWO) / temp)
-        c(ns) = sqrt(SIX / temp)
+        temp = tm * (tm + 1.0)
+        a(ns) = sqrt((tm + 3.0) * (tm - 2.0) / temp)
+        c(ns) = sqrt(6.0 / temp)
 
-        ! Original F77 logic: if(mp3 .gt. nlat) go to 215
+        ! Check mp3 boundary exactly as F77
         mp3 = m + 3
-        if (mp3 > nlat) cycle
+        if (mp3 > nlat) cycle  ! equivalent to "go to 215"
 
-        ! Compute remaining coefficients for this m
+        ! Inner loop for remaining coefficients - EXACT F77 translation
         do np1 = mp3, nlat
             n = np1 - 1
             ns = ns + 1
-            fn = real(n, wp)
+            fn = float(n)  ! Use F77 function name
             tn = fn + fn
-            cn = (tn + ONE) / (tn - THREE)
+            cn = (tn + 1.0) / (tn - 3.0)
             fnpm = fn + fm
             fnmm = fn - fm
-            temp = fnpm * (fnpm - ONE)
+            temp = fnpm * (fnpm - 1.0)
 
-            ! OPTIMIZATION 2a: Use pre-computed constants for clarity and performance
-            a(ns) = sqrt(cn * (fnpm - THREE) * (fnpm - TWO) / temp)
-            b(ns) = sqrt(cn * fnmm * (fnmm - ONE) / temp)
-            c(ns) = sqrt((fnmm + ONE) * (fnmm + TWO) / temp)
+            ! CRITICAL: These formulas MUST match F77 exactly
+            a(ns) = sqrt(cn * (fnpm - 3.0) * (fnpm - 2.0) / temp)
+            b(ns) = sqrt(cn * fnmm * (fnmm - 1.0) / temp)
+            c(ns) = sqrt((fnmm + 1.0) * (fnmm + 2.0) / temp)
         end do
     end do
 
@@ -1761,7 +1761,7 @@ subroutine ses1(nlat, nlon, imid, p, pin, walin, dwork)
     ! Input/Output parameters - IDENTICAL interface to original
     integer, intent(in) :: nlat, nlon, imid
     real(wp), intent(out) :: p(imid, *)
-    real(wp), intent(inout) :: pin(imid, nlat, 3), walin(*), dwork(*)
+    real(wp), intent(inout) :: pin(imid, nlat, 3), walin(*), dwork(*)  ! CORRECTED: should be 3 based on F77 original
 
     ! Local variables - same precision as original
     integer :: mmax, mp1, m, np1, mn, i, i3
@@ -1844,7 +1844,7 @@ subroutine zvinit(nlat, nlon, wzvin, dwork)
 
     ! OPTIMIZATION 2: Call optimized core routine with workspace slices
     call zvini1(nlat, nlon, imid, &
-                wzvin(1:iw1-1), wzvin(iw1:iw1+10000), &
+                wzvin(1:iw1-1), wzvin(iw1), &
                 dwork(1:nlat/2+1), dwork(nlat/2+2:nlat+100))
 
 end subroutine zvinit
@@ -1952,7 +1952,7 @@ subroutine zwinit(nlat, nlon, wzwin, dwork)
 
     ! OPTIMIZATION 2: Call optimized core routine with workspace slices
     call zwini1(nlat, nlon, imid, &
-                wzwin(1:iw1-1), wzwin(iw1:iw1+10000), &
+                wzwin(1:iw1-1), wzwin(iw1), &
                 dwork(1:nlat/2+1), dwork(nlat/2+2:nlat+100))
 
 end subroutine zwinit
@@ -2054,7 +2054,8 @@ subroutine zvin(ityp, nlat, nlon, m, zv, i3, wzvin)
     integer, parameter :: wp = kind(1.0d0)  ! double precision
 
     ! Input/Output parameters - IDENTICAL interface to original
-    integer, intent(in) :: ityp, nlat, nlon, m, i3
+    integer, intent(in) :: ityp, nlat, nlon, m
+    integer, intent(inout) :: i3
     real(wp), intent(inout) :: zv(*)
     real(wp), intent(in) :: wzvin(*)
 
@@ -2076,7 +2077,7 @@ subroutine zvin(ityp, nlat, nlon, m, zv, i3, wzvin)
     ! OPTIMIZATION 3: Call optimized core routine with workspace slices
     call zvin1(ityp, nlat, m, zv, imid, i3, &
                wzvin(1:lim), wzvin(iw1:iw2-1), &
-               wzvin(iw2:iw3-1), wzvin(iw3:iw4-1), wzvin(iw4:iw4+10000))
+               wzvin(iw2:iw3-1), wzvin(iw3:iw4-1), wzvin(iw4))
 
 end subroutine zvin
 
@@ -2224,7 +2225,8 @@ subroutine zwin(ityp, nlat, nlon, m, zw, i3, wzwin)
     integer, parameter :: wp = kind(1.0d0)  ! double precision
 
     ! Input/Output parameters - IDENTICAL interface to original
-    integer, intent(in) :: ityp, nlat, nlon, m, i3
+    integer, intent(in) :: ityp, nlat, nlon, m
+    integer, intent(inout) :: i3
     real(wp), intent(inout) :: zw(*)
     real(wp), intent(in) :: wzwin(*)
 
@@ -2246,7 +2248,7 @@ subroutine zwin(ityp, nlat, nlon, m, zw, i3, wzwin)
     ! OPTIMIZATION 3: Call optimized core routine with workspace slices
     call zwin1(ityp, nlat, m, zw, imid, i3, &
                wzwin(1:lim), wzwin(iw1:iw2-1), &
-               wzwin(iw2:iw3-1), wzwin(iw3:iw4-1), wzwin(iw4:iw4+10000))
+               wzwin(iw2:iw3-1), wzwin(iw3:iw4-1), wzwin(iw4))
 
 end subroutine zwin
 
@@ -2408,7 +2410,7 @@ subroutine vbinit(nlat, nlon, wvbin, dwork)
 
     ! OPTIMIZATION 2: Call optimized core routine with workspace slices
     call vbini1(nlat, nlon, imid, &
-                wvbin(1:iw1-1), wvbin(iw1:iw1+10000), &
+                wvbin(1:iw1-1), wvbin(iw1), &
                 dwork(1:nlat/2+1), dwork(nlat/2+2:nlat+100))
 
 end subroutine vbinit
@@ -2515,7 +2517,7 @@ subroutine wbinit(nlat, nlon, wwbin, dwork)
 
     ! OPTIMIZATION 2: Call optimized core routine with workspace slices
     call wbini1(nlat, nlon, imid, &
-                wwbin(1:iw1-1), wwbin(iw1:iw1+10000), &
+                wwbin(1:iw1-1), wwbin(iw1), &
                 dwork(1:nlat/2+1), dwork(nlat/2+2:nlat+100))
 
 end subroutine wbinit
@@ -2616,7 +2618,8 @@ subroutine vbin(ityp, nlat, nlon, m, vb, i3, wvbin)
     integer, parameter :: wp = kind(1.0d0)  ! double precision
 
     ! Input/Output parameters - IDENTICAL interface to original
-    integer, intent(in) :: ityp, nlat, nlon, m, i3
+    integer, intent(in) :: ityp, nlat, nlon, m
+    integer, intent(inout) :: i3
     real(wp), intent(inout) :: vb(*)
     real(wp), intent(in) :: wvbin(*)
 
@@ -2638,7 +2641,7 @@ subroutine vbin(ityp, nlat, nlon, m, vb, i3, wvbin)
     ! OPTIMIZATION 3: Call optimized core routine with workspace slices
     call vbin1(ityp, nlat, m, vb, imid, i3, &
                wvbin(1:lim), wvbin(iw1:iw2-1), &
-               wvbin(iw2:iw3-1), wvbin(iw3:iw4-1), wvbin(iw4:iw4+10000))
+               wvbin(iw2:iw3-1), wvbin(iw3:iw4-1), wvbin(iw4))
 
 end subroutine vbin
 
@@ -2693,12 +2696,12 @@ subroutine vbin1(ityp, nlat, m, vb, imid, i3, vbz, vb1, a, b, c)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision to match F77 original
+    integer, parameter :: wp = kind(1.0d0)  ! double precision to match F77 original
 
     ! Input/Output parameters - IDENTICAL interface to F77:lines 1118-1120
     integer, intent(in) :: ityp, nlat, m, imid
     integer, intent(inout) :: i3
-    real(wp), intent(inout) :: vb(imid, nlat, 3)
+    real(wp), intent(inout) :: vb(imid, nlat, 2)  ! FIXED: correct dimension
     real(wp), intent(in) :: vbz(imid, *), vb1(imid, *)
     real(wp), intent(in) :: a(*), b(*), c(*)
 
@@ -2794,10 +2797,11 @@ subroutine wbin(ityp, nlat, nlon, m, wb, i3, wwbin)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision to match original
+    integer, parameter :: wp = kind(1.0d0)  ! double precision to match original
 
     ! Input/Output parameters - IDENTICAL interface to original
-    integer, intent(in) :: ityp, nlat, nlon, m, i3
+    integer, intent(in) :: ityp, nlat, nlon, m
+    integer, intent(inout) :: i3
     real(wp), intent(inout) :: wb(*)
     real(wp), intent(in) :: wwbin(*)
 
@@ -2819,7 +2823,7 @@ subroutine wbin(ityp, nlat, nlon, m, wb, i3, wwbin)
     ! OPTIMIZATION 3: Call optimized core routine with workspace slices
     call wbin1(ityp, nlat, m, wb, imid, i3, &
                wwbin(1:lim), wwbin(iw1:iw2-1), &
-               wwbin(iw2:iw3-1), wwbin(iw3:iw4-1), wwbin(iw4:iw4+10000))
+               wwbin(iw2:iw3-1), wwbin(iw3:iw4-1), wwbin(iw4))
 
 end subroutine wbin
 
@@ -2852,12 +2856,12 @@ subroutine wbin1(ityp, nlat, m, wb, imid, i3, wb1, wb2, a, b, c)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision to match original
+    integer, parameter :: wp = kind(1.0d0)  ! double precision to match original
 
     ! Input/Output parameters - IDENTICAL interface to original
     integer, intent(in) :: ityp, nlat, m, imid
     integer, intent(inout) :: i3
-    real(wp), intent(inout) :: wb(imid, nlat, 3)
+    real(wp), intent(inout) :: wb(imid, nlat, 2)  ! FIXED: correct dimension
     real(wp), intent(in) :: wb1(imid, *), wb2(imid, *)
     real(wp), intent(in) :: a(*), b(*), c(*)
 
@@ -3933,7 +3937,7 @@ subroutine rabcv(nlat, nlon, abc)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision to match F77 original
+    integer, parameter :: wp = kind(1.0d0)  ! double precision to match F77 original
 
     ! Input/Output parameters - IDENTICAL interface to F77:lines 1900,1906
     integer, intent(in) :: nlat, nlon
@@ -3952,7 +3956,7 @@ subroutine rabcv(nlat, nlon, abc)
 
     ! OPTIMIZATION 3: Call highly optimized core routine with precise memory slicing
     ! This ensures optimal cache utilization and minimal memory overhead
-    call rabcv1(nlat, nlon, abc(1:labc), abc(iw1:iw1+labc-1), abc(iw2:iw2+10000))  ! F77:line 1911
+    call rabcv1(nlat, nlon, abc, abc(iw1), abc(iw2))  ! F77:line 1911
 
 end subroutine rabcv
 
@@ -3983,7 +3987,7 @@ subroutine rabcv1(nlat, nlon, a, b, c)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision to match F77 original
+    integer, parameter :: wp = kind(1.0d0)  ! double precision to match F77 original
 
     ! Input/Output parameters - IDENTICAL interface to F77:lines 1914,1919,1975
     integer, intent(in) :: nlat, nlon
@@ -4109,7 +4113,7 @@ subroutine rabcw(nlat, nlon, abc)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision to match F77 original
+    integer, parameter :: wp = kind(1.0d0)  ! double precision to match F77 original
 
     ! Input/Output parameters - IDENTICAL interface to F77:lines 1956,1962
     integer, intent(in) :: nlat, nlon
@@ -4128,7 +4132,7 @@ subroutine rabcw(nlat, nlon, abc)
 
     ! OPTIMIZATION 3: Call highly optimized core routine with precise memory slicing
     ! This ensures optimal cache utilization and minimal memory overhead
-    call rabcw1(nlat, nlon, abc(1:labc), abc(iw1:iw1+labc-1), abc(iw2:iw2+10000))  ! F77:line 1967
+    call rabcw1(nlat, nlon, abc, abc(iw1), abc(iw2))  ! F77:line 1967
 
 end subroutine rabcw
 
@@ -4162,7 +4166,7 @@ subroutine rabcw1(nlat, nlon, a, b, c)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision to match F77 original
+    integer, parameter :: wp = kind(1.0d0)  ! double precision to match F77 original
 
     ! Input/Output parameters - IDENTICAL interface to F77:lines 1970,1975
     integer, intent(in) :: nlat, nlon
@@ -4284,7 +4288,7 @@ subroutine vtinit(nlat, nlon, wvbin, dwork)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision for wvbin
+    integer, parameter :: wp = kind(1.0d0)  ! double precision for wvbin
     integer, parameter :: dp = kind(1.0d0)  ! double precision for dwork
 
     ! Input/Output parameters - IDENTICAL interface to F77:lines 2015,2016
@@ -4299,10 +4303,9 @@ subroutine vtinit(nlat, nlon, wvbin, dwork)
     imid = (nlat + 1) / 2  ! F77:line 2018
     iw1 = 2 * nlat * imid + 1  ! F77:line 2019
 
-    ! OPTIMIZATION 2: Call highly optimized core routine with precise memory slicing
-    ! This ensures optimal cache utilization and minimal memory overhead
-    call vtini1(nlat, nlon, imid, wvbin(1:2*nlat*imid), wvbin(iw1:iw1+10000), &
-                dwork(1:nlat/2+1), dwork(nlat/2+2:nlat+100))  ! F77:lines 2024-2025
+    ! CORRECTED: Call core routine exactly as F77 original - NO array slicing
+    ! F77:lines 2024-2025: call vtini1(nlat,nlon,imid,wvbin,wvbin(iw1),dwork,dwork(nlat/2+2))
+    call vtini1(nlat, nlon, imid, wvbin, wvbin(iw1), dwork, dwork(nlat/2+2))
 
 end subroutine vtinit
 
@@ -4345,59 +4348,43 @@ subroutine vtini1(nlat, nlon, imid, vb, abc, cvb, work)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision for vb, abc
-    integer, parameter :: dp = kind(1.0d0)  ! double precision for work arrays
+    integer, parameter :: wp = kind(1.0d0)  ! double precision for consistency
 
     ! Input/Output parameters - IDENTICAL interface to F77:lines 2028,2034
     integer, intent(in) :: nlat, nlon, imid
     real(wp), intent(out) :: vb(imid, nlat, 2), abc(*)
-    real(dp), intent(inout) :: cvb(*), work(*)
+    real(wp), intent(inout) :: cvb(*), work(*)
 
-    ! Local variables - optimized for cache efficiency and vectorization
+    ! Local variables - same as F77 original for safety
     integer :: mdo, mp1, m, np1, n, i
-    real(dp) :: pi, dt, th, vbh
-    ! OPTIMIZATION 1: Precomputed angular values for better cache performance
-    real(dp), allocatable :: theta_values(:)
+    real(wp) :: pi, dt, th, vbh
 
-    ! OPTIMIZATION 2: Precompute all constants and angular values (F77:lines 2035-2037)
-    pi = 4.0_dp * atan(1.0_dp)  ! F77:line 2035
-    dt = pi / real(nlat - 1, dp)  ! F77:line 2036
+    ! FIXED: Simple constant computation like F77 original (F77:lines 2035-2037)
+    pi = 4.0_wp * atan(1.0_wp)  ! F77:line 2035
+    dt = pi / real(nlat - 1, wp)  ! F77:line 2036
     mdo = min(2, nlat, (nlon + 1) / 2)  ! F77:line 2037
 
-    ! OPTIMIZATION 3: Precompute all angular values to eliminate redundant computation
-    allocate(theta_values(imid))
-    do i = 1, imid
-        theta_values(i) = real(i - 1, dp) * dt  ! F77:line 2047 (precomputed)
-    end do
-
-    ! OPTIMIZATION 4: Reordered main initialization loop for optimal cache performance
-    ! Original F77:lines 2038-2050 with labels 160, 165
-    ! Reordered to: m → n → i for better memory access patterns
+    ! FIXED: Use exact same loop structure as F77 original
+    ! F77:lines 2038-2050 with labels 160, 165
     do mp1 = 1, mdo                      ! F77:line 2038 with label 160
         m = mp1 - 1                      ! F77:line 2039
         do np1 = mp1, nlat                ! F77:line 2040 with label 160
             n = np1 - 1                  ! F77:line 2041
 
-            ! OPTIMIZATION 5: Compute theta derivative coefficients (F77:line 2042)
-            ! This call computes coefficients for all theta values for given (m,n)
+            ! Compute theta derivative coefficients (F77:line 2042)
             call dvtk(m, n, cvb, work)
 
-            ! OPTIMIZATION 6: Vectorized evaluation at all grid points (F77:lines 2043-2049)
-            ! Use precomputed angular values for better cache performance
-            ! This loop is now vectorization-friendly with no data dependencies
+            ! Evaluate at all grid points (F77:lines 2043-2049)
             do i = 1, imid                 ! F77:line 2043 with label 165
-                ! Use precomputed angular value instead of computing each time
-                th = theta_values(i)       ! F77:line 2044 (optimized)
+                ! FIXED: Direct computation, no dynamic allocation
+                th = real(i - 1, wp) * dt  ! F77:line 2044
                 call dvtt(m, n, th, cvb, vbh)  ! F77:line 2045
-                vb(i, np1, mp1) = real(vbh, wp)  ! F77:line 2046 (optimized precision conversion)
+                vb(i, np1, mp1) = vbh     ! F77:line 2046
             end do                         ! F77:165 continue
         end do                            ! F77:160 continue
     end do
 
-    ! OPTIMIZATION 7: Clean up precomputed values
-    deallocate(theta_values)
-
-    ! OPTIMIZATION 8: Compute recursion coefficients (F77:line 2051)
+    ! Compute recursion coefficients (F77:line 2051)
     call rabcv(nlat, nlon, abc)
 
 end subroutine vtini1
@@ -4425,7 +4412,7 @@ subroutine wtinit(nlat, nlon, wwbin, dwork)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision for wwbin
+    integer, parameter :: wp = kind(1.0d0)  ! double precision for wwbin
     integer, parameter :: dp = kind(1.0d0)  ! double precision for dwork
 
     ! Input/Output parameters - IDENTICAL interface to original
@@ -4440,9 +4427,9 @@ subroutine wtinit(nlat, nlon, wwbin, dwork)
     imid = (nlat + 1) / 2
     iw1 = 2 * nlat * imid + 1
 
-    ! OPTIMIZATION 2: Call optimized core routine with workspace slices
-    call wtini1(nlat, nlon, imid, wwbin(1:2*nlat*imid), wwbin(iw1:iw1+10000), &
-                dwork(1:nlat/2+1), dwork(nlat/2+2:nlat+100))
+    ! CORRECTED: Call core routine exactly as F77 original - NO array slicing
+    ! F77:lines 2062-2063: call wtini1(nlat,nlon,imid,wwbin,wwbin(iw1),dwork,dwork(nlat/2+2))
+    call wtini1(nlat, nlon, imid, wwbin, wwbin(iw1), dwork, dwork(nlat/2+2))
 
 end subroutine wtinit
 
@@ -4477,21 +4464,20 @@ subroutine wtini1(nlat, nlon, imid, wb, abc, cwb, work)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision for wb, abc
-    integer, parameter :: dp = kind(1.0d0)  ! double precision for work arrays
+    integer, parameter :: wp = kind(1.0d0)  ! double precision for consistency
 
     ! Input/Output parameters - IDENTICAL interface to original
     integer, intent(in) :: nlat, nlon, imid
-    real(wp), intent(out) :: wb(imid, nlat, 3), abc(*)
-    real(dp), intent(inout) :: cwb(*), work(*)
+    real(wp), intent(out) :: wb(imid, nlat, 2), abc(*)
+    real(wp), intent(inout) :: cwb(*), work(*)
 
     ! Local variables - same precision as original
     integer :: mdo, mp1, m, np1, n, i
-    real(dp) :: pi, dt, th, wbh
+    real(wp) :: pi, dt, th, wbh
 
     ! OPTIMIZATION 1: Precompute constants
-    pi = 4.0_dp * atan(1.0_dp)
-    dt = pi / real(nlat - 1, dp)
+    pi = 4.0_wp * atan(1.0_wp)
+    dt = pi / real(nlat - 1, wp)
     mdo = min(3, nlat, (nlon + 1) / 2)
 
     ! OPTIMIZATION 2: Early return if insufficient m values
@@ -4508,9 +4494,9 @@ subroutine wtini1(nlat, nlon, imid, wb, abc, cwb, work)
 
             ! OPTIMIZATION 4: Evaluate at grid points
             do i = 1, imid
-                th = real(i - 1, dp) * dt
+                th = real(i - 1, wp) * dt
                 call dwtt(m, n, th, cwb, wbh)
-                wb(i, np1, m) = real(wbh, wp)
+                wb(i, np1, m) = wbh
             end do
         end do
     end do
@@ -4545,7 +4531,7 @@ subroutine vtgint(nlat, nlon, theta, wvbin, work)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision for wvbin
+    integer, parameter :: wp = kind(1.0d0)  ! double precision for wvbin
     integer, parameter :: dp = kind(1.0d0)  ! double precision for theta, work
 
     ! Input/Output parameters - IDENTICAL interface to F77 original
@@ -4563,8 +4549,9 @@ subroutine vtgint(nlat, nlon, theta, wvbin, work)
 
     ! OPTIMIZATION 2: Call optimized core routine with workspace slices
     ! F77 original: call vtgit1(nlat,nlon,imid,theta,wvbin,wvbin(iw1),work,work(nlat/2+2))
-    call vtgit1(nlat, nlon, imid, theta, wvbin(1:2*nlat*imid), wvbin(iw1:iw1+10000), &
-                work(1:nlat/2+1), work(nlat/2+2:nlat+100))
+    ! CORRECTED: Call core routine exactly as F77 original - NO array slicing
+    ! F77:lines 2103-2104: call vtgit1(nlat,nlon,imid,theta,wvbin,wvbin(iw1),work,work(nlat/2+2))
+    call vtgit1(nlat, nlon, imid, theta, wvbin, wvbin(iw1), work, work(nlat/2+2))
 
 end subroutine vtgint
 
@@ -4600,20 +4587,19 @@ subroutine vtgit1(nlat, nlon, imid, theta, vb, abc, cvb, work)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision for vb, abc
-    integer, parameter :: dp = kind(1.0d0)  ! double precision for work arrays
+    integer, parameter :: wp = kind(1.0d0)  ! double precision for consistency
 
     ! Input/Output parameters - IDENTICAL interface to F77 original
     integer, intent(in) :: nlat, nlon, imid
-    real(dp), intent(in) :: theta(*)  ! theta(imid) Gaussian quadrature points
-    real(wp), intent(out) :: vb(imid, nlat, 3), abc(*)
-    real(dp), intent(inout) :: cvb(*), work(*)
+    real(wp), intent(in) :: theta(*)  ! theta(imid) Gaussian quadrature points
+    real(wp), intent(out) :: vb(imid, nlat, 2), abc(*)
+    real(wp), intent(inout) :: cvb(*), work(*)
 
     ! Local variables - same precision as original
     integer :: mdo, mp1, m, np1, n, i
     integer, parameter :: tile_size = 32
     integer :: i_start, i_end, i_tile
-    real(dp) :: vbh
+    real(wp) :: vbh
 
     ! OPTIMIZATION 1: Precompute grid limit to avoid recomputation
     mdo = min(2, nlat, (nlon + 1) / 2)
@@ -4636,14 +4622,14 @@ subroutine vtgit1(nlat, nlon, imid, theta, vb, abc, cvb, work)
                     i_end = min(i_start + tile_size - 1, imid)
                     do i_tile = i_start, i_end
                         call dvtt(m, n, theta(i_tile), cvb, vbh)
-                        vb(i_tile, np1, mp1) = real(vbh, wp)
+                        vb(i_tile, np1, mp1) = vbh
                     end do
                 end do
             else
                 ! OPTIMIZATION 4B: Standard loop for small arrays
                 do i = 1, imid
                     call dvtt(m, n, theta(i), cvb, vbh)
-                    vb(i, np1, mp1) = real(vbh, wp)  ! F77: vb(i,np1,mp1) = vbh
+                    vb(i, np1, mp1) = vbh  ! F77: vb(i,np1,mp1) = vbh
                 end do
             end if
         end do
@@ -4679,7 +4665,7 @@ subroutine wtgint(nlat, nlon, theta, wwbin, work)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision for wwbin
+    integer, parameter :: wp = kind(1.0d0)  ! double precision for wwbin
     integer, parameter :: dp = kind(1.0d0)  ! double precision for theta, work
 
     ! Input/Output parameters - IDENTICAL interface to F77 original
@@ -4697,8 +4683,9 @@ subroutine wtgint(nlat, nlon, theta, wwbin, work)
 
     ! OPTIMIZATION 2: Call optimized core routine with workspace slices
     ! F77 original: call wtgit1(nlat,nlon,imid,theta,wwbin,wwbin(iw1),work,work(nlat/2+2))
-    call wtgit1(nlat, nlon, imid, theta, wwbin(1:2*nlat*imid), wwbin(iw1:iw1+10000), &
-                work(1:nlat/2+1), work(nlat/2+2:nlat+100))
+    ! CORRECTED: Call core routine exactly as F77 original - NO array slicing
+    ! F77:lines 2140-2141: call wtgit1(nlat,nlon,imid,theta,wwbin,wwbin(iw1),work,work(nlat/2+2))
+    call wtgit1(nlat, nlon, imid, theta, wwbin, wwbin(iw1), work, work(nlat/2+2))
 
 end subroutine wtgint
 
@@ -4736,21 +4723,20 @@ subroutine wtgit1(nlat, nlon, imid, theta, wb, abc, cwb, work)
     implicit none
 
     ! Parameters
-    integer, parameter :: wp = kind(1.0)  ! single precision for wb, abc
-    integer, parameter :: dp = kind(1.0d0)  ! double precision for work arrays
+    integer, parameter :: wp = kind(1.0d0)  ! double precision for consistency
     integer, parameter :: tile_size = 32
     integer, parameter :: CACHE_BLOCK_SIZE = 64
 
     ! Input/Output parameters - IDENTICAL interface to F77 original
     integer, intent(in) :: nlat, nlon, imid
-    real(dp), intent(in) :: theta(*)  ! theta(imid) Gaussian quadrature points
-    real(wp), intent(out) :: wb(imid, nlat, 3), abc(*)
-    real(dp), intent(inout) :: cwb(*), work(*)
+    real(wp), intent(in) :: theta(*)  ! theta(imid) Gaussian quadrature points
+    real(wp), intent(out) :: wb(imid, nlat, 2), abc(*)
+    real(wp), intent(inout) :: cwb(*), work(*)
 
     ! Local variables - same precision as original
     integer :: mdo, mp1, m, np1, n, i
     integer :: i_start, i_end, i_tile, iblock, block_start, block_end
-    real(dp) :: wbh
+    real(wp) :: wbh
 
     ! OPTIMIZATION 1: Precompute grid limit and check boundary condition
     mdo = min(3, nlat, (nlon + 1) / 2)
@@ -4777,14 +4763,14 @@ subroutine wtgit1(nlat, nlon, imid, theta, wb, abc, cwb, work)
                     i_end = min(i_start + tile_size - 1, imid)
                     do i_tile = i_start, i_end
                         call dwtt(m, n, theta(i_tile), cwb, wbh)
-                        wb(i_tile, np1, m) = real(wbh, wp)
+                        wb(i_tile, np1, m) = wbh
                     end do
                 end do
             else
                 ! OPTIMIZATION 5B: Standard loop for small arrays
                 do i = 1, imid
                     call dwtt(m, n, theta(i), cwb, wbh)
-                    wb(i, np1, m) = real(wbh, wp)  ! F77: wb(i,np1,m) = wbh
+                    wb(i, np1, m) = wbh  ! F77: wb(i,np1,m) = wbh
                 end do
             end if
         end do
@@ -5464,7 +5450,7 @@ subroutine vbgint(nlat, nlon, theta, wvbin, work)
     ! OPTIMIZATION 2: Call optimized core routine with workspace slices
     ! F77: call vbgit1 (nlat,nlon,imid,theta,wvbin,wvbin(iw1),work,work(nlat/2+2))
     call vbgit1(nlat, nlon, imid, theta, &
-                wvbin(1:iw1-1), wvbin(iw1:iw1+10000), &
+                wvbin(1:iw1-1), wvbin(iw1), &
                 work(1:nlat/2+1), work(nlat/2+2:nlat+100))
 
 end subroutine vbgint
@@ -5505,7 +5491,7 @@ subroutine vbgit1(nlat, nlon, imid, theta, vb, abc, cvb, work)
     ! Input/Output parameters - CORRECTED precision consistency
     integer, intent(in) :: nlat, nlon, imid
     real(wp), intent(in) :: theta(*)
-    real(wp), intent(out) :: vb(imid, nlat, 3)  ! FIXED: consistent double precision
+    real(wp), intent(out) :: vb(imid, nlat, 2)  ! FIXED: consistent double precision
     real(wp), intent(out) :: abc(*)     ! FIXED: consistent double precision
     real(wp), intent(inout) :: cvb(*), work(*)
 
@@ -5630,7 +5616,7 @@ subroutine wbgint(nlat, nlon, theta, wwbin, work)
     ! OPTIMIZATION 2: Call optimized core routine with workspace slices
     ! F77: call wbgit1 (nlat,nlon,imid,theta,wwbin,wwbin(iw1),work,work(nlat/2+2))
     call wbgit1(nlat, nlon, imid, theta, &
-                wwbin(1:iw1-1), wwbin(iw1:iw1+10000), &
+                wwbin(1:iw1-1), wwbin(iw1), &
                 work(1:nlat/2+1), work(nlat/2+2:nlat+100))
 
 end subroutine wbgint
@@ -5672,7 +5658,7 @@ subroutine wbgit1(nlat, nlon, imid, theta, wb, abc, cwb, work)
     ! Input/Output parameters - CORRECTED precision consistency
     integer, intent(in) :: nlat, nlon, imid
     real(wp), intent(in) :: theta(*)
-    real(wp), intent(out) :: wb(imid, nlat, 3)  ! FIXED: consistent double precision
+    real(wp), intent(out) :: wb(imid, nlat, 2)  ! FIXED: consistent double precision
     real(wp), intent(out) :: abc(*)     ! FIXED: consistent double precision
     real(wp), intent(inout) :: cwb(*), work(*)
 
