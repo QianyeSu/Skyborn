@@ -14,9 +14,11 @@ subroutine getlegfunc(legfunc, lat, ntrunc)
 
     ! Local variables
     integer :: m, n, nm, nmstrt
-    real :: theta
-    real, parameter :: pi = 3.141592653589793  ! High precision pi
+    real :: theta, pi
     real :: cp((ntrunc/2)+1)
+
+    ! Calculate pi with machine precision (equivalent to original .f version)
+    pi = 4.0 * atan(1.0)
 
     ! Convert latitude to colatitude in radians
     theta = 0.5 * pi - (pi / 180.0) * lat
@@ -24,7 +26,7 @@ subroutine getlegfunc(legfunc, lat, ntrunc)
     ! Main computation loop - optimized memory access pattern
     nmstrt = 0
     do m = 1, ntrunc + 1
-        !DIR$ VECTOR ALWAYS  ! Force vectorization for performance
+        !$OMP SIMD PRIVATE(nm)
         do n = m, ntrunc + 1
             nm = nmstrt + n - m + 1
 

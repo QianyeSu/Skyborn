@@ -17,15 +17,13 @@ subroutine multsmoothfact(dataspec, dataspec_smooth, smooth, nlat, nmdim, nt)
     real :: smooth_factor
 
     ! Calculate truncation from nmdim
-    ntrunc = int(-1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim))))
+    ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
     ! Main computation loops - optimized for vectorization and cache efficiency
-    !$OMP PARALLEL DO PRIVATE(nmstrt, m, n, nm, smooth_factor) &
-    !$OMP             SHARED(ntrunc, smooth)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD PRIVATE(nm, smooth_factor)
             do n = m, ntrunc + 1
                 nm = nmstrt + n - m + 1
                 smooth_factor = smooth(n)
@@ -36,6 +34,5 @@ subroutine multsmoothfact(dataspec, dataspec_smooth, smooth, nlat, nmdim, nt)
             nmstrt = nmstrt + ntrunc - m + 2
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine multsmoothfact

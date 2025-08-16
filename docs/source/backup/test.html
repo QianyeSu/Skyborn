@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combined Black Hole with Wormhole Particles</title>
+    <style>
+        body {
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+
+        combined-hole {
+            position: absolute;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        combined-hole::before {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            z-index: -1;
+            display: block;
+            width: 150%;
+            height: 140%;
+            background: radial-gradient(ellipse at 50% 55%, transparent 10%, black 50%);
+            transform: translate3d(-50%, -50%, 0);
+            content: "";
+            pointer-events: none;
+        }
+
+        combined-hole::after {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            z-index: -2;
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(
+                ellipse at 50% 75%,
+                #a900ff 20%,
+                transparent 75%
+            );
+            mix-blend-mode: overlay;
+            transform: translate3d(-50%, -50%, 0);
+            content: "";
+            pointer-events: none;
+        }
+
+        .aura {
+            position: absolute;
+            top: -71.5%;
+            left: 50%;
+            z-index: 3;
+            width: 30%;
+            height: 140%;
+            background: linear-gradient(
+                20deg,
+                #0099ff,
+                #0066cc20 16.5%,
+                #00ccff 33%,
+                #0099ff20 49.5%,
+                #0080ff 66%,
+                #00aaff60 85.5%,
+                #0066ff 100%
+            ) 0 100% / 100% 200%;
+            border-radius: 0 0 100% 100%;
+            filter: blur(50px);
+            mix-blend-mode: plus-lighter;
+            opacity: 0.75;
+            transform: translate3d(-50%, 0, 0);
+            animation: aura-glow 5s infinite linear;
+        }
+
+        @keyframes aura-glow {
+            0% { background-position: 0 100%; }
+            100% { background-position: 0 300%; }
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                transparent,
+                transparent 1px,
+                white 1px,
+                white 2px
+            );
+            mix-blend-mode: overlay;
+            opacity: 0.5;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <combined-hole>
+        <canvas class="js-canvas"></canvas>
+        <div class="aura"></div>
+        <div class="overlay"></div>
+    </combined-hole>
+
+    <script type="module">
+        import easingUtils from "https://esm.sh/easing-utils";
+
+        class CombinedHole extends HTMLElement {
+            connectedCallback() {
+                this.canvas = this.querySelector(".js-canvas");
+                this.ctx = this.canvas.getContext("2d");
+
+                this.discs = [];
+                this.lines = [];
+                this.wormholeParticles = [];
+
+                this.setSize();
+                this.setDiscs();
+                this.setLines();
+                this.setBlackholeParticles();
+                this.setWormholeParticles();
+
+                this.bindEvents();
+                requestAnimationFrame(this.tick.bind(this));
+            }
+
+            bindEvents() {
+                window.addEventListener("resize", this.onResize.bind(this));
+            }
+
+            onResize() {
+                this.setSize();
+                this.setDiscs();
+                this.setLines();
+                this.setBlackholeParticles();
+                this.setWormholeParticles();
+            }
+
+            setSize() {
+                this.rect = this.getBoundingClientRect();
+                this.render = {
+                    width: this.rect.width,
+                    height: this.rect.height,
+                    dpi: window.devicePixelRatio
+                };
+                this.canvas.width = this.render.width * this.render.dpi;
+                this.canvas.height = this.render.height * this.render.dpi;
+            }
+
+            setDiscs() {
+                const { width, height } = this.rect;
+                this.discs = [];
+
+                this.startDisc = {
+                    x: width * 0.5,
+                    y: height * 0.45,
+                    w: width * 0.75,
+                    h: height * 0.7
+                };
+
+                this.endDisc = {
+                    x: width * 0.5,
+                    y: height * 0.95,
+                    w: 0,
+                    h: 0
+                };
+
+                const totalDiscs = 100;
+                let prevBottom = height;
+                this.clip = {};
+
+                for (let i = 0; i < totalDiscs; i++) {
+                    const p = i / totalDiscs;
+                    const disc = this.tweenDisc({ p });
+                    const bottom = disc.y + disc.h;
+
+                    if (bottom <= prevBottom) {
+                        this.clip = {
+                            disc: { ...disc },
+                            i
+                        };
+                    }
+
+                    prevBottom = bottom;
+                    this.discs.push(disc);
+                }
+
+                this.clip.path = new Path2D();
+                this.clip.path.ellipse(
+                    this.clip.disc.x,
+                    this.clip.disc.y,
+                    this.clip.disc.w,
+                    this.clip.disc.h,
+                    0,
+                    0,
+                    Math.PI * 2
+                );
+                this.clip.path.rect(
+                    this.clip.disc.x - this.clip.disc.w,
+                    0,
+                    this.clip.disc.w * 2,
+                    this.clip.disc.y
+                );
+            }
+
+            setLines() {
+                const { width, height } = this.rect;
+                this.lines = [];
+
+                const totalLines = 100;
+                const linesAngle = (Math.PI * 2) / totalLines;
+
+                for (let i = 0; i < totalLines; i++) {
+                    this.lines.push([]);
+                }
+
+                this.discs.forEach((disc) => {
+                    for (let i = 0; i < totalLines; i++) {
+                        const angle = i * linesAngle;
+                        const p = {
+                            x: disc.x + Math.cos(angle) * disc.w,
+                            y: disc.y + Math.sin(angle) * disc.h
+                        };
+                        this.lines[i].push(p);
+                    }
+                });
+
+                this.linesCanvas = new OffscreenCanvas(width, height);
+                const ctx = this.linesCanvas.getContext("2d");
+
+                this.lines.forEach((line, i) => {
+                    ctx.save();
+                    let lineIsIn = false;
+                    line.forEach((p1, j) => {
+                        if (j === 0) return;
+
+                        const p0 = line[j - 1];
+
+                        if (!lineIsIn && (ctx.isPointInPath(this.clip.path, p1.x, p1.y) || ctx.isPointInStroke(this.clip.path, p1.x, p1.y))) {
+                            lineIsIn = true;
+                        } else if (lineIsIn) {
+                            ctx.clip(this.clip.path);
+                        }
+
+                        ctx.beginPath();
+                        ctx.moveTo(p0.x, p0.y);
+                        ctx.lineTo(p1.x, p1.y);
+                        ctx.strokeStyle = "#444";
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                        ctx.closePath();
+                    });
+                    ctx.restore();
+                });
+
+                this.linesCtx = ctx;
+            }
+
+            setBlackholeParticles() {
+                const { width, height } = this.rect;
+                this.particles = [];
+
+                this.particleArea = {
+                    sw: this.clip.disc.w * 0.5,
+                    ew: this.clip.disc.w * 2,
+                    h: height * 0.85
+                };
+                this.particleArea.sx = (width - this.particleArea.sw) / 2;
+                this.particleArea.ex = (width - this.particleArea.ew) / 2;
+
+                const totalParticles = 300; // Increase black hole particle count
+
+                for (let i = 0; i < totalParticles; i++) {
+                    const particle = this.initBlackholeParticle(true);
+                    this.particles.push(particle);
+                }
+            }
+
+            initBlackholeParticle(start = false) {
+                const sx = this.particleArea.sx + this.particleArea.sw * Math.random();
+                const ex = this.particleArea.ex + this.particleArea.ew * Math.random();
+                const dx = ex - sx;
+                const vx = 0.1 + Math.random() * 0.5;
+                const y = start ? this.particleArea.h * Math.random() : this.particleArea.h;
+                const r = 0.5 + Math.random() * 4;
+                const vy = 0.5 + Math.random();
+
+                return {
+                    x: sx,
+                    sx,
+                    dx,
+                    y,
+                    vy,
+                    p: 0,
+                    r,
+                    c: `rgba(255, 255, 255, ${Math.random()})`
+                };
+            }
+
+            setWormholeParticles() {
+                this.wormholeParticles = [];
+                const totalWormholeParticles = 5000; // Reduced to stable count to ensure it works first
+
+                // Pre-compute sin/cos lookup tables for optimization
+                this.sinTable = [];
+                this.cosTable = [];
+                const tableSize = 1000;
+                for (let i = 0; i < tableSize; i++) {
+                    const angle = (i / tableSize) * Math.PI * 2;
+                    this.sinTable[i] = Math.sin(angle);
+                    this.cosTable[i] = Math.cos(angle);
+                }
+
+                console.log('Creating particles for', this.discs.length, 'discs'); // Debug output
+
+                // Ensure each ellipse has particles
+                this.discs.forEach((disc, discIndex) => {
+                    // Calculate actual ellipse size to determine inner and outer orbits
+                    const ellipseSize = disc.w + disc.h; // Ellipse size indicator
+                    const maxSize = Math.max(...this.discs.map(d => d.w + d.h));
+                    const minSize = Math.min(...this.discs.map(d => d.w + d.h));
+
+                    // Normalized size：1=outer orbit (large)，0=inner orbit (small)
+                    const sizeRatio = (ellipseSize - minSize) / (maxSize - minSize);
+                    const distanceRatio = 1 - sizeRatio; // reverse：1=inner orbit,0=outer orbit
+
+                    const particlesPerDisc = Math.floor(totalWormholeParticles / this.discs.length * (1 - distanceRatio * 0.5));
+
+                    // Inner orbit speed is faster：Particles close to black hole are affected by gravity and move faster
+                    const baseSpeed = 0.001; // Outer orbit base speed（slowed down）
+                    const maxSpeedMultiplier = 8; // Maximum speed multiplier（reduced）
+                    const speedMultiplier = 1 + distanceRatio * maxSpeedMultiplier; // inner orbit fast, outer orbit slow
+                    const speed = baseSpeed * speedMultiplier;
+
+                    for (let i = 0; i < particlesPerDisc; i++) {
+                        const particle = {
+                            d: disc, // Associated ellipse
+                            a: Math.random() * Math.PI * 2, // angle
+                            p: Math.random(), // Progress position along ellipse (0-1)
+                            speed: speed,
+                            r: Math.floor(Math.random() * 80), // Use blue theme
+                            g: Math.floor(Math.random() * 80) + 100, // blue-green
+                            b: Math.floor(Math.random() * 80) + 175, // strong blue
+                            o: 0.5 + Math.random() * 0.5,
+                            size: 1.5 + Math.random() * 2,
+                            distanceRatio: distanceRatio,
+                            active: true
+                        };
+                        this.wormholeParticles.push(particle);
+                    }
+                });
+
+                console.log('Created', this.wormholeParticles.length, 'wormhole particles'); // Debug output
+            }
+
+            tweenValue(start, end, p, ease = false) {
+                const delta = end - start;
+                const easeFn = easingUtils[
+                    ease ? "ease" + ease.charAt(0).toUpperCase() + ease.slice(1) : "linear"
+                ];
+                return start + delta * easeFn(p);
+            }
+
+            tweenDisc(disc) {
+                disc.x = this.tweenValue(this.startDisc.x, this.endDisc.x, disc.p);
+                disc.y = this.tweenValue(this.startDisc.y, this.endDisc.y, disc.p, "inExpo");
+                disc.w = this.tweenValue(this.startDisc.w, this.endDisc.w, disc.p);
+                disc.h = this.tweenValue(this.startDisc.h, this.endDisc.h, disc.p);
+                return disc;
+            }
+
+            drawDiscs() {
+                const { ctx } = this;
+                ctx.strokeStyle = "#444";
+                ctx.lineWidth = 2;
+
+                const outerDisc = this.startDisc;
+                ctx.beginPath();
+                ctx.ellipse(outerDisc.x, outerDisc.y, outerDisc.w, outerDisc.h, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.closePath();
+
+                this.discs.forEach((disc, i) => {
+                    if (i % 5 !== 0) return;
+
+                    if (disc.w < this.clip.disc.w - 5) {
+                        ctx.save();
+                        ctx.clip(this.clip.path);
+                    }
+
+                    ctx.beginPath();
+                    ctx.ellipse(disc.x, disc.y, disc.w, disc.h, 0, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.closePath();
+
+                    if (disc.w < this.clip.disc.w - 5) {
+                        ctx.restore();
+                    }
+                });
+            }
+
+            drawLines() {
+                const { ctx, linesCanvas } = this;
+                ctx.drawImage(linesCanvas, 0, 0);
+            }
+
+            drawBlackholeParticles() {
+                const { ctx } = this;
+                ctx.save();
+                ctx.clip(this.clip.path);
+
+                this.particles.forEach((particle) => {
+                    ctx.fillStyle = particle.c;
+                    ctx.beginPath();
+                    ctx.rect(particle.x, particle.y, particle.r, particle.r);
+                    ctx.closePath();
+                    ctx.fill();
+                });
+
+                ctx.restore();
+            }
+
+            // Fixed trigonometric function lookup
+            fastSin(angle) {
+                // Simplified lookup, ensuring no errors
+                const normalizedAngle = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+                const index = Math.floor((normalizedAngle / (Math.PI * 2)) * (this.sinTable.length - 1));
+                return this.sinTable[index] || Math.sin(angle); // Fallback to standard function
+            }
+
+            fastCos(angle) {
+                const normalizedAngle = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+                const index = Math.floor((normalizedAngle / (Math.PI * 2)) * (this.cosTable.length - 1));
+                return this.cosTable[index] || Math.cos(angle); // Fallback to standard function
+            }
+
+            drawWormholeParticles() {
+                const { ctx } = this;
+                const { width, height } = this.render;
+                const centerX = width * 0.5;
+                const centerY = height * 0.5;
+                const blackHoleRadius = Math.min(width, height) * 0.01;
+
+                this.wormholeParticles.forEach((particle) => {
+                    if (!particle.active) return;
+
+                    const { d, a, r, g, b, o, size, distanceRatio } = particle;
+
+                    if (!d || typeof d.w === 'undefined' || typeof d.h === 'undefined') return;
+
+                    // Use elliptical orbit to calculate position, adding slight perturbation
+                    const baseX = d.x + Math.cos(a) * d.w;
+                    const baseY = d.y + Math.sin(a) * d.h;
+
+                    const noiseScale = 2;
+                    const x = baseX + (Math.random() - 0.5) * noiseScale;
+                    const y = baseY + (Math.random() - 0.5) * noiseScale;
+
+                    // Check if particle is absorbed
+                    const distanceToCenter = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+
+                    if (distanceToCenter < blackHoleRadius) {
+                        particle.active = false;
+                        return;
+                    }
+
+                    // Check if reached white particle generation area - considering elliptical orbit depth
+                    const whiteParticleSpawnY = this.particleArea.h * 0.81; // Increase disappearance height to81%
+
+                    // Calculate particle's relative position on elliptical orbit
+                    const ellipseSize = Math.sqrt(d.w * d.w + d.h * d.h);
+                    const maxEllipseSize = Math.max(...this.discs.map(disc => Math.sqrt(disc.w * disc.w + disc.h * disc.h)));
+                    const sizeRatio = ellipseSize / maxEllipseSize;
+
+                    // Only inner orbit particles (those close to black hole) reach white particle generation area and disappear
+                    const isInnerOrbit = sizeRatio < 0.15; // Only inner orbit30%orbits
+
+                    if (isInnerOrbit && y >= whiteParticleSpawnY) {
+                        // Check if within white particle generation range
+                        const spawnCenterX = this.particleArea.sx + this.particleArea.sw * 0.6;
+                        const spawnRadius = this.particleArea.sw * 10;
+                        const distanceToSpawnCenter = Math.abs(x - spawnCenterX);
+
+                        if (distanceToSpawnCenter <= spawnRadius) {
+                            particle.active = false;
+                            return;
+                        }
+                    }
+
+                    // Calculate ellipse transparency
+                    const discAlpha = d.a !== undefined ? Math.max(d.a, 0.4) : 1;
+
+                    // Inner orbit particles emit stronger light
+                    const glowIntensity = 4 + distanceRatio * 6;
+
+                    ctx.shadowBlur = glowIntensity;
+                    ctx.shadowColor = `rgb(${r}, ${g}, ${b})`;
+
+                    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                    ctx.globalAlpha = o * discAlpha * (0.8 + distanceRatio * 0.3);
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.closePath();
+
+                    ctx.shadowBlur = 0;
+                });
+
+                ctx.globalAlpha = 1;
+            }
+
+            moveDiscs() {
+                this.discs.forEach((disc) => {
+                    disc.p = (disc.p + 0.002) % 1; // Speed up contraction (from 0.0005 increased to 0.002)
+                    this.tweenDisc(disc);
+
+                    const scaleX = this.tweenValue(1, 0, disc.p, 'outCubic');
+                    const scaleY = this.tweenValue(1, 0, disc.p, 'outExpo');
+
+                    disc.sx = scaleX;
+                    disc.sy = scaleY;
+
+                    const p = disc.sx * disc.sy;
+                    let a = 1;
+                    if (p < 0.01) {
+                        a = Math.pow(Math.min(p / 0.01, 1), 3);
+                    } else if (p > 0.2) {
+                        a = 1 - Math.min((p - 0.2) / 0.8, 1);
+                    }
+                    disc.a = a;
+                });
+            }
+
+            moveBlackholeParticles() {
+                this.particles.forEach((particle) => {
+                    particle.p = 1 - particle.y / this.particleArea.h;
+                    particle.x = particle.sx + particle.dx * particle.p;
+                    particle.y -= particle.vy;
+
+                    if (particle.y < 0) {
+                        particle.y = this.initBlackholeParticle().y;
+                    }
+                });
+            }
+
+            moveWormholeParticles() {
+                const inactiveParticles = [];
+
+                this.wormholeParticles.forEach((particle, index) => {
+                    if (!particle.active) {
+                        inactiveParticles.push(index);
+                        return;
+                    }
+
+                    // Particles move along elliptical orbit
+                    particle.p = (particle.p + particle.speed) % 1;
+                    particle.a = particle.p * Math.PI * 2;
+                });
+
+                // New particle replenishment mechanism: when particles disappear, immediately replenish on outer orbit ellipse
+                inactiveParticles.forEach((index) => {
+                    const particle = this.wormholeParticles[index];
+
+                    // Immediately respawn to outer orbit ellipse
+                    const outerDiscs = this.discs.slice(0, Math.floor(this.discs.length * 0.3));
+                    if (outerDiscs.length > 0) {
+                        const randomDisc = outerDiscs[Math.floor(Math.random() * outerDiscs.length)];
+
+                        particle.d = randomDisc;
+                        particle.p = Math.random();
+                        particle.a = particle.p * Math.PI * 2;
+                        particle.active = true;
+
+                        // Reset to outer orbit particle properties - Use blue theme
+                        const ellipseSize = Math.sqrt(randomDisc.w * randomDisc.w + randomDisc.h * randomDisc.h);
+                        const maxEllipseSize = Math.max(...this.discs.map(d => Math.sqrt(d.w * d.w + d.h * d.h)));
+                        const sizeRatio = ellipseSize / maxEllipseSize;
+                        const distanceRatio = 1 - sizeRatio;
+
+                        particle.distanceRatio = distanceRatio;
+                        particle.speed = 0.001 * (1 + distanceRatio * 8);
+                        particle.r = Math.floor(Math.random() * 80);
+                        particle.g = Math.floor(Math.random() * 80) + 100;
+                        particle.b = Math.floor(Math.random() * 80) + 175;
+                        particle.o = 0.5 + Math.random() * 0.5;
+                        particle.size = 1.5 + Math.random() * 2;
+                    }
+                });
+            }
+
+            tick(time) {
+                const { ctx } = this;
+
+                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                ctx.save();
+                ctx.scale(this.render.dpi, this.render.dpi);
+
+                this.moveDiscs();
+                this.moveBlackholeParticles();
+                this.moveWormholeParticles();
+
+                // Draw order: discs -> grid lines -> black hole particles -> Wormhole particles (top layer)
+                this.drawDiscs();
+                this.drawLines();
+                this.drawBlackholeParticles();
+                this.drawWormholeParticles(); // Wormhole particles on top layer
+
+                ctx.restore();
+                requestAnimationFrame(this.tick.bind(this));
+            }
+        }
+
+        customElements.define("combined-hole", CombinedHole);
+    </script>
+</body>
+</html>

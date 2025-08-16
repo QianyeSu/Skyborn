@@ -31,7 +31,38 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libeccodes-dev gfortran build-essential libopenblas-dev libblas-dev liblapack-dev meson ninja-build
+
+          # Add GCC 13+ repository for latest compiler versions
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+
+          # Install latest GCC/gfortran versions (13+)
+          sudo apt-get install -y build-essential
+          sudo apt-get install -y gcc-13 gfortran-13 g++-13
+          sudo apt-get install -y gcc-14 gfortran-14 g++-14 || echo "GCC-14 not available, using GCC-13"
+
+          # Install OpenMP and math libraries
+          sudo apt-get install -y libomp-dev libopenblas-dev libblas-dev liblapack-dev
+          # Install build tools
+          sudo apt-get install -y meson ninja-build pkg-config cmake
+          # Install eccodes for meteorological data support
+          sudo apt-get install -y libeccodes-dev || echo "eccodes installation optional"
+
+          # Set up compiler alternatives - prioritize GCC 13+
+          # Try GCC-14 first, fallback to GCC-13
+          if [ -x "/usr/bin/gcc-14" ]; then
+            echo "Setting up GCC-14 as primary compiler"
+            sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 140 --slave /usr/bin/g++ g++ /usr/bin/g++-14
+            sudo update-alternatives --install /usr/bin/gfortran gfortran /usr/bin/gfortran-14 140
+            sudo update-alternatives --set gcc /usr/bin/gcc-14
+            sudo update-alternatives --set gfortran /usr/bin/gfortran-14
+          else
+            echo "Setting up GCC-13 as primary compiler"
+            sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 130 --slave /usr/bin/g++ g++ /usr/bin/g++-13
+            sudo update-alternatives --install /usr/bin/gfortran gfortran /usr/bin/gfortran-13 130
+            sudo update-alternatives --set gcc /usr/bin/gcc-13
+            sudo update-alternatives --set gfortran /usr/bin/gfortran-13
+          fi
 
       - name: Install dependencies
         run: |
@@ -54,38 +85,82 @@ jobs:
           # Try to install eccodes, but don't fail if it doesn't work
           pip install eccodes || echo "eccodes installation failed, continuing without it"
 
-      - name: Verify compiler availability and test simple compilation
+      - name: Verify compiler environment
         run: |
-          echo "=== Checking compiler availability ==="
-          gfortran --version || echo "gfortran not found"
-          gcc --version || echo "gcc not found"
-          which gfortran || echo "gfortran path not found"
-          which gcc || echo "gcc path not found"
+          echo "=== Compiler Environment Verification ==="
+          gcc --version | head -1
+          gfortran --version | head -1
 
-          echo "=== Testing simple Fortran compilation ==="
-          echo "program test; print *, 'Hello'; end program" > test.f90
-          gfortran -c test.f90 && echo "✓ Fortran compilation works" || echo "✗ Fortran compilation failed"
-          rm -f test.f90 test.o
+          # Check gfortran version is 13+
+          GFORTRAN_VERSION=$(gfortran --version | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1 | cut -d. -f1)
+          echo "gfortran major version: $GFORTRAN_VERSION"
+          if [ "$GFORTRAN_VERSION" -ge 13 ]; then
+            echo "✓ gfortran $GFORTRAN_VERSION.x meets requirement (13+)"
+          else
+            echo "✗ gfortran $GFORTRAN_VERSION.x is below requirement (13+)"
+            exit 1
+          fi
 
-          echo "=== Testing f2py availability ==="
-          python -m numpy.f2py --help | head -5 || echo "f2py not available"
+          echo "=== Setting up build environment ==="
+          export CC=gcc
+          export FC=gfortran
+          export F77=gfortran
+          export F90=gfortran
+          export CXX=g++
+          echo "Compilers: CC=$CC, FC=$FC, CXX=$CXX"
 
-          echo "=== Testing meson availability ==="
-          meson --version || echo "meson not found"
-          ninja --version || echo "ninja not found"
+          echo "=== Testing f2py with gfortran $GFORTRAN_VERSION ==="
+          echo 'subroutine test_compile()
+          print *, "gfortran compilation test"
+          end subroutine' > test.f90
+          python -m numpy.f2py -c test.f90 -m test_mod --fcompiler=gnu95 && echo "✓ f2py works with gfortran $GFORTRAN_VERSION" || echo "✗ f2py failed"
+          rm -f test.f90 test_mod*.so *.mod
+
 
       - name: Manual build attempt with detailed output
         run: |
           echo "=== Attempting manual build with verbose output ==="
-          # Set explicit compiler environment variables
+          # Set explicit compiler environment variables with OpenMP support
           export FC=gfortran
           export F77=gfortran
           export F90=gfortran
           export CC=gcc
+          export CXX=g++
+          export FFLAGS="-O3 -fPIC -fopenmp -fno-second-underscore -std=legacy"
+          export CFLAGS="-O3 -fPIC -fopenmp"
+          export LDFLAGS="-fopenmp"
+          export NPY_NUM_BUILD_JOBS=2
 
-          # Try building with maximum verbosity
-          if ! python setup.py build_ext --inplace --verbose; then
-            echo "=== Build failed, checking for any compiled modules ==="
+          echo "=== Environment setup ==="
+          echo "FC=$FC, F77=$F77, F90=$F90, CC=$CC, CXX=$CXX"
+          echo "FFLAGS=$FFLAGS"
+          echo "CFLAGS=$CFLAGS"
+          echo "LDFLAGS=$LDFLAGS"
+
+          # Verify compiler versions one more time
+          $FC --version | head -1
+          $CC --version | head -1
+
+          # Clean any previous build artifacts
+          echo "=== Cleaning previous build artifacts ==="
+          rm -rf build/ dist/ *.egg-info/
+          find . -name "*.so" -delete
+          find . -name "*.pyd" -delete
+          find . -name "*.mod" -delete
+          find . -name "*module.c" -delete
+          find . -name "*-f2pywrappers*.f" -delete
+
+          # Try building with maximum verbosity and error capture
+          echo "=== Building with detailed f2py output ==="
+          if ! python setup.py build_ext --inplace --verbose 2>&1 | tee build_output.log; then
+            echo "=== Build failed, analyzing error output ==="
+            echo "=== Last 100 lines of build output ==="
+            tail -100 build_output.log || echo "No build_output.log found"
+            echo "=== Checking for specific f2py errors ==="
+            grep -i "error\|failed\|undefined\|cannot find\|no such file" build_output.log || echo "No obvious errors found"
+            echo "=== Checking compiler-specific errors ==="
+            grep -i "gfortran\|gcc\|compile\|link" build_output.log || echo "No compiler errors found"
+            echo "=== Checking for any compiled modules despite failure ==="
             find . -name "*.so" -o -name "*.pyd" | head -10
           else
             echo "=== Build succeeded, checking compiled modules ==="
