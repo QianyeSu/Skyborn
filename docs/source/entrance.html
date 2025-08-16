@@ -52,6 +52,24 @@
             margin-bottom: 0.8rem;
             text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
             animation: float 3s ease-in-out infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-svg {
+            height: var(--logo-height, 80px);
+            width: auto;
+            filter: drop-shadow(0 0 var(--glow-intensity, 20px) rgba(30, 144, 255, 0.6))
+                   drop-shadow(0 0 var(--glow-blur, 40px) rgba(65, 105, 225, 0.4))
+                   drop-shadow(0 0 var(--glow-spread, 60px) rgba(0, 102, 255, 0.2));
+            transition: filter 0.3s ease, height 0.15s ease;
+        }
+
+        .logo-svg:hover {
+            filter: drop-shadow(0 0 calc(var(--glow-intensity, 20px) * 1.5) rgba(30, 144, 255, 0.8))
+                   drop-shadow(0 0 calc(var(--glow-blur, 40px) * 1.3) rgba(65, 105, 225, 0.6))
+                   drop-shadow(0 0 calc(var(--glow-spread, 60px) * 1.2) rgba(0, 102, 255, 0.3));
         }
 
         .subtitle {
@@ -243,13 +261,235 @@
             }
         }
 
+        /* Star background effect - modular design */
+        .stars-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+            opacity: var(--stars-opacity, 0.6);
+        }
+
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle var(--star-twinkle-duration, 3s) ease-in-out infinite alternate;
+        }
+
+        .star.medium {
+            width: 3px;
+            height: 3px;
+            animation-duration: var(--star-twinkle-duration-medium, 2s);
+        }
+
+        .star.large {
+            width: 4px;
+            height: 4px;
+            animation-duration: var(--star-twinkle-duration-large, 4s);
+            box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+        }
+
+        @keyframes twinkle {
+            from {
+            opacity: 0.3;
+            transform: scale(1);
+            }
+            to {
+            opacity: 1;
+            transform: scale(1.2);
+            }
+        }
+
+        /* Custom CSS variables for glow and star effects */
+        :root {
+            --logo-height: 110px;
+            --glow-intensity: 20px;
+            --glow-blur: 40px;
+            --glow-spread: 60px;
+            --stars-opacity: 0.6;
+            --stars-count: 80;
+            --star-twinkle-duration: 3s;
+            --star-twinkle-duration-medium: 2s;
+            --star-twinkle-duration-large: 4s;
+        }
+
+        /* Debug panel styles (replace inline styles for lint/deployment) */
+        .debug-panel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            /* glassy, rounded white translucent panel */
+            background: linear-gradient(180deg, rgba(238, 232, 232, 0.06), rgba(255,255,255,0.03));
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+            -webkit-backdrop-filter: blur(8px) saturate(120%);
+            backdrop-filter: blur(8px) saturate(120%);
+            color: #ffffff;
+            padding: 16px;
+            border-radius: 12px;
+            font-family: 'Martian Mono', monospace;
+            font-size: 13px;
+            z-index: 1000;
+            /* hide via opacity/transform so toggling .open can animate smoothly */
+            opacity: 0;
+            transform: translateY(10px) scale(0.98);
+            pointer-events: none;
+            transition: opacity 180ms ease, transform 160ms ease;
+            min-width: 280px;
+        }
+
+        .debug-panel .debug-title {
+            margin-bottom: 10px;
+            font-weight: 700;
+            color: rgba(255,255,255,0.95);
+        }
+
+        .debug-panel .debug-section {
+            margin-bottom: 8px;
+        }
+
+        .debug-panel input[type="range"] {
+            width: 100%;
+        }
+
+        /* button styles for a cleaner, modern look */
+        .debug-panel .debug-btn {
+            margin: 2px;
+            padding: 6px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #fff;
+            border-radius: 8px;
+            transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.12s ease;
+        }
+
+        .debug-panel .debug-btn:hover {
+            transform: translateY(-3px);
+            background: rgba(255,255,255,0.09);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+        }
+
+        .debug-panel .debug-btn {
+            margin: 2px;
+            padding: 4px 8px;
+            font-size: 10px;
+            cursor: pointer;
+        }
+
+        .debug-panel .debug-toggle-btn {
+            width: 100%;
+            padding: 8px;
+            font-size: 12px;
+            margin-top: 8px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            color: #fff;
+            transition: background 0.12s ease, transform 0.12s ease;
+        }
+
+        .debug-panel .debug-toggle-btn:hover {
+            background: rgba(255,255,255,0.08);
+            transform: translateY(-2px);
+        }
+
+        .debug-panel .debug-note {
+            margin-top: 8px;
+            font-size: 10px;
+            opacity: 0.7;
+        }
+
+        /* Visible state when toggled open */
+        .debug-panel.open {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+        }
+
+        /* Bottom-right corner hotspot and small FAB that appears on hover */
+        .corner-hotspot {
+            position: fixed;
+            /* make the hotspot larger so "approaching" the corner triggers it */
+            right: 8px;
+            bottom: 8px;
+            width: 100px;
+            height: 100px;
+            z-index: 1098;
+            background: transparent;
+            /* allow pointer events so hover is detected, but keep it invisible */
+            pointer-events: auto;
+        }
+
+        .corner-fab {
+            position: fixed;
+            right: 8px;
+            bottom: 8px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #fff;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1099;
+            box-shadow: 0 8px 18px rgba(0,0,0,0.45);
+            cursor: pointer;
+            -webkit-backdrop-filter: blur(4px);
+            backdrop-filter: blur(4px);
+            opacity: 0; /* hidden until hotspot hovered */
+            pointer-events: none;
+            transform: translateY(10px) scale(0.96);
+            transition: opacity 200ms cubic-bezier(.2,.9,.2,1), transform 180ms cubic-bezier(.2,.9,.2,1);
+        }
+
+        /* when hovering the invisible hotspot, show the small FAB */
+        .corner-hotspot:hover ~ .corner-fab,
+        .corner-fab:focus {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0) scale(1);
+        }
+
+
+
+    /* Logo interaction styles */
+    .logo { cursor: default; }
+    .logo-svg { cursor: pointer; transition: transform 0.18s ease, filter 0.18s ease; display: inline-block; }
+    .logo-svg:hover { transform: translateY(-3px) scale(1.03); }
+    .logo-press { transform: translateY(0) scale(0.95) !important; }
+
     </style>
 </head>
 <body>
     <canvas id="shader"></canvas>
 
+    <!-- Star background effect - modular, can be easily removed -->
+    <div class="stars-container" id="starsContainer">
+        <!-- Stars will be dynamically generated by JavaScript -->
+    </div>
+
+    <!-- right-bottom corner hotspot and small FAB (appears on hover of the corner) -->
+    <div class="corner-hotspot" aria-hidden="true"></div>
+    <button class="corner-fab" id="cornerFab" aria-label="Open debug panel">⚙</button>
+
+
+
     <div class="entrance-container">
-        <div class="logo">🌟 Skyborn</div>
+        <div class="logo">
+            <img src="_static/SkyBornLogo.svg" alt="Skyborn Logo" class="logo-svg">
+        </div>
         <div class="subtitle">Advanced Climate & Atmospheric Science Toolkit</div>
         <a href="documentation.html" class="enter-button">
             Enter Documentation
@@ -271,7 +511,293 @@
         Version 0.3.6 | Built with ❤️ by Qianye Su
     </div> -->
 
+    <!-- Debug control panel - modular, can be removed in production -->
+    <div id="debugPanel" class="debug-panel">
+        <div class="debug-title">Glow & Stars Debug Panel</div>
+
+        <div class="debug-section">
+            <label>Glow intensity: <span id="glowIntensityValue">20</span>px</label><br>
+            <input type="range" id="glowIntensity" min="0" max="60" value="20" title="Glow intensity" aria-label="Glow intensity">
+        </div>
+
+        <div class="debug-section">
+            <label>Glow blur: <span id="glowBlurValue">40</span>px</label><br>
+            <input type="range" id="glowBlur" min="0" max="100" value="40" title="Glow blur" aria-label="Glow blur">
+        </div>
+
+        <div class="debug-section">
+            <label>Glow spread: <span id="glowSpreadValue">60</span>px</label><br>
+            <input type="range" id="glowSpread" min="0" max="150" value="60" title="Glow spread" aria-label="Glow spread">
+        </div>
+
+        <div class="debug-section">
+            <label>Stars opacity: <span id="starsOpacityValue">0.6</span></label><br>
+            <input type="range" id="starsOpacity" min="0" max="1" step="0.1" value="0.6" title="Stars opacity" aria-label="Stars opacity">
+        </div>
+
+        <div class="debug-section">
+            <label>Logo size: <span id="logoSizeValue">110</span>px</label><br>
+            <input type="range" id="logoSize" min="40" max="200" value="110" title="Logo size" aria-label="Logo size">
+        </div>
+
+        <div class="debug-section">
+            <button class="debug-btn glow-preset" data-preset="subtle">Subtle</button>
+            <button class="debug-btn glow-preset" data-preset="medium">Medium</button>
+            <button class="debug-btn glow-preset" data-preset="intense">Intense</button>
+        </div>
+
+        <button class="debug-toggle-btn" id="toggleStarsBtn">Toggle Stars</button>
+
+
+    </div>
+
     <script>
+        // Global key handler fallback: toggle debug panel on Ctrl/Cmd+D or Ctrl+Shift+D or command + D
+        (function() {
+            window.addEventListener('keydown', function(e) {
+                try {
+                    const target = e.target || {};
+                    const tag = (target.tagName || '').toUpperCase();
+                    if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
+                    const isD = (e.key === 'd' || e.key === 'D');
+                    // support Ctrl, Cmd (meta) and Option/Alt as modifier keys for mac compatibility
+                    const primaryModifier = e.ctrlKey || e.metaKey || e.altKey;
+                    if (primaryModifier && isD) {
+                        try { e.preventDefault(); } catch (err) {}
+                        const panel = document.getElementById('debugPanel');
+                        if (panel) panel.classList.toggle('open');
+                    }
+                } catch (err) {}
+            });
+        })();
+
+        // ========== Star Generation Module - Easily Removable ==========
+        function createStars() {
+            const starsContainer = document.getElementById('starsContainer');
+            if (!starsContainer) return;
+
+            const starsCount = getComputedStyle(document.documentElement)
+                .getPropertyValue('--stars-count').trim() || 80;
+
+            // Clear existing stars
+            starsContainer.innerHTML = '';
+
+            for (let i = 0; i < parseInt(starsCount); i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+
+                // Randomly add size class
+                const rand = Math.random();
+                if (rand > 0.8) star.classList.add('large');
+                else if (rand > 0.6) star.classList.add('medium');
+
+                // Random position, avoid center area
+                let x, y;
+                do {
+                    x = Math.random() * 100;
+                    y = Math.random() * 100;
+                } while (
+                    // Avoid center area (35-65%)
+                    x > 35 && x < 65 && y > 35 && y < 65
+                );
+
+                star.style.left = x + '%';
+                star.style.top = y + '%';
+                star.style.animationDelay = Math.random() * 3 + 's';
+
+                starsContainer.appendChild(star);
+            }
+        }
+
+        // Initialize stars
+        document.addEventListener('DOMContentLoaded', createStars);
+        window.addEventListener('resize', createStars);
+        // ========== End Star Module ==========
+
+        // ========== Glow Adjustment Functions ==========
+        function setGlowIntensity(intensity) {
+            document.documentElement.style.setProperty('--glow-intensity', intensity + 'px');
+        }
+
+        function setGlowBlur(blur) {
+            document.documentElement.style.setProperty('--glow-blur', blur + 'px');
+        }
+
+        function setGlowSpread(spread) {
+            document.documentElement.style.setProperty('--glow-spread', spread + 'px');
+        }
+
+        function setStarsOpacity(opacity) {
+            document.documentElement.style.setProperty('--stars-opacity', opacity);
+        }
+
+        function setLogoSize(size) {
+            document.documentElement.style.setProperty('--logo-height', size + 'px');
+            const val = document.getElementById('logoSizeValue');
+            if (val) val.textContent = size;
+            const slider = document.getElementById('logoSize');
+            if (slider) slider.value = size;
+        }
+
+        // Example usage (you can use these in console):
+        // setGlowIntensity(30);      // Set glow intensity
+        // setGlowBlur(50);           // Set glow blur
+        // setGlowSpread(80);         // Set glow spread
+        // setStarsOpacity(0.8);      // Set stars opacity
+
+        // Quick presets
+        function setGlowPreset(preset) {
+            switch(preset) {
+                case 'subtle':
+                    setGlowIntensity(10);
+                    setGlowBlur(20);
+                    setGlowSpread(30);
+                    break;
+                case 'medium':
+                    setGlowIntensity(20);
+                    setGlowBlur(40);
+                    setGlowSpread(60);
+                    break;
+                case 'intense':
+                    setGlowIntensity(40);
+                    setGlowBlur(80);
+                    setGlowSpread(120);
+                    break;
+            }
+        }
+        // ========== End Glow Adjustment ==========
+
+        // ========== Debug Panel Controls ==========
+        // Sync initial logo size (from CSS variable)
+        document.addEventListener('DOMContentLoaded', function initialLogoSync() {
+            try {
+                const style = getComputedStyle(document.documentElement);
+                const initialLogo = parseInt(style.getPropertyValue('--logo-height')) || 110;
+                setLogoSize(initialLogo);
+            } catch (e) {}
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const debugPanel = document.getElementById('debugPanel');
+
+            // Ctrl+D toggles debug panel (compatible with ReadTheDocs etc.)
+            function toggleDebugPanel() {
+                debugPanel.classList.toggle('open');
+            }
+
+            document.addEventListener('keydown', function(e) {
+                // e.key may be 'd' or 'D' in different browsers
+                // Support: Ctrl+D / Cmd+D, and Ctrl+Shift+D as fallback (some browsers use Ctrl+D for bookmarks)
+                const isD = (e.key === 'd' || e.key === 'D');
+                const ctrlOrMeta = e.ctrlKey || e.metaKey;
+                if (ctrlOrMeta && isD) {
+                    // Try to prevent default (may not work if browser already handled shortcut)
+                    try { e.preventDefault(); } catch (err) {}
+                    toggleDebugPanel();
+                } else if (ctrlOrMeta && e.shiftKey && isD) {
+                    try { e.preventDefault(); } catch (err) {}
+                    toggleDebugPanel();
+                }
+            });
+
+            // If URL contains ?debug=1, show panel automatically (for ReadTheDocs deployment)
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('debug') === '1') {
+                    debugPanel.classList.add('open');
+                }
+            } catch (err) {
+                // In some strict environments window.location may be overwritten, ignore errors
+            }
+
+            // Bind slider events
+            function bindSlider(id, callback, valueId) {
+                const slider = document.getElementById(id);
+                const valueSpan = document.getElementById(valueId);
+
+                slider.addEventListener('input', function() {
+                    const value = parseFloat(this.value);
+                    valueSpan.textContent = value;
+                    callback(value);
+                });
+            }
+
+            bindSlider('glowIntensity', setGlowIntensity, 'glowIntensityValue');
+            bindSlider('glowBlur', setGlowBlur, 'glowBlurValue');
+            bindSlider('glowSpread', setGlowSpread, 'glowSpreadValue');
+            bindSlider('starsOpacity', setStarsOpacity, 'starsOpacityValue');
+            bindSlider('logoSize', setLogoSize, 'logoSizeValue');
+
+            // Toggle stars button binding
+            const toggleStarsBtn = document.getElementById('toggleStarsBtn');
+            if (toggleStarsBtn) {
+                toggleStarsBtn.addEventListener('click', function() {
+                    const sc = document.getElementById('starsContainer');
+                    if (!sc) return;
+                    sc.style.display = sc.style.display === 'none' ? 'block' : 'none';
+                });
+            }
+            // Corner small FAB binding (appears when user hovers the bottom-right corner)
+            const cornerFab = document.getElementById('cornerFab');
+            if (cornerFab) {
+                cornerFab.addEventListener('click', function() {
+                    if (!debugPanel) return;
+                    debugPanel.classList.toggle('open');
+                });
+            }
+
+            // Bind preset buttons (glow-preset) without inline onclick
+            const presetBtns = document.querySelectorAll('.glow-preset');
+            if (presetBtns && presetBtns.length) {
+                presetBtns.forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const p = this.getAttribute('data-preset');
+                        if (p) setGlowPreset(p);
+                    });
+                });
+            }
+
+            // Auto-hide behavior: when mouse leaves panel (and fab), hide after a small delay
+            let panelHideTimeout = null;
+            const PANEL_HIDE_DELAY = 600; // ms
+            function scheduleHidePanel() {
+                try {
+                    clearTimeout(panelHideTimeout);
+                    panelHideTimeout = setTimeout(() => {
+                        if (debugPanel) debugPanel.classList.remove('open');
+                    }, PANEL_HIDE_DELAY);
+                } catch (err) {}
+            }
+            function cancelHidePanel() {
+                try { clearTimeout(panelHideTimeout); } catch (err) {}
+            }
+
+            if (debugPanel) {
+                debugPanel.addEventListener('mouseenter', cancelHidePanel);
+                debugPanel.addEventListener('mouseleave', scheduleHidePanel);
+            }
+            if (cornerFab) {
+                cornerFab.addEventListener('mouseenter', cancelHidePanel);
+                cornerFab.addEventListener('mouseleave', scheduleHidePanel);
+            }
+
+
+            // Logo click/press animation
+            const logoImg = document.querySelector('.logo-svg');
+            if (logoImg) {
+                logoImg.addEventListener('click', function() {
+                    logoImg.classList.add('logo-press');
+                    setTimeout(() => logoImg.classList.remove('logo-press'), 160);
+                });
+                // Also small 'tap' effect on mousedown for snappier feedback
+                logoImg.addEventListener('mousedown', function() {
+                    logoImg.classList.add('logo-press');
+                });
+                document.addEventListener('mouseup', function() { if (logoImg) logoImg.classList.remove('logo-press'); });
+            }
+        });
+        // ========== End Debug Panel ==========
+
         // Inline FPS Counter
         class FPSCounter {
             constructor(container = document.body, options = {}) {
@@ -646,6 +1172,8 @@
                 // Fallback handled by existing code below
             }
         })();
+
+
     </script>
 
     <script>
