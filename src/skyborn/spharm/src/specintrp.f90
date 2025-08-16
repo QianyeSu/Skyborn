@@ -26,7 +26,7 @@ subroutine specintrp(rlon, ntrunc, datnm, scrm, pnm, ob)
     do m = 1, mwaves
         scrm(m) = zero
 
-        !DIR$ VECTOR ALWAYS
+        !$OMP SIMD PRIVATE(nm)
         do n = 1, mwaves - m + 1
             nm = nmstrt + n
             scrm(m) = scrm(m) + datnm(nm) * pnm(nm)
@@ -39,6 +39,7 @@ subroutine specintrp(rlon, ntrunc, datnm, scrm, pnm, ob)
     ob = real(scrm(1))
 
     ! Add m>=2 terms with optimized trigonometric evaluation
+    !$OMP SIMD PRIVATE(m_rlon, cos_m_rlon, sin_m_rlon)
     do m = 2, mwaves
         m_rlon = real(m-1) * rlon
         cos_m_rlon = cos(m_rlon)

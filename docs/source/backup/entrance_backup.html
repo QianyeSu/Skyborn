@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skyborn Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background:
+                radial-gradient(ellipse at center,
+                    rgba(30, 58, 138, 0.3) 0%,
+                    rgba(30, 58, 138, 0.6) 30%,
+                    rgba(15, 23, 42, 0.9) 70%,
+                    rgba(0, 0, 0, 1) 100%
+                );
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #particles-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .entrance-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 2;
+            color: white;
+        }
+
+        .logo {
+            font-size: 4rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .subtitle {
+            font-size: 1.5rem;
+            margin-bottom: 3rem;
+            opacity: 0.9;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            font-weight: bold;
+        }
+
+        .enter-button {
+            background: linear-gradient(45deg, #2563eb, #3b82f6);
+            color: white;
+            border: none;
+            padding: 1rem 2.5rem;
+            font-size: 1.2rem;
+            font-weight: 600;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 32px rgba(37, 99, 235, 0.3);
+            text-decoration: none;
+            display: inline-block;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .enter-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(37, 99, 235, 0.4);
+        }
+
+        .enter-button:active {
+            transform: translateY(0);
+        }
+
+        .enter-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .enter-button:hover::before {
+            left: 100%;
+        }
+
+        .version-info {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-20px);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .entrance-container > * {
+            animation: fadeIn 1s ease-out;
+        }
+
+        .entrance-container > *:nth-child(1) { animation-delay: 0.2s; }
+        .entrance-container > *:nth-child(2) { animation-delay: 0.4s; }
+        .entrance-container > *:nth-child(3) { animation-delay: 0.6s; }
+
+    </style>
+</head>
+<body>
+    <canvas id="particles-canvas"></canvas>
+
+    <div class="entrance-container">
+        <div class="logo">🌟 Skyborn</div>
+        <div class="subtitle">Climate Data Analysis & Visualization Toolkit</div>
+        <a href="documentation.html" class="enter-button">
+            Enter Documentation
+        </a>
+    </div>
+
+    <div class="version-info">
+        Version 0.3.6 | Built with ❤️ by Qianye Su
+    </div>
+
+    <script>
+        // Black hole particle system for background animation
+        class BlackHoleParticleSystem {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.particles = [];
+                this.particleCount = 300;
+                this.mouse = { x: 0, y: 0 };
+                this.blackHole = {
+                    x: window.innerWidth / 2,
+                    y: window.innerHeight / 2,
+                    radius: 80,
+                    mass: 1000
+                };
+
+                this.resize();
+                this.init();
+                this.animate();
+
+                // Event listeners
+                window.addEventListener('resize', () => this.resize());
+                canvas.addEventListener('mousemove', (e) => {
+                    this.mouse.x = e.clientX;
+                    this.mouse.y = e.clientY;
+                });
+            }
+
+            resize() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+                this.blackHole.x = window.innerWidth / 2;
+                this.blackHole.y = window.innerHeight / 2;
+            }
+
+            init() {
+                this.particles = [];
+                for (let i = 0; i < this.particleCount; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = Math.random() * 400 + 150;
+                    const x = this.blackHole.x + Math.cos(angle) * distance;
+                    const y = this.blackHole.y + Math.sin(angle) * distance;
+
+                    this.particles.push({
+                        x: x,
+                        y: y,
+                        vx: Math.random() * 2 - 1,
+                        vy: Math.random() * 2 - 1,
+                        size: Math.random() * 2 + 0.5,
+                        alpha: Math.random() * 0.8 + 0.2,
+                        color: `hsl(${Math.random() * 60 + 200}, 80%, ${Math.random() * 30 + 60}%)`,
+                        trail: []
+                    });
+                }
+            }
+
+            resetParticle(particle) {
+                // Reset particle to a random position around the black hole
+                const angle = Math.random() * Math.PI * 2;
+                const distance = Math.random() * 400 + 150;
+                particle.x = this.blackHole.x + Math.cos(angle) * distance;
+                particle.y = this.blackHole.y + Math.sin(angle) * distance;
+                particle.vx = Math.random() * 2 - 1;
+                particle.vy = Math.random() * 2 - 1;
+                particle.trail = [];
+                particle.alpha = Math.random() * 0.8 + 0.2;
+                particle.size = Math.random() * 2 + 0.5;
+                particle.color = `hsl(${Math.random() * 60 + 200}, 80%, ${Math.random() * 30 + 60}%)`;
+            }
+
+            animate() {
+                // Create space tunnel effect background
+                const gradient = this.ctx.createRadialGradient(
+                    this.blackHole.x, this.blackHole.y, 0,
+                    this.blackHole.x, this.blackHole.y, Math.max(this.canvas.width, this.canvas.height)
+                );
+                gradient.addColorStop(0, 'rgba(0, 0, 0, 0.9)');
+                gradient.addColorStop(0.3, 'rgba(10, 25, 60, 0.5)');
+                gradient.addColorStop(0.6, 'rgba(30, 58, 138, 0.3)');
+                gradient.addColorStop(1, 'rgba(15, 23, 42, 0.1)');
+
+                this.ctx.fillStyle = gradient;
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // Draw concentric circles for tunnel effect
+                const time = Date.now() * 0.001;
+                for (let i = 1; i <= 10; i++) {
+                    const radius = i * 50 + Math.sin(time * 2 + i) * 20;
+                    this.ctx.beginPath();
+                    this.ctx.arc(this.blackHole.x, this.blackHole.y, radius, 0, Math.PI * 2);
+                    this.ctx.strokeStyle = `rgba(100, 150, 255, ${0.1 / i})`;
+                    this.ctx.lineWidth = 2;
+                    this.ctx.stroke();
+                }
+
+                // Draw black hole
+                const blackHoleGradient = this.ctx.createRadialGradient(
+                    this.blackHole.x, this.blackHole.y, 0,
+                    this.blackHole.x, this.blackHole.y, this.blackHole.radius
+                );
+                blackHoleGradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+                blackHoleGradient.addColorStop(0.3, 'rgba(20, 20, 50, 0.8)');
+                blackHoleGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+                this.ctx.beginPath();
+                this.ctx.arc(this.blackHole.x, this.blackHole.y, this.blackHole.radius, 0, Math.PI * 2);
+                this.ctx.fillStyle = blackHoleGradient;
+                this.ctx.fill();
+
+                // Update and draw particles with curved motion
+                this.particles.forEach((particle, index) => {
+                    // Calculate gravity effect from black hole
+                    const dx = this.blackHole.x - particle.x;
+                    const dy = this.blackHole.y - particle.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < this.blackHole.radius) {
+                        // Reset particle if it gets too close to black hole
+                        this.resetParticle(particle);
+                    } else {
+                        // Apply gravitational force
+                        const force = this.blackHole.mass / (distance * distance);
+                        const forceX = (dx / distance) * force * 0.001;
+                        const forceY = (dy / distance) * force * 0.001;
+
+                        // Add curved motion with sine waves for more organic movement
+                        const curveForce = 0.05;
+                        const waveX = Math.sin(time * 3 + index * 0.1) * curveForce;
+                        const waveY = Math.cos(time * 3 + index * 0.1) * curveForce;
+
+                        particle.vx += forceX + waveX;
+                        particle.vy += forceY + waveY;
+
+                        // Enhanced orbital velocity with spiral effect
+                        const orbitalForce = 0.03 * (1 + Math.sin(time * 2 + index * 0.05) * 0.5);
+                        particle.vx += -dy / distance * orbitalForce;
+                        particle.vy += dx / distance * orbitalForce;
+
+                        // Add turbulence for more natural curved movement
+                        const turbulence = 0.02;
+                        particle.vx += (Math.random() - 0.5) * turbulence;
+                        particle.vy += (Math.random() - 0.5) * turbulence;
+
+                        // Apply velocity dampening for smoother curves
+                        particle.vx *= 0.985;
+                        particle.vy *= 0.985;
+
+                        // Update position
+                        particle.x += particle.vx;
+                        particle.y += particle.vy;
+
+                        // Check boundaries and reset if particle goes off screen
+                        if (particle.x < -50 || particle.x > this.canvas.width + 50 ||
+                            particle.y < -50 || particle.y > this.canvas.height + 50) {
+                            this.resetParticle(particle);
+                        }
+
+                        // Add to trail
+                        particle.trail.push({ x: particle.x, y: particle.y });
+                        if (particle.trail.length > 25) {
+                            particle.trail.shift();
+                        }
+
+                        // Draw curved particle trail using bezier curves
+                        if (particle.trail.length > 2) {
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(particle.trail[0].x, particle.trail[0].y);
+
+                            for (let i = 1; i < particle.trail.length - 1; i++) {
+                                const current = particle.trail[i];
+                                const next = particle.trail[i + 1];
+                                const xc = (current.x + next.x) / 2;
+                                const yc = (current.y + next.y) / 2;
+                                this.ctx.quadraticCurveTo(current.x, current.y, xc, yc);
+                            }
+
+                            this.ctx.strokeStyle = `rgba(100, 150, 255, ${0.4 * (particle.trail.length / 25)})`;
+                            this.ctx.lineWidth = 1;
+                            this.ctx.stroke();
+                        }
+
+                        // Draw particle with glow effect
+                        const glowGradient = this.ctx.createRadialGradient(
+                            particle.x, particle.y, 0,
+                            particle.x, particle.y, particle.size * 4
+                        );
+                        glowGradient.addColorStop(0, particle.color);
+                        glowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+                        this.ctx.beginPath();
+                        this.ctx.arc(particle.x, particle.y, particle.size * 4, 0, Math.PI * 2);
+                        this.ctx.fillStyle = glowGradient;
+                        this.ctx.globalAlpha = particle.alpha * 0.3;
+                        this.ctx.fill();
+
+                        // Draw particle core
+                        this.ctx.beginPath();
+                        this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                        this.ctx.fillStyle = particle.color;
+                        this.ctx.globalAlpha = particle.alpha;
+                        this.ctx.fill();
+                        this.ctx.globalAlpha = 1;
+                    }
+                });
+
+                requestAnimationFrame(() => this.animate());
+            }
+        }
+
+        // Initialize black hole particle system
+        const canvas = document.getElementById('particles-canvas');
+        const blackHoleSystem = new BlackHoleParticleSystem(canvas);
+
+        // Button click effect
+        document.querySelector('.enter-button').addEventListener('click', function(e) {
+            e.preventDefault();
+
+            // Create ripple effect
+            const ripple = document.createElement('div');
+            ripple.style.position = 'absolute';
+            ripple.style.borderRadius = '50%';
+            ripple.style.background = 'rgba(255, 255, 255, 0.6)';
+            ripple.style.transform = 'scale(0)';
+            ripple.style.animation = 'ripple 0.6s linear';
+            ripple.style.left = (e.layerX - 25) + 'px';
+            ripple.style.top = (e.layerY - 25) + 'px';
+            ripple.style.width = '50px';
+            ripple.style.height = '50px';
+            ripple.style.pointerEvents = 'none';
+
+            this.appendChild(ripple);
+
+            // Navigate after animation
+            setTimeout(() => {
+                window.location.href = 'documentation.html';
+            }, 300);
+
+            // Remove ripple
+            setTimeout(() => {
+                ripple.remove();
+            }, 600);
+        });
+
+        // Add ripple animation CSS
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes ripple {
+                to {
+                    transform: scale(4);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>

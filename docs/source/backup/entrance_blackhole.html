@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skyborn Documentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@100..800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            background: #141414;
+            font-family: 'Martian Mono', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            position: relative;
+        }
+
+        a-hole {
+            position: absolute;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        a-hole:before {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            z-index: 2;
+            display: block;
+            width: 150%;
+            height: 140%;
+            background: radial-gradient(ellipse at 50% 55%, transparent 10%, black 50%);
+            transform: translate3d(-50%, -50%, 0);
+            content: "";
+        }
+
+        a-hole:after {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            z-index: 5;
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(
+                ellipse at 50% 75%,
+                #0080ff 20%,
+                transparent 75%
+            );
+            mix-blend-mode: overlay;
+            transform: translate3d(-50%, -50%, 0);
+            content: "";
+        }
+
+        @keyframes aura-glow {
+            0% {
+                background-position: 0 100%;
+            }
+            100% {
+                background-position: 0 300%;
+            }
+        }
+
+        a-hole .aura {
+            position: absolute;
+            top: -71.5%;
+            left: 50%;
+            z-index: 3;
+            width: 30%;
+            height: 140%;
+            background: linear-gradient(
+                20deg,
+                #0099ff,
+                #0066cc20 16.5%,
+                #00ccff 33%,
+                #0099ff20 49.5%,
+                #0080ff 66%,
+                #00aaff60 85.5%,
+                #0066ff 100%
+            )
+            0 100% / 100% 200%;
+            border-radius: 0 0 100% 100%;
+            filter: blur(50px);
+            mix-blend-mode: plus-lighter;
+            opacity: 0.75;
+            transform: translate3d(-50%, 0, 0);
+            animation: aura-glow 5s infinite linear;
+        }
+
+        a-hole .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                transparent,
+                transparent 1px,
+                white 1px,
+                white 2px
+            );
+            mix-blend-mode: overlay;
+            opacity: 0.5;
+        }
+
+        a-hole canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        black-hole {
+            position: absolute;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 4;
+            pointer-events: none;
+        }
+
+        black-hole canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .entrance-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 15;
+            color: white;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 0.8rem;
+            text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 2.5rem;
+            opacity: 0.9;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            font-weight: bold;
+        }
+
+        .enter-button {
+            background: linear-gradient(45deg, #f59e0b, #f97316);
+            color: white;
+            border: 2px solid rgba(251, 191, 36, 0.3);
+            padding: 0.8rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 32px rgba(245, 158, 11, 0.4);
+            text-decoration: none;
+            display: inline-block;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .enter-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(245, 158, 11, 0.6);
+            border-color: rgba(251, 191, 36, 0.6);
+        }
+
+        .enter-button:active {
+            transform: translateY(0);
+        }
+
+        .enter-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .enter-button:hover::before {
+            left: 100%;
+        }
+
+        .version-info {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            z-index: 15;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-20px);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .entrance-container > * {
+            animation: fadeIn 1s ease-out;
+        }
+
+        .entrance-container > *:nth-child(1) { animation-delay: 0.2s; }
+        .entrance-container > *:nth-child(2) { animation-delay: 0.4s; }
+        .entrance-container > *:nth-child(3) { animation-delay: 0.6s; }
+
+    </style>
+</head>
+<body>
+    <a-hole>
+        <canvas class="js-canvas"></canvas>
+        <div class="aura"></div>
+        <div class="overlay"></div>
+    </a-hole>
+
+    <black-hole>
+        <canvas class="js-canvas"></canvas>
+    </black-hole>
+
+    <div class="entrance-container">
+        <div class="logo">🌟 Skyborn</div>
+        <div class="subtitle">Climate Data Analysis & Visualization Toolkit</div>
+        <a href="documentation.html" class="enter-button">
+            Enter Documentation
+        </a>
+    </div>
+
+    <div class="version-info">
+        Version 0.3.6 | Built with ❤️ by Qianye Su
+    </div>
+
+    <script type="module">
+        import easingUtils from "https://esm.sh/easing-utils";
+
+        // 🎛️ Global perspective configuration parameters - control grid lines and particles separately
+        //
+        // Basic shape parameters:
+        // 1. ELLIPSE_WIDTH (0.5-1.0): Ellipse width, affects overall black hole size
+        // 2. ELLIPSE_HEIGHT (0.4-0.8): Ellipse height, affects basic ellipse shape
+        // 3. DEPTH_FACTOR (0.3-0.8): Depth distribution factor, controls particle depth spread
+        //
+        // Grid perspective parameters (controls black hole grid view):
+        // 4. GRID_ROTATION_ANGLE (-45 to 45): Grid rotation angle (degrees)
+        // 5. GRID_TILT_ANGLE (0 to 60): Grid tilt angle (degrees), 0=front view, 60=steep top view
+        // 6. GRID_PERSPECTIVE_STRENGTH (0.5-2.0): Grid perspective strength
+        //
+        // Particle perspective parameters (controls particles independently):
+        // 7. PARTICLE_ROTATION_ANGLE (-45 to 45): Particle rotation angle (degrees)
+        // 8. PARTICLE_TILT_ANGLE (0 to 60): Particle tilt angle (degrees), 0=front view, 60=steep top view
+        // 9. PARTICLE_PERSPECTIVE_STRENGTH (0.5-2.0): Particle perspective strength
+        const PERSPECTIVE_CONFIG = {
+            // Basic shape parameters
+            ELLIPSE_WIDTH: 0.8,     // ellipse widthcoefficient (0.5-1.0)
+            ELLIPSE_HEIGHT: 0.7,    // ellipse heightcoefficient (0.4-0.8)
+            DEPTH_FACTOR: 0.8,       // depth distribution coefficient (0.3-0.8) - controls particle distribution range
+
+            // Grid line viewing angle parameters（black hole grid）
+            GRID_ROTATION_ANGLE: 0,       // grid rotation angle(degrees) (-45 to 45)
+            GRID_TILT_ANGLE: 0,          // grid tilt angle(degrees) (0 to 60) - 0=front view，60=strong top-down view
+            GRID_PERSPECTIVE_STRENGTH: 1.0, // grid perspective strength (0.5-2.0)
+
+            // Particle viewing angle parameters（independent control）
+            PARTICLE_ROTATION_ANGLE: 0,   // particle rotation angle(degrees) (-45 to 45)
+            PARTICLE_TILT_ANGLE: 0,     // particle tilt angle(degrees) (0 to 60) - only affects particle top-down view
+            PARTICLE_PERSPECTIVE_STRENGTH: 1.5, // particle perspective strength (0.5-2.0)
+        };
+
+        class AHole extends HTMLElement {
+            /**
+             * Apply perspective transform (grid lines only)
+             */
+            applyPerspectiveTransform(x, y, depth = 0) {
+                const config = PERSPECTIVE_CONFIG;
+
+                // Convert angles to radians - use grid line parameters
+                const rotationRad = (config.GRID_ROTATION_ANGLE * Math.PI) / 180;
+                const tiltRad = (config.GRID_TILT_ANGLE * Math.PI) / 180;
+
+                // Calculate coordinates relative to center
+                const centerX = this.rect.width / 2;
+                const centerY = this.rect.height * 0.45;
+                let relX = x - centerX;
+                let relY = y - centerY;
+
+                // Apply rotation transform
+                const cosRot = Math.cos(rotationRad);
+                const sinRot = Math.sin(rotationRad);
+                const rotatedX = relX * cosRot - relY * sinRot;
+                const rotatedY = relX * sinRot + relY * cosRot;
+
+                // Apply tilt and perspective transform
+                const cosTilt = Math.cos(tiltRad);
+                const sinTilt = Math.sin(tiltRad);
+                const perspectiveFactor = 1 + (depth * sinTilt * config.GRID_PERSPECTIVE_STRENGTH * 0.001);
+
+                const transformedX = rotatedX / perspectiveFactor;
+                const transformedY = (rotatedY * cosTilt - depth * sinTilt * 0.5) / perspectiveFactor;
+
+                return {
+                    x: transformedX + centerX,
+                    y: transformedY + centerY
+                };
+            }
+
+            /**
+             * Init
+             */
+            connectedCallback() {
+                // Elements
+                this.canvas = this.querySelector(".js-canvas");
+                this.ctx = this.canvas.getContext("2d");
+
+                this.discs = [];
+                this.lines = [];
+
+                // Init
+                this.setSize();
+                this.setDiscs();
+                this.setLines();
+                this.setParticles();
+
+                this.bindEvents();
+
+                // RAF
+                requestAnimationFrame(this.tick.bind(this));
+            }
+
+            /**
+             * Bind events
+             */
+            bindEvents() {
+                window.addEventListener("resize", this.onResize.bind(this));
+            }
+
+            /**
+             * Resize handler
+             */
+            onResize() {
+                this.setSize();
+                this.setDiscs();
+                this.setLines();
+                this.setParticles();
+            }
+
+            /**
+             * Set size
+             */
+            setSize() {
+                this.rect = this.getBoundingClientRect();
+
+                this.render = {
+                    width: this.rect.width,
+                    height: this.rect.height,
+                    dpi: window.devicePixelRatio
+                };
+
+                this.canvas.width = this.render.width * this.render.dpi;
+                this.canvas.height = this.render.height * this.render.dpi;
+            }
+
+            /**
+             * Set discs
+             */
+            setDiscs() {
+                const { width, height } = this.rect;
+
+                this.discs = [];
+
+                this.startDisc = {
+                    x: width * 0.5,
+                    y: height * 0.45,
+                    w: width * PERSPECTIVE_CONFIG.ELLIPSE_WIDTH,
+                    h: height * PERSPECTIVE_CONFIG.ELLIPSE_HEIGHT
+                };
+
+                this.endDisc = {
+                    x: width * 0.5,
+                    y: height * 0.95,
+                    w: 0,
+                    h: 0
+                };
+
+                const totalDiscs = 100;
+
+                let prevBottom = height;
+                this.clip = {};
+
+                for (let i = 0; i < totalDiscs; i++) {
+                    const p = i / totalDiscs;
+
+                    const disc = this.tweenDisc({
+                        p
+                    });
+
+                    const bottom = disc.y + disc.h;
+
+                    if (bottom <= prevBottom) {
+                        this.clip = {
+                            disc: { ...disc },
+                            i
+                        };
+                    }
+
+                    prevBottom = bottom;
+
+                    this.discs.push(disc);
+                }
+
+                this.clip.path = new Path2D();
+                this.clip.path.ellipse(
+                    this.clip.disc.x,
+                    this.clip.disc.y,
+                    this.clip.disc.w,
+                    this.clip.disc.h,
+                    0,
+                    0,
+                    Math.PI * 2
+                );
+                this.clip.path.rect(
+                    this.clip.disc.x - this.clip.disc.w,
+                    0,
+                    this.clip.disc.w * 2,
+                    this.clip.disc.y
+                );
+            }
+
+            /**
+             * Set lines
+             */
+            setLines() {
+                const { width, height } = this.rect;
+
+                this.lines = [];
+
+                const totalLines = 100;
+                const linesAngle = (Math.PI * 2) / totalLines;
+
+                for (let i = 0; i < totalLines; i++) {
+                    this.lines.push([]);
+                }
+
+                this.discs.forEach((disc) => {
+                    for (let i = 0; i < totalLines; i++) {
+                        const angle = i * linesAngle;
+
+                        const baseX = disc.x + Math.cos(angle) * disc.w;
+                        const baseY = disc.y + Math.sin(angle) * disc.h;
+                        const depth = disc.p * 1000; // Depth value for perspective transform
+
+                        const transformed = this.applyPerspectiveTransform(baseX, baseY, depth);
+                        const p = {
+                            x: transformed.x,
+                            y: transformed.y
+                        };
+
+                        this.lines[i].push(p);
+                    }
+                });
+
+                this.linesCanvas = new OffscreenCanvas(width, height);
+                const ctx = this.linesCanvas.getContext("2d");
+
+                this.lines.forEach((line, i) => {
+                    ctx.save();
+
+                    let lineIsIn = false;
+                    line.forEach((p1, j) => {
+                        if (j === 0) {
+                            return;
+                        }
+
+                        const p0 = line[j - 1];
+
+                        if (
+                            !lineIsIn &&
+                            (ctx.isPointInPath(this.clip.path, p1.x, p1.y) ||
+                                ctx.isPointInStroke(this.clip.path, p1.x, p1.y))
+                        ) {
+                            lineIsIn = true;
+                        } else if (lineIsIn) {
+                            ctx.clip(this.clip.path);
+                        }
+
+                        ctx.beginPath();
+
+                        ctx.moveTo(p0.x, p0.y);
+                        ctx.lineTo(p1.x, p1.y);
+
+                        ctx.strokeStyle = "#444";
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+
+                        ctx.closePath();
+                    });
+
+                    ctx.restore();
+                });
+
+                this.linesCtx = ctx;
+            }
+
+            /**
+             * Set particles
+             */
+            setParticles() {
+                const { width, height } = this.rect;
+
+                this.particles = [];
+
+                this.particleArea = {
+                    sw: this.clip.disc.w * 0.5,
+                    ew: this.clip.disc.w * 2,
+                    h: height * 0.85
+                };
+                this.particleArea.sx = (width - this.particleArea.sw) / 2;
+                this.particleArea.ex = (width - this.particleArea.ew) / 2;
+
+                const totalParticles = 100;
+
+                for (let i = 0; i < totalParticles; i++) {
+                    const particle = this.initParticle(true);
+
+                    this.particles.push(particle);
+                }
+            }
+
+            /**
+             * Init particle
+             */
+            initParticle(start = false) {
+                const sx = this.particleArea.sx + this.particleArea.sw * Math.random();
+                const ex = this.particleArea.ex + this.particleArea.ew * Math.random();
+                const dx = ex - sx;
+                const vx = 0.1 + Math.random() * 0.5;
+                const y = start ? this.particleArea.h * Math.random() : this.particleArea.h;
+                const r = 0.5 + Math.random() * 4;
+                const vy = 0.5 + Math.random();
+
+                return {
+                    x: sx,
+                    sx,
+                    dx,
+                    y,
+                    vy,
+                    p: 0,
+                    r,
+                    c: `rgba(255, 255, 255, ${Math.random()})`
+                };
+            }
+
+            /**
+             * Tween value
+             */
+            tweenValue(start, end, p, ease = false) {
+                const delta = end - start;
+
+                const easeFn =
+                    easingUtils[
+                        ease ? "ease" + ease.charAt(0).toUpperCase() + ease.slice(1) : "linear"
+                    ];
+
+                return start + delta * easeFn(p);
+            }
+
+            /**
+             * Draw discs
+             */
+            drawDiscs() {
+                const { ctx } = this;
+
+                ctx.strokeStyle = "#444";
+                ctx.lineWidth = 2;
+
+                // Outer disc
+                const outerDisc = this.startDisc;
+
+                ctx.beginPath();
+
+                ctx.ellipse(
+                    outerDisc.x,
+                    outerDisc.y,
+                    outerDisc.w,
+                    outerDisc.h,
+                    0,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.stroke();
+
+                ctx.closePath();
+
+                // Discs
+                this.discs.forEach((disc, i) => {
+                    if (i % 5 !== 0) {
+                        return;
+                    }
+
+                    if (disc.w < this.clip.disc.w - 5) {
+                        ctx.save();
+
+                        ctx.clip(this.clip.path);
+                    }
+
+                    ctx.beginPath();
+
+                    const depth = disc.p * 1000;
+                    const transformed = this.applyPerspectiveTransform(disc.x, disc.y, depth);
+
+                    // Calculate ellipse parameters after perspective transform
+                    const tiltRad = (PERSPECTIVE_CONFIG.GRID_TILT_ANGLE * Math.PI) / 180;
+                    const rotationRad = (PERSPECTIVE_CONFIG.GRID_ROTATION_ANGLE * Math.PI) / 180;
+                    const perspectiveFactor = 1 + (depth * Math.sin(tiltRad) * PERSPECTIVE_CONFIG.GRID_PERSPECTIVE_STRENGTH * 0.001);
+
+                    const scaledW = disc.w / perspectiveFactor;
+                    const scaledH = disc.h * Math.cos(tiltRad) / perspectiveFactor;
+
+                    ctx.ellipse(transformed.x, transformed.y, scaledW, scaledH, rotationRad, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    ctx.closePath();
+
+                    if (disc.w < this.clip.disc.w - 5) {
+                        ctx.restore();
+                    }
+                });
+            }
+
+            /**
+             * Draw lines
+             */
+            drawLines() {
+                const { ctx, linesCanvas } = this;
+
+                ctx.drawImage(linesCanvas, 0, 0);
+            }
+
+            /**
+             * Draw particles
+             */
+            drawParticles() {
+                const { ctx } = this;
+
+                ctx.save();
+
+                ctx.clip(this.clip.path);
+
+                this.particles.forEach((particle) => {
+                    ctx.fillStyle = particle.c;
+                    ctx.beginPath();
+                    ctx.rect(particle.x, particle.y, particle.r, particle.r);
+                    ctx.closePath();
+
+                    ctx.fill();
+                });
+
+                ctx.restore();
+            }
+
+            /**
+             * Move discs
+             */
+            moveDiscs() {
+                this.discs.forEach((disc) => {
+                    disc.p = (disc.p + 0.001) % 1;
+
+                    this.tweenDisc(disc);
+                });
+            }
+
+            /**
+             * Move Particles
+             */
+            moveParticles() {
+                this.particles.forEach((particle) => {
+                    particle.p = 1 - particle.y / this.particleArea.h;
+                    particle.x = particle.sx + particle.dx * particle.p;
+                    particle.y -= particle.vy;
+
+                    if (particle.y < 0) {
+                        particle.y = this.initParticle().y;
+                    }
+                });
+            }
+
+            /**
+             * Tween disc
+             */
+            tweenDisc(disc) {
+                disc.x = this.tweenValue(this.startDisc.x, this.endDisc.x, disc.p);
+                disc.y = this.tweenValue(
+                    this.startDisc.y,
+                    this.endDisc.y,
+                    disc.p,
+                    "inExpo"
+                );
+
+                disc.w = this.tweenValue(this.startDisc.w, this.endDisc.w, disc.p);
+                disc.h = this.tweenValue(this.startDisc.h, this.endDisc.h, disc.p);
+
+                return disc;
+            }
+
+            /**
+             * Tick
+             */
+            tick(time) {
+                const { ctx } = this;
+
+                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                ctx.save();
+                ctx.scale(this.render.dpi, this.render.dpi);
+
+                this.moveDiscs();
+                this.moveParticles();
+
+                this.drawDiscs();
+                this.drawLines();
+                this.drawParticles();
+
+                ctx.restore();
+
+                requestAnimationFrame(this.tick.bind(this));
+            }
+        }
+
+        customElements.define("a-hole", AHole);
+
+        class BlackHole extends HTMLElement {
+            /**
+             * Apply perspective transform (particles only)
+             */
+            applyPerspectiveTransform(x, y, depth = 0) {
+                const config = PERSPECTIVE_CONFIG;
+
+                // Convert angles to radians - use particle parameters
+                const rotationRad = (config.PARTICLE_ROTATION_ANGLE * Math.PI) / 180;
+                const tiltRad = (config.PARTICLE_TILT_ANGLE * Math.PI) / 180;
+
+                // Calculate coordinates relative to center
+                const centerX = this.render.width / 2;
+                const centerY = this.render.height * 0.45;
+                let relX = x - centerX;
+                let relY = y - centerY;
+
+                // Apply rotation transform
+                const cosRot = Math.cos(rotationRad);
+                const sinRot = Math.sin(rotationRad);
+                const rotatedX = relX * cosRot - relY * sinRot;
+                const rotatedY = relX * sinRot + relY * cosRot;
+
+                // Apply tilt and perspective transform
+                const cosTilt = Math.cos(tiltRad);
+                const sinTilt = Math.sin(tiltRad);
+                const perspectiveFactor = 1 + (depth * sinTilt * config.PARTICLE_PERSPECTIVE_STRENGTH * 0.001);
+
+                const transformedX = rotatedX / perspectiveFactor;
+                const transformedY = (rotatedY * cosTilt - depth * sinTilt * 0.5) / perspectiveFactor;
+
+                return {
+                    x: transformedX + centerX,
+                    y: transformedY + centerY
+                };
+            }
+
+            /**
+             * Init
+             */
+            connectedCallback() {
+                // Elements
+                this.canvas = this.querySelector(".js-canvas");
+                this.ctx = this.canvas.getContext("2d");
+
+                // Init
+                this.setSizes();
+
+                this.bindEvents();
+
+                // RAF
+                requestAnimationFrame(this.tick.bind(this));
+            }
+
+            /**
+             * Bind events
+             */
+            bindEvents() {
+                window.addEventListener("resize", this.onResize.bind(this));
+            }
+
+            /**
+             * Resize handler
+             */
+            onResize() {
+                this.setSizes()
+            }
+
+            /**
+             * Set sizes
+             */
+            setSizes () {
+                this.setCanvasSize()
+                this.setGraphics()
+            }
+
+            /**
+             * Set canvas size
+             */
+            setCanvasSize () {
+                const rect = this.getBoundingClientRect()
+
+                this.render = {
+                    width: rect.width,
+                    hWidth: rect.width * 0.5,
+                    height: rect.height,
+                    hHeight: rect.height * 0.5,
+                    dpi: window.devicePixelRatio
+                }
+
+                this.canvas.width = this.render.width * this.render.dpi
+                this.canvas.height = this.render.height * this.render.dpi
+            }
+
+            /**
+             * Set graphics
+             */
+            setGraphics () {
+                this.setDiscs()
+                this.setDots()
+            }
+
+            /**
+             * Set discs
+             */
+            setDiscs () {
+                this.discs = []
+
+                this.startDisc = {
+                    x: this.render.width * 0.5,
+                    y: this.render.height * 0.45,
+                    w: this.render.width * PERSPECTIVE_CONFIG.ELLIPSE_WIDTH,
+                    h: this.render.height * PERSPECTIVE_CONFIG.ELLIPSE_HEIGHT
+                }
+
+                const totalDiscs = 150
+
+                for (let i = 0; i < totalDiscs; i++) {
+                    const p = i / totalDiscs
+
+                    const disc = this.tweenDisc({
+                        p
+                    })
+
+                    this.discs.push(disc)
+                }
+            }
+
+            /**
+             * Set dots
+             */
+            setDots () {
+                this.dots = []
+
+                const totalDots = 20000
+
+                for (let i = 0; i < totalDots; i++) {
+                    const disc = this.discs[Math.floor(this.discs.length * Math.random())];
+                    // Use the same angular distribution as the grid lines (100 lines)
+                    const angleIndex = Math.floor(Math.random() * 100);
+                    const baseAngle = (Math.PI * 2 * angleIndex) / 100;
+                    const dot = {
+                        d: disc,
+                        a: baseAngle,
+                        c: `rgb(${Math.random() * 30}, ${100 + Math.random() * 80}, ${200 + Math.random() * 55})`,
+                        p: Math.random(),
+                        o: Math.random(),
+                    };
+
+                    this.dots.push(dot)
+                }
+            }
+
+            /**
+             * Tween disc
+             */
+            tweenDisc (disc) {
+                const { startDisc } = this
+
+                const scaleX = this.tweenValue(1, 0, disc.p, 'outCubic')
+                const scaleY = this.tweenValue(1, 0, disc.p, 'outExpo')
+
+                disc.sx = scaleX
+                disc.sy = scaleY
+
+                disc.w = startDisc.w * scaleX
+                disc.h = startDisc.h * scaleY
+
+                disc.x = startDisc.x
+                disc.y = startDisc.y + disc.p * startDisc.h * PERSPECTIVE_CONFIG.DEPTH_FACTOR
+
+                return disc
+            }
+
+            /**
+             * Tween value
+             */
+            tweenValue (start, end, p, ease = false) {
+                const delta = end - start
+
+                const easeFn =
+                    easingUtils[
+                        ease ? "ease" + ease.charAt(0).toUpperCase() + ease.slice(1) : "linear"
+                    ];
+
+                return start + delta * easeFn(p);
+            }
+
+            /**
+             * Draw discs
+             */
+            drawDiscs () {
+                const { ctx } = this
+
+                ctx.strokeStyle = '#0329'
+                ctx.lineWidth = 1
+
+                // Discs
+                this.discs.forEach((disc, i) => {
+                    const p = disc.sx * disc.sy
+
+                    ctx.beginPath()
+
+                    ctx.globalAlpha = disc.a
+
+                    const depth = disc.p * 1000;
+                    const transformed = this.applyPerspectiveTransform(disc.x, disc.y, depth);
+
+                    // Calculate ellipse parameters after perspective transform - use particle parameters
+                    const tiltRad = (PERSPECTIVE_CONFIG.PARTICLE_TILT_ANGLE * Math.PI) / 180;
+                    const rotationRad = (PERSPECTIVE_CONFIG.PARTICLE_ROTATION_ANGLE * Math.PI) / 180;
+                    const perspectiveFactor = 1 + (depth * Math.sin(tiltRad) * PERSPECTIVE_CONFIG.PARTICLE_PERSPECTIVE_STRENGTH * 0.001);
+
+                    const scaledW = disc.w / perspectiveFactor;
+                    const scaledH = disc.h * Math.cos(tiltRad) / perspectiveFactor;
+
+                    ctx.ellipse(
+                        transformed.x,
+                        transformed.y,
+                        scaledW,
+                        scaledH,
+                        rotationRad,
+                        0,
+                        Math.PI * 2
+                    )
+                    ctx.stroke()
+
+                    ctx.closePath()
+                })
+            }
+
+            /**
+             * Draw dots
+             */
+            drawDots () {
+                const { ctx } = this
+
+                this.dots.forEach((dot) => {
+                    const { d, a, p, c, o } = dot
+
+                    const _p = d.sx * d.sy
+
+                    // Draw current particle
+                    const newA = a + (Math.PI * 2 * p)
+                    const baseX = d.x + Math.cos(newA) * d.w
+                    const baseY = d.y + Math.sin(newA) * d.h
+                    const depth = d.p * 1000; // Depth value for perspective transform
+
+                    const transformed = this.applyPerspectiveTransform(baseX, baseY, depth)
+                    const x = transformed.x
+                    const y = transformed.y
+
+                    ctx.fillStyle = c
+                    ctx.globalAlpha = d.a * o
+
+                    ctx.beginPath()
+                    ctx.arc(x, y, 1 + _p * 0.5, 0, Math.PI * 2)
+                    ctx.fill()
+                    ctx.closePath()
+                })
+            }
+
+            /**
+             * Move discs
+             */
+            moveDiscs () {
+                this.discs.forEach((disc) => {
+                    disc.p = (disc.p + 0.0003) % 1
+
+                    this.tweenDisc(disc)
+
+                    const p = disc.sx * disc.sy
+
+                    let a = 1
+                    if (p < 0.01) {
+                        a = Math.pow(Math.min(p / 0.01, 1), 3)
+                    } else if (p > 0.2) {
+                        a = 1 - Math.min((p - 0.2) / 0.8, 1)
+                    }
+
+                    disc.a = a
+                })
+            }
+
+            /**
+             * Move dots
+             */
+            moveDots () {
+                this.dots.forEach((dot) => {
+                    const v = this.tweenValue(0, 0.001, 1 - dot.d.sx * dot.d.sy, 'inExpo')
+                    dot.p = (dot.p + v) % 1
+
+                })
+            }
+
+            /**
+             * Tick
+             */
+            tick(time) {
+                const { ctx } = this;
+
+                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                ctx.save();
+                ctx.scale(this.render.dpi, this.render.dpi);
+
+                // Move
+                this.moveDiscs()
+                this.moveDots()
+
+                // Draw
+                this.drawDiscs()
+                this.drawDots()
+
+                ctx.restore();
+
+                requestAnimationFrame(this.tick.bind(this));
+            }
+        }
+
+        customElements.define("black-hole", BlackHole);
+
+        // Initialize the components
+        // Both components will auto-initialize when the page loads
+
+        // Button click effect
+        document.querySelector('.enter-button').addEventListener('click', function(e) {
+            e.preventDefault();
+
+            // Create ripple effect
+            const ripple = document.createElement('div');
+            ripple.style.position = 'absolute';
+            ripple.style.borderRadius = '50%';
+            ripple.style.background = 'rgba(255, 255, 255, 0.6)';
+            ripple.style.transform = 'scale(0)';
+            ripple.style.animation = 'ripple 0.6s linear';
+            ripple.style.left = (e.layerX - 25) + 'px';
+            ripple.style.top = (e.layerY - 25) + 'px';
+            ripple.style.width = '50px';
+            ripple.style.height = '50px';
+            ripple.style.pointerEvents = 'none';
+
+            this.appendChild(ripple);
+
+            // Navigate after animation
+            setTimeout(() => {
+                window.location.href = 'documentation.html';
+            }, 300);
+
+            // Remove ripple
+            setTimeout(() => {
+                ripple.remove();
+            }, 600);
+        });
+
+        // Add ripple animation CSS
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes ripple {
+                to {
+                    transform: scale(4);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>

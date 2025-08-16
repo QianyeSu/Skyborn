@@ -158,11 +158,20 @@ class MesonBuildExt(build_ext):
     def build_meson_modules(self):
         """Build modules that use meson (like spharm)"""
         print("DEBUG: build_meson_modules() called")
+
+        # Determine target directory based on --inplace flag
+        if self.inplace:
+            print("DEBUG: --inplace detected, building to source directory")
+            spharm_target = Path("src") / "skyborn" / "spharm"
+        else:
+            print("DEBUG: Building to build directory")
+            spharm_target = Path(self.build_lib) / "skyborn" / "spharm"
+
         meson_modules = [
             {
                 "name": "spharm",
                 "path": Path("src") / "skyborn" / "spharm",
-                "target_dir": Path(self.build_lib) / "skyborn" / "spharm",
+                "target_dir": spharm_target,
             }
         ]
 
@@ -197,39 +206,40 @@ class MesonBuildExt(build_ext):
             build_temp.mkdir(parents=True, exist_ok=True)
 
             src_dir = module_path / "src"
-            f_files = list(src_dir.glob("*.f"))
-            # f_files = [
-            #     src_dir / "lap.f90",
-            #     src_dir / "invlap.f90",
-            #     src_dir / "sphcom.f",
-            #     src_dir / "hrfft.f",
-            #     src_dir / "getlegfunc.f",
-            #     src_dir / "specintrp.f",
-            #     src_dir / "onedtotwod.f",
-            #     src_dir / "onedtotwod_vrtdiv.f",
-            #     src_dir / "twodtooned.f",
-            #     src_dir / "twodtooned_vrtdiv.f",
-            #     src_dir / "multsmoothfact.f",
-            #     src_dir / "gaqd.f",
-            #     src_dir / "shses.f",
-            #     src_dir / "shaes.f",
-            #     src_dir / "vhaes.f",
-            #     src_dir / "vhses.f",
-            #     src_dir / "shsgs.f",
-            #     src_dir / "shags.f",
-            #     src_dir / "vhags.f",
-            #     src_dir / "vhsgs.f",
-            #     src_dir / "shaec.f",
-            #     src_dir / "shagc.f",
-            #     src_dir / "shsec.f",
-            #     src_dir / "shsgc.f",
-            #     src_dir / "vhaec.f",
-            #     src_dir / "vhagc.f",
-            #     src_dir / "vhsec.f",
-            #     src_dir / "vhsgc.f",
-            #     src_dir / "ihgeod.f",
-            #     src_dir / "alf.f",
-            # ]
+            # f_files = list(src_dir.glob("*.f"))
+            # f_files = list(src_dir.glob("*.f90"))
+            f_files = [
+                src_dir / "lap.f90",
+                src_dir / "invlap.f90",
+                src_dir / "sphcom.f90",
+                src_dir / "hrfft.f90",
+                src_dir / "getlegfunc.f90",
+                src_dir / "specintrp.f90",
+                src_dir / "onedtotwod.f90",
+                src_dir / "onedtotwod_vrtdiv.f90",
+                src_dir / "twodtooned.f90",
+                src_dir / "twodtooned_vrtdiv.f90",
+                src_dir / "multsmoothfact.f90",
+                src_dir / "gaqd.f90",
+                src_dir / "shses.f90",
+                src_dir / "shaes.f90",
+                src_dir / "vhaes.f90",
+                src_dir / "vhses.f90",
+                src_dir / "shsgs.f90",
+                src_dir / "shags.f90",
+                src_dir / "vhags.f90",
+                src_dir / "vhsgs.f90",
+                src_dir / "shaec.f90",
+                src_dir / "shagc.f90",
+                src_dir / "shsec.f90",
+                src_dir / "shsgc.f90",
+                src_dir / "vhaec.f90",
+                src_dir / "vhagc.f90",
+                src_dir / "vhsec.f90",
+                src_dir / "vhsgc.f90",
+                src_dir / "ihgeod.f90",
+                src_dir / "alf.f90",
+            ]
             pyf_file = src_dir / "_spherepack.pyf"
 
             # --- STEP 1: Generate wrapper files in the isolated build directory ---
@@ -295,7 +305,7 @@ class MesonBuildExt(build_ext):
             )
 
             if is_macos_arm64:
-                # Apple Silicon (arm64) optimized flags
+                # Apple Silicon (arm64) optimized flags with OpenMP
                 fortran_optim_flags = (
                     "-O3 "
                     "-fPIC "
@@ -309,7 +319,9 @@ class MesonBuildExt(build_ext):
                     "-fno-common "
                     "-ftree-loop-im "
                     "-ftree-loop-distribution "
-                    "-falign-functions=32"
+                    "-falign-functions=32 "
+                    "-fopenmp "
+                    "-std=legacy"
                 )
                 c_optim_flags = (
                     "-O3 "
@@ -318,10 +330,11 @@ class MesonBuildExt(build_ext):
                     "-mtune=apple-m1 "
                     "-fPIC "
                     "-fno-trapping-math "
-                    "-falign-functions=32"
+                    "-falign-functions=32 "
+                    "-fopenmp"
                 )
             else:
-                # x86-64 optimized flags (Linux/Windows/Intel macOS)
+                # x86-64 optimized flags with OpenMP (Linux/Windows/Intel macOS)
                 fortran_optim_flags = (
                     "-O3 "
                     "-fPIC "
@@ -335,7 +348,27 @@ class MesonBuildExt(build_ext):
                     "-fno-common "
                     "-ftree-loop-im "
                     "-ftree-loop-distribution "
-                    "-falign-functions=32"
+                    "-falign-functions=32 "
+                    "-falign-loops=32 "  # Loop alignment optimization
+                    "-fopenmp "
+                    "-std=legacy"
+                    # "-mavx2 "
+                    # "-mfma "
+                    # "-flto "
+                    # "-ffast-math "                   # Fast math operations (may allow some loss of precision)
+                    # "-funsafe-math-optimizations "    # More aggressive math optimizations
+                    # "-freciprocal-math "              # Use reciprocal approximations
+                    # "-fno-math-errno "                # Disable math function error checking
+                    # "-fno-trapping-math "             # Disable math traps
+                    # "-ftree-loop-optimize "           # Loop tree optimization
+                    # "-ftree-loop-vectorize "          # Loop vectorization
+                    # "-floop-nest-optimize "           # Loop nest optimization
+                    # "-floop-parallelize-all "         # Parallelize all loops
+                    # "-ftree-parallelize-loops=4 "     # Specify number of parallel loops (adjust for CPU cores)
+                    # "-fprefetch-loop-arrays "         # Prefetch loop arrays
+                    # "-fpack-struct "                  # Pack structs tightly
+                    # "-mcx16 "                         # Enable 16-byte atomic operations
+                    # "-mfpmath=sse "                   # Use SSE for floating-point math
                 )
                 c_optim_flags = (
                     # Highest level optimization, covers most performance enhancements
@@ -351,18 +384,20 @@ class MesonBuildExt(build_ext):
                     # Disable floating-point exception traps, prevents crashes due to floating-point errors, enhances robustness
                     "-fno-trapping-math "
                     # Align function entry points, potentially slightly improves instruction cache efficiency
-                    "-falign-functions=32"
+                    "-falign-functions=32 "
+                    # OpenMP parallel processing support
+                    "-fopenmp"
                 )
-            # f2py_cmd += [
-            #     "--opt=" + fortran_optim_flags,
-            #     "--f90flags=" + fortran_optim_flags,
-            #     "--cflags=" + c_optim_flags,
-            # ]
+            f2py_cmd += [
+                "--opt=" + fortran_optim_flags,
+                "--f90flags=" + fortran_optim_flags,
+                # "--cflags=" + c_optim_flags,
+            ]
             print(
                 "INFO: Setting compiler flags via environment variables for the Meson backend."
             )
             build_env = os.environ.copy()
-            build_env["FFLAGS"] = fortran_optim_flags
+            # build_env["FFLAGS"] = fortran_optim_flags
             build_env["CFLAGS"] = c_optim_flags
             import platform
 
@@ -372,7 +407,7 @@ class MesonBuildExt(build_ext):
                 f2py_cmd += ["--fcompiler=gnu95", "--compiler=unix"]
 
             print("f2py build command:", " ".join(f2py_cmd))
-            print(f"Using FFLAGS: {build_env.get('FFLAGS')}")
+            # print(f"Using FFLAGS: {build_env.get('FFLAGS')}")
             print(f"Using CFLAGS: {build_env.get('CFLAGS')}")
             subprocess.run(
                 f2py_cmd,
@@ -416,7 +451,19 @@ class MesonBuildExt(build_ext):
             target_dir.mkdir(parents=True, exist_ok=True)
 
             print(f"Moving {source_file} to {target_dir}")
-            shutil.move(str(source_file), str(target_dir))
+            destination_file = target_dir / source_file.name
+            shutil.move(str(source_file), str(destination_file))
+
+            # In --inplace mode, we're already in source directory, so we're done
+            # In non-inplace mode, also copy to source directory for convenience
+            if not self.inplace:
+                source_dir_target = Path("src") / "skyborn" / "spharm"
+                print(
+                    f"Also copying to source directory for development: {source_dir_target}"
+                )
+                source_dir_target.mkdir(parents=True, exist_ok=True)
+                # Copy the file to source directory as well
+                shutil.copy2(str(destination_file), str(source_dir_target))
 
             print(f"spharm compilation successful!")
             self._built_modules = getattr(self, "_built_modules", set())

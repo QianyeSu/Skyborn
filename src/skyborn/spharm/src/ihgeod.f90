@@ -32,7 +32,6 @@ subroutine ihgeod(m, idp, jdp, x, y, z)
     real :: x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4, x5, y5, z5, x6, y6, z6
     real :: dxi, dyi, dzi, dxj, dyj, dzj, xs, ys, zs
     real :: rad, theta, phi_temp
-    real, parameter :: golden_ratio = 1.618033988749895
 
     ! Precompute constants
     pi = 4.0 * atan(1.0)
@@ -44,9 +43,6 @@ subroutine ihgeod(m, idp, jdp, x, y, z)
     tdphi = 3.0 * hdphi
 
     ! Generate geodesic points for each of the 5 icosahedral faces
-    !$OMP PARALLEL DO PRIVATE(phi, x1, y1, z1, x2, y2, z2, x3, y3, z3, &
-    !$OMP                      x4, y4, z4, x5, y5, z5, x6, y6, z6, &
-    !$OMP                      dxi, dyi, dzi, dxj, dyj, dzj, xs, ys, zs, i, j)
     do k = 1, 5
         phi = (k - 1) * dphi
 
@@ -64,13 +60,13 @@ subroutine ihgeod(m, idp, jdp, x, y, z)
         dzj = (z3 - z2) / (m - 1)
 
         ! Fill first triangle
-        !DIR$ VECTOR ALWAYS
+        !$OMP SIMD PRIVATE(xs, ys, zs)
         do i = 1, m
             xs = x1 + (i - 1) * dxi
             ys = y1 + (i - 1) * dyi
             zs = z1 + (i - 1) * dzi
 
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD
             do j = 1, i
                 x(j, i, k) = xs + (j - 1) * dxj
                 y(j, i, k) = ys + (j - 1) * dyj
@@ -88,13 +84,13 @@ subroutine ihgeod(m, idp, jdp, x, y, z)
         dzj = (z4 - z1) / (m - 1)
 
         ! Fill second triangle
-        !DIR$ VECTOR ALWAYS
+        !$OMP SIMD PRIVATE(xs, ys, zs)
         do j = 1, m
             xs = x1 + (j - 1) * dxj
             ys = y1 + (j - 1) * dyj
             zs = z1 + (j - 1) * dzj
 
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD
             do i = 1, j
                 x(j, i, k) = xs + (i - 1) * dxi
                 y(j, i, k) = ys + (i - 1) * dyi
@@ -109,13 +105,13 @@ subroutine ihgeod(m, idp, jdp, x, y, z)
         dzj = (z5 - z3) / (m - 1)
 
         ! Fill third triangle
-        !DIR$ VECTOR ALWAYS
+        !$OMP SIMD PRIVATE(xs, ys, zs)
         do i = 1, m
             xs = x4 + (i - 1) * dxi
             ys = y4 + (i - 1) * dyi
             zs = z4 + (i - 1) * dzi
 
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD
             do j = 1, i
                 x(j + m - 1, i, k) = xs + (j - 1) * dxj
                 y(j + m - 1, i, k) = ys + (j - 1) * dyj
@@ -133,13 +129,13 @@ subroutine ihgeod(m, idp, jdp, x, y, z)
         dzj = (z6 - z4) / (m - 1)
 
         ! Fill fourth triangle
-        !DIR$ VECTOR ALWAYS
+        !$OMP SIMD PRIVATE(xs, ys, zs)
         do j = 1, m
             xs = x4 + (j - 1) * dxj
             ys = y4 + (j - 1) * dyj
             zs = z4 + (j - 1) * dzj
 
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD
             do i = 1, j
                 x(j + m - 1, i, k) = xs + (i - 1) * dxi
                 y(j + m - 1, i, k) = ys + (i - 1) * dyi
@@ -147,20 +143,17 @@ subroutine ihgeod(m, idp, jdp, x, y, z)
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
 
     ! Normalize all points to unit sphere with improved precision
-    !$OMP PARALLEL DO PRIVATE(j, i, rad, theta, phi_temp)
     do k = 1, 5
         do j = 1, m + m - 1
-            !DIR$ VECTOR ALWAYS
+            !$OMP SIMD PRIVATE(rad, theta, phi_temp)
             do i = 1, m
                 call ctos(x(j, i, k), y(j, i, k), z(j, i, k), rad, theta, phi_temp)
                 call stoc(1.0, theta, phi_temp, x(j, i, k), y(j, i, k), z(j, i, k))
             end do
         end do
     end do
-    !$OMP END PARALLEL DO
 
 end subroutine ihgeod
 
