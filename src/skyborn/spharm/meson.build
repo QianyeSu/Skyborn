@@ -85,6 +85,7 @@ if host_system == 'darwin' and host_cpu == 'aarch64'
         '-finline-functions',       # Inline small functions
         '-ftree-vectorize',         # Auto-vectorization for SIMD
         '-ffinite-math-only',       # Assume no NaN/Inf values
+        '-ffree-line-length-none',  # Allow arbitrarily long free-form source lines
         '-march=armv8-a',           # ARM64 architecture
         '-mtune=apple-m1',          # Tune for Apple Silicon
         '-fno-common',              # Don't use common blocks
@@ -98,12 +99,12 @@ if host_system == 'darwin' and host_cpu == 'aarch64'
     c_args = [
         # '-O3',                                        # Maximum optimization
         '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION', # NumPy API compatibility
-        # '-march=armv8-a',                             # ARM64 architecture
-        # '-mtune=apple-m1',                            # Tune for Apple Silicon
-        # '-fPIC',                                      # Position independent code
-        # '-fno-trapping-math',                         # Disable floating-point traps
-        # '-falign-functions=32',                       # Function alignment
-        # '-fopenmp',                                   # OpenMP support
+        '-march=armv8-a',                             # ARM64 architecture
+        '-mtune=apple-m1',                            # Tune for Apple Silicon
+        '-fPIC',                                      # Position independent code
+        '-fno-trapping-math',                         # Disable floating-point traps
+        '-falign-functions=32',                       # Function alignment
+        '-fopenmp',                                   # OpenMP support
     ]
 else
     # x86-64 optimized flags (Linux/Windows/Intel macOS)
@@ -116,6 +117,7 @@ else
         '-finline-functions',       # Inline small functions
         '-ftree-vectorize',         # Auto-vectorization for SIMD
         '-ffinite-math-only',       # Assume no NaN/Inf values
+        '-ffree-line-length-none',  # Allow arbitrarily long free-form source lines
         '-march=x86-64',            # x86-64 architecture
         '-mtune=generic',           # Generic tuning (portable)
         '-fno-common',              # Don't use common blocks
@@ -129,15 +131,12 @@ else
     c_args = [
         # '-O3',                                        # Maximum optimization
         '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',# NumPy API compatibility
-        # '-march=x86-64',                              # x86-64 architecture
-        # '-mtune=generic',                             # Generic tuning (portable)
-        # '-fPIC',                                      # Position independent code
-        # '-fno-trapping-math',                         # Disable floating-point traps
-        # '-falign-functions=32',                       # Function alignment
-        # '-fopenmp',                                   # OpenMP support
-        # '-Wno-cast-function-type',                    # Suppress function cast warnings
-        # '-Wno-missing-field-initializers',            # Suppress missing initializer warnings
-        # '-Wno-unused-parameter'                       # Suppress unused parameter warnings
+        '-march=x86-64',                              # x86-64 architecture
+        '-mtune=generic',                             # Generic tuning (portable)
+        '-fPIC',                                      # Position independent code
+        '-fno-trapping-math',                         # Disable floating-point traps
+        '-falign-functions=32',                       # Function alignment
+        '-fopenmp',                                   # OpenMP support
     ]
 endif
 
