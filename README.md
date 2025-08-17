@@ -12,9 +12,8 @@
 [![Tests](https://github.com/QianyeSu/Skyborn/actions/workflows/stable-ci.yml/badge.svg)](https://github.com/QianyeSu/Skyborn/actions/workflows/stable-ci.yml)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)](https://github.com/QianyeSu/Skyborn)
 [![Code style](https://img.shields.io/badge/code%20style-black-blue.svg)](https://github.com/psf/black)
-[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://skyborn.readthedocs.io/en/latest/)
 [![Build Status](https://github.com/QianyeSu/Skyborn/actions/workflows/test-coverage.yml/badge.svg?branch=main)](https://github.com/QianyeSu/Skyborn/actions/workflows/test-coverage.yml?query=branch%3Amain)
-
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://skyborn.readthedocs.io/en/latest/)
 ## System Requirements
 
 **Operating System:** 🖥️ **Cross-Platform**
