@@ -8,28 +8,8 @@ py_mod = import('python')
 py = py_mod.find_installation('python', pure: false)
 py_dep = py.dependency()
 
-# Find OpenMP dependency with macOS-specific handling
-if host_system == 'darwin'
-    # macOS specific OpenMP detection
-    openmp_dep = dependency('openmp', required: false)
-    if not openmp_dep.found()
-        # Try to find libomp manually on macOS
-        libomp_lib = find_library('omp', required: false)
-        if libomp_lib.found()
-            # Create a custom dependency for macOS OpenMP
-            openmp_dep = declare_dependency(
-                dependencies: libomp_lib,
-                compile_args: ['-Xpreprocessor', '-fopenmp']
-            )
-            message('Using macOS libomp for OpenMP support')
-        else
-            message('OpenMP not found on macOS - building without parallel support')
-        endif
-    endif
-else
-    # Standard OpenMP detection for other platforms
-    openmp_dep = dependency('openmp', required: false)
-endif
+# Find OpenMP dependency
+openmp_dep = dependency('openmp', required: false)
 
 # Install Python module files
 py.install_sources(
@@ -94,69 +74,70 @@ message('Host CPU family: ' + host_cpu)
 fortran_args = []
 c_args = []
 
-# Base optimization flags (without OpenMP)
-base_fortran_args = [
-    '-O3',                      # Maximum optimization
-    '-fPIC',                    # Position independent code
-    '-fno-second-underscore',   # Fortran symbol naming convention
-    '-funroll-loops',           # Loop unrolling optimization
-    '-finline-functions',       # Inline small functions
-    '-ftree-vectorize',         # Auto-vectorization for SIMD
-    '-ffinite-math-only',       # Assume no NaN/Inf values
-    '-ffree-line-length-none',  # Allow arbitrarily long free-form source lines
-    '-fno-common',              # Don't use common blocks
-    '-ftree-loop-im',           # Loop invariant motion
-    '-ftree-loop-distribution', # Loop distribution
-    '-falign-functions=32',     # Function alignment
-    '-falign-loops=32',         # Loop alignment optimization
-    '-std=legacy'               # Legacy Fortran standard
-]
-
-base_c_args = [
-    '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION', # NumPy API compatibility
-    '-fPIC',                                       # Position independent code
-    '-fno-trapping-math',                          # Disable floating-point traps
-    '-falign-functions=32',                        # Function alignment
-]
-
 if host_system == 'darwin' and host_cpu == 'aarch64'
     # Apple Silicon (arm64) optimized flags
     message('Configuring for Apple Silicon (arm64)')
-    fortran_args = base_fortran_args + [
+    fortran_args = [
+        '-O3',                      # Maximum optimization
+        '-fPIC',                    # Position independent code
+        '-fno-second-underscore',   # Fortran symbol naming convention
+        '-funroll-loops',           # Loop unrolling optimization
+        '-finline-functions',       # Inline small functions
+        '-ftree-vectorize',         # Auto-vectorization for SIMD
+        '-ffinite-math-only',       # Assume no NaN/Inf values
+        '-ffree-line-length-none',  # Allow arbitrarily long free-form source lines
         '-march=armv8-a',           # ARM64 architecture
         '-mtune=apple-m1',          # Tune for Apple Silicon
+        '-fno-common',              # Don't use common blocks
+        '-ftree-loop-im',           # Loop invariant motion
+        '-ftree-loop-distribution', # Loop distribution
+        '-falign-functions=32',     # Function alignment
+        '-falign-loops=32',         # Loop alignment optimization
+        '-std=legacy',              # Legacy Fortran standard
+        '-fopenmp',
     ]
-    c_args = base_c_args + [
-        '-march=armv8-a',           # ARM64 architecture
-        '-mtune=apple-m1',          # Tune for Apple Silicon
+    c_args = [
+        # '-O3',                                        # Maximum optimization
+        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION', # NumPy API compatibility
+        '-march=armv8-a',                             # ARM64 architecture
+        '-mtune=apple-m1',                            # Tune for Apple Silicon
+        '-fPIC',                                      # Position independent code
+        '-fno-trapping-math',                         # Disable floating-point traps
+        '-falign-functions=32',                       # Function alignment
+        '-fopenmp',
     ]
 else
     # x86-64 optimized flags (Linux/Windows/Intel macOS)
     message('Configuring for x86-64 architecture')
-    fortran_args = base_fortran_args + [
+    fortran_args = [
+        '-O3',                      # Maximum optimization
+        '-fPIC',                    # Position independent code
+        '-fno-second-underscore',   # Fortran symbol naming convention
+        '-funroll-loops',           # Loop unrolling optimization
+        '-finline-functions',       # Inline small functions
+        '-ftree-vectorize',         # Auto-vectorization for SIMD
+        '-ffinite-math-only',       # Assume no NaN/Inf values
+        '-ffree-line-length-none',  # Allow arbitrarily long free-form source lines
         '-march=x86-64',            # x86-64 architecture
         '-mtune=generic',           # Generic tuning (portable)
+        '-fno-common',              # Don't use common blocks
+        '-ftree-loop-im',           # Loop invariant motion
+        '-ftree-loop-distribution', # Loop distribution
+        '-falign-functions=32',     # Function alignment
+        '-falign-loops=32',         # Loop alignment optimization
+        '-std=legacy',              # Legacy Fortran standard
+        '-fopenmp',
     ]
-    c_args = base_c_args + [
-        '-march=x86-64',            # x86-64 architecture
-        '-mtune=generic',           # Generic tuning (portable)
+    c_args = [
+        # '-O3',                                        # Maximum optimization
+        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',# NumPy API compatibility
+        '-march=x86-64',                              # x86-64 architecture
+        '-mtune=generic',                             # Generic tuning (portable)
+        '-fPIC',                                      # Position independent code
+        '-fno-trapping-math',                         # Disable floating-point traps
+        '-falign-functions=32',                       # Function alignment
+        '-fopenmp',
     ]
-endif
-
-# Add OpenMP flags if available
-if openmp_dep.found()
-    if host_system == 'darwin'
-        # macOS specific OpenMP flags
-        fortran_args += ['-Xpreprocessor', '-fopenmp']
-        c_args += ['-Xpreprocessor', '-fopenmp']
-    else
-        # Standard OpenMP flags for other platforms
-        fortran_args += ['-fopenmp']
-        c_args += ['-fopenmp']
-    endif
-    message('Added OpenMP compilation flags')
-else
-    message('Building without OpenMP - parallel processing disabled')
 endif
 
 message('Fortran args: ' + ' '.join(fortran_args))
