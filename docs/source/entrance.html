@@ -500,16 +500,15 @@
                 right: 6px;
                 bottom: 6px;
             }
-        }
-
-        /* On devices without hover (touch), show the FAB by default so users can tap it */
-        @media (hover: none) {
-            .corner-fab {
-                opacity: 1;
-                pointer-events: auto;
-                transform: translateY(0) scale(1);
+            /* Hide debug controls completely on touch devices */
+            #debugPanel, .corner-fab {
+                display: none !important;
+                visibility: hidden !important;
+                pointer-events: none !important;
             }
         }
+
+    /* On touch devices we intentionally keep the FAB hidden; hotspot touch still works */
 
 
 
@@ -557,7 +556,7 @@
     </div>
 
     <!-- <div class="version-info">
-        Version 0.3.6 | Built with ❤️ by Qianye Su
+        Version 0.3.12 | Built with ❤️ by Qianye Su
     </div> -->
 
     <!-- Debug control panel - modular, can be removed in production -->
@@ -603,8 +602,10 @@
     <script>
         // Global key handler fallback: toggle debug panel on Ctrl/Cmd+D or Ctrl+Shift+D or command + D
         (function() {
+            const isTouchGlobal = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
             window.addEventListener('keydown', function(e) {
                 try {
+                    if (isTouchGlobal) return; // do not allow keyboard toggles on touch devices
                     const target = e.target || {};
                     const tag = (target.tagName || '').toUpperCase();
                     if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
@@ -776,7 +777,7 @@
             // If URL contains ?debug=1, show panel automatically (for ReadTheDocs deployment)
             try {
                 const urlParams = new URLSearchParams(window.location.search);
-                if (urlParams.get('debug') === '1') {
+                if (urlParams.get('debug') === '1' && !isTouch) {
                     debugPanel.classList.add('open');
                 }
             } catch (err) {
@@ -823,26 +824,13 @@
             const cornerHotspot = document.querySelector('.corner-hotspot');
             const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
             if (isTouch) {
-                // make FAB visible on touch devices
-                if (cornerFab) {
-                    cornerFab.style.opacity = '1';
-                    cornerFab.style.pointerEvents = 'auto';
-                    cornerFab.style.transform = 'translateY(0) scale(1)';
-                }
-
-                // Expand hotspot and bind touchstart to toggle panel
-                if (cornerHotspot) {
-                    cornerHotspot.addEventListener('touchstart', function(e) {
-                        e.stopPropagation();
-                        if (!debugPanel) return;
-                        debugPanel.classList.toggle('open');
-                    });
-                }
-
+                // On touch devices we do NOT allow the debug panel to be opened.
                 // Reduce star count on touch devices for performance
                 try {
                     document.documentElement.style.setProperty('--stars-count', '30');
                     document.documentElement.style.setProperty('--logo-height', getComputedStyle(document.documentElement).getPropertyValue('--logo-height') || '80px');
+                    // ensure panel is closed/hidden
+                    if (debugPanel) debugPanel.classList.remove('open');
                 } catch (err) {}
             }
 
