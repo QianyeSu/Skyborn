@@ -53,14 +53,28 @@ jobs:
       #   with:
       #     platforms: arm64
 
-      # Setup for macOS (following NumPy's approach)
+      # Setup for macOS (following NumPy's approach) + OpenMP support
       - name: Setup macOS
         if: startsWith(matrix.buildplat[0], 'macos')
         run: |
-          # Use gfortran-13 like NumPy
+          # Install OpenMP support via Homebrew
+          brew install gcc libomp
+
+          # Use gfortran-13 like NumPy, plus OpenMP-capable GCC
           echo "FC=gfortran-13" >> "$GITHUB_ENV"
           echo "F77=gfortran-13" >> "$GITHUB_ENV"
           echo "F90=gfortran-13" >> "$GITHUB_ENV"
+          echo "CC=gcc-13" >> "$GITHUB_ENV"
+          echo "CXX=g++-13" >> "$GITHUB_ENV"
+
+          # Set OpenMP library paths
+          echo "LDFLAGS=-L$(brew --prefix libomp)/lib" >> "$GITHUB_ENV"
+          echo "CPPFLAGS=-I$(brew --prefix libomp)/include" >> "$GITHUB_ENV"
+          echo "OpenMP_C_FLAGS=-Xpreprocessor -fopenmp" >> "$GITHUB_ENV"
+          echo "OpenMP_C_LIB_NAMES=omp" >> "$GITHUB_ENV"
+          echo "OpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp" >> "$GITHUB_ENV"
+          echo "OpenMP_CXX_LIB_NAMES=omp" >> "$GITHUB_ENV"
+          echo "OpenMP_omp_LIBRARY=$(brew --prefix libomp)/lib/libomp.dylib" >> "$GITHUB_ENV"
 
       # Setup for Linux (install gfortran in container)
       - name: Setup Linux environment
@@ -131,7 +145,7 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
-          CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc MACOSX_DEPLOYMENT_TARGET=13.0
+          CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc-13 CXX=g++-13 MACOSX_DEPLOYMENT_TARGET=13.0 LDFLAGS=-L$(brew --prefix libomp)/lib CPPFLAGS=-I$(brew --prefix libomp)/include
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
