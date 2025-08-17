@@ -301,7 +301,7 @@ else:
         dependencies: dependencies,
         fortran_args: fortran_args,
         c_args: c_args,
-        install: false,  # We'll handle installation manually to move to src/spharm
+        install: true,  # Install the extension module properly
         build_by_default: true,
     )
 
