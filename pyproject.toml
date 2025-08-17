@@ -4,8 +4,8 @@ requires = [
     "wheel",
     "numpy>=1.24.0",
     "Cython>=3.0.0",
-    "meson>=0.64.0; platform_system != 'Windows'",
-    "ninja; platform_system != 'Windows'",
+    "meson",
+    "ninja",
 ]
 build-backend = "setuptools.build_meta"
 
