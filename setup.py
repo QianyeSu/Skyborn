@@ -178,8 +178,8 @@ class MesonBuildExt(build_ext):
         for module in meson_modules:
             print(f"DEBUG: Processing module {module['name']}")
             if self.should_build_meson_module(module):
-                print(f"DEBUG: Building module {module['name']}")
-                self.build_single_meson_module(module)
+                print(f"DEBUG: Building module {module['name']} with meson")
+                self.build_meson_module(module)
             else:
                 print(f"DEBUG: Skipping module {module['name']} - no meson.build found")
 
@@ -188,294 +188,174 @@ class MesonBuildExt(build_ext):
         meson_build_file = module["path"] / "meson.build"
         return meson_build_file.exists()
 
-    def build_single_meson_module(self, module):
+    def check_meson_available(self):
+        """Check if meson and ninja are available"""
+        try:
+            # Check meson
+            result = subprocess.run(
+                ["meson", "--version"], capture_output=True, text=True, timeout=10
+            )
+            if result.returncode != 0:
+                return False, "meson not found"
+
+            meson_version = result.stdout.strip()
+            print(f"Found meson version: {meson_version}")
+
+            # Check ninja
+            result = subprocess.run(
+                ["ninja", "--version"], capture_output=True, text=True, timeout=10
+            )
+            if result.returncode != 0:
+                return False, "ninja not found"
+
+            ninja_version = result.stdout.strip()
+            print(f"Found ninja version: {ninja_version}")
+
+            return True, None
+
+        except (
+            subprocess.TimeoutExpired,
+            subprocess.SubprocessError,
+            FileNotFoundError,
+        ) as e:
+            return False, str(e)
+
+    def build_meson_module(self, module):
         """
-        Build a single meson module using a corrected two-step f2py process.
+        Build a meson module using the meson build system.
         """
-        print(f"Building {module['name']} with two-step f2py process...")
+        print(f"Building {module['name']} with meson build system...")
+
+        # Check if meson and ninja are available
+        meson_available, error_msg = self.check_meson_available()
+        if not meson_available:
+            print(f"ERROR: Meson build tools not available: {error_msg}")
+            print("Please install meson and ninja:")
+            print("  pip install meson ninja")
+            print("  or: conda install meson ninja")
+            raise RuntimeError(
+                f"Meson build tools required but not available: {error_msg}"
+            )
 
         module_path = module["path"]
-        # CRITICAL: Use an isolated build directory for all generated files.
-        # This prevents polluting the source tree and avoids permission errors.
-        build_temp = module_path / "build"
+        # Use build subdirectory as specified in requirements
+        build_dir = module_path / "build"
 
         try:
-            # Clean and create the isolated build directory
-            if build_temp.exists():
-                shutil.rmtree(build_temp)
-            build_temp.mkdir(parents=True, exist_ok=True)
+            # Clean build directory
+            if build_dir.exists():
+                print(f"Cleaning existing build directory: {build_dir}")
+                shutil.rmtree(build_dir)
 
-            src_dir = module_path / "src"
-            # f_files = list(src_dir.glob("*.f"))
-            # f_files = list(src_dir.glob("*.f90"))
-            f_files = [
-                src_dir / "lap.f90",
-                src_dir / "invlap.f90",
-                src_dir / "sphcom.f90",
-                src_dir / "hrfft.f90",
-                src_dir / "getlegfunc.f90",
-                src_dir / "specintrp.f90",
-                src_dir / "onedtotwod.f90",
-                src_dir / "onedtotwod_vrtdiv.f90",
-                src_dir / "twodtooned.f90",
-                src_dir / "twodtooned_vrtdiv.f90",
-                src_dir / "multsmoothfact.f90",
-                src_dir / "gaqd.f90",
-                src_dir / "shses.f90",
-                src_dir / "shaes.f90",
-                src_dir / "vhaes.f90",
-                src_dir / "vhses.f90",
-                src_dir / "shsgs.f90",
-                src_dir / "shags.f90",
-                src_dir / "vhags.f90",
-                src_dir / "vhsgs.f90",
-                src_dir / "shaec.f90",
-                src_dir / "shagc.f90",
-                src_dir / "shsec.f90",
-                src_dir / "shsgc.f90",
-                src_dir / "vhaec.f90",
-                src_dir / "vhagc.f90",
-                src_dir / "vhsec.f90",
-                src_dir / "vhsgc.f90",
-                src_dir / "ihgeod.f90",
-                src_dir / "alf.f90",
-            ]
-            pyf_file = src_dir / "_spherepack.pyf"
+            # Setup build directory
+            build_dir.mkdir(parents=True, exist_ok=True)
 
-            # --- STEP 1: Generate wrapper files in the isolated build directory ---
-            print("Step 1: Generating C and Fortran wrapper files...")
-
-            generate_cmd = [
-                sys.executable,
-                "-m",
-                "numpy.f2py",
-                str(pyf_file),
-                "--lower",
-                # CRITICAL: Tell f2py the name of the module. This ensures
-                # '_spherepackmodule.c' is created with the correct content.
-                "-m",
-                "_spherepack",
+            # Configure meson build
+            # Use local 'build' directory and '.' as source when running inside module_path
+            # This avoids passing paths that meson will interpret relative to cwd and
+            # causing doubled paths like src/skyborn/spharm/src/...
+            print(f"Configuring meson build in {build_dir} (cwd={module_path})")
+            setup_cmd = [
+                "meson",
+                "setup",
+                "build",  # build directory inside module_path
+                ".",  # source is current directory (module_path)
+                "--buildtype=release",
+                "-Db_lto=true",
             ]
 
-            print(f"Running generation command: {' '.join(generate_cmd)}")
-            # CRITICAL: Run the command from the project root directory.
-            subprocess.run(generate_cmd, cwd=str(Path.cwd()), check=True)
+            print(f"Running: {' '.join(setup_cmd)} (cwd={module_path})")
 
-            # --- STEP 2: Verify generated files and build the full source list ---
-            print("Step 2: Verifying wrappers and preparing source list...")
-
-            # Generated files will be in the current working directory (project root)
-            generated_c_wrapper = Path.cwd() / "_spherepackmodule.c"
-            generated_f_wrapper = Path.cwd() / "_spherepack-f2pywrappers.f"
-
-            # CRITICAL: Only the C wrapper is mandatory.
-            if not generated_c_wrapper.exists():
-                raise RuntimeError(
-                    f"f2py C wrapper not generated! Looked for: {generated_c_wrapper}"
-                )
-
-            print(f"Found mandatory C wrapper: {generated_c_wrapper.name}")
-
-            # Build the final list of source files for the compiler
-            compile_sources = [str(f) for f in f_files] + [str(generated_c_wrapper)]
-
-            # Add the optional Fortran wrapper only if it exists
-            if generated_f_wrapper.exists():
-                print(f"Found optional Fortran wrapper: {generated_f_wrapper.name}")
-                compile_sources.append(str(generated_f_wrapper))
-
-            # --- STEP 3: Compile all sources together ---
-            print("Step 3: Compiling all sources...")
-
-            # The .pyf file must still be the first argument for f2py to get metadata
-            f2py_cmd = (
-                [sys.executable, "-m", "numpy.f2py", "-c", str(pyf_file)]
-                + compile_sources
-                # Use setuptools' global temp dir for output
-                + ["--build-dir", str(self.build_temp)]
-            )
-
-            # fortran_optim_flags = "-O3 -fPIC -fno-second-underscore -funroll-loops -finline-functions -ftree-vectorize -ffinite-math-only"
-            # fortran_optim_flags = "-O3 -fPIC -fno-second-underscore -funroll-loops -finline-functions -ftree-vectorize -ffinite-math-only"
+            # Set up environment for conda gfortran across all platforms
+            env = os.environ.copy()
             import platform
 
-            # Check for Apple Silicon (arm64) architecture
-            is_macos_arm64 = (
-                platform.system() == "Darwin" and platform.machine() == "arm64"
-            )
+            conda_prefix = env.get("CONDA_PREFIX", "")
+            if conda_prefix:
+                system = platform.system()
+                current_path = env.get("PATH", "")
 
-            if is_macos_arm64:
-                # Apple Silicon (arm64) optimized flags with OpenMP
-                fortran_optim_flags = (
-                    "-O3 "
-                    "-fPIC "
-                    "-fno-second-underscore "
-                    "-funroll-loops "
-                    "-finline-functions "
-                    "-ftree-vectorize "
-                    "-ffinite-math-only "
-                    "-march=armv8-a "
-                    "-mtune=apple-m1 "
-                    "-fno-common "
-                    "-ftree-loop-im "
-                    "-ftree-loop-distribution "
-                    "-falign-functions=32 "
-                    "-fopenmp "
-                    "-std=legacy"
-                )
-                c_optim_flags = (
-                    "-O3 "
-                    "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION "
-                    "-march=armv8-a "
-                    "-mtune=apple-m1 "
-                    "-fPIC "
-                    "-fno-trapping-math "
-                    "-falign-functions=32 "
-                    "-fopenmp"
-                )
-            else:
-                # x86-64 optimized flags with OpenMP (Linux/Windows/Intel macOS)
-                fortran_optim_flags = (
-                    "-O3 "
-                    "-fPIC "
-                    "-fno-second-underscore "
-                    "-funroll-loops "
-                    "-finline-functions "
-                    "-ftree-vectorize "
-                    "-ffinite-math-only "
-                    "-march=x86-64 "
-                    "-mtune=generic "
-                    "-fno-common "
-                    "-ftree-loop-im "
-                    "-ftree-loop-distribution "
-                    "-falign-functions=32 "
-                    "-falign-loops=32 "  # Loop alignment optimization
-                    "-fopenmp "
-                    "-std=legacy"
-                    # "-mavx2 "
-                    # "-mfma "
-                    # "-flto "
-                    # "-ffast-math "                   # Fast math operations (may allow some loss of precision)
-                    # "-funsafe-math-optimizations "    # More aggressive math optimizations
-                    # "-freciprocal-math "              # Use reciprocal approximations
-                    # "-fno-math-errno "                # Disable math function error checking
-                    # "-fno-trapping-math "             # Disable math traps
-                    # "-ftree-loop-optimize "           # Loop tree optimization
-                    # "-ftree-loop-vectorize "          # Loop vectorization
-                    # "-floop-nest-optimize "           # Loop nest optimization
-                    # "-floop-parallelize-all "         # Parallelize all loops
-                    # "-ftree-parallelize-loops=4 "     # Specify number of parallel loops (adjust for CPU cores)
-                    # "-fprefetch-loop-arrays "         # Prefetch loop arrays
-                    # "-fpack-struct "                  # Pack structs tightly
-                    # "-mcx16 "                         # Enable 16-byte atomic operations
-                    # "-mfpmath=sse "                   # Use SSE for floating-point math
-                )
-                c_optim_flags = (
-                    # Highest level optimization, covers most performance enhancements
-                    "-O3 "
-                    # NumPy API compatibility, very important
-                    "-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION "
-                    # Explicitly target all 64-bit x86 CPUs for optimization, consistent with Fortran, ensures portability
-                    "-march=x86-64 "
-                    # Tune for generic processors, not specific models, consistent with Fortran
-                    "-mtune=generic "
-                    # Position Independent Code, required for shared libraries
-                    "-fPIC "
-                    # Disable floating-point exception traps, prevents crashes due to floating-point errors, enhances robustness
-                    "-fno-trapping-math "
-                    # Align function entry points, potentially slightly improves instruction cache efficiency
-                    "-falign-functions=32 "
-                    # OpenMP parallel processing support
-                    "-fopenmp"
-                )
-            f2py_cmd += [
-                "--opt=" + fortran_optim_flags,
-                "--f90flags=" + fortran_optim_flags,
-                # "--cflags=" + c_optim_flags,
-            ]
-            print(
-                "INFO: Setting compiler flags via environment variables for the Meson backend."
-            )
-            build_env = os.environ.copy()
-            # build_env["FFLAGS"] = fortran_optim_flags
-            build_env["CFLAGS"] = c_optim_flags
-            import platform
+                if system == "Windows":
+                    # Windows conda environment setup
+                    conda_bin = os.path.join(conda_prefix, "bin")
+                    conda_library_bin = os.path.join(conda_prefix, "Library", "bin")
+                    env["PATH"] = f"{conda_bin};{conda_library_bin};{current_path}"
+                    print(
+                        f"Enhanced PATH for Windows conda environment: {conda_prefix}"
+                    )
 
-            if platform.system() == "Windows":
-                f2py_cmd += ["--fcompiler=gnu95"]
-            else:
-                f2py_cmd += ["--fcompiler=gnu95", "--compiler=unix"]
+                elif system in ["Linux", "Darwin"]:
+                    # Linux and macOS conda environment setup
+                    conda_bin = os.path.join(conda_prefix, "bin")
+                    # On Unix-like systems, use colon separator and prepend to PATH
+                    env["PATH"] = f"{conda_bin}:{current_path}"
 
-            print("f2py build command:", " ".join(f2py_cmd))
-            # print(f"Using FFLAGS: {build_env.get('FFLAGS')}")
-            print(f"Using CFLAGS: {build_env.get('CFLAGS')}")
-            subprocess.run(
-                f2py_cmd,
-                # Run from project root so that build dir paths are correct
-                cwd=str(Path.cwd()),
+                    # Add lib directory to LD_LIBRARY_PATH (Linux) or DYLD_LIBRARY_PATH (macOS)
+                    conda_lib = os.path.join(conda_prefix, "lib")
+                    if system == "Linux":
+                        current_lib_path = env.get("LD_LIBRARY_PATH", "")
+                        env["LD_LIBRARY_PATH"] = (
+                            f"{conda_lib}:{current_lib_path}"
+                            if current_lib_path
+                            else conda_lib
+                        )
+                        print(
+                            f"Enhanced PATH and LD_LIBRARY_PATH for Linux conda environment: {conda_prefix}"
+                        )
+                    else:  # macOS
+                        current_lib_path = env.get("DYLD_LIBRARY_PATH", "")
+                        env["DYLD_LIBRARY_PATH"] = (
+                            f"{conda_lib}:{current_lib_path}"
+                            if current_lib_path
+                            else conda_lib
+                        )
+                        print(
+                            f"Enhanced PATH and DYLD_LIBRARY_PATH for macOS conda environment: {conda_prefix}"
+                        )
+
+                else:
+                    print(
+                        f"Warning: Unknown platform {system}, using basic conda PATH setup"
+                    )
+                    conda_bin = os.path.join(conda_prefix, "bin")
+                    env["PATH"] = f"{conda_bin}:{current_path}"
+
+            subprocess.run(setup_cmd, cwd=str(module_path), check=True, env=env)
+
+            # Build with ninja (run relative to module_path, target 'build')
+            print(f"Building with ninja in {build_dir} (cwd={module_path})")
+            build_cmd = ["ninja", "-C", "build"]
+
+            print(f"Running: {' '.join(build_cmd)} (cwd={module_path})")
+            result = subprocess.run(
+                build_cmd,
+                cwd=str(module_path),
                 check=True,
-                env=build_env,  # <-- This passes the environment to the subprocess
+                capture_output=True,
+                text=True,
             )
 
-            # --- STEP 4: Clean up generated files and move compiled file ---
-            print("Step 4: Cleaning up generated files and moving compiled module...")
+            if result.stdout:
+                print("Build output:", result.stdout)
+            if result.stderr:
+                print("Build warnings/errors:", result.stderr)
 
-            # Clean up generated wrapper files from project root
-            if generated_c_wrapper.exists():
-                generated_c_wrapper.unlink()
-            if generated_f_wrapper.exists():
-                generated_f_wrapper.unlink()
+            # File moving is now handled directly in meson.build
 
-            # Find the compiled file (e.g., _spherepack.cpython-312-x86_64-linux-gnu.so)
-            # f2py outputs to project root, not to build_temp
-            compiled_files = (
-                list(Path.cwd().glob("_spherepack*.so"))
-                + list(Path.cwd().glob("_spherepack*.pyd"))
-                + list(Path.cwd().glob("_spherepack*.dylib"))
-            )
-            if not compiled_files:
-                # Also check build_temp in case f2py behavior changes
-                compiled_files = (
-                    list(Path(self.build_temp).glob("_spherepack*.so"))
-                    + list(Path(self.build_temp).glob("_spherepack*.pyd"))
-                    + list(Path(self.build_temp).glob("_spherepack*.dylib"))
-                )
+            print(f"Meson build for {module['name']} completed successfully!")
 
-            if not compiled_files:
-                raise FileNotFoundError(
-                    f"Could not find compiled module in project root or {self.build_temp}"
-                )
-
-            source_file = compiled_files[0]
-            target_dir = module["target_dir"]
-            target_dir.mkdir(parents=True, exist_ok=True)
-
-            print(f"Moving {source_file} to {target_dir}")
-            destination_file = target_dir / source_file.name
-            shutil.move(str(source_file), str(destination_file))
-
-            # In --inplace mode, we're already in source directory, so we're done
-            # In non-inplace mode, also copy to source directory for convenience
-            if not self.inplace:
-                source_dir_target = Path("src") / "skyborn" / "spharm"
-                print(
-                    f"Also copying to source directory for development: {source_dir_target}"
-                )
-                source_dir_target.mkdir(parents=True, exist_ok=True)
-                # Copy the file to source directory as well
-                shutil.copy2(str(destination_file), str(source_dir_target))
-
-            print(f"spharm compilation successful!")
             self._built_modules = getattr(self, "_built_modules", set())
             self._built_modules.add(module["name"])
 
         except (subprocess.CalledProcessError, RuntimeError, FileNotFoundError) as e:
-            print(f"ERROR: Failed to build {module['name']}: {e}")
-            # Print more info on subprocess errors
+            print(f"ERROR: Meson build failed for {module['name']}: {e}")
             if isinstance(e, subprocess.CalledProcessError):
-                print("Stdout:", e.stdout)
-                print("Stderr:", e.stderr)
-            print(f"Continuing without {module['name']} extensions...")
+                print(f"Command failed with exit code: {e.returncode}")
+                if hasattr(e, "stdout") and e.stdout:
+                    print("Stdout:", e.stdout)
+                if hasattr(e, "stderr") and e.stderr:
+                    print("Stderr:", e.stderr)
+            raise  # Re-raise the exception since we're not using f2py fallback
 
 
 class CustomDevelop(develop):

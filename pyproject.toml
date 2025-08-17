@@ -19,7 +19,8 @@ dynamic = [
 description = "Atmospheric science research utilities"
 readme = "README.md"
 authors = [{ name = "Qianye Su", email = "suqianye2000@gmail.com" }]
-license = { file = "LICENSE" }
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 keywords = [
     "atmospheric-science",
@@ -39,7 +40,6 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: BSD License",
     "Operating System :: OS Independent",
 ]
 
