@@ -134,7 +134,7 @@ class VectorWind:
             if hasattr(arr, "filled"):
                 processed = arr.filled(fill_value=np.nan)
             else:
-                processed = np.asarray(arr, dtype=np.float64).copy()
+                processed = np.asarray(arr, dtype=np.float32).copy()
         except (ValueError, TypeError) as e:
             raise ValueError(f"Cannot convert {name} to numpy array: {e}")
 
@@ -151,8 +151,8 @@ class VectorWind:
         - Data type compatibility
         """
         # Check for NaN values
-        u_has_nan = np.isnan(self.u).any()
-        v_has_nan = np.isnan(self.v).any()
+        u_has_nan = np.any(np.isnan(self.u))
+        v_has_nan = np.any(np.isnan(self.v))
 
         if u_has_nan or v_has_nan:
             nan_locations = []
@@ -170,8 +170,8 @@ class VectorWind:
             )
 
         # Check for infinite values
-        u_has_inf = np.isinf(self.u).any()
-        v_has_inf = np.isinf(self.v).any()
+        u_has_inf = np.any(np.isinf(self.u))
+        v_has_inf = np.any(np.isinf(self.v))
 
         if u_has_inf or v_has_inf:
             inf_locations = []
@@ -189,16 +189,16 @@ class VectorWind:
             )
 
         # Check for extremely large values that might cause numerical issues
-        u_max = np.abs(self.u).max()
-        v_max = np.abs(self.v).max()
-        max_reasonable = 1e6  # 1000 km/s should be more than enough for any wind
+        # u_max = np.abs(self.u).max()
+        # v_max = np.abs(self.v).max()
+        # max_reasonable = 1e6  # 1000 km/s should be more than enough for any wind
 
-        if u_max > max_reasonable or v_max > max_reasonable:
-            raise ValueError(
-                f"Input wind components contain extremely large values "
-                f"(max |u|={u_max:.2e}, max |v|={v_max:.2e}). "
-                f"Please check units and data validity."
-            )
+        # if u_max > max_reasonable or v_max > max_reasonable:
+        #     raise ValueError(
+        #         f"Input wind components contain extremely large values "
+        #         f"(max |u|={u_max:.2e}, max |v|={v_max:.2e}). "
+        #         f"Please check units and data validity."
+        #     )
 
     def _validate_dimensions(self) -> None:
         """
@@ -229,14 +229,14 @@ class VectorWind:
             )
 
         # Check for reasonable grid sizes
-        if nlat > 10000 or nlon > 10000:
-            import warnings
+        # if nlat > 10000 or nlon > 10000:
+        #     import warnings
 
-            warnings.warn(
-                f"Very large grid detected (nlat={nlat}, nlon={nlon}). "
-                f"This may require significant memory and computation time.",
-                UserWarning,
-            )
+        #     warnings.warn(
+        #         f"Very large grid detected (nlat={nlat}, nlon={nlon}). "
+        #         f"This may require significant memory and computation time.",
+        #         UserWarning,
+        #     )
 
     def _initialize_spharmt(
         self, nlon: int, nlat: int, gridtype: str, rsphere: float, legfunc: str
@@ -377,9 +377,7 @@ class VectorWind:
         >>> vrt_t13, div_t13 = vw.vrtdiv(truncation=13)
         """
         vrtspec, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
-        vrtgrid = self.s.spectogrd(vrtspec)
-        divgrid = self.s.spectogrd(divspec)
-        return vrtgrid, divgrid
+        return self.s.spectogrd(vrtspec), self.s.spectogrd(divspec)
 
     def vorticity(self, truncation: Optional[int] = None) -> np.ndarray:
         """
@@ -507,9 +505,9 @@ class VectorWind:
         >>> abs_vrt = vw.absolutevorticity()
         >>> abs_vrt_t13 = vw.absolutevorticity(omega=7.2921150e-5, truncation=13)
         """
-        planetary_vrt = self.planetaryvorticity(omega=omega)
-        relative_vrt = self.vorticity(truncation=truncation)
-        return planetary_vrt + relative_vrt
+        return self.planetaryvorticity(omega=omega) + self.vorticity(
+            truncation=truncation
+        )
 
     def sfvp(self, truncation: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -627,10 +625,8 @@ class VectorWind:
         >>> u_chi_t13, v_chi_t13, u_psi_t13, v_psi_t13 = vw.helmholtz(truncation=13)
         """
         psi, chi = self.s.getpsichi(self.u, self.v, ntrunc=truncation)
-        psi_spec = self.s.grdtospec(psi)
-        chi_spec = self.s.grdtospec(chi)
-        v_psi, u_psi = self.s.getgrad(psi_spec)
-        u_chi, v_chi = self.s.getgrad(chi_spec)
+        v_psi, u_psi = self.s.getgrad(self.s.grdtospec(psi))
+        u_chi, v_chi = self.s.getgrad(self.s.grdtospec(chi))
         return u_chi, v_chi, -u_psi, v_psi
 
     def irrotationalcomponent(
@@ -667,8 +663,7 @@ class VectorWind:
         >>> u_chi_t13, v_chi_t13 = vw.irrotationalcomponent(truncation=13)
         """
         _, chi = self.s.getpsichi(self.u, self.v, ntrunc=truncation)
-        chi_spec = self.s.grdtospec(chi)
-        return self.s.getgrad(chi_spec)
+        return self.s.getgrad(self.s.grdtospec(chi))
 
     def nondivergentcomponent(
         self, truncation: Optional[int] = None
@@ -704,8 +699,7 @@ class VectorWind:
         >>> u_psi_t13, v_psi_t13 = vw.nondivergentcomponent(truncation=13)
         """
         psi, _ = self.s.getpsichi(self.u, self.v, ntrunc=truncation)
-        psi_spec = self.s.grdtospec(psi)
-        v_psi, u_psi = self.s.getgrad(psi_spec)
+        v_psi, u_psi = self.s.getgrad(self.s.grdtospec(psi))
         return -u_psi, v_psi
 
     def gradient(
@@ -740,7 +734,7 @@ class VectorWind:
         except AttributeError:
             pass
 
-        if np.isnan(chi).any():
+        if np.any(np.isnan(chi)):
             raise ValueError("chi cannot contain missing values")
 
         try:
@@ -784,7 +778,7 @@ class VectorWind:
         except AttributeError:
             pass
 
-        if np.isnan(field).any():
+        if np.any(np.isnan(field)):
             raise ValueError("field cannot contain missing values")
 
         try:
