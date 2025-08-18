@@ -130,7 +130,7 @@ def inspect_gridtype(latitudes: ArrayLike) -> GridType:
         try:
             gauss_reference, _ = gaussian_lats_wts(nlat)
             difference = np.abs(latitudes - gauss_reference)
-            if (difference > tolerance).any():
+            if np.any(difference > tolerance):
                 raise ValueError(
                     f"Latitudes are neither equally-spaced nor Gaussian. "
                     f"Maximum difference from Gaussian: {difference.max():.6f} degrees, "
@@ -154,7 +154,7 @@ def inspect_gridtype(latitudes: ArrayLike) -> GridType:
             )
 
         difference = np.abs(latitudes - equal_reference)
-        if (difference > tolerance).any():
+        if np.any(difference > tolerance):
             raise ValueError(
                 f"Equally-spaced latitudes don't match global regular grid pattern. "
                 f"Maximum difference: {difference.max():.6f} degrees, "
