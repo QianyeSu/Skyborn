@@ -408,13 +408,15 @@ Related Modules
 References
 ----------
 
-1. **SPHEREPACK**: Swarztrauber, P. N., and W. F. Spotz (1997), "Generalized discrete spherical harmonic transforms", J. Comput. Phys., 159, 213-230.
+1. Swarztrauber, P. N. (2003), **"On computing the points and weights for Gauss–Legendre quadrature"**, SIAM Journal on Scientific Computing, 24(3), 945–954.
 
-2. **Spherical Harmonics**: Varshalovich, D. A., A. N. Moskalev, and V. K. Khersonskii (1988), "Quantum Theory of Angular Momentum", World Scientific.
+2. Swarztrauber, P. N., and W. F. Spotz (2000), **"Generalized discrete spherical harmonic transforms"**, Journal of Computational Physics, 159(2), 213–230.
 
-3. **Numerical Methods**: Boyd, J. P. (2001), "Chebyshev and Fourier Spectral Methods", Dover Publications.
+3. Adams, J. C., and P. N. Swarztrauber (1999), **"SPHEREPACK 3.0: A model development facility"**, Monthly Weather Review, 127(8), 1872–1878.
 
-4. **Atmospheric Applications**: Holton, J. R. (2004), "An Introduction to Dynamic Meteorology", Academic Press.
+4. Swarztrauber, P. N. (1996), **"Spectral transform methods for solving the shallow-water equations on the sphere"**, Monthly Weather Review, 124(4), 730–744.
+
+5. Williamson, D. L., et al. (1992), **"A standard test set for numerical approximations to the shallow water equations in spherical geometry"**, Journal of Computational Physics, 102(1), 211–224.
 
 .. note::
    This module is based on the NCAR SPHEREPACK library and includes optimizations for modern computing environments. The interface has been enhanced with comprehensive type checking and error handling while maintaining compatibility with the original SPHEREPACK functionality.
