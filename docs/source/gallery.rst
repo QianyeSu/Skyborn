@@ -358,6 +358,35 @@ Technical Notes
 - Error messages guide proper usage
 - Reference solutions for testing
 
+Performance Comparison
+-----------------------
+
+**Skyborn vs Original Windspharm Performance**
+
+.. image:: images/windspharm_performance_comparison.png
+   :alt: Windspharm Performance Comparison
+   :width: 100%
+
+*Figure 10: Performance benchmark comparison between Skyborn windspharm and original windspharm implementations. Skyborn demonstrates consistent performance improvements across all atmospheric calculations, with speedups ranging from 1.22x to 1.36x faster while maintaining identical numerical accuracy.*
+
+Key Performance Highlights:
+
+* **Vorticity Calculation**: 1.36x faster than original implementation
+* **Divergence Calculation**: 1.28x faster than original implementation
+* **Combined Vorticity+Divergence**: 1.25x faster than original implementation
+* **Streamfunction+Velocity Potential**: 1.31x faster than original implementation
+* **Helmholtz Decomposition**: 1.22x faster than original implementation
+* **Numerical Accuracy**: Results are identical to original windspharm
+* **Memory Efficiency**: Optimized algorithms reduce computational overhead
+* **Consistent Performance**: All operations show measurable improvements
+
+The performance gains result from:
+- Optimized spherical harmonic transformations
+- Efficient memory management and data layout
+- Vectorized operations and reduced function call overhead
+- Algorithm optimizations specific to atmospheric wind field patterns
+- Enhanced caching strategies for Legendre polynomial computations
+
 Performance Benchmarks
 =======================
 
