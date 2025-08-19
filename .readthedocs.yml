@@ -12,6 +12,17 @@ build:
   tools:
     python: "mambaforge-22.9"
   commands:
+    # Setup compiler environment variables
+    - export FC=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gfortran
+    - export F77=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gfortran
+    - export F90=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gfortran
+    - export CC=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc
+    - export CXX=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++
+    - export PATH=$CONDA_PREFIX/bin:$PATH
+    # Verify compiler availability
+    - which gfortran || echo "gfortran not found in PATH"
+    - which $FC || echo "FC not found"
+    - $FC --version || echo "FC version check failed"
     # Install Python dependencies
     - python -m pip install --upgrade pip setuptools wheel
     - python -m pip install -r requirements-docs.txt
