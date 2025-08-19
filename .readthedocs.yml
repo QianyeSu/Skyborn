@@ -8,13 +8,11 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.10"
-  jobs:
-    pre_build:
-      # Install system dependencies including gfortran
-      - apt-get update
-      - apt-get install -y gfortran gcc g++ build-essential
   commands:
-    # Install dependencies
+    # Install system dependencies including gfortran
+    - apt-get update
+    - apt-get install -y gfortran gcc g++ build-essential
+    # Install Python dependencies
     - python -m pip install --upgrade pip setuptools wheel
     - python -m pip install -r requirements-docs.txt
     - python -m pip install -e .
