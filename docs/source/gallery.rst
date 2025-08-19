@@ -358,6 +358,37 @@ Technical Notes
 - Error messages guide proper usage
 - Reference solutions for testing
 
+Performance Benchmarks
+=======================
+
+Skyborn delivers exceptional performance improvements over traditional scientific computing libraries. Our optimized implementations provide significant speedups while maintaining numerical accuracy.
+
+Statistical Analysis Performance
+---------------------------------
+
+**Linear Regression and Mann-Kendall Trend Analysis**
+
+.. image:: images/precipitation_trends_comparison_1979_2014.png
+   :alt: Skyborn Performance Benchmark Comparison
+   :width: 100%
+
+*Figure 1: Performance comparison showing dramatic speed improvements: Skyborn linear regression (0.014s) vs Scipy (3.619s) - 258x faster; Skyborn Mann-Kendall (0.494s) vs PyMannKendall (13.625s) - 28x faster. Results are numerically identical between implementations.*
+
+Key Performance Highlights:
+
+* **Linear Regression**: 258x faster than Scipy (0.014s vs 3.619s)
+* **Mann-Kendall Test**: 28x faster than PyMannKendall (0.494s vs 13.625s)
+* **Numerical Accuracy**: Results are identical to reference implementations
+* **Memory Efficiency**: Optimized algorithms reduce memory footprint
+* **Large Dataset Support**: Performance advantages scale with data size
+
+The performance gains come from:
+- Optimized NumPy operations and vectorization
+- Efficient memory management
+- Algorithm optimizations specific to climate data patterns
+- Reduced function call overhead
+- Cache-friendly data access patterns
+
 GridFill Atmospheric Data Interpolation
 ========================================
 
