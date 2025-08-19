@@ -12,17 +12,22 @@ build:
   tools:
     python: "mambaforge-22.9"
   commands:
-    # Setup compiler environment variables
+    # Setup compiler environment variables and create symlinks
     - export FC=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gfortran
     - export F77=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gfortran
     - export F90=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gfortran
     - export CC=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc
     - export CXX=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++
     - export PATH=$CONDA_PREFIX/bin:$PATH
+    # Create symlinks for meson to find compilers
+    - mkdir -p $HOME/bin
+    - ln -sf $CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gfortran $HOME/bin/gfortran
+    - ln -sf $CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc $HOME/bin/gcc
+    - ln -sf $CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++ $HOME/bin/g++
+    - export PATH=$HOME/bin:$PATH
     # Verify compiler availability
-    - which gfortran || echo "gfortran not found in PATH"
-    - which $FC || echo "FC not found"
-    - $FC --version || echo "FC version check failed"
+    - which gfortran && gfortran --version
+    - which gcc && gcc --version
     # Install Python dependencies
     - python -m pip install --upgrade pip setuptools wheel
     - python -m pip install -r requirements-docs.txt
