@@ -92,10 +92,6 @@ class VectorWind:
         checks for missing values, infinite values, shape compatibility, and
         dimensional requirements.
         """
-        # Store original input for reference
-        self._input_u = u
-        self._input_v = v
-
         # Step 1: Handle masked arrays and create copies
         self.u = self._process_input_array(u, "u")
         self.v = self._process_input_array(v, "v")
