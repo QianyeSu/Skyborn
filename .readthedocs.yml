@@ -18,16 +18,8 @@ build:
     # Install documentation requirements
     - python -m pip install --upgrade pip setuptools wheel
     - python -m pip install -r requirements-docs.txt
-    # Try to install package in docs mode, continue if fails
-    - python -m pip install -e . || echo "⚠️  Package install failed, continuing with docs-only build"
-    # Test if we can import basic modules
-    - python -c "import sys; sys.path.insert(0, '.');
-      try:from skyborn import calculations;
-          from skyborn import mann_kendall;
-          from skyborn import interpolation;
-          print('✅ Successfully imported Python-only modules');
-      except ImportError as e:print(f'ℹ️  Some modules not available:{e}');
-          print('ℹ️  Continuing with documentation build...');"
+    # Try to install package in docs mode (skip if fails)
+    - python -m pip install -e . || echo "⚠️ Package install failed, building docs without package"
     # Build documentation
     - export LC_ALL=C.UTF-8 && export LANG=C.UTF-8 && cd docs && python build_docs.py --clean
     # Copy to output directory
