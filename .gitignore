@@ -8,6 +8,7 @@ __pycache__/
 *.so
 *.dylib
 *.dll
+*.pyd
 
 # Distribution / packaging
 .Python

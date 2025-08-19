@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skyborn Documentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@100..800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="Cargantua.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            font-family: 'Martian Mono', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .entrance-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+            color: white;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 0.8rem;
+            text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            animation: float 3s ease-in-out infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-svg {
+            height: var(--logo-height, 80px);
+            width: auto;
+            filter: drop-shadow(0 0 var(--glow-intensity, 20px) rgba(30, 144, 255, 0.6))
+                   drop-shadow(0 0 var(--glow-blur, 40px) rgba(65, 105, 225, 0.4))
+                   drop-shadow(0 0 var(--glow-spread, 60px) rgba(0, 102, 255, 0.2));
+            transition: filter 0.3s ease, height 0.15s ease;
+        }
+
+        .logo-svg:hover {
+            filter: drop-shadow(0 0 calc(var(--glow-intensity, 20px) * 1.5) rgba(30, 144, 255, 0.8))
+                   drop-shadow(0 0 calc(var(--glow-blur, 40px) * 1.3) rgba(65, 105, 225, 0.6))
+                   drop-shadow(0 0 calc(var(--glow-spread, 60px) * 1.2) rgba(0, 102, 255, 0.3));
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 2.5rem;
+            opacity: 0.9;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            font-weight: bold;
+        }
+
+        .enter-button {
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.9) 50%, rgba(51, 65, 85, 0.9) 100%);
+            color: #e5e7eb;
+            border: 1px solid #e5e7eb;
+            padding: 0.8rem 2rem;
+            font-size: 1rem;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow:
+                0 0 20px rgba(229, 231, 235, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1),
+                0 4px 15px rgba(0, 0, 0, 0.2);
+            text-decoration: none;
+            display: inline-block;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .enter-button:hover {
+            transform: translateY(-3px);
+            color: #ffffff;
+            border-color: #e5e7eb;
+            box-shadow:
+                0 0 40px rgba(229, 231, 235, 0.5),
+                0 0 80px rgba(229, 231, 235, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%);
+        }
+
+        .enter-button:active {
+            transform: translateY(-1px);
+            box-shadow:
+                0 0 25px rgba(229, 231, 235, 0.6),
+                inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .enter-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(229, 231, 235, 0.6), transparent);
+            transition: left 0.6s ease;
+            z-index: 1;
+        }
+
+        .enter-button:hover::before {
+            left: 100%;
+        }
+
+        .enter-button::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                linear-gradient(45deg, transparent 30%, rgba(229, 231, 235, 0.1) 50%, transparent 70%),
+                linear-gradient(-45deg, transparent 30%, rgba(229, 231, 235, 0.05) 50%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            border-radius: 8px;
+        }
+
+        .enter-button:hover::after {
+            opacity: 1;
+        }
+
+        /* Particle effects container */
+        .particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+
+        .particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: #e5e7eb;
+            border-radius: 50%;
+            opacity: 0;
+            animation: particleFloat 3s linear infinite;
+            box-shadow: 0 0 6px #e5e7eb;
+        }
+
+        .particle:nth-child(1) { left: 10%; animation-delay: 0s; }
+        .particle:nth-child(2) { left: 20%; animation-delay: 0.5s; }
+        .particle:nth-child(3) { left: 30%; animation-delay: 1s; }
+        .particle:nth-child(4) { left: 40%; animation-delay: 1.5s; }
+        .particle:nth-child(5) { left: 50%; animation-delay: 2s; }
+        .particle:nth-child(6) { left: 60%; animation-delay: 0.3s; }
+        .particle:nth-child(7) { left: 70%; animation-delay: 0.8s; }
+        .particle:nth-child(8) { left: 80%; animation-delay: 1.3s; }
+        .particle:nth-child(9) { left: 90%; animation-delay: 1.8s; }
+
+        @keyframes particleFloat {
+            0% {
+                transform: translateY(100px);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+        }
+
+        /* Activate particles on hover */
+        .enter-button:hover .particles {
+            animation: activateParticles 0.1s ease;
+        }
+
+        @keyframes activateParticles {
+            to {
+                opacity: 1;
+            }
+        }
+
+        .version-info {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            z-index: 10;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-20px);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .entrance-container > * {
+            animation: fadeIn 1s ease-out;
+        }
+
+        .entrance-container > *:nth-child(1) { animation-delay: 0.2s; }
+        .entrance-container > *:nth-child(2) { animation-delay: 0.4s; }
+        .entrance-container > *:nth-child(3) { animation-delay: 0.6s; }
+
+        @keyframes ripple {
+            to {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+
+        /* Star background effect - modular design */
+        .stars-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+            opacity: var(--stars-opacity, 0.6);
+        }
+
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle var(--star-twinkle-duration, 3s) ease-in-out infinite alternate;
+        }
+
+        .star.medium {
+            width: 3px;
+            height: 3px;
+            animation-duration: var(--star-twinkle-duration-medium, 2s);
+        }
+
+        .star.large {
+            width: 4px;
+            height: 4px;
+            animation-duration: var(--star-twinkle-duration-large, 4s);
+            box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+        }
+
+        /* Low-end device mode: remove expensive shadows and particles */
+        .low-end .star.large {
+            box-shadow: none;
+        }
+        .low-end .particles {
+            display: none !important;
+        }
+
+        @keyframes twinkle {
+            from {
+            opacity: 0.3;
+            transform: scale(1);
+            }
+            to {
+            opacity: 1;
+            transform: scale(1.2);
+            }
+        }
+
+        /* Custom CSS variables for glow and star effects */
+        :root {
+            --logo-height: 150px;
+            --glow-intensity: 20px;
+            --glow-blur: 40px;
+            --glow-spread: 60px;
+            --stars-opacity: 0.6;
+            --stars-count: 80;
+            --star-twinkle-duration: 3s;
+            --star-twinkle-duration-medium: 2s;
+            --star-twinkle-duration-large: 4s;
+        }
+
+        /* Debug panel styles (replace inline styles for lint/deployment) */
+        .debug-panel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            /* glassy, rounded white translucent panel */
+            background: linear-gradient(180deg, rgba(238, 232, 232, 0.06), rgba(255,255,255,0.03));
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+            -webkit-backdrop-filter: blur(8px) saturate(120%);
+            backdrop-filter: blur(8px) saturate(120%);
+            color: #ffffff;
+            padding: 16px;
+            border-radius: 12px;
+            font-family: 'Martian Mono', monospace;
+            font-size: 13px;
+            z-index: 1000;
+            /* hide via opacity/transform so toggling .open can animate smoothly */
+            opacity: 0;
+            transform: translateY(10px) scale(0.98);
+            pointer-events: none;
+            transition: opacity 180ms ease, transform 160ms ease;
+            min-width: 280px;
+        }
+
+        .debug-panel .debug-title {
+            margin-bottom: 10px;
+            font-weight: 700;
+            color: rgba(255,255,255,0.95);
+        }
+
+        .debug-panel .debug-section {
+            margin-bottom: 8px;
+        }
+
+        .debug-panel input[type="range"] {
+            width: 100%;
+        }
+
+        /* button styles for a cleaner, modern look */
+        .debug-panel .debug-btn {
+            margin: 2px;
+            padding: 6px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #fff;
+            border-radius: 8px;
+            transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.12s ease;
+        }
+
+        .debug-panel .debug-btn:hover {
+            transform: translateY(-3px);
+            background: rgba(255,255,255,0.09);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+        }
+
+        .debug-panel .debug-btn {
+            margin: 2px;
+            padding: 4px 8px;
+            font-size: 10px;
+            cursor: pointer;
+        }
+
+        .debug-panel .debug-toggle-btn {
+            width: 100%;
+            padding: 8px;
+            font-size: 12px;
+            margin-top: 8px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            color: #fff;
+            transition: background 0.12s ease, transform 0.12s ease;
+        }
+
+        .debug-panel .debug-toggle-btn:hover {
+            background: rgba(255,255,255,0.08);
+            transform: translateY(-2px);
+        }
+
+        .debug-panel .debug-note {
+            margin-top: 8px;
+            font-size: 10px;
+            opacity: 0.7;
+        }
+
+        /* Visible state when toggled open */
+        .debug-panel.open {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+        }
+
+        /* Bottom-right corner hotspot and small FAB that appears on hover */
+        .corner-hotspot {
+            position: fixed;
+            /* make the hotspot larger so "approaching" the corner triggers it */
+            right: 8px;
+            bottom: 8px;
+            width: 100px;
+            height: 100px;
+            z-index: 1098;
+            background: transparent;
+            /* allow pointer events so hover is detected, but keep it invisible */
+            pointer-events: auto;
+        }
+
+        .corner-fab {
+            position: fixed;
+            right: 8px;
+            bottom: 8px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #fff;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1099;
+            box-shadow: 0 8px 18px rgba(0,0,0,0.45);
+            cursor: pointer;
+            -webkit-backdrop-filter: blur(4px);
+            backdrop-filter: blur(4px);
+            opacity: 0; /* hidden until hotspot hovered */
+            pointer-events: none;
+            transform: translateY(10px) scale(0.96);
+            transition: opacity 200ms cubic-bezier(.2,.9,.2,1), transform 180ms cubic-bezier(.2,.9,.2,1);
+        }
+
+        /* when hovering the invisible hotspot, show the small FAB */
+        .corner-hotspot:hover ~ .corner-fab,
+        .corner-fab:focus {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0) scale(1);
+        }
+
+        /* Mobile / touch device adjustments */
+        @media (max-width: 700px), (pointer: coarse) {
+            :root {
+                --logo-height: 80px;
+                --stars-count: 30;
+                --stars-opacity: 0.45;
+            }
+
+            .entrance-container {
+                padding: 0 12px;
+            }
+
+            /* Make debug panel span most of the width and be scrollable on small screens */
+            .debug-panel {
+                left: 12px !important;
+                right: 12px !important;
+                bottom: 12px !important;
+                min-width: unset !important;
+                width: auto !important;
+                max-height: 60vh;
+                overflow-y: auto;
+            }
+
+            /* Increase hotspot area for easier touch activation */
+            .corner-hotspot {
+                width: 160px;
+                height: 160px;
+                right: 6px;
+                bottom: 6px;
+            }
+            /* Hide debug controls completely on touch devices */
+            #debugPanel, .corner-fab {
+                display: none !important;
+                visibility: hidden !important;
+                pointer-events: none !important;
+            }
+        }
+
+    /* On touch devices we intentionally keep the FAB hidden; hotspot touch still works */
+
+
+
+    /* Logo interaction styles */
+    .logo { cursor: default; }
+    .logo-svg { cursor: pointer; transition: transform 0.18s ease, filter 0.18s ease; display: inline-block; }
+    .logo-svg:hover { transform: translateY(-3px) scale(1.03); }
+    .logo-press { transform: translateY(0) scale(0.95) !important; }
+
+    </style>
+</head>
+<body>
+    <canvas id="shader"></canvas>
+
+    <!-- Star background effect - modular, can be easily removed -->
+    <div class="stars-container" id="starsContainer">
+        <!-- Stars will be dynamically generated by JavaScript -->
+    </div>
+
+    <!-- right-bottom corner hotspot and small FAB (appears on hover of the corner) -->
+    <div class="corner-hotspot" aria-hidden="true"></div>
+    <button class="corner-fab" id="cornerFab" aria-label="Open debug panel">⚙</button>
+
+
+
+    <div class="entrance-container">
+        <div class="logo">
+            <img src="../_static/SkyBornLogo.svg" alt="Skyborn Logo" class="logo-svg">
+        </div>
+        <!-- <div class="subtitle">Advanced Climate & Atmospheric Science Toolkit</div>
+        <a href="documentation.html" class="enter-button">
+            Enter Documentation
+            <div class="particles">
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+            </div>
+        </a> -->
+    </div>
+
+    <!-- <div class="version-info">
+        Version 0.3.12 | Built with ❤️ by Qianye Su
+    </div> -->
+
+    <!-- Debug control panel - modular, can be removed in production -->
+    <div id="debugPanel" class="debug-panel">
+        <div class="debug-title">Glow & Stars Debug Panel</div>
+
+        <div class="debug-section">
+            <label>Glow intensity: <span id="glowIntensityValue">20</span>px</label><br>
+            <input type="range" id="glowIntensity" min="0" max="60" value="20" title="Glow intensity" aria-label="Glow intensity">
+        </div>
+
+        <div class="debug-section">
+            <label>Glow blur: <span id="glowBlurValue">40</span>px</label><br>
+            <input type="range" id="glowBlur" min="0" max="100" value="40" title="Glow blur" aria-label="Glow blur">
+        </div>
+
+        <div class="debug-section">
+            <label>Glow spread: <span id="glowSpreadValue">60</span>px</label><br>
+            <input type="range" id="glowSpread" min="0" max="150" value="60" title="Glow spread" aria-label="Glow spread">
+        </div>
+
+        <div class="debug-section">
+            <label>Stars opacity: <span id="starsOpacityValue">0.6</span></label><br>
+            <input type="range" id="starsOpacity" min="0" max="1" step="0.1" value="0.6" title="Stars opacity" aria-label="Stars opacity">
+        </div>
+
+        <div class="debug-section">
+            <label>Logo size: <span id="logoSizeValue">110</span>px</label><br>
+            <input type="range" id="logoSize" min="40" max="200" value="110" title="Logo size" aria-label="Logo size">
+        </div>
+
+        <div class="debug-section">
+            <button class="debug-btn glow-preset" data-preset="subtle">Subtle</button>
+            <button class="debug-btn glow-preset" data-preset="medium">Medium</button>
+            <button class="debug-btn glow-preset" data-preset="intense">Intense</button>
+        </div>
+
+        <button class="debug-toggle-btn" id="toggleStarsBtn">Toggle Stars</button>
+
+
+    </div>
+
+    <script>
+        // Global key handler fallback: toggle debug panel on Ctrl/Cmd+D or Ctrl+Shift+D or command + D
+        (function() {
+            const isTouchGlobal = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
+            window.addEventListener('keydown', function(e) {
+                try {
+                    if (isTouchGlobal) return; // do not allow keyboard toggles on touch devices
+                    const target = e.target || {};
+                    const tag = (target.tagName || '').toUpperCase();
+                    if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
+                    const isD = (e.key === 'd' || e.key === 'D');
+                    // support Ctrl, Cmd (meta) and Option/Alt as modifier keys for mac compatibility
+                    const primaryModifier = e.ctrlKey || e.metaKey || e.altKey;
+                    if (primaryModifier && isD) {
+                        try { e.preventDefault(); } catch (err) {}
+                        const panel = document.getElementById('debugPanel');
+                        if (panel) panel.classList.toggle('open');
+                    }
+                } catch (err) {}
+            });
+        })();
+
+        // ========== Star Generation Module - Easily Removable ==========
+        // Low-end device detection: reduce effects for battery/memory constrained devices
+        (function detectLowEnd() {
+            try {
+                const isLowMemory = navigator.deviceMemory && navigator.deviceMemory <= 1; // 1GB or less
+                const lowDPR = (window.devicePixelRatio || 1) < 1.25;
+                const isSlowCPU = false; // placeholder — could use heuristic via userAgent if needed
+                const batteryPromise = (navigator.getBattery && typeof navigator.getBattery === 'function')
+                    ? navigator.getBattery().catch(() => null)
+                    : Promise.resolve(null);
+
+                batteryPromise.then(batt => {
+                    const lowBattery = batt ? (batt.level !== undefined && batt.level < 0.25 && !batt.charging) : false;
+                    if (isLowMemory || lowDPR || lowBattery) {
+                        document.documentElement.classList.add('low-end');
+                        // reduce stars and logo size for performance
+                        try {
+                            document.documentElement.style.setProperty('--stars-count', '18');
+                            document.documentElement.style.setProperty('--logo-height', '70px');
+                            document.documentElement.style.setProperty('--stars-opacity', '0.35');
+                        } catch (err) {}
+                    }
+                });
+            } catch (err) {}
+        })();
+        function createStars() {
+            const starsContainer = document.getElementById('starsContainer');
+            if (!starsContainer) return;
+
+            const starsCount = getComputedStyle(document.documentElement)
+                .getPropertyValue('--stars-count').trim() || 80;
+
+            // Clear existing stars
+            starsContainer.innerHTML = '';
+
+            for (let i = 0; i < parseInt(starsCount); i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+
+                // Randomly add size class
+                const rand = Math.random();
+                if (rand > 0.8) star.classList.add('large');
+                else if (rand > 0.6) star.classList.add('medium');
+
+                // Random position, avoid center area
+                let x, y;
+                do {
+                    x = Math.random() * 100;
+                    y = Math.random() * 100;
+                } while (
+                    // Avoid center area (35-65%)
+                    x > 35 && x < 65 && y > 35 && y < 65
+                );
+
+                star.style.left = x + '%';
+                star.style.top = y + '%';
+                star.style.animationDelay = Math.random() * 3 + 's';
+
+                starsContainer.appendChild(star);
+            }
+        }
+
+        // Initialize stars
+        document.addEventListener('DOMContentLoaded', createStars);
+        window.addEventListener('resize', createStars);
+        // ========== End Star Module ==========
+
+        // ========== Glow Adjustment Functions ==========
+        function setGlowIntensity(intensity) {
+            document.documentElement.style.setProperty('--glow-intensity', intensity + 'px');
+        }
+
+        function setGlowBlur(blur) {
+            document.documentElement.style.setProperty('--glow-blur', blur + 'px');
+        }
+
+        function setGlowSpread(spread) {
+            document.documentElement.style.setProperty('--glow-spread', spread + 'px');
+        }
+
+        function setStarsOpacity(opacity) {
+            document.documentElement.style.setProperty('--stars-opacity', opacity);
+        }
+
+        function setLogoSize(size) {
+            document.documentElement.style.setProperty('--logo-height', size + 'px');
+            const val = document.getElementById('logoSizeValue');
+            if (val) val.textContent = size;
+            const slider = document.getElementById('logoSize');
+            if (slider) slider.value = size;
+        }
+
+        // Example usage (you can use these in console):
+        // setGlowIntensity(30);      // Set glow intensity
+        // setGlowBlur(50);           // Set glow blur
+        // setGlowSpread(80);         // Set glow spread
+        // setStarsOpacity(0.8);      // Set stars opacity
+
+        // Quick presets
+        function setGlowPreset(preset) {
+            switch(preset) {
+                case 'subtle':
+                    setGlowIntensity(10);
+                    setGlowBlur(20);
+                    setGlowSpread(30);
+                    break;
+                case 'medium':
+                    setGlowIntensity(20);
+                    setGlowBlur(40);
+                    setGlowSpread(60);
+                    break;
+                case 'intense':
+                    setGlowIntensity(40);
+                    setGlowBlur(80);
+                    setGlowSpread(120);
+                    break;
+            }
+        }
+        // ========== End Glow Adjustment ==========
+
+        // ========== Debug Panel Controls ==========
+        // Sync initial logo size (from CSS variable)
+        document.addEventListener('DOMContentLoaded', function initialLogoSync() {
+            try {
+                const style = getComputedStyle(document.documentElement);
+                const initialLogo = parseInt(style.getPropertyValue('--logo-height')) || 110;
+                setLogoSize(initialLogo);
+            } catch (e) {}
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const debugPanel = document.getElementById('debugPanel');
+
+            // Ctrl+D toggles debug panel (compatible with ReadTheDocs etc.)
+            function toggleDebugPanel() {
+                debugPanel.classList.toggle('open');
+            }
+
+            document.addEventListener('keydown', function(e) {
+                // e.key may be 'd' or 'D' in different browsers
+                // Support: Ctrl+D / Cmd+D, and Ctrl+Shift+D as fallback (some browsers use Ctrl+D for bookmarks)
+                const isD = (e.key === 'd' || e.key === 'D');
+                const ctrlOrMeta = e.ctrlKey || e.metaKey;
+                if (ctrlOrMeta && isD) {
+                    // Try to prevent default (may not work if browser already handled shortcut)
+                    try { e.preventDefault(); } catch (err) {}
+                    toggleDebugPanel();
+                } else if (ctrlOrMeta && e.shiftKey && isD) {
+                    try { e.preventDefault(); } catch (err) {}
+                    toggleDebugPanel();
+                }
+            });
+
+            // If URL contains ?debug=1, show panel automatically (for ReadTheDocs deployment)
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('debug') === '1' && !isTouch) {
+                    debugPanel.classList.add('open');
+                }
+            } catch (err) {
+                // In some strict environments window.location may be overwritten, ignore errors
+            }
+
+            // Bind slider events
+            function bindSlider(id, callback, valueId) {
+                const slider = document.getElementById(id);
+                const valueSpan = document.getElementById(valueId);
+
+                slider.addEventListener('input', function() {
+                    const value = parseFloat(this.value);
+                    valueSpan.textContent = value;
+                    callback(value);
+                });
+            }
+
+            bindSlider('glowIntensity', setGlowIntensity, 'glowIntensityValue');
+            bindSlider('glowBlur', setGlowBlur, 'glowBlurValue');
+            bindSlider('glowSpread', setGlowSpread, 'glowSpreadValue');
+            bindSlider('starsOpacity', setStarsOpacity, 'starsOpacityValue');
+            bindSlider('logoSize', setLogoSize, 'logoSizeValue');
+
+            // Toggle stars button binding
+            const toggleStarsBtn = document.getElementById('toggleStarsBtn');
+            if (toggleStarsBtn) {
+                toggleStarsBtn.addEventListener('click', function() {
+                    const sc = document.getElementById('starsContainer');
+                    if (!sc) return;
+                    sc.style.display = sc.style.display === 'none' ? 'block' : 'none';
+                });
+            }
+            // Corner small FAB binding (appears when user hovers the bottom-right corner)
+            const cornerFab = document.getElementById('cornerFab');
+            if (cornerFab) {
+                cornerFab.addEventListener('click', function() {
+                    if (!debugPanel) return;
+                    debugPanel.classList.toggle('open');
+                });
+            }
+
+            // Touch / mobile support: show FAB by default and allow hotspot touch to toggle
+            const cornerHotspot = document.querySelector('.corner-hotspot');
+            const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
+            if (isTouch) {
+                // On touch devices we do NOT allow the debug panel to be opened.
+                // Reduce star count on touch devices for performance
+                try {
+                    document.documentElement.style.setProperty('--stars-count', '30');
+                    document.documentElement.style.setProperty('--logo-height', getComputedStyle(document.documentElement).getPropertyValue('--logo-height') || '80px');
+                    // ensure panel is closed/hidden
+                    if (debugPanel) debugPanel.classList.remove('open');
+                } catch (err) {}
+            }
+
+            // Bind preset buttons (glow-preset) without inline onclick
+            const presetBtns = document.querySelectorAll('.glow-preset');
+            if (presetBtns && presetBtns.length) {
+                presetBtns.forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const p = this.getAttribute('data-preset');
+                        if (p) setGlowPreset(p);
+                    });
+                });
+            }
+
+            // Auto-hide behavior: when mouse leaves panel (and fab), hide after a small delay
+            let panelHideTimeout = null;
+            const PANEL_HIDE_DELAY = 600; // ms
+            function scheduleHidePanel() {
+                try {
+                    clearTimeout(panelHideTimeout);
+                    panelHideTimeout = setTimeout(() => {
+                        if (debugPanel) debugPanel.classList.remove('open');
+                    }, PANEL_HIDE_DELAY);
+                } catch (err) {}
+            }
+            function cancelHidePanel() {
+                try { clearTimeout(panelHideTimeout); } catch (err) {}
+            }
+
+            if (debugPanel) {
+                debugPanel.addEventListener('mouseenter', cancelHidePanel);
+                debugPanel.addEventListener('mouseleave', scheduleHidePanel);
+            }
+            if (cornerFab) {
+                cornerFab.addEventListener('mouseenter', cancelHidePanel);
+                cornerFab.addEventListener('mouseleave', scheduleHidePanel);
+            }
+
+
+            // Logo click/press animation
+            const logoImg = document.querySelector('.logo-svg');
+            if (logoImg) {
+                logoImg.addEventListener('click', function() {
+                    logoImg.classList.add('logo-press');
+                    setTimeout(() => logoImg.classList.remove('logo-press'), 160);
+                });
+                // Also small 'tap' effect on mousedown for snappier feedback
+                logoImg.addEventListener('mousedown', function() {
+                    logoImg.classList.add('logo-press');
+                });
+                document.addEventListener('mouseup', function() { if (logoImg) logoImg.classList.remove('logo-press'); });
+            }
+        });
+        // ========== End Debug Panel ==========
+
+        // Inline FPS Counter
+        class FPSCounter {
+            constructor(container = document.body, options = {}) {
+                if (!(container instanceof HTMLElement)) {
+                    throw new Error('Container must be a valid DOM element.');
+                }
+                this.fps = 0;
+                this.frameCount = 0;
+                this.lastTime = performance.now();
+                this.fpsInterval = 1000;
+                this.lastFpsUpdate = this.lastTime;
+                this.framesSinceLastUpdate = 0;
+                this.container = container;
+                this.manual = !!options.manual;
+                this.bare = !!options.bare;
+
+                if (this.bare) {
+                    this.fpsElement = container;
+                    this.frameCountElement = null;
+                    this.memElement = null;
+                } else {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'fps-counter';
+                    wrapper.style.cssText = `position: fixed; top: 0; left: 0; background: rgba(0,0,0,0.7); color: lime; font: 12px monospace; padding: 5px; z-index: 9999;`;
+                    this.frameCountElement = document.createElement('div');
+                    this.frameCountElement.className = 'fps-frame-count';
+                    wrapper.appendChild(this.frameCountElement);
+                    this.fpsElement = document.createElement('div');
+                    this.fpsElement.className = 'fps-value';
+                    wrapper.appendChild(this.fpsElement);
+                    this.memElement = document.createElement('div');
+                    this.memElement.className = 'fps-memory-usage';
+                    this.memElement.style.cssText = `cursor: help;`;
+                    this.memElement.title = 'Only works in Chrome-ish browsers';
+                    wrapper.appendChild(this.memElement);
+                    this.container.appendChild(wrapper);
+                }
+                if (!this.manual) { this.animate(); }
+            }
+
+            animate() {
+                const currentTime = performance.now();
+                this.frameCount++;
+                this.framesSinceLastUpdate++;
+                if (currentTime - this.lastFpsUpdate >= this.fpsInterval) {
+                    this.fps = Math.round((this.framesSinceLastUpdate * 1000) / (currentTime - this.lastFpsUpdate));
+                    this.lastFpsUpdate = currentTime;
+                    this.framesSinceLastUpdate = 0;
+                    if (this.bare) {
+                        this.fpsElement.textContent = `${this.fps} FPS`;
+                    } else {
+                        this.fpsElement.textContent = `${this.fps} FPS`;
+                        if (performance.memory && this.memElement) {
+                            const { usedJSHeapSize, totalJSHeapSize } = performance.memory;
+                            const usedMB = (usedJSHeapSize / 1024 / 1024).toFixed(2);
+                            const totalMB = (totalJSHeapSize / 1024 / 1024).toFixed(2);
+                            this.memElement.textContent = `Heap: ${usedMB} / ${totalMB} MB`;
+                        }
+                    }
+                }
+                if (!this.bare && this.frameCountElement) {
+                    this.frameCountElement.textContent = `Frames: ${this.frameCount}`;
+                }
+                this.lastTime = currentTime;
+                if (!this.manual) { requestAnimationFrame(() => this.animate()); }
+            }
+        }
+
+        // Inline Canvas Manager
+        function validate(dim, name) {
+            if (dim === 'full') {
+                return name === 'width' ? window.innerWidth : window.innerHeight;
+            }
+            const parsed = parseInt(dim, 10);
+            if (!isNaN(parsed) && parsed > 0) {
+                return parsed;
+            }
+            throw new TypeError(`${name} must be a positive number or 'full'`);
+        }
+
+        function canvasManager() {
+            return {
+                attach: function(elementOrId, config = {}) {
+                    if (!elementOrId) {
+                        throw new TypeError('attach requires a canvas element or string ID');
+                    }
+                    const el = typeof elementOrId === 'string'
+                        ? document.getElementById(elementOrId)
+                        : elementOrId;
+                    if (!(el instanceof HTMLCanvasElement)) {
+                        throw new TypeError('attach expects a canvas element or string ID');
+                    }
+
+                    let ctx = null;
+                    let width = 0;
+                    let height = 0;
+                    let dpr = window.devicePixelRatio || 1;
+                    let resizeTimeout = null;
+                    let resizeHandler = null;
+                    let isDestroyed = false;
+
+                    function checkDestroyed() {
+                        if (isDestroyed) {
+                            throw new Error('Canvas manager has been destroyed');
+                        }
+                    }
+
+                    const controller = {
+                        resize(w = 'full', h = 'full', clear = true) {
+                            checkDestroyed();
+                            width = validate(w, 'width');
+                            height = validate(h, 'height');
+                            dpr = window.devicePixelRatio || 1;
+                            el.width = width * dpr;
+                            el.height = height * dpr;
+                            el.style.width = `${width}px`;
+                            el.style.height = `${height}px`;
+
+                            // Update WebGL viewport if context exists
+                            if (ctx && (ctx instanceof WebGLRenderingContext || ctx instanceof WebGL2RenderingContext)) {
+                                ctx.viewport(0, 0, el.width, el.height);
+                            }
+
+                            return controller;
+                        },
+                        context(type = '2d', options = {}) {
+                            checkDestroyed();
+                            if (!ctx) {
+                                ctx = el.getContext(type, options);
+                                if (!ctx) {
+                                    throw new Error(`Failed to get '${type}' context`);
+                                }
+                                if (width === 0 || height === 0) {
+                                    const w = el.clientWidth;
+                                    const h = el.clientHeight;
+                                    controller.resize(w || 300, h || 150);
+                                }
+                            }
+                            return ctx;
+                        },
+                        listen(signal = 'resize', time = 250) {
+                            checkDestroyed();
+                            if (signal === 'resize') {
+                                if (resizeHandler) {
+                                    window.removeEventListener('resize', resizeHandler);
+                                }
+                                resizeHandler = () => {
+                                    clearTimeout(resizeTimeout);
+                                    resizeTimeout = setTimeout(() => {
+                                        if (!isDestroyed) {
+                                            controller.resize(width === 0 ? 'full' : width, height === 0 ? 'full' : height);
+                                        }
+                                    }, time);
+                                };
+                                window.addEventListener('resize', resizeHandler);
+                            }
+                            return controller;
+                        },
+                        get el() { checkDestroyed(); return el; },
+                        get ctx() { checkDestroyed(); return ctx; }
+                    };
+                    return controller;
+                }
+            };
+        }
+
+        // Inline Shader Builder (essential parts only)
+        class ShaderBuilder {
+            constructor(gl, vsource, fsource) {
+                if (!gl || !(gl instanceof WebGL2RenderingContext)) {
+                    throw new Error("ShaderBuilder requires a WebGL2 context.");
+                }
+                this.gl = gl;
+                this.vsource = vsource;
+                this.fsource = fsource;
+                this.program = null;
+                this._uniformCache = {};
+                this._attributeCache = {};
+                this._vaos = new Map();
+                this._vbos = new Map();
+            }
+
+            build() {
+                const gl = this.gl;
+                if (!this.vsource || !this.fsource) throw new Error("Shader sources must not be empty.");
+
+                if (this.program) {
+                    gl.deleteProgram(this.program);
+                }
+
+                const vertexShader = this._compileShader(gl.VERTEX_SHADER, this.vsource);
+                const fragmentShader = this._compileShader(gl.FRAGMENT_SHADER, this.fsource);
+                this.program = gl.createProgram();
+                gl.attachShader(this.program, vertexShader);
+                gl.attachShader(this.program, fragmentShader);
+                gl.linkProgram(this.program);
+                gl.deleteShader(vertexShader);
+                gl.deleteShader(fragmentShader);
+                if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
+                    const info = gl.getProgramInfoLog(this.program);
+                    throw new Error("Failed to link shader program: " + info);
+                }
+                this._uniformCache = {};
+                this._attributeCache = {};
+            }
+
+            _compileShader(type, source) {
+                const gl = this.gl;
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+                gl.compileShader(shader);
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    const info = gl.getShaderInfoLog(shader);
+                    throw new Error("Failed to compile shader: " + info);
+                }
+                return shader;
+            }
+
+            setUniform1f(name, value) {
+                const location = this._getUniformLocation(name);
+                if (location !== null) {
+                    this.gl.uniform1f(location, value);
+                }
+            }
+
+            setUniform3f(name, x, y, z) {
+                const location = this._getUniformLocation(name);
+                if (location !== null) {
+                    this.gl.uniform3f(location, x, y, z);
+                }
+            }
+
+            _getUniformLocation(name) {
+                if (!this.program) throw new Error("Shader program not built.");
+
+                if (!(name in this._uniformCache)) {
+                    this._uniformCache[name] = this.gl.getUniformLocation(this.program, name);
+                }
+
+                return this._uniformCache[name];
+            }
+
+            createVAO(name) {
+                const vao = this.gl.createVertexArray();
+                this._vaos.set(name, vao);
+                return vao;
+            }
+
+            bindVAO(name) {
+                const vao = this._vaos.get(name);
+                if (!vao) throw new Error(`VAO '${name}' not found.`);
+                this.gl.bindVertexArray(vao);
+            }
+
+            createVBO(name, data, usage = this.gl.STATIC_DRAW) {
+                const buffer = this.gl.createBuffer();
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+                this.gl.bufferData(this.gl.ARRAY_BUFFER, data, usage);
+                this._vbos.set(name, buffer);
+            }
+
+            setAttribute(name, size, type, normalized = false, stride = 0, offset = 0) {
+                const gl = this.gl;
+                const location = gl.getAttribLocation(this.program, name);
+                if (location === -1) throw new Error(`Attribute '${name}' not found.`);
+                gl.enableVertexAttribArray(location);
+                gl.vertexAttribPointer(location, size, type, normalized, stride, offset);
+                this._attributeCache[name] = location;
+            }
+
+            use() {
+                if (!this.program) throw new Error("Shader program not built.");
+                this.gl.useProgram(this.program);
+            }
+        }
+
+        // Inline Cargantua.js logic
+        (() => {
+            try {
+                // new FPSCounter(); // Removed FPS counter
+
+                const manager = canvasManager().attach('shader');
+                const gl = manager.context('webgl2');
+                manager.resize('full', 'full');
+                manager.listen('resize', 250);
+
+                // Also react to window resize (covers F11 browser fullscreen which may not trigger fullscreenchange)
+                window.addEventListener('resize', function() {
+                    try { manager.resize('full', 'full'); } catch (err) {}
+                });
+
+                // Ensure canvas/GL viewport resizes when entering/exiting fullscreen (F11)
+                function handleFullscreenResize() {
+                    try {
+                        manager.resize('full', 'full');
+                    } catch (err) {
+                        // ignore if manager not available
+                    }
+                }
+                document.addEventListener('fullscreenchange', handleFullscreenResize);
+                // Vendor-prefixed events for older browsers
+                document.addEventListener('webkitfullscreenchange', handleFullscreenResize);
+                document.addEventListener('mozfullscreenchange', handleFullscreenResize);
+                document.addEventListener('MSFullscreenChange', handleFullscreenResize);
+
+                const frag = `#version 300 es
+                precision highp float;
+
+                uniform vec3 u_resolution;
+                uniform float u_time;
+                uniform float u_mix;
+                out vec4 fragColor;
+
+                void main() {
+                    vec2 fragCoord = gl_FragCoord.xy;
+                    vec2 r = u_resolution.xy;
+                    vec2 p = (fragCoord + fragCoord - r) / r.y;
+                    vec2 z = vec2(0.5);
+                    vec2 i = vec2(0.1);
+                    vec2 f = p * (z += 5. - 6. * exp(.4 - dot(p, p)));
+                    vec4 O = vec4(0.0);
+                    for (i.y = 1.0; i.y <= 8.0; i.y += 1.0) {
+                        O += (tanh(f) + 1.0).xyyx * abs(f.x - f.y);
+                        f += tanh(f.yx * i.y + i + u_time) / i.y + 0.7;
+                    }
+                    O = tanh(3.0 * exp(z.x - 3.0 - p.y * vec4(-0.5, 1.0, 2.0, 0.0)) / O);
+
+                    float mixPhase = dot(p, p) + z.x + u_time + sin(p.x * 1.5 + p.y * 2.5 + u_time * 0.5);
+                    float channel = cos(mixPhase * 4.0);
+                    // Add edge brightness compensation
+                    float edgeBrightness = 1.0 + 0.3 * (abs(p.x) + abs(p.y));
+
+                    vec3 glow = vec3(
+                        0.0 + 0.0 * sin(channel + 2.0), // Minimal red component for warmth
+                        0.1 + 0.5 * sin(channel + 0.0), // Dominant green component
+                        0.6 + 0.4 * sin(channel + 1.0)  // Deep blue background
+                        //         0.0,                     // No red component
+                        //   0.7 + 0.5 * sin(channel + 0.0), // Strong cyan
+                        //   0.9 + 0.4 * sin(channel + 0.5)  // Strong blue
+                    );
+                    O.rgb *= glow * edgeBrightness;
+
+                    fragColor = O;
+                }`;
+
+                const vert = `#version 300 es
+                precision highp float;
+
+                layout(location = 0) in vec2 a_position;
+                out vec2 vUv;
+                void main() {
+                    gl_Position = vec4(a_position, 0.0, 1.0);
+                    vUv = a_position * 0.5 + 0.5;
+                }`;
+
+                const shader = new ShaderBuilder(gl, vert, frag);
+                shader.build();
+
+                const quadVerts = new Float32Array([
+                    -1, -1,
+                    1, -1,
+                    -1,  1,
+                    1,  1,
+                ]);
+                shader.createVAO('quad');
+                shader.bindVAO('quad');
+                shader.createVBO('quad', quadVerts);
+                shader.setAttribute('a_position', 2, gl.FLOAT);
+
+                let desiredFPS = 60;
+                const draw = (time) => {
+                    // If low-end, throttle to 20-30 FPS
+                    const isLowEnd = document.documentElement.classList.contains('low-end');
+                    const target = isLowEnd ? 25 : desiredFPS;
+
+                    // Ensure viewport matches canvas size
+                    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+                    gl.clearColor(0, 0, 0, 1);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+
+                    shader.use();
+                    shader.setUniform3f('u_resolution', gl.canvas.width, gl.canvas.height, 1);
+                    shader.setUniform1f('u_time', time * 0.001);
+                    shader.setUniform1f('u_mix', 0.5);
+
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                    if (isLowEnd) {
+                        // pace frames using setTimeout for lower FPS
+                        setTimeout(() => requestAnimationFrame(draw), 1000 / target);
+                    } else {
+                        requestAnimationFrame(draw);
+                    }
+                };
+
+                requestAnimationFrame(draw);
+
+            } catch (error) {
+                console.error('WebGL error:', error);
+                // Fallback handled by existing code below
+            }
+        })();
+
+
+    </script>
+
+    <script>
+        // Fallback WebGL animation if modules fail
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const canvas = document.getElementById('shader');
+                if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                    console.log('WebGL not working, starting fallback animation');
+                    startFallbackAnimation();
+                }
+            }, 2000);
+        });
+
+        function startFallbackAnimation() {
+            const canvas = document.getElementById('shader');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            function animate(time) {
+                const t = time * 0.001;
+
+                // Create gradient background
+                const gradient = ctx.createRadialGradient(
+                    canvas.width/2, canvas.height/2, 0,
+                    canvas.width/2, canvas.height/2, Math.max(canvas.width, canvas.height)/2
+                );
+
+                const hue1 = (t * 20) % 360;
+                const hue2 = (t * 30 + 120) % 360;
+                const hue3 = (t * 10 + 240) % 360;
+
+                gradient.addColorStop(0, `hsl(${hue1}, 70%, 20%)`);
+                gradient.addColorStop(0.5, `hsl(${hue2}, 60%, 15%)`);
+                gradient.addColorStop(1, `hsl(${hue3}, 50%, 10%)`);
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Add moving particles (reduce count on low-end)
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                const lowEnd = document.documentElement.classList.contains('low-end');
+                const particleCount = lowEnd ? 18 : 50;
+                for (let i = 0; i < particleCount; i++) {
+                    const x = (Math.sin(t * 0.5 + i) * 0.3 + 0.5) * canvas.width;
+                    const y = (Math.cos(t * 0.3 + i * 0.5) * 0.3 + 0.5) * canvas.height;
+                    const size = Math.sin(t + i) * 2 + 3;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                requestAnimationFrame(animate);
+            }
+
+            animate(0);
+        }
+
+        // Button click effect
+        document.querySelector('.enter-button').addEventListener('click', function(e) {
+            e.preventDefault();
+
+            // Create ripple effect
+            const ripple = document.createElement('div');
+            ripple.style.position = 'absolute';
+            ripple.style.borderRadius = '50%';
+            ripple.style.background = 'rgba(255, 255, 255, 0.6)';
+            ripple.style.transform = 'scale(0)';
+            ripple.style.animation = 'ripple 0.6s linear';
+            ripple.style.left = (e.layerX - 25) + 'px';
+            ripple.style.top = (e.layerY - 25) + 'px';
+            ripple.style.width = '50px';
+            ripple.style.height = '50px';
+            ripple.style.pointerEvents = 'none';
+
+            this.appendChild(ripple);
+
+            // Navigate after animation
+            setTimeout(() => {
+                window.location.href = 'documentation.html';
+            }, 300);
+
+            // Remove ripple
+            setTimeout(() => {
+                ripple.remove();
+            }, 600);
+        });
+    </script>
+</body>
+</html>
