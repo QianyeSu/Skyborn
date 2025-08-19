@@ -10,8 +10,8 @@ build:
     python: "3.10"
   commands:
     # Install system dependencies including gfortran
-    - apt-get update
-    - apt-get install -y gfortran gcc g++ build-essential
+    - sudo apt-get update
+    - sudo apt-get install -y gfortran gcc g++ build-essential
     # Install Python dependencies
     - python -m pip install --upgrade pip setuptools wheel
     - python -m pip install -r requirements-docs.txt
