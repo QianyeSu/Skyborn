@@ -3,9 +3,9 @@ channels:
   - conda-forge
 dependencies:
   - python=3.10
-  - gfortran
-  - gcc
-  - cxx-compiler
+  - gcc_linux-64  # GCC compiler for Linux
+  - gfortran_linux-64  # GFortran compiler for Linux
+  - binutils_linux-64  # Binutils for linking
   - cmake
   - ninja
   - meson
