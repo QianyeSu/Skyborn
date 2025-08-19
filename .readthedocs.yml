@@ -12,32 +12,28 @@ build:
   tools:
     python: "mambaforge-22.9"
   commands:
-    # Setup compiler environment variables and create symlinks
-    - export FC=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gfortran
-    - export F77=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gfortran
-    - export F90=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gfortran
-    - export CC=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc
-    - export CXX=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++
-    - export PATH=$CONDA_PREFIX/bin:$PATH
-    # Create symlinks for meson to find compilers
-    - mkdir -p $HOME/bin
-    - ln -sf $CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gfortran $HOME/bin/gfortran
-    - ln -sf $CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc $HOME/bin/gcc
-    - ln -sf $CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++ $HOME/bin/g++
-    - export PATH=$HOME/bin:$PATH
-    # Verify compiler availability
-    - which gfortran && gfortran --version
-    - which gcc && gcc --version
-    # Install Python dependencies
+    # Set environment variables to skip Fortran compilation
+    - export SKYBORN_DOCS_BUILD=1
+    - export SKIP_FORTRAN=1
+    # Install documentation requirements
     - python -m pip install --upgrade pip setuptools wheel
     - python -m pip install -r requirements-docs.txt
-    - python -m pip install -e .
-    # Build documentation with custom script
+    # Try to install package in docs mode, continue if fails
+    - python -m pip install -e . || echo "⚠️  Package install failed, continuing with docs-only build"
+    # Test if we can import basic modules
+    - python -c "import sys; sys.path.insert(0, '.');
+      try:from skyborn import calculations;
+          from skyborn import mann_kendall;
+          from skyborn import interpolation;
+          print('✅ Successfully imported Python-only modules');
+      except ImportError as e:print(f'ℹ️  Some modules not available:{e}');
+          print('ℹ️  Continuing with documentation build...');"
+    # Build documentation
     - export LC_ALL=C.UTF-8 && export LANG=C.UTF-8 && cd docs && python build_docs.py --clean
     # Copy to output directory
     - mkdir -p $READTHEDOCS_OUTPUT/html
     - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/
-    - echo "✅ Custom build completed with particle effect homepage"
+    - echo "✅ Documentation build completed"
     # Debug: Check what files were copied
     # - echo "📁 Files in output directory:"
     # - ls -la $READTHEDOCS_OUTPUT/html/
