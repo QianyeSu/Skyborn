@@ -11,6 +11,11 @@ dependencies:
   - pytest
   - pytest-cov
   - eccodes # For GRIB processing
+  # Documentation dependencies
+  - sphinx
   - pip
   - pip:
-      - -e .
+      - sphinx-book-theme
+      - myst-parser
+      - nbsphinx
+      - jupyter
