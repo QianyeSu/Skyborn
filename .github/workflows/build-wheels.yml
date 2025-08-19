@@ -30,11 +30,11 @@ jobs:
         # Following NumPy's matrix pattern
         buildplat:
           - [ubuntu-latest, manylinux_x86_64]
-          # - [ubuntu-22.04, manylinux_aarch64]  # Temporarily disabled
+          - [ubuntu-22.04, manylinux_aarch64]  # ARM64 Linux support
           - [macos-13, macosx_x86_64] # macOS Intel
           - [macos-14, macosx_arm64] # macOS Apple Silicon
           - [windows-2022, win_amd64]
-        python: ["cp39", "cp310", "cp311", "cp312"]
+        python: ["cp39", "cp310", "cp311", "cp312", "cp313"]
         # exclude:
         #   # Exclude problematic combinations if needed
         #   # - buildplat: [ubuntu-22.04, manylinux_aarch64]  # Temporarily disabled
@@ -46,12 +46,12 @@ jobs:
         with:
           submodules: recursive
 
-      # Set up QEMU for cross-compilation (ARM64 Linux) - Temporarily disabled
-      # - name: Set up QEMU
-      #   if: matrix.buildplat[1] == 'manylinux_aarch64'
-      #   uses: docker/setup-qemu-action@v3
-      #   with:
-      #     platforms: arm64
+      # Set up QEMU for cross-compilation (ARM64 Linux)
+      - name: Set up QEMU
+        if: matrix.buildplat[1] == 'manylinux_aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       # Setup for macOS (following NumPy's approach) + OpenMP support
       - name: Setup macOS
@@ -172,20 +172,28 @@ jobs:
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
-      # Build wheels (Linux aarch64) - Temporarily disabled
-      # - name: Build wheels (Linux aarch64)
-      #   if: matrix.buildplat[1] == 'manylinux_aarch64'
-      #   uses: pypa/cibuildwheel@352e01339f0a173aa2a3eb57f01492e341e83865
-      #   with:
-      #     output-dir: wheelhouse
-      #   env:
-      #     CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-      #     CIBW_SKIP: "*-win32 *-musllinux*"
-      #     CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
-      #     CIBW_BEFORE_BUILD_LINUX: dnf install -y gcc-gfortran || yum install -y gcc-gfortran || echo 'gfortran install failed'
-      #     CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
-      #     CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed on aarch64')"
-      #     CIBW_BUILD_VERBOSITY: 1
+      # Build wheels (Linux aarch64)
+      - name: Build wheels (Linux aarch64)
+        if: matrix.buildplat[1] == 'manylinux_aarch64'
+        uses: pypa/cibuildwheel@352e01339f0a173aa2a3eb57f01492e341e83865 # v3.1.3
+        with:
+          output-dir: wheelhouse
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
+          CIBW_SKIP: "*-win32 *-musllinux*"
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+          CIBW_BEFORE_BUILD_LINUX: |
+            # Install gfortran and dependencies
+            dnf install -y gcc-gfortran || yum install -y gcc-gfortran || echo 'gfortran install failed'
+            # Install modern geospatial stack from conda-forge (more reliable)
+            curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-aarch64.sh -o mambaforge.sh
+            bash mambaforge.sh -b -p /opt/mambaforge
+            /opt/mambaforge/bin/mamba install -y -c conda-forge "proj>=9.4.0" "pyproj>=3.6.0" geos gdal sqlite
+            # Verify PROJ version
+            /opt/mambaforge/bin/proj --version || echo 'PROJ not available'
+          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PROJ_DIR=/opt/mambaforge PKG_CONFIG_PATH=/opt/mambaforge/lib/pkgconfig PATH=/opt/mambaforge/bin:$PATH LD_LIBRARY_PATH=/opt/mambaforge/lib:$LD_LIBRARY_PATH
+          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed on aarch64')"
+          CIBW_BUILD_VERBOSITY: 1
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -258,7 +266,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-13, macos-14]
-        python: ["cp39", "cp310", "cp311", "cp312"]
+        python: ["cp39", "cp310", "cp311", "cp312", "cp313"]
     steps:
       - name: Map abi tag to python version
         id: mapver
@@ -269,6 +277,7 @@ jobs:
             cp310) echo "PYVER=3.10" >> $GITHUB_ENV ;;
             cp311) echo "PYVER=3.11" >> $GITHUB_ENV ;;
             cp312) echo "PYVER=3.12" >> $GITHUB_ENV ;;
+            cp313) echo "PYVER=3.13" >> $GITHUB_ENV ;;
           esac
 
       - name: Setup Python
