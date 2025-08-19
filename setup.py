@@ -21,11 +21,19 @@ try:
 except ImportError:
     HAVE_CYTHON = False
 
-# Force gfortran compiler usage
-os.environ["FC"] = os.environ.get("FC", "gfortran")
-os.environ["F77"] = os.environ.get("F77", "gfortran")
-os.environ["F90"] = os.environ.get("F90", "gfortran")
-os.environ["CC"] = os.environ.get("CC", "gcc")
+# Check if we're in documentation build mode
+DOCS_BUILD_MODE = (
+    os.environ.get("SKYBORN_DOCS_BUILD") == "1" or os.environ.get("SKIP_FORTRAN") == "1"
+)
+
+if DOCS_BUILD_MODE:
+    print("📚 Documentation build mode detected - skipping Fortran compilation")
+else:
+    # Force gfortran compiler usage
+    os.environ["FC"] = os.environ.get("FC", "gfortran")
+    os.environ["F77"] = os.environ.get("F77", "gfortran")
+    os.environ["F90"] = os.environ.get("F90", "gfortran")
+    os.environ["CC"] = os.environ.get("CC", "gcc")
 
 
 # Check if gfortran is available
@@ -51,8 +59,11 @@ def check_gfortran():
     return False
 
 
-# Check gfortran availability at setup time
-check_gfortran()
+# Check gfortran availability at setup time (skip in docs mode)
+if not DOCS_BUILD_MODE:
+    check_gfortran()
+else:
+    print("📚 Skipping gfortran check in documentation build mode")
 
 
 def get_gridfill_extensions():
@@ -158,6 +169,11 @@ class MesonBuildExt(build_ext):
     def build_meson_modules(self):
         """Build modules that use meson (like spharm)"""
         print("DEBUG: build_meson_modules() called")
+
+        # Skip meson builds in documentation mode
+        if DOCS_BUILD_MODE:
+            print("📚 Documentation build mode - skipping meson module builds")
+            return
 
         # Determine target directory based on --inplace flag
         if self.inplace:
