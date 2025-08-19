@@ -17,6 +17,13 @@ Version 0.3.12 (Current)
 
 * **Enhanced Build System**: Streamlined compilation process for the modernized Fortran components
 
+* **Python 3.13 Support**: Added full compatibility with Python 3.13:
+
+  - **Wheel Distribution**: Pre-compiled wheels now available for Python 3.13 across all supported platforms
+  - **Build System Compatibility**: Updated build configuration to support Python 3.13's new features and requirements
+  - **Cross-Platform Testing**: Comprehensive testing on Linux x86_64, macOS (Intel & Apple Silicon), and Windows x64
+  - **Future-Ready**: Ensures Skyborn stays current with the latest Python ecosystem developments
+
 **🔧 Technical Improvements**
 
 * **Fortran Modernization**:
@@ -30,6 +37,12 @@ Version 0.3.12 (Current)
   - Optimized Legendre polynomial computations
   - Reduced function call overhead in critical computation paths
   - Enhanced caching strategies for frequently used calculations
+
+* **Platform and Build Improvements**:
+  - **Extended Python Support**: Now supports Python 3.9, 3.10, 3.11, 3.12, and 3.13
+  - **Multi-Platform Wheels**: Automated wheel building for Linux x86_64, macOS Intel/Apple Silicon, and Windows x64
+  - **CI/CD Enhancements**: Improved build matrix with comprehensive testing across all supported Python versions
+  - **Future ARM64 Linux Preparation**: Infrastructure ready for ARM64 Linux support when Python wheel ecosystem matures
 
 **📊 Performance Benchmarks**
 
