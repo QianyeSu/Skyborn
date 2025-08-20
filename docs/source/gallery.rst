@@ -456,6 +456,14 @@ The fundamental GridFill approach solves the Poisson equation:
 
 where φ represents the atmospheric field being interpolated.
 
+**GridFill Demonstration: GPCP Precipitation Data**
+
+.. image:: images/gridfill_demo_result.png
+   :alt: GridFill GPCP Precipitation Demo
+   :width: 100%
+
+*Figure: GridFill demonstration using GPCP precipitation data showing gradient-based gap placement. Top panel shows original data, middle panel shows artificially created gaps at gradient boundaries (transitions between high and low precipitation values), and bottom panel shows the filled data using Poisson equation solver. The algorithm successfully reconstructs missing values while preserving physical continuity and spatial patterns, demonstrating effectiveness at challenging interpolation scenarios.*
+
 **2. Advanced Methods**
 
 .. image:: images/gridfill_comprehensive_comparison.png
