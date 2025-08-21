@@ -4,6 +4,10 @@
 
 version: 2
 
+# Use conda/mamba for package management
+conda:
+  environment: docs/environment.yml
+
 # Use standard Python build instead of custom commands
 python:
   install:
