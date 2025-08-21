@@ -1,0 +1,24 @@
+# Environment file for Read the Docs documentation build
+name: skyborn-docs
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.9
+  - pip
+  - setuptools
+  - wheel
+  # Documentation dependencies
+  - sphinx>=4.0
+  - sphinx-book-theme
+  - myst-nb
+  - sphinx-autodoc-typehints
+  - sphinx-copybutton
+  - toml
+  # Core scientific packages that might be needed for docs
+  - numpy
+  - pandas
+  - xarray
+  - matplotlib
+  - pip:
+    - sphinx-autodoc-typehints
