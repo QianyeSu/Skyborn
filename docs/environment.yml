@@ -21,11 +21,15 @@ dependencies:
   # Compilation tools for Fortran and Cython modules
   - meson
   - ninja
-  - gcc
-  - gfortran
+  - c-compiler      # Modern conda-forge C compiler
+  - fortran-compiler # Modern conda-forge Fortran compiler
   - pkg-config
+  # Build tools
+  - make
+  - cmake
   # Additional scientific dependencies that might be needed
   - scipy
   - matplotlib-base
+  - cython
   # NOTE: We need compilation tools to build skyborn's Fortran/Cython extensions
   # so that Sphinx can generate proper cross-references
