@@ -170,8 +170,8 @@ autodoc_mock_imports = [
     'shtns',
     'fortls',
     # Skyborn's own compiled modules (documentation-only approach)
-    'skyborn.fortran_modules',
-    'skyborn.cython_modules',
+    # 'skyborn.fortran_modules',
+    # 'skyborn.cython_modules',
     # Add specific compiled submodules here as needed
 ]
 
@@ -185,6 +185,8 @@ nitpicky = False  # Don't fail on broken references
 nitpick_ignore = [
     ('py:class', 'builtins.object'),
     ('py:class', 'optional'),
+    # Add known broken references for spharm placeholder functions
+
 ]
 
 # HTML output options
@@ -208,6 +210,8 @@ add_module_names = False  # Don't add module names to function references
 html_use_opensearch = 'https://skyborn.readthedocs.io/'
 
 # Add a custom configuration for Read the Docs
+
+
 def setup(app):
     """Custom setup function for Sphinx."""
     # Check if we're building on Read the Docs
@@ -222,13 +226,15 @@ def setup(app):
             print(f"⚠️ Skyborn import failed on RTD: {e}")
             # Ensure path is set correctly
             import sys
-            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+            project_root = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), '../..'))
             src_path = os.path.join(project_root, 'src')
             if src_path not in sys.path:
                 sys.path.insert(0, src_path)
                 print(f"Added {src_path} to Python path")
 
     return {'version': '0.1', 'parallel_read_safe': True}
+
 
 # -- MyST-NB configuration for Jupyter notebooks ---------------------------
 myst_enable_extensions = [
