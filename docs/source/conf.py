@@ -157,7 +157,7 @@ intersphinx_mapping = {
 # Let skyborn's own compiled modules build naturally for proper cross-references.
 
 autodoc_mock_imports = [
-    # External scientific libraries that might be missing on RTD
+    # External scientific libraries
     'eccodes',
     'cfgrib',
     'netCDF4',
@@ -169,7 +169,10 @@ autodoc_mock_imports = [
     'pyshtools',
     'shtns',
     'fortls',
-    # Only add more here if they're actually missing on RTD
+    # Skyborn's own compiled modules (documentation-only approach)
+    'skyborn.fortran_modules',
+    'skyborn.cython_modules',
+    # Add specific compiled submodules here as needed
 ]
 
 

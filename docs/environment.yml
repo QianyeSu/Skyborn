@@ -15,21 +15,10 @@ dependencies:
   - sphinx-autodoc-typehints
   - sphinx-copybutton
   - toml
-  # Scientific packages and compilation tools needed for skyborn
+  # Scientific packages for documentation (mocked, not actually imported)
   - numpy
   - pandas
-  # Compilation tools for Fortran and Cython modules
-  - meson
-  - ninja
-  - c-compiler      # Modern conda-forge C compiler
-  - fortran-compiler # Modern conda-forge Fortran compiler
-  - pkg-config
-  # Build tools
-  - make
-  - cmake
-  # Additional scientific dependencies that might be needed
   - scipy
   - matplotlib-base
-  - cython
-  # NOTE: We need compilation tools to build skyborn's Fortran/Cython extensions
-  # so that Sphinx can generate proper cross-references
+  # NOTE: Using documentation-only approach with mocked imports
+  # No compilation tools needed since we mock all compiled modules
