@@ -8,9 +8,11 @@ version: 2
 conda:
   environment: docs/environment.yml
 
-# Install only documentation dependencies (package compiled in build stage)
+# Install skyborn with compilation, then docs requirements
 python:
   install:
+    - method: pip
+      path: .
     - requirements: requirements-docs.txt
 
 # Use standard Sphinx build process for better cross-reference support
@@ -18,8 +20,28 @@ sphinx:
   configuration: docs/source/conf.py
   fail_on_warning: false
 
-# Minimal build configuration for documentation
+# Build configuration with compilation enabled (following build-wheels.yml)
 build:
   os: ubuntu-22.04
   tools:
     python: "mambaforge-22.9"
+  jobs:
+    pre_build:
+      # Set up compilation environment (like your Linux builds)
+      - export FC=gfortran
+      - export CC=gcc
+      - export F77=gfortran
+      - export F90=gfortran
+      # Test compiler availability
+      - echo "🔧 Testing compilation tools..."
+      - gfortran --version
+      - gcc --version
+      - meson --version
+      - ninja --version
+      # Build skyborn with Fortran/Cython extensions for proper docs
+      - echo "🏗️ Building Skyborn with compiled extensions..."
+      - python setup.py build_ext --inplace --verbose
+    post_build:
+      # Verify documentation was generated with cross-references
+      - test -f $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "✅ Functions page generated" || echo "❌ Functions page missing"
+      - test -f $READTHEDOCS_OUTPUT/html/api/spharm.html && echo "✅ Spharm API page generated" || echo "❌ Spharm API page missing"
