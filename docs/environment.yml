@@ -15,11 +15,16 @@ dependencies:
   - sphinx-autodoc-typehints
   - sphinx-copybutton
   - toml
-  # Scientific packages for documentation (needed for imports)
+  # Scientific packages for documentation and compilation
   - numpy
   - pandas
   - scipy
   - matplotlib-base
   - xarray  # Required by skyborn.calc.calculations
-  # NOTE: Using documentation-only approach with mocked imports
-  # No compilation tools needed since we mock all compiled modules
+  # Build tools (following build-wheels.yml configuration)
+  - meson>=1.0
+  - ninja
+  - gcc  # C compiler
+  - gfortran  # Fortran compiler (like your wheel builds)
+  - cython>=3.0.0
+  # NOTE: Now enabling compilation to match your setup.py design
