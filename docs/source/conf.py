@@ -157,27 +157,18 @@ intersphinx_mapping = {
 # Let skyborn's own compiled modules build naturally for proper cross-references.
 
 autodoc_mock_imports = [
-    # External scientific libraries that might be missing
+    # Only mock truly optional external libraries that might be missing on RTD
     'eccodes',
     'cfgrib',
-    'netCDF4',
-    'cartopy',
-    'cartopy.crs',
-    'cartopy.feature',
-    'metpy',
-    'metpy.calc',
     'pyshtools',
     'shtns',
     'fortls',
-    # Additional scientific packages that might be missing
+    # Optional machine learning libraries
     'statsmodels',
     'sklearn',
     'scikit-learn',
-    # Skyborn's own compiled modules that require compilation
-    'skyborn.spharm._spherepack',
-    'skyborn.gridfill._gridfill',
-    'skyborn.windspharm._windspharm',
-    # Any other compiled extensions
+    # NOTE: Removed skyborn's own compiled modules since we now build them
+    # NOTE: Kept core scientific libs (numpy, xarray, etc.) since they're in environment.yml
 ]
 
 
