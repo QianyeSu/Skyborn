@@ -8,10 +8,14 @@ version: 2
 conda:
   environment: docs/environment.yml
 
-# Only install documentation dependencies, NOT the package itself
+# Install documentation dependencies AND the package with compilation
 python:
   install:
     - requirements: requirements-docs.txt
+    - method: pip
+      path: .
+      extra_requirements:
+        - docs
 
 # Use standard Sphinx build process for better cross-reference support
 sphinx:
@@ -25,21 +29,23 @@ build:
     python: "mambaforge-22.9"
   jobs:
     pre_build:
-      # Critical: Set environment variables to prevent ANY compilation attempts
+      # Set environment variables to help compilation succeed
       - export SKYBORN_DOCS_BUILD=1
-      - export SKIP_FORTRAN=1
-      - export SKIP_COMPILATION=1
       - export SPHINX_WARN_AS_ERROR=0
-      # Disable setuptools from trying to build extensions
-      - export SETUPTOOLS_USE_DISTUTILS=stdlib
-      # Add source to Python path so Sphinx can import modules directly
-      - export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
-      # Verify the path setup
-      - echo "Python path: $PYTHONPATH"
+      # Set up compilation environment
+      - export CC=gcc
+      - export FC=gfortran
+      - export PKG_CONFIG_PATH="${CONDA_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH}"
+      # Ensure meson can find tools
+      - which meson || echo "Meson not found"
+      - which ninja || echo "Ninja not found"
+      - which gcc || echo "GCC not found"
+      - which gfortran || echo "Gfortran not found"
+      # Check source structure
       - ls -la src/skyborn/ || echo "Source directory check"
     post_build:
       # Validate that key pages and cross-references exist
-      - test -f $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "✅ Functions page generated" || echo "⚠️ Functions page missing"
-      - test -f $READTHEDOCS_OUTPUT/html/api/conversion.html && echo "✅ API pages generated" || echo "⚠️ API pages missing"
+      - test -f $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "Functions page generated" || echo "Functions page missing"
+      - test -f $READTHEDOCS_OUTPUT/html/api/conversion.html && echo "API pages generated" || echo "API pages missing"
       # Test a specific cross-reference link
-      - grep -q 'href="api/conversion.html#skyborn.conversion.grib_to_netcdf"' $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "✅ Cross-references working" || echo "⚠️ Cross-references broken"
+      - grep -q 'href="api/conversion.html#skyborn.conversion.grib_to_netcdf"' $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "Cross-references working" || echo "Cross-references broken"
