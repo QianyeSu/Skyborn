@@ -15,12 +15,17 @@ dependencies:
   - sphinx-autodoc-typehints
   - sphinx-copybutton
   - toml
-  # Minimal scientific packages needed for docs (no compilation required)
+  # Scientific packages and compilation tools needed for skyborn
   - numpy
   - pandas
+  # Compilation tools for Fortran and Cython modules
   - meson
   - ninja
   - gcc
   - gfortran
-  # NOTE: We intentionally DON'T install the actual skyborn package
-  # to avoid compilation issues. Sphinx will use PYTHONPATH + mocking.
+  - pkg-config
+  # Additional scientific dependencies that might be needed
+  - scipy
+  - matplotlib-base
+  # NOTE: We need compilation tools to build skyborn's Fortran/Cython extensions
+  # so that Sphinx can generate proper cross-references
