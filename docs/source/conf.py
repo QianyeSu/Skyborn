@@ -153,8 +153,8 @@ intersphinx_mapping = {
 }
 
 # -- Mock imports to avoid dependency issues --------------------------------
-# Strategy: Mock ALL potentially problematic imports so Sphinx can still
-# parse the source code and generate cross-references without compilation
+# Strategy: Mock ONLY external dependencies that might be missing on RTD.
+# Let skyborn's own compiled modules build naturally for proper cross-references.
 
 autodoc_mock_imports = [
     # External scientific libraries
