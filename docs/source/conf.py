@@ -159,19 +159,37 @@ autodoc_mock_imports = [
     'scipy',
     'scipy.ndimage',
     'scipy.special',
+    'scipy.spatial',
+    'scipy.interpolate',
+    'scipy.optimize',
+    'scipy.stats',
     'sklearn',
     'sklearn.feature_selection',
     'eccodes',
     'cfgrib',
     'netCDF4',
     'cartopy',
+    'cartopy.crs',
+    'cartopy.feature',
     'matplotlib',
+    'matplotlib.pyplot',
     'seaborn',
     'xarray',
     'skyborn.ROF',  # ROF module is under development
     'fortls',
     'pyshtools',
     'shtns',
+    # Mock all compiled extension modules
+    'skyborn.spharm._spharm',
+    'skyborn.windspharm._windspharm',
+    'skyborn.gridfill._gridfill',
+    'skyborn.gridfill.gridfill',
+    # Mock any other potentially problematic imports
+    'numba',
+    'dask',
+    'cython',
+    'pyfftw',
+    'mpi4py',
 ]
 
 # Configure cross-references to be more robust
