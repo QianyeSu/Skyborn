@@ -11,10 +11,7 @@ conda:
 # Use standard Python build instead of custom commands
 python:
   install:
-    - method: pip
-      path: .
-      extra_requirements:
-        - docs
+    - requirements: requirements-docs.txt
 
 # Use standard Sphinx build process for better cross-reference support
 sphinx:
@@ -32,7 +29,7 @@ build:
       - export SKYBORN_DOCS_BUILD=1
       - export SKIP_FORTRAN=1
       - export SPHINX_WARN_AS_ERROR=0
-      # Add source to Python path for imports
+      # Add source to Python path for imports (let Sphinx mock handle the rest)
       - export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
     post_build:
       # Validate that key pages and cross-references exist
