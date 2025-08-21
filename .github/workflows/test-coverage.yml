@@ -173,13 +173,22 @@ jobs:
               basename_ext=$(basename "$ext")
               echo "Processing: $basename_ext"
 
-              # Copy to matching subdirectory in src/skyborn/
+              # Skip if already in src/skyborn/ hierarchy
+              if echo "$ext" | grep -q "^src/skyborn/"; then
+                echo "  Already in correct location: $ext"
+                continue
+              fi
+
+              # Find target subdirectory in src/skyborn/
               for subdir in src/skyborn/*/; do
                 if [ -d "$subdir" ] && [ -f "${subdir}__init__.py" ]; then
                   subdir_name=$(basename "$subdir")
-                  # Check if this extension belongs to this subdir
-                  if echo "$basename_ext" | grep -q "$subdir_name" || \
-                     grep -q "$(echo "$basename_ext" | cut -d. -f1)" "${subdir}"*.py 2>/dev/null; then
+                  target_file="${subdir}${basename_ext}"
+
+                  # Check if this extension belongs to this subdir and doesn't already exist
+                  if (echo "$basename_ext" | grep -q "$subdir_name" || \
+                     grep -q "$(echo "$basename_ext" | cut -d. -f1)" "${subdir}"*.py 2>/dev/null) && \
+                     [ ! -f "$target_file" ]; then
                     cp -v "$ext" "$subdir"
                     echo "  ✓ Copied to $subdir"
                     break
