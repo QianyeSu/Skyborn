@@ -18,27 +18,8 @@ sphinx:
   configuration: docs/source/conf.py
   fail_on_warning: false
 
-# Documentation-only build configuration (no compilation needed)
+# Minimal build configuration for documentation
 build:
   os: ubuntu-22.04
   tools:
     python: "mambaforge-22.9"
-  jobs:
-    pre_build:
-      # Set environment variables for documentation build
-      - export SKYBORN_DOCS_BUILD=1
-      - export SPHINX_WARN_AS_ERROR=0
-      # Ensure source is in Python path for Sphinx (even with mocked imports)
-      - export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
-      # Create simple __init__.py with version if missing
-      - |
-        if [ ! -f src/skyborn/__init__.py ]; then
-          mkdir -p src/skyborn
-          echo '__version__ = "0.3.6"' > src/skyborn/__init__.py
-        fi
-      # Test that basic import works (with mocked modules)
-      - python -c "import sys; sys.path.insert(0, 'src'); import skyborn; print(f'✅ Skyborn v{skyborn.__version__} available for docs')" || echo "Skyborn import failed, will rely on mocked imports"
-    post_build:
-      # Validate that key pages exist
-      - test -f $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "✅ Functions page generated" || echo "❌ Functions page missing"
-      - test -f $READTHEDOCS_OUTPUT/html/api/conversion.html && echo "✅ API pages generated" || echo "❌ API pages missing"
