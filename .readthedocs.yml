@@ -8,7 +8,7 @@ version: 2
 conda:
   environment: docs/environment.yml
 
-# Use standard Python build instead of custom commands
+# Only install documentation dependencies, NOT the package itself
 python:
   install:
     - requirements: requirements-docs.txt
@@ -25,12 +25,18 @@ build:
     python: "mambaforge-22.9"
   jobs:
     pre_build:
-      # Set environment variables to skip Fortran compilation
+      # Critical: Set environment variables to prevent ANY compilation attempts
       - export SKYBORN_DOCS_BUILD=1
       - export SKIP_FORTRAN=1
+      - export SKIP_COMPILATION=1
       - export SPHINX_WARN_AS_ERROR=0
-      # Add source to Python path for imports (let Sphinx mock handle the rest)
-      - export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
+      # Disable setuptools from trying to build extensions
+      - export SETUPTOOLS_USE_DISTUTILS=stdlib
+      # Add source to Python path so Sphinx can import modules directly
+      - export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
+      # Verify the path setup
+      - echo "Python path: $PYTHONPATH"
+      - ls -la src/skyborn/ || echo "Source directory check"
     post_build:
       # Validate that key pages and cross-references exist
       - test -f $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "✅ Functions page generated" || echo "⚠️ Functions page missing"
