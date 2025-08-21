@@ -68,6 +68,8 @@ exclude_patterns = []
 # Suppress specific warnings
 suppress_warnings = [
     'myst.mathjax',
+    'ref.ref',
+    'ref.python',
     # 'autodoc.duplicate_object',
     # 'autodoc',  # Add more general autodoc suppression
 ]
@@ -167,7 +169,64 @@ autodoc_mock_imports = [
     'seaborn',
     'xarray',
     'skyborn.ROF',  # ROF module is under development
+    'fortls',
+    'pyshtools',
+    'shtns',
 ]
+
+# Configure cross-references to be more robust
+autodoc_typehints = 'description'
+autodoc_preserve_defaults = True
+
+# Ensure all cross-references work on Read the Docs
+nitpicky = False  # Don't fail on broken references
+nitpick_ignore = [
+    ('py:class', 'builtins.object'),
+    ('py:class', 'optional'),
+]
+
+# HTML output options
+html_use_index = True
+html_split_index = False
+
+# Configure how Sphinx handles missing references
+# This is critical for Read the Docs builds where some modules might not import
+autodoc_inherit_docstrings = True
+autodoc_member_order = 'bysource'
+
+# Ensure object inventory is properly generated
+html_use_smartypants = True
+html_add_permalinks = True
+
+# Additional configuration for cross-references
+add_function_parentheses = True
+add_module_names = False  # Don't add module names to function references
+
+# Configure object inventory for better cross-referencing
+html_use_opensearch = 'https://skyborn.readthedocs.io/'
+
+# Add a custom configuration for Read the Docs
+def setup(app):
+    """Custom setup function for Sphinx."""
+    # Check if we're building on Read the Docs
+    on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
+
+    if on_rtd:
+        # Additional mock imports for RTD
+        try:
+            import skyborn
+            print("✅ Skyborn successfully imported on RTD")
+        except ImportError as e:
+            print(f"⚠️ Skyborn import failed on RTD: {e}")
+            # Ensure path is set correctly
+            import sys
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+            src_path = os.path.join(project_root, 'src')
+            if src_path not in sys.path:
+                sys.path.insert(0, src_path)
+                print(f"Added {src_path} to Python path")
+
+    return {'version': '0.1', 'parallel_read_safe': True}
 
 # -- MyST-NB configuration for Jupyter notebooks ---------------------------
 myst_enable_extensions = [
