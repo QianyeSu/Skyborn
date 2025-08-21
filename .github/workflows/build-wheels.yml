@@ -77,6 +77,12 @@ jobs:
           echo "OpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp" >> "$GITHUB_ENV"
           echo "OpenMP_CXX_LIB_NAMES=omp" >> "$GITHUB_ENV"
           echo "OpenMP_omp_LIBRARY=$(brew --prefix libomp)/lib/libomp.dylib" >> "$GITHUB_ENV"
+          # Set macOS deployment target depending on runner version
+          if [ "${{ matrix.buildplat[0] }}" = "macos-14" ]; then
+            echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "$GITHUB_ENV"
+          else
+            echo "MACOSX_DEPLOYMENT_TARGET=13.0" >> "$GITHUB_ENV"
+          fi
 
       # Setup for Linux (install gfortran in container)
       - name: Setup Linux environment
@@ -138,16 +144,31 @@ jobs:
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
-      - name: Build wheels (macOS)
-        if: startsWith(matrix.buildplat[1], 'macosx')
+      - name: Build wheels (macOS x86_64)
+        if: matrix.buildplat[1] == 'macosx_x86_64'
         uses: pypa/cibuildwheel@v3.1.3
-        # uses: pypa/cibuildwheel@352e01339f0a173aa2a3eb57f01492e341e83865 # v3.1.3
         with:
           output-dir: wheelhouse
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
+          # x86_64 on macos-13: target 13.0
           CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc-13 CXX=g++-13 MACOSX_DEPLOYMENT_TARGET=13.0
+          MACOSX_DEPLOYMENT_TARGET: "13.0"
+          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
+          CIBW_BUILD_VERBOSITY: 1
+
+      - name: Build wheels (macOS arm64)
+        if: matrix.buildplat[1] == 'macosx_arm64'
+        uses: pypa/cibuildwheel@v3.1.3
+        with:
+          output-dir: wheelhouse
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
+          CIBW_SKIP: "*-win32 *-musllinux*"
+          # arm64 on macos-14: set deployment target to 14.0 to match libgomp/libomp minima
+          CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc-13 CXX=g++-13 MACOSX_DEPLOYMENT_TARGET=14.0
+          MACOSX_DEPLOYMENT_TARGET: "14.0"
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
