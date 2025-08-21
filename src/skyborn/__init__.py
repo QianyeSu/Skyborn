@@ -64,4 +64,4 @@ fill = gridfill_fill
 fill_cube = gridfill_fill_cube
 
 
-__version__ = "0.3.12"
+__version__ = "0.3.12.post1"

@@ -302,8 +302,8 @@ else:
         dependencies: dependencies,
         fortran_args: fortran_args,
         c_args: c_args,
-        install: true,
-        subdir: 'skyborn/spharm',  # This is the key! Install directly to the package directory
+        install: true,   # Install to custom location if provided
+        install_dir: get_option('python.purelibdir') / 'skyborn' / 'spharm',  # Use setuptools path if available
         build_by_default: true,
     )
 
