@@ -158,32 +158,7 @@ intersphinx_mapping = {
 
 autodoc_mock_imports = [
     # External scientific libraries
-    'metpy',
-    'metpy.calc',
-    'scipy',
-    'scipy.ndimage',
-    'scipy.special',
-    'scipy.spatial',
-    'scipy.interpolate',
-    'scipy.optimize',
-    'scipy.stats',
-    'sklearn',
-    'sklearn.feature_selection',
-    'eccodes',
-    'cfgrib',
-    'netCDF4',
-    'cartopy',
-    'cartopy.crs',
-    'cartopy.feature',
-    'matplotlib',
-    'matplotlib.pyplot',
-    'seaborn',
-    'xarray',
-    'numba',
-    'dask',
-    'cython',
-    'pyfftw',
-    'mpi4py',
+
 ]
 
 
