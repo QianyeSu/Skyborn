@@ -19,6 +19,4 @@ dependencies:
   - numpy
   - pandas
   - xarray
-  - matplotlib
-  - pip:
-    - sphinx-autodoc-typehints
+  - matplotlib-base  # Use base version to avoid heavy dependencies
