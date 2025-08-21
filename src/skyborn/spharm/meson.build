@@ -261,6 +261,7 @@ else:
     endif
 
     # Build the spherepack extension module
+    # Use subdir parameter to install directly into the Python package structure
     spherepack_ext = py.extension_module(
         '_spherepack',
         [
@@ -301,16 +302,17 @@ else:
         dependencies: dependencies,
         fortran_args: fortran_args,
         c_args: c_args,
-        install: true,  # Install the extension module properly
+        install: true,
+        subdir: 'skyborn/spharm',  # This is the key! Install directly to the package directory
         build_by_default: true,
     )
 
-    # Automatically move compiled extension files to source directory (for --inplace builds)
-    # This custom_target executes immediately after spherepack extension compilation completes
-    move_extension = custom_target(
-        'move_spherepack_extension',
-        input: spherepack_ext,  # Depends on compiled extension
-        output: 'moved_marker.txt',  # Create marker file to indicate move completion
+    # Always create a copy target for source directory (for --inplace builds)
+    # This target will run after the main extension is built, but only copy if needed
+    copy_to_source = custom_target(
+        'copy_to_source_for_inplace',
+        input: spherepack_ext,
+        output: 'inplace_copy_marker.txt',
         command: [
             py,
             '-c',
@@ -318,99 +320,63 @@ else:
 import os
 import shutil
 import glob
-import time
-import platform
+import sys
 from pathlib import Path
 
-def move_extension_files():
-    # Get build directory and source directory
-    build_dir = Path("@BUILD_ROOT@")
-    source_dir = Path("@SOURCE_ROOT@")
+print("=== Extension source copy check ===")
 
-    print(f"Moving compiled extension files from {build_dir} to {source_dir}")
+current_dir = Path.cwd()
+build_dir = current_dir / "build"
+print(f"Current dir: {current_dir}")
+print(f"Build dir: {build_dir}")
 
-    # Search for compiled extension files
-    patterns = ["_spherepack*.so", "_spherepack*.pyd", "_spherepack*.dylib"]
-    compiled_files = []
+# Check if we should copy to source (heuristic: if no existing .pyd in source, or if it's older)
+should_copy = False
 
-    for pattern in patterns:
-        search_pattern = str(build_dir / "**" / pattern)
-        found_files = glob.glob(search_pattern, recursive=True)
-        compiled_files.extend(found_files)
+# Search for compiled extension files in build directory
+patterns = ["_spherepack*.so", "_spherepack*.pyd", "_spherepack*.dylib"]
+built_files = []
 
-    if compiled_files:
-        for source_file_str in compiled_files:
-            source_file = Path(source_file_str)
-            destination = source_dir / source_file.name
+for pattern in patterns:
+    found_files = glob.glob(str(build_dir / "**" / pattern), recursive=True)
+    built_files.extend(found_files)
 
-            print(f"Moving compiled extension: {source_file} -> {destination}")
+if built_files:
+    print(f"Found built files: {built_files}")
 
-            # Windows-specific handling for file locking issues
-            if platform.system() == "Windows":
-                success = False
-                max_attempts = 5
+    # Check if we should copy to source directory
+    for built_file_str in built_files:
+        built_file = Path(built_file_str)
+        source_file = current_dir / built_file.name
 
-                for attempt in range(max_attempts):
-                    try:
-                        # Handle existing target file first
-                        if destination.exists():
-                            try:
-                                destination.unlink()
-                            except OSError:
-                                # If file is locked, rename it first
-                                backup_name = destination.with_suffix(f".old{int(time.time())}")
-                                destination.rename(backup_name)
+        # Copy if source doesn't exist or is older
+        if not source_file.exists():
+            should_copy = True
+            print(f"Source {built_file.name} doesn't exist, will copy")
+        elif built_file.stat().st_mtime > source_file.stat().st_mtime:
+            should_copy = True
+            print(f"Source {built_file.name} is older, will copy")
 
-                        # Copy file (safer than move on Windows)
-                        shutil.copy2(str(source_file), str(destination))
-                        print(f"Successfully copied {source_file.name}")
-                        success = True
-                        break
+        if should_copy:
+            try:
+                if source_file.exists():
+                    source_file.unlink()
+                shutil.copy2(str(built_file), str(source_file))
+                print(f"✓ Copied {built_file.name} to source directory")
+            except Exception as e:
+                print(f"✗ Failed to copy {built_file.name}: {e}")
+else:
+    print("No compiled extension files found")
 
-                    except (OSError, shutil.Error) as e:
-                        if attempt < max_attempts - 1:
-                            print(f"Attempt {attempt + 1} failed: {e}. Retrying in 1 second...")
-                            time.sleep(1)
-                        else:
-                            print(f"Final attempt failed: {e}")
+# Create marker
+with open("''' + '@OUTPUT@' + '''", "w") as f:
+    f.write("Source copy check completed\\n")
 
-                if not success:
-                    print(f"Warning: Unable to copy {source_file.name} after {max_attempts} attempts")
-                    print(f"New file is available at: {source_file}")
-                    print(f"Please manually copy to: {destination}")
-
-            else:
-                # Unix-like systems (Linux/macOS) - simple handling
-                try:
-                    # Remove existing file if it exists
-                    if destination.exists():
-                        destination.unlink()
-
-                    # Move file
-                    shutil.move(str(source_file), str(destination))
-                    print(f"Successfully moved {source_file.name}")
-
-                except (OSError, shutil.Error) as e:
-                    print(f"Warning: Unable to move {source_file.name}: {e}")
-                    # Try copying instead
-                    try:
-                        shutil.copy2(str(source_file), str(destination))
-                        print(f"Successfully copied {source_file.name}")
-                    except (OSError, shutil.Error) as copy_e:
-                        print(f"Error: Unable to copy {source_file.name}: {copy_e}")
-    else:
-        print("Warning: No compiled extension found to move")
-
-    # Create marker file
-    with open("@OUTPUT@", "w") as f:
-        f.write("Extension moved successfully\\n")
-
-# Execute file moving
-move_extension_files()
+print("=== Extension source copy check completed ===")
 '''
         ],
-        build_by_default: true,  # Execute by default during build
-        console: true  # Display output
+        build_by_default: true,  # Always run this check
+        console: true
     )
 
     message('spharm submodule configured successfully with cross-platform optimizations')
