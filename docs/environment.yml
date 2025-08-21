@@ -15,8 +15,12 @@ dependencies:
   - sphinx-autodoc-typehints
   - sphinx-copybutton
   - toml
-  # Core scientific packages that might be needed for docs
+  # Minimal scientific packages needed for docs (no compilation required)
   - numpy
   - pandas
-  - xarray
-  - matplotlib-base  # Use base version to avoid heavy dependencies
+  - meson
+  - ninja
+  - gcc
+  - gfortran
+  # NOTE: We intentionally DON'T install the actual skyborn package
+  # to avoid compilation issues. Sphinx will use PYTHONPATH + mocking.

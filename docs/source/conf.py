@@ -153,7 +153,11 @@ intersphinx_mapping = {
 }
 
 # -- Mock imports to avoid dependency issues --------------------------------
+# Strategy: Mock ALL potentially problematic imports so Sphinx can still
+# parse the source code and generate cross-references without compilation
+
 autodoc_mock_imports = [
+    # External scientific libraries
     'metpy',
     'metpy.calc',
     'scipy',
@@ -175,22 +179,13 @@ autodoc_mock_imports = [
     'matplotlib.pyplot',
     'seaborn',
     'xarray',
-    'skyborn.ROF',  # ROF module is under development
-    'fortls',
-    'pyshtools',
-    'shtns',
-    # Mock all compiled extension modules
-    'skyborn.spharm._spharm',
-    'skyborn.windspharm._windspharm',
-    'skyborn.gridfill._gridfill',
-    'skyborn.gridfill.gridfill',
-    # Mock any other potentially problematic imports
     'numba',
     'dask',
     'cython',
     'pyfftw',
     'mpi4py',
 ]
+
 
 # Configure cross-references to be more robust
 autodoc_typehints = 'description'
