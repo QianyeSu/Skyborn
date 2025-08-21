@@ -183,13 +183,9 @@ class MesonBuildExt(build_ext):
             print("DEBUG: Building to build directory")
             spharm_target = Path(self.build_lib) / "skyborn" / "spharm"
 
-        meson_modules = [
-            {
-                "name": "spharm",
-                "path": Path("src") / "skyborn" / "spharm",
-                "target_dir": spharm_target,
-            }
-        ]
+        # Auto-discover meson modules based on directory structure
+        # Each module should have a meson.build file
+        meson_modules = self._discover_meson_modules()
 
         for module in meson_modules:
             print(f"DEBUG: Processing module {module['name']}")
@@ -266,11 +262,9 @@ class MesonBuildExt(build_ext):
             # Setup build directory
             build_dir.mkdir(parents=True, exist_ok=True)
 
-            # Configure meson build
-            # Use local 'build' directory and '.' as source when running inside module_path
-            # This avoids passing paths that meson will interpret relative to cwd and
-            # causing doubled paths like src/skyborn/spharm/src/...
+            # Configure meson build with custom install directory for wheel builds
             print(f"Configuring meson build in {build_dir} (cwd={module_path})")
+
             setup_cmd = [
                 "meson",
                 "setup",
@@ -279,6 +273,18 @@ class MesonBuildExt(build_ext):
                 "--buildtype=release",
                 "-Db_lto=true",
             ]
+
+            # For wheel builds, configure custom install directory
+            if not self.inplace and hasattr(self, "build_lib") and self.build_lib:
+                # Tell meson to install to our build directory instead of system
+                build_lib_path = Path(self.build_lib).resolve()
+                setup_cmd.extend(
+                    [
+                        f"--python.purelibdir={build_lib_path}",
+                        f"--python.platlibdir={build_lib_path}",
+                    ]
+                )
+                print(f"DEBUG: Configuring meson to install to: {build_lib_path}")
 
             print(f"Running: {' '.join(setup_cmd)} (cwd={module_path})")
 
@@ -356,7 +362,31 @@ class MesonBuildExt(build_ext):
             if result.stderr:
                 print("Build warnings/errors:", result.stderr)
 
-            # File moving is now handled directly in meson.build
+            # Install using meson (this will handle the path configuration we set up)
+            if not self.inplace and hasattr(self, "build_lib") and self.build_lib:
+                print(f"Installing meson build outputs to {self.build_lib}")
+                install_cmd = ["meson", "install", "-C", "build", "--only-changed"]
+                print(f"Running: {' '.join(install_cmd)} (cwd={module_path})")
+
+                try:
+                    install_result = subprocess.run(
+                        install_cmd,
+                        cwd=str(module_path),
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        env=env,
+                    )
+                    if install_result.stdout:
+                        print("Install output:", install_result.stdout)
+                except subprocess.CalledProcessError as e:
+                    print(f"ERROR: Meson install failed: {e}")
+                    print(
+                        "This should not happen with the new setup. Please check meson configuration."
+                    )
+                    raise
+            else:
+                print("Inplace build - extensions handled by meson custom_target")
 
             print(f"Meson build for {module['name']} completed successfully!")
 
@@ -372,6 +402,28 @@ class MesonBuildExt(build_ext):
                 if hasattr(e, "stderr") and e.stderr:
                     print("Stderr:", e.stderr)
             raise  # Re-raise the exception since we're not using f2py fallback
+
+    def _discover_meson_modules(self):
+        """
+        Auto-discover meson modules by looking for meson.build files
+        in skyborn subpackages.
+        """
+        modules = []
+        skyborn_src = Path("src") / "skyborn"
+
+        # Look for subdirectories with meson.build files
+        for subdir in skyborn_src.iterdir():
+            if subdir.is_dir() and (subdir / "meson.build").exists():
+                module_name = subdir.name
+                print(f"DEBUG: Discovered meson module: {module_name}")
+                modules.append(
+                    {
+                        "name": module_name,
+                        "path": subdir,
+                    }
+                )
+
+        return modules
 
 
 class CustomDevelop(develop):
