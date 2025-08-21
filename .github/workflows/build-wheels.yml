@@ -147,7 +147,7 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
-          CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc-13 CXX=g++-13 MACOSX_DEPLOYMENT_TARGET=13.0
+          CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc-13 CXX=g++-13 MACOSX_DEPLOYMENT_TARGET=14.0
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
