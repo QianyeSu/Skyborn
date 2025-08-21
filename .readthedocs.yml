@@ -8,14 +8,10 @@ version: 2
 conda:
   environment: docs/environment.yml
 
-# Install documentation dependencies AND the package with compilation
+# Install only documentation dependencies (package compiled in build stage)
 python:
   install:
     - requirements: requirements-docs.txt
-    - method: pip
-      path: .
-      extra_requirements:
-        - docs
 
 # Use standard Sphinx build process for better cross-reference support
 sphinx:
@@ -29,20 +25,58 @@ build:
     python: "mambaforge-22.9"
   jobs:
     pre_build:
-      # Set environment variables to help compilation succeed
+      # Set environment variables
       - export SKYBORN_DOCS_BUILD=1
       - export SPHINX_WARN_AS_ERROR=0
+      # Check what was actually installed in the conda environment
+      - echo "=== Conda Environment Info ==="
+      - conda info
+      - echo "=== Checking for build tools in conda environment ==="
+      - conda list | grep -E "(gcc|gfortran|meson|ninja|pkg-config|compiler)" || echo "⚠️ Some build tools not found in conda list"
+      - echo "=== Full conda package list (first 20) ==="
+      - conda list | head -20
+      # Try to install missing build tools if needed
+      - conda install -y gcc gfortran meson ninja pkg-config -c conda-forge || echo "Failed to install some build tools"
       # Set up compilation environment
       - export CC=gcc
       - export FC=gfortran
       - export PKG_CONFIG_PATH="${CONDA_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH}"
-      # Ensure meson can find tools
-      - which meson || echo "Meson not found"
-      - which ninja || echo "Ninja not found"
-      - which gcc || echo "GCC not found"
-      - which gfortran || echo "Gfortran not found"
+      # Check for essential build tools (show what we have, don't fail yet)
+      - echo "=== Checking for build tools ==="
+      - which meson && echo "✅ Meson found" || echo "❌ Meson not found"
+      - which ninja && echo "✅ Ninja found" || echo "❌ Ninja not found"
+      - which gcc && echo "✅ GCC found" || echo "❌ GCC not found"
+      - which gfortran && echo "✅ Gfortran found" || echo "❌ Gfortran not found"
+      - which pkg-config && echo "✅ pkg-config found" || echo "❌ pkg-config not found"
+      # Also check for alternative compiler names
+      - which cc && echo "✅ CC found" || echo "❌ CC not found"
+      - which fc && echo "✅ FC found" || echo "❌ FC not found"
+      # Show available compilers in PATH
+      - echo "=== Available compilers in PATH ==="
+      - ls -la /usr/bin/*gcc* || echo "No gcc variants found"
+      - ls -la /usr/bin/*gfortran* || echo "No gfortran variants found"
+      # Show tool versions if available
+      - meson --version 2>/dev/null || echo "Meson not available"
+      - ninja --version 2>/dev/null || echo "Ninja not available"
       # Check source structure
       - ls -la src/skyborn/ || echo "Source directory check"
+    build:
+      # Try to compile extensions in-place (fallback to pip install if setup.py doesn't exist)
+      - echo "Building Fortran and Cython extensions in-place..."
+      - |
+        if [ -f setup.py ]; then
+          echo "Using setup.py for in-place compilation..."
+          python setup.py build_ext --inplace --verbose
+        else
+          echo "No setup.py found, using pip install..."
+          python -m pip install --verbose --no-deps --editable .
+        fi
+      # Ensure source is in Python path for Sphinx
+      - export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
+      # Test import
+      - python -c "import sys; sys.path.insert(0, 'src'); import skyborn; print(f'✅ Skyborn v{skyborn.__version__} imported successfully')"
+      # List compiled extensions for debugging
+      - find src/ -name "*.so" -o -name "*.pyd" | head -10 || echo "No compiled extensions found"
     post_build:
       # Validate that key pages and cross-references exist
       - test -f $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "Functions page generated" || echo "Functions page missing"
