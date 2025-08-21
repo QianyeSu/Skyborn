@@ -1,7 +1,50 @@
 Changelog
 =========
 
-Version 0.3.12 (Current)
+Version 0.3.12.post1 (Current)
+-------------------------------
+
+**🔧 Critical Bug Fixes**
+
+* **Fixed spharm Module Wheel Packaging**: Resolved critical issue where compiled Fortran extensions (``_spherepack*.pyd`` files) were missing from wheel distributions built via GitHub CI
+
+  - **Root Cause**: Meson build system was installing to system paths instead of setuptools build directory
+  - **Solution**: Configured meson to install directly to setuptools build directory using ``--python.purelibdir`` and ``--python.platlibdir`` parameters
+  - **Impact**: Users can now install pre-compiled wheels with full spharm functionality
+
+* **Improved Build System Integration**: Streamlined meson-setuptools integration for better maintainability
+
+  - **Enhanced setup.py**: Added auto-discovery of meson modules for future extensibility
+  - **Simplified Logic**: Removed complex file copying mechanisms in favor of native meson installation
+  - **Better Error Handling**: Improved build process reliability across platforms
+
+* **Fixed macOS Wheel Building**: Resolved OpenMP dependency compatibility issues
+
+  - **Issue**: ``libgomp.1.dylib`` required minimum macOS 14.0 target version
+  - **Solution**: Set ``MACOSX_DEPLOYMENT_TARGET=14.0`` in GitHub Actions workflow
+  - **Note**: macOS 13 users can still install from source using ``pip install --no-binary=skyborn skyborn``
+
+**🛠️ Technical Improvements**
+
+* **Enhanced Meson Configuration**:
+
+  - Changed from ``install: false`` to ``install: true`` with proper ``install_dir`` configuration
+  - Maintained smart copying logic for ``--inplace`` builds
+  - Enhanced cross-platform compatibility
+
+* **Streamlined GitHub Actions**:
+
+  - Updated wheel building workflow for better OpenMP library handling
+  - Ensures compatibility with modern macOS development environments
+  - Improved build reliability and error reporting
+
+**✅ Validation**
+
+* Successfully tested wheel building and installation across all supported platforms
+* Confirmed ``_spherepack*.pyd`` files are correctly included in wheel distributions
+* Verified functionality through comprehensive installation tests
+
+Version 0.3.12
 -------------------------------
 
 **🚀 Major Performance Enhancements**
