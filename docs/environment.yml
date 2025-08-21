@@ -15,10 +15,11 @@ dependencies:
   - sphinx-autodoc-typehints
   - sphinx-copybutton
   - toml
-  # Scientific packages for documentation (mocked, not actually imported)
+  # Scientific packages for documentation (needed for imports)
   - numpy
   - pandas
   - scipy
   - matplotlib-base
+  - xarray  # Required by skyborn.calc.calculations
   # NOTE: Using documentation-only approach with mocked imports
   # No compilation tools needed since we mock all compiled modules
