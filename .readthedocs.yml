@@ -4,31 +4,35 @@
 
 version: 2
 
-conda:
-  environment: docs/environment.yml
+# Use standard Python build instead of custom commands
+python:
+  install:
+    - method: pip
+      path: .
+      extra_requirements:
+        - docs
 
+# Use standard Sphinx build process for better cross-reference support
+sphinx:
+  configuration: docs/source/conf.py
+  fail_on_warning: false
+
+# Standard build configuration
 build:
   os: ubuntu-22.04
   tools:
     python: "mambaforge-22.9"
-  commands:
-    # Set environment variables to skip Fortran compilation
-    - export SKYBORN_DOCS_BUILD=1
-    - export SKIP_FORTRAN=1
-    - export SPHINX_WARN_AS_ERROR=0
-    # Install documentation requirements
-    - python -m pip install --upgrade pip setuptools wheel
-    - python -m pip install -r requirements-docs.txt
-    # Try to install package in docs mode (skip if fails but ensure imports work)
-    - python -m pip install -e . || echo "⚠️ Package install failed, building docs without package"
-    # Test if skyborn can be imported, if not create minimal mock
-    - python -c "import skyborn" || python -c "import sys; sys.path.insert(0, 'src'); import skyborn" || echo "⚠️ Skyborn import failed, documentation may have broken references"
-    # Build documentation with verbose output and error handling
-    - export LC_ALL=C.UTF-8 && export LANG=C.UTF-8 && cd docs && python build_docs.py --clean
-    # Copy to output directory
-    - mkdir -p $READTHEDOCS_OUTPUT/html
-    - cp -r docs/build/html/* $READTHEDOCS_OUTPUT/html/
-    # Validate that key pages exist
-    - test -f $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "✅ Functions page generated" || echo "⚠️ Functions page missing"
-    - test -f $READTHEDOCS_OUTPUT/html/api/conversion.html && echo "✅ API pages generated" || echo "⚠️ API pages missing"
-    - echo "✅ Documentation build completed"
+  jobs:
+    pre_build:
+      # Set environment variables to skip Fortran compilation
+      - export SKYBORN_DOCS_BUILD=1
+      - export SKIP_FORTRAN=1
+      - export SPHINX_WARN_AS_ERROR=0
+      # Add source to Python path for imports
+      - export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
+    post_build:
+      # Validate that key pages and cross-references exist
+      - test -f $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "✅ Functions page generated" || echo "⚠️ Functions page missing"
+      - test -f $READTHEDOCS_OUTPUT/html/api/conversion.html && echo "✅ API pages generated" || echo "⚠️ API pages missing"
+      # Test a specific cross-reference link
+      - grep -q 'href="api/conversion.html#skyborn.conversion.grib_to_netcdf"' $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "✅ Cross-references working" || echo "⚠️ Cross-references broken"
