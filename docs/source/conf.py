@@ -157,8 +157,19 @@ intersphinx_mapping = {
 # Let skyborn's own compiled modules build naturally for proper cross-references.
 
 autodoc_mock_imports = [
-    # External scientific libraries
-
+    # External scientific libraries that might be missing on RTD
+    'eccodes',
+    'cfgrib',
+    'netCDF4',
+    'cartopy',
+    'cartopy.crs',
+    'cartopy.feature',
+    'metpy',
+    'metpy.calc',
+    'pyshtools',
+    'shtns',
+    'fortls',
+    # Only add more here if they're actually missing on RTD
 ]
 
 
