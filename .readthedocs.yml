@@ -15,12 +15,7 @@ python:
       path: .
     - requirements: requirements-docs.txt
 
-# Sphinx configuration (required by RTD)
-sphinx:
-  configuration: docs/source/conf.py
-  fail_on_warning: false
-
-# Use custom build script optimized for RTD
+# Use custom build script optimized for RTD (no sphinx configuration to avoid double build)
 build:
   os: ubuntu-22.04
   tools:
