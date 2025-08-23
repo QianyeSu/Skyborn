@@ -11,6 +11,7 @@ import xarray as xr
 from numpy.testing import assert_array_almost_equal, assert_array_equal
 from skyborn.calc.calculations import (
     linear_regression,
+    spatial_correlation,
     convert_longitude_range,
     pearson_correlation,
     spearman_correlation,
@@ -178,6 +179,219 @@ class TestLinearRegression:
 
         assert isinstance(slopes_xr, np.ndarray)
         assert isinstance(p_values_xr, np.ndarray)
+
+
+class TestSpatialCorrelation:
+    """Test spatial correlation functionality."""
+
+    @pytest.fixture
+    def sample_spatial_data(self):
+        """Create sample spatial correlation data."""
+        np.random.seed(42)
+        n_time, n_lat, n_lon = 50, 20, 30
+
+        # Create predictor time series
+        predictor = np.random.randn(n_time)
+
+        # Create spatial data
+        data = np.random.randn(n_time, n_lat, n_lon)
+
+        # Add some regions with known correlations
+        # Strong positive correlation region
+        for lat in range(5, 10):
+            for lon in range(10, 15):
+                data[:, lat, lon] = 0.8 * predictor + 0.2 * np.random.randn(n_time)
+
+        # Strong negative correlation region
+        for lat in range(15, 18):
+            for lon in range(20, 25):
+                data[:, lat, lon] = -0.7 * predictor + 0.3 * np.random.randn(n_time)
+
+        return data, predictor
+
+    def test_spatial_correlation_basic(self, sample_spatial_data):
+        """Test basic spatial correlation functionality."""
+        data, predictor = sample_spatial_data
+
+        corr_coef, p_values = spatial_correlation(data, predictor)
+
+        # Check output shapes
+        assert corr_coef.shape == data.shape[1:]  # (n_lat, n_lon)
+        assert p_values.shape == data.shape[1:]
+
+        # Check correlation coefficient range
+        valid_corr = corr_coef[~np.isnan(corr_coef)]
+        assert np.all(valid_corr >= -1.0)
+        assert np.all(valid_corr <= 1.0)
+
+        # Check p-values range
+        valid_p = p_values[~np.isnan(p_values)]
+        assert np.all(valid_p >= 0.0)
+        assert np.all(valid_p <= 1.0)
+
+    def test_spatial_correlation_known_relationships(self, sample_spatial_data):
+        """Test spatial correlation with known relationships."""
+        data, predictor = sample_spatial_data
+
+        corr_coef, p_values = spatial_correlation(data, predictor)
+
+        # Check positive correlation region (lat 5-9, lon 10-14)
+        pos_corr_region = corr_coef[5:10, 10:15]
+        assert np.mean(pos_corr_region) > 0.5  # Should be strongly positive
+
+        # Check negative correlation region (lat 15-17, lon 20-24)
+        neg_corr_region = corr_coef[15:18, 20:25]
+        assert np.mean(neg_corr_region) < -0.4  # Should be strongly negative
+
+        # Check corresponding p-values are significant
+        pos_p_region = p_values[5:10, 10:15]
+        neg_p_region = p_values[15:18, 20:25]
+        assert np.mean(pos_p_region < 0.05) > 0.8  # Most should be significant
+        assert np.mean(neg_p_region < 0.05) > 0.8
+
+    def test_spatial_correlation_xarray_input(self, sample_spatial_data):
+        """Test spatial correlation with xarray input."""
+        data_np, predictor_np = sample_spatial_data
+
+        # Convert to xarray
+        time_coord = np.arange(len(predictor_np))
+        lat_coord = np.arange(data_np.shape[1])
+        lon_coord = np.arange(data_np.shape[2])
+
+        data_xr = xr.DataArray(
+            data_np,
+            dims=["time", "lat", "lon"],
+            coords={"time": time_coord, "lat": lat_coord, "lon": lon_coord},
+        )
+        predictor_xr = xr.DataArray(
+            predictor_np, dims=["time"], coords={"time": time_coord}
+        )
+
+        # Test with xarray inputs
+        corr_xr, p_xr = spatial_correlation(data_xr, predictor_xr)
+
+        # Should produce same results as numpy version
+        corr_np, p_np = spatial_correlation(data_np, predictor_np)
+
+        assert_array_almost_equal(corr_xr, corr_np)
+        assert_array_almost_equal(p_xr, p_np)
+
+    def test_spatial_correlation_with_nans(self):
+        """Test spatial correlation with NaN values."""
+        np.random.seed(42)
+        n_time, n_lat, n_lon = 60, 15, 20
+
+        # Create data with NaN values
+        predictor = np.random.randn(n_time)
+        predictor[5:10] = np.nan  # Add NaN to predictor
+
+        data = np.random.randn(n_time, n_lat, n_lon)
+        data[:10, :3, :3] = np.nan  # Add NaN block to data
+
+        # Add some known correlation where there are no NaNs
+        for lat in range(8, 12):
+            for lon in range(10, 15):
+                data[:, lat, lon] = 0.7 * predictor + 0.3 * np.random.randn(n_time)
+
+        corr_coef, p_values = spatial_correlation(data, predictor)
+
+        # Check shapes
+        assert corr_coef.shape == (n_lat, n_lon)
+        assert p_values.shape == (n_lat, n_lon)
+
+        # Areas with too many NaNs should be NaN in results
+        assert np.all(np.isnan(corr_coef[:3, :3]))
+        assert np.all(np.isnan(p_values[:3, :3]))
+
+        # Areas with sufficient data should have valid results
+        valid_region = corr_coef[8:12, 10:15]
+        assert not np.all(np.isnan(valid_region))
+        assert np.mean(valid_region[~np.isnan(valid_region)]) > 0.3
+
+    def test_spatial_correlation_input_validation(self):
+        """Test input validation for spatial correlation."""
+        # Test mismatched time dimensions
+        data = np.random.randn(50, 10, 15)
+        predictor = np.random.randn(40)  # Wrong length
+
+        with pytest.raises(ValueError, match="Time dimension of data"):
+            spatial_correlation(data, predictor)
+
+    def test_spatial_correlation_edge_cases(self):
+        """Test edge cases for spatial correlation."""
+        n_time = 20
+
+        # Test with constant predictor
+        predictor_constant = np.ones(n_time)
+        data = np.random.randn(n_time, 5, 5)
+
+        corr_coef, p_values = spatial_correlation(data, predictor_constant)
+
+        # With constant predictor, correlations should be NaN or 0
+        assert np.all(np.isnan(corr_coef) | (corr_coef == 0))
+
+        # Test with very short time series
+        predictor_short = np.array([1.0, 2.0])
+        data_short = np.random.randn(2, 3, 3)
+
+        corr_short, p_short = spatial_correlation(data_short, predictor_short)
+
+        # With only 2 points, should get NaN (insufficient data)
+        assert np.all(np.isnan(corr_short))
+        assert np.all(np.isnan(p_short))
+
+    def test_spatial_correlation_output_types(self, sample_spatial_data):
+        """Test that outputs are numpy arrays regardless of input type."""
+        data, predictor = sample_spatial_data
+
+        corr_coef, p_values = spatial_correlation(data, predictor)
+
+        assert isinstance(corr_coef, np.ndarray)
+        assert isinstance(p_values, np.ndarray)
+
+        # Test with xarray input
+        data_xr = xr.DataArray(data, dims=["time", "lat", "lon"])
+        predictor_xr = xr.DataArray(predictor, dims=["time"])
+
+        corr_xr, p_xr = spatial_correlation(data_xr, predictor_xr)
+
+        assert isinstance(corr_xr, np.ndarray)
+        assert isinstance(p_xr, np.ndarray)
+
+    def test_spatial_correlation_accuracy_vs_scipy(self):
+        """Test accuracy against scipy.stats.pearsonr."""
+        from scipy.stats import pearsonr
+
+        np.random.seed(123)
+        n_time = 100
+
+        # Create simple test case
+        predictor = np.random.randn(n_time)
+        data = np.zeros((n_time, 3, 3))
+
+        # Fill with known relationships
+        for lat in range(3):
+            for lon in range(3):
+                correlation_strength = 0.1 * (
+                    lat + lon + 1
+                )  # Vary correlation strength
+                data[:, lat, lon] = (
+                    correlation_strength * predictor + 0.5 * np.random.randn(n_time)
+                )
+
+        # Test our function
+        corr_ours, p_ours = spatial_correlation(data, predictor)
+
+        # Compare with scipy for each point
+        for lat in range(3):
+            for lon in range(3):
+                r_scipy, p_scipy = pearsonr(data[:, lat, lon], predictor)
+
+                # Check correlation coefficient
+                assert abs(corr_ours[lat, lon] - r_scipy) < 1e-10
+
+                # Check p-value
+                assert abs(p_ours[lat, lon] - p_scipy) < 1e-8
 
 
 class TestLongitudeConversion:
