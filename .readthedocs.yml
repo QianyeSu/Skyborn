@@ -20,8 +20,6 @@ build:
   os: ubuntu-22.04
   tools:
     python: "mambaforge-22.9"
-  commands:
-    - python docs/build_docs.py
   jobs:
     pre_build:
       # Set up compilation environment
@@ -38,6 +36,8 @@ build:
       # Build skyborn with Fortran/Cython extensions
       - echo "🏗️ Building Skyborn with compiled extensions..."
       - python setup.py build_ext --inplace --verbose
+      # Build documentation using custom script
+      - python docs/build_docs.py
     post_build:
       # Verify documentation was generated
       - test -f $READTHEDOCS_OUTPUT/html/index.html && echo "✅ Entry page generated" || echo "❌ Entry page missing"
