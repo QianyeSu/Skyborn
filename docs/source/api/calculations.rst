@@ -8,6 +8,8 @@ Statistical Functions
 
 .. autofunction:: skyborn.calc.linear_regression
 
+.. autofunction:: skyborn.calc.spatial_correlation
+
 .. autofunction:: skyborn.calc.pearson_correlation
 
 .. autofunction:: skyborn.calc.spearman_correlation
@@ -52,6 +54,7 @@ Example Usage
 
    import skyborn as skb
    import numpy as np
+   import xarray as xr
 
    # Statistical analysis
    x = np.random.randn(100)
@@ -59,6 +62,20 @@ Example Usage
 
    slope, intercept, r_value = skb.linear_regression(x, y)
    correlation = skb.pearson_correlation(x, y)
+
+   # Spatial correlation analysis
+   # Create sample spatial data (time, lat, lon)
+   n_time, n_lat, n_lon = 120, 36, 72
+   spatial_data = np.random.randn(n_time, n_lat, n_lon)
+   time_series = np.random.randn(n_time)
+
+   # Calculate spatial correlations efficiently
+   corr_map, p_values = skb.spatial_correlation(spatial_data, time_series)
+
+   # Works with xarray too
+   data_xr = xr.DataArray(spatial_data, dims=['time', 'lat', 'lon'])
+   predictor_xr = xr.DataArray(time_series, dims=['time'])
+   corr_xr, p_xr = skb.spatial_correlation(data_xr, predictor_xr)
 
    # Emergent constraint analysis
    x_values = np.linspace(-3, 3, 100)
