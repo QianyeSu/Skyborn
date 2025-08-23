@@ -10,6 +10,7 @@ This module contains various calculation functions including:
 
 from .calculations import (
     linear_regression,
+    spatial_correlation,
     convert_longitude_range,
     pearson_correlation,
     spearman_correlation,
