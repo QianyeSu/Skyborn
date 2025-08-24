@@ -3,24 +3,23 @@ Functions for curved quiver plots.
 """
 
 from __future__ import annotations
+
 from collections.abc import Hashable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
-# import matplotlib.font_manager
-from .modplot import CurvedQuiverplotSet
-from typing import Literal
-from matplotlib.patches import FancyArrowPatch
-
-import xarray as xr
 import matplotlib.pyplot as plt
+import xarray as xr
 
 # import numpy as np
 # import matplotlib
 from matplotlib.artist import Artist, allow_rasterization
-from matplotlib.patches import Rectangle
-from matplotlib.text import Text
-from matplotlib.figure import Figure
 from matplotlib.backend_bases import RendererBase
+from matplotlib.figure import Figure
+from matplotlib.patches import FancyArrowPatch, Rectangle
+from matplotlib.text import Text
+
+# import matplotlib.font_manager
+from .modplot import CurvedQuiverplotSet
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes

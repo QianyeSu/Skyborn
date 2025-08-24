@@ -47,7 +47,7 @@ Note:
 from __future__ import absolute_import, print_function
 
 import warnings
-from typing import Tuple, Optional, Union, Any, Dict
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import numpy.ma as ma

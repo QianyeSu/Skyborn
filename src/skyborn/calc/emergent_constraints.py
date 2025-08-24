@@ -18,9 +18,10 @@ Date: 2023.03.15
 Modified for Skyborn package with type annotations and improved naming
 """
 
+from typing import Tuple, Union
+
 import numpy as np
 import xarray as xr
-from typing import Tuple, Union
 
 __all__ = [
     "gaussian_pdf",

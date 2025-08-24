@@ -7,7 +7,7 @@ default_stages:
 
 # Set the default language version
 default_language_version:
-  python: python3.10
+  python: python3.10  # Use current environment Python version
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -25,5 +25,12 @@ repos:
     rev: 24.10.0
     hooks:
       - id: black
+        types: [python]
+        exclude: ^docs/
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
         types: [python]
         exclude: ^docs/

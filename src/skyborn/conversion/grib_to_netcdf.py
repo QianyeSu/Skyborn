@@ -12,13 +12,13 @@ References:
     - https://confluence.ecmwf.int/display/ECC/grib_to_netcdf
 """
 
-import subprocess
+import logging
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
-from typing import Union, Optional, List, Literal
-import shutil
-import logging
+from typing import List, Literal, Optional, Union
 
 __all__ = [
     "convert_grib_to_nc",

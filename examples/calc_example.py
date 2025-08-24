@@ -5,16 +5,18 @@ This example demonstrates how to use the emergent constraint methods
 and statistical calculations in the new calc module structure.
 """
 
+import os
+import sys
+
+import numpy as np
+import xarray as xr
+
 from skyborn.calc import (
     calc_GAUSSIAN_PDF,
     calc_PDF_EC_PRIOR,
     linear_regression,
     pearson_correlation,
 )
-import numpy as np
-import xarray as xr
-import sys
-import os
 
 # Add the src directory to Python path for development
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
