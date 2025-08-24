@@ -12,8 +12,11 @@ Main Functions:
 """
 
 from __future__ import annotations
-from typing import Tuple, List, Union, Literal
+
+from typing import List, Literal, Tuple, Union
+
 import numpy as np
+
 from skyborn.spharm import gaussian_lats_wts
 
 __all__ = ["get_apiorder", "inspect_gridtype", "to3d"]

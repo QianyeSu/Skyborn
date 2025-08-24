@@ -2,11 +2,12 @@
 
 from __future__ import absolute_import
 
-import pytest
 import numpy as np
 import numpy.ma as ma
+import pytest
 
 from skyborn.windspharm.tests import VectorWindTest, solvers
+
 from .reference import reference_solutions
 
 

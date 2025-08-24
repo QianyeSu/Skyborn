@@ -26,8 +26,7 @@ Example:
 
 from __future__ import absolute_import
 
-from . import standard
-from . import tools
+from . import standard, tools
 
 # Import main class for easier access
 from .standard import VectorWind

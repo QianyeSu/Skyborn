@@ -11,17 +11,19 @@ Data source: hot_model_ECS.xlsx
 Method reference: https://github.com/blackcata/Emergent_Constraints/tree/master
 """
 
+import os
+import sys
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+
 from skyborn.calc import (
-    gaussian_pdf,
     emergent_constraint_posterior,
+    gaussian_pdf,
     pearson_correlation,
 )
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import sys
-import os
 
 # Add Skyborn to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))

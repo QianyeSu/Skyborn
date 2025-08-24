@@ -14,10 +14,11 @@ Output:
 
 import os
 import sys
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
 
 # Add src to path for development
 current_dir = os.path.dirname(os.path.abspath(__file__))

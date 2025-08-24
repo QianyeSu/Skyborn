@@ -5,26 +5,27 @@ This module tests the modular plotting utilities and streamline functionality,
 including the velovect function and supporting classes.
 """
 
-import pytest
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib
 from unittest.mock import Mock, patch
+
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pytest
 from matplotlib.collections import LineCollection, PatchCollection
 from matplotlib.patches import FancyArrowPatch
 
 from skyborn.plot.modplot import (
-    velovect,
     CurvedQuiverplotSet,
-    Grid,
-    StreamMask,
     DomainMap,
-    interpgrid,
+    Grid,
+    InvalidIndexError,
+    OutOfBounds,
+    StreamMask,
+    TerminateTrajectory,
     _gen_starting_points,
     _get_integrator,
-    InvalidIndexError,
-    TerminateTrajectory,
-    OutOfBounds,
+    interpgrid,
+    velovect,
 )
 
 

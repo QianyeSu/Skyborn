@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from skyborn.windspharm.tests import VectorWindTest, solvers
+
 from .reference import reference_solutions
 
 

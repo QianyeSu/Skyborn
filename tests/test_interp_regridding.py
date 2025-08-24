@@ -5,24 +5,25 @@ This module tests the regridding and interpolation functionality
 in the skyborn.interp.regridding module.
 """
 
-import pytest
 import numpy as np
+import pytest
 import xarray as xr
 from numpy.testing import assert_array_almost_equal, assert_array_equal
+
 from skyborn.interp.regridding import (
-    Grid,
-    Regridder,
-    NearestRegridder,
     BilinearRegridder,
     ConservativeRegridder,
-    regrid_dataset,
-    nearest_neighbor_indices,
-    _detect_coordinate_names,
+    Grid,
+    NearestRegridder,
+    Regridder,
+    _assert_increasing,
     _conservative_latitude_weights,
     _conservative_longitude_weights,
+    _detect_coordinate_names,
     _latitude_overlap,
     _longitude_overlap,
-    _assert_increasing,
+    nearest_neighbor_indices,
+    regrid_dataset,
 )
 
 

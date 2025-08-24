@@ -2,10 +2,10 @@
 """
 Analyze F90 source files to count subroutine call frequencies
 """
+import glob
 import os
 import re
 from collections import defaultdict
-import glob
 
 
 def analyze_f90_files(directory):

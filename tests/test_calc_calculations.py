@@ -5,29 +5,29 @@ This module tests the statistical and mathematical calculation functions
 in the skyborn.calc.calculations module.
 """
 
-import pytest
 import numpy as np
+import pytest
 import xarray as xr
 from numpy.testing import assert_array_almost_equal, assert_array_equal
+
 from skyborn.calc.calculations import (
-    linear_regression,
-    spatial_correlation,
-    convert_longitude_range,
-    pearson_correlation,
-    spearman_correlation,
-    kendall_correlation,
     calculate_potential_temperature,
+    convert_longitude_range,
+    kendall_correlation,
+    linear_regression,
+    pearson_correlation,
+    spatial_correlation,
+    spearman_correlation,
 )
-from skyborn.calc.emergent_constraints import (
-    gaussian_pdf,
-    emergent_constraint_posterior,
-    emergent_constraint_prior,
+from skyborn.calc.emergent_constraints import (  # Legacy functions for backward compatibility testing
     _calculate_std_from_pdf,
-    # Legacy functions for backward compatibility testing
     calc_GAUSSIAN_PDF,
     calc_PDF_EC,
-    find_std_from_PDF,
     calc_PDF_EC_PRIOR,
+    emergent_constraint_posterior,
+    emergent_constraint_prior,
+    find_std_from_PDF,
+    gaussian_pdf,
 )
 
 

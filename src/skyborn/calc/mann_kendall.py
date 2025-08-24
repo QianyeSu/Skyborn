@@ -50,13 +50,14 @@ Flexible dimension specification with xarray:
 >>> print(results.trend.values.shape)  # (10, 15)
 """
 
+import warnings
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+
+import dask.array as da
 import numpy as np
 import scipy.stats as stats
 import xarray as xr
-import dask.array as da
 from dask.diagnostics import ProgressBar
-from typing import Tuple, Union, Optional, Dict, Any, List, TYPE_CHECKING
-import warnings
 
 __all__ = [
     "mann_kendall_test",
