@@ -25,7 +25,8 @@ Example:
 """
 
 from __future__ import annotations
-from typing import Optional, Tuple, Union, Any
+
+from typing import Any, Optional, Tuple, Union
 
 __all__ = ["VectorWind"]
 

@@ -1,10 +1,11 @@
 # import os
+from typing import Any, Dict, List, Tuple, Union
+
 import numpy as np
 
 # import pandas as pd
 # from glob import glob
 from scipy import stats
-from typing import Dict, List, Tuple, Union, Any
 
 __all__ = [
     "speco",

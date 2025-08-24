@@ -5,19 +5,20 @@ This module tests the curved quiver plotting functionality,
 including the curved_quiver function and CurvedQuiverLegend class.
 """
 
-import pytest
-import numpy as np
-import matplotlib.pyplot as plt
-import xarray as xr
+from unittest.mock import MagicMock, Mock, patch
+
 import matplotlib
-from unittest.mock import Mock, patch, MagicMock
+import matplotlib.pyplot as plt
+import numpy as np
+import pytest
+import xarray as xr
 from matplotlib.patches import FancyArrowPatch
 from matplotlib.text import Text
 
 from skyborn.plot.curved_quiver_plot import (
-    curved_quiver,
-    add_curved_quiverkey,
     CurvedQuiverLegend,
+    add_curved_quiverkey,
+    curved_quiver,
 )
 from skyborn.plot.modplot import CurvedQuiverplotSet
 

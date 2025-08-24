@@ -7,17 +7,17 @@ This module provides various interpolation methods including:
 - Conservative interpolation
 """
 
-from .regridding import (
-    Grid,
-    Regridder,
-    NearestRegridder,
-    BilinearRegridder,
-    ConservativeRegridder,
-    nearest_neighbor_indices,
-    regrid_dataset,
-)
 from .interpolation import (
     interp_hybrid_to_pressure,
-    interp_sigma_to_hybrid,
     interp_multidim,
+    interp_sigma_to_hybrid,
+)
+from .regridding import (
+    BilinearRegridder,
+    ConservativeRegridder,
+    Grid,
+    NearestRegridder,
+    Regridder,
+    nearest_neighbor_indices,
+    regrid_dataset,
 )

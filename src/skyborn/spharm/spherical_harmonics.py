@@ -121,8 +121,8 @@ OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 """
 
-from typing import Optional, Tuple, Union, Literal, Any, Dict, Callable
 import math
+from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union
 
 __all__ = [
     "Spharmt",

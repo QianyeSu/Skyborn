@@ -6,19 +6,20 @@ implementations of Mann-Kendall trend detection algorithms, including
 dask-based parallel processing, edge cases, and error handling.
 """
 
-import xarray as xr
-import pandas as pd
-from dask.diagnostics import ProgressBar
-import dask.array as da
-import dask
-import scipy
 import importlib.util
-import numpy as np
-import pytest
-import warnings
-import unittest.mock
-import sys
 import os
+import sys
+import unittest.mock
+import warnings
+
+import dask
+import dask.array as da
+import numpy as np
+import pandas as pd
+import pytest
+import scipy
+import xarray as xr
+from dask.diagnostics import ProgressBar
 
 # Add the src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))

@@ -5,21 +5,22 @@ This module contains comprehensive tests for the GRIB to NetCDF conversion
 functionality, including both unit tests and integration tests.
 """
 
-import pytest
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import numpy as np
+import pytest
 
 from skyborn.conversion.grib_to_netcdf import (
-    convert_grib_to_nc,
-    convert_grib_to_nc_simple,
-    batch_convert_grib_to_nc,
+    GribToNetCDFError,
+    _build_grib_to_netcdf_command,
     _check_grib_to_netcdf_available,
     _validate_grib_files,
-    _build_grib_to_netcdf_command,
-    GribToNetCDFError,
+    batch_convert_grib_to_nc,
+    convert_grib_to_nc,
+    convert_grib_to_nc_simple,
 )
 
 

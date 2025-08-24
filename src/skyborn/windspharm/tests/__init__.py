@@ -5,8 +5,8 @@ from __future__ import absolute_import
 import pytest
 
 from skyborn import windspharm
-from .utils import error
 
+from .utils import error
 
 # Create a mapping from interface name to VectorWind class.
 solvers = {"standard": windspharm.standard.VectorWind}

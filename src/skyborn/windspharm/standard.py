@@ -7,8 +7,11 @@ streamfunction, velocity potential, and other dynamical quantities.
 """
 
 from __future__ import annotations
-from typing import Optional, Union, Tuple, Literal
+
+from typing import Literal, Optional, Tuple, Union
+
 import numpy as np
+
 from skyborn.spharm import Spharmt, gaussian_lats_wts
 
 __all__ = ["VectorWind"]

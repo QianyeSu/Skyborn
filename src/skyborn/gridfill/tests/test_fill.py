@@ -2,9 +2,9 @@
 
 import os
 
-import pytest
 import numpy as np
 import numpy.ma as ma
+import pytest
 
 from skyborn.gridfill import fill
 

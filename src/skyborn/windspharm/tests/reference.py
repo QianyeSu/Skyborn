@@ -1,9 +1,11 @@
 """Reference solutions for testing the `windspharm` package."""
 
 from __future__ import absolute_import
+
 import os
 
 import numpy as np
+
 from skyborn.spharm import gaussian_lats_wts
 
 
@@ -42,8 +44,8 @@ def __read_reference_solutions(gridtype):
 
 def _wrap_iris(reference, lats, lons):
     try:
-        from iris.cube import Cube
         from iris.coords import DimCoord
+        from iris.cube import Cube
     except ImportError:
         raise ValueError("cannot use container 'iris' without iris")
 

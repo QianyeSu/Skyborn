@@ -1,6 +1,8 @@
+from typing import List, Tuple, Union
+
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Union
+
 from .utils import unproject_vectors
 
 __all__ = ["calculate_trend", "calculate_uncertainty", "all_trends"]
