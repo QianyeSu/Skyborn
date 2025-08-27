@@ -5,46 +5,46 @@
 python module tropopause_height ! in
     interface  ! in :tropopause_height
         subroutine tropopause_grid_3d(nlat,nlon,nlev,nlevm,pfull,tfull,tmsg,lapsec,punit,ptrop_hpa,htrop_m,itrop,lapse_rate,success) ! in :tropopause_height:tropopause_height.f90
-            integer, optional,intent(in),check(shape(pfull, 0) == nlat),depend(pfull) :: nlat=shape(pfull, 0)
-            integer, optional,intent(in),check(shape(pfull, 1) == nlon),depend(pfull) :: nlon=shape(pfull, 1)
-            integer, optional,intent(in),check(shape(pfull, 2) == nlev),depend(pfull) :: nlev=shape(pfull, 2)
+            integer, optional,intent(in),check(shape(tfull, 0) == nlat),depend(tfull) :: nlat=shape(tfull, 0)
+            integer, optional,intent(in),check(shape(tfull, 1) == nlon),depend(tfull) :: nlon=shape(tfull, 1)
+            integer, optional,intent(in),check(len(pfull) == nlev),depend(pfull) :: nlev=len(pfull)
             integer intent(in) :: nlevm
-            real(kind=8) dimension(nlat,nlon,nlev),intent(in) :: pfull
-            real(kind=8) dimension(nlat,nlon,nlev),intent(in),depend(nlev,nlon,nlat) :: tfull
+            real(kind=8) dimension(nlev),intent(in) :: pfull
+            real(kind=8) dimension(nlat,nlon,nlev),intent(in),depend(nlev) :: tfull
             real(kind=8) intent(in) :: tmsg
             real(kind=8) intent(in) :: lapsec
             integer intent(in) :: punit
-            real(kind=8) dimension(nlat,nlon),intent(out),depend(nlon,nlat) :: ptrop_hpa
-            real(kind=8) dimension(nlat,nlon),intent(out),depend(nlon,nlat) :: htrop_m
-            integer dimension(nlat,nlon),intent(out),depend(nlon,nlat) :: itrop
-            real(kind=8) dimension(nlat,nlon),intent(out),depend(nlon,nlat) :: lapse_rate
-            logical dimension(nlat,nlon),intent(out),depend(nlon,nlat) :: success
+            real(kind=8) dimension(nlat,nlon),intent(out),depend(nlat,nlon) :: ptrop_hpa
+            real(kind=8) dimension(nlat,nlon),intent(out),depend(nlat,nlon) :: htrop_m
+            integer dimension(nlat,nlon),intent(out),depend(nlat,nlon) :: itrop
+            real(kind=8) dimension(nlat,nlon),intent(out),depend(nlat,nlon) :: lapse_rate
+            logical dimension(nlat,nlon),intent(out),depend(nlat,nlon) :: success
         end subroutine tropopause_grid_3d
 
         subroutine tropopause_grid_4d(nlat,nlon,nlev,ntime,nlevm,pfull,tfull,tmsg,lapsec,punit,ptrop_hpa,htrop_m,itrop,lapse_rate,success) ! in :tropopause_height:tropopause_height.f90
-            integer, optional,intent(in),check(shape(pfull, 0) == nlat),depend(pfull) :: nlat=shape(pfull, 0)
-            integer, optional,intent(in),check(shape(pfull, 1) == nlon),depend(pfull) :: nlon=shape(pfull, 1)
-            integer, optional,intent(in),check(shape(pfull, 2) == nlev),depend(pfull) :: nlev=shape(pfull, 2)
-            integer, optional,intent(in),check(shape(pfull, 3) == ntime),depend(pfull) :: ntime=shape(pfull, 3)
+            integer, optional,intent(in),check(shape(tfull, 0) == nlat),depend(tfull) :: nlat=shape(tfull, 0)
+            integer, optional,intent(in),check(shape(tfull, 1) == nlon),depend(tfull) :: nlon=shape(tfull, 1)
+            integer, optional,intent(in),check(len(pfull) == nlev),depend(pfull) :: nlev=len(pfull)
+            integer, optional,intent(in),check(shape(tfull, 3) == ntime),depend(tfull) :: ntime=shape(tfull, 3)
             integer intent(in) :: nlevm
-            real(kind=8) dimension(nlat,nlon,nlev,ntime),intent(in) :: pfull
-            real(kind=8) dimension(nlat,nlon,nlev,ntime),intent(in),depend(nlev,ntime,nlon,nlat) :: tfull
+            real(kind=8) dimension(nlev),intent(in) :: pfull
+            real(kind=8) dimension(nlat,nlon,nlev,ntime),intent(in),depend(nlev) :: tfull
             real(kind=8) intent(in) :: tmsg
             real(kind=8) intent(in) :: lapsec
             integer intent(in) :: punit
-            real(kind=8) dimension(nlat,nlon,ntime),intent(out),depend(ntime,nlon,nlat) :: ptrop_hpa
-            real(kind=8) dimension(nlat,nlon,ntime),intent(out),depend(ntime,nlon,nlat) :: htrop_m
-            integer dimension(nlat,nlon,ntime),intent(out),depend(ntime,nlon,nlat) :: itrop
-            real(kind=8) dimension(nlat,nlon,ntime),intent(out),depend(ntime,nlon,nlat) :: lapse_rate
-            logical dimension(nlat,nlon,ntime),intent(out),depend(ntime,nlon,nlat) :: success
+            real(kind=8) dimension(nlat,nlon,ntime),intent(out),depend(nlat,nlon,ntime) :: ptrop_hpa
+            real(kind=8) dimension(nlat,nlon,ntime),intent(out),depend(nlat,nlon,ntime) :: htrop_m
+            integer dimension(nlat,nlon,ntime),intent(out),depend(nlat,nlon,ntime) :: itrop
+            real(kind=8) dimension(nlat,nlon,ntime),intent(out),depend(nlat,nlon,ntime) :: lapse_rate
+            logical dimension(nlat,nlon,ntime),intent(out),depend(nlat,nlon,ntime) :: success
         end subroutine tropopause_grid_4d
 
         subroutine tropopause_grid_2d(nspatial,nlev,nlevm,pfull,tfull,tmsg,lapsec,punit,ptrop_hpa,htrop_m,itrop,lapse_rate,success) ! in :tropopause_height:tropopause_height.f90
-            integer, optional,intent(in),check(shape(pfull, 0) == nspatial),depend(pfull) :: nspatial=shape(pfull, 0)
-            integer, optional,intent(in),check(shape(pfull, 1) == nlev),depend(pfull) :: nlev=shape(pfull, 1)
+            integer, optional,intent(in),check(shape(tfull, 0) == nspatial),depend(tfull) :: nspatial=shape(tfull, 0)
+            integer, optional,intent(in),check(len(pfull) == nlev),depend(pfull) :: nlev=len(pfull)
             integer intent(in) :: nlevm
-            real(kind=8) dimension(nspatial,nlev),intent(in) :: pfull
-            real(kind=8) dimension(nspatial,nlev),intent(in),depend(nlev,nspatial) :: tfull
+            real(kind=8) dimension(nlev),intent(in) :: pfull
+            real(kind=8) dimension(nspatial,nlev),intent(in),depend(nlev) :: tfull
             real(kind=8) intent(in) :: tmsg
             real(kind=8) intent(in) :: lapsec
             integer intent(in) :: punit
@@ -56,7 +56,7 @@ python module tropopause_height ! in
         end subroutine tropopause_grid_2d
 
         subroutine tropopause_profile_1d(nlev,nlevm,pfull,tfull,tmsg,lapsec,punit,ptrop_hpa,htrop_m,itrop,lapse_rate,success) ! in :tropopause_height:tropopause_height.f90
-            integer, optional,intent(in),check(len(pfull) == nlev),depend(pfull) :: nlev=len(pfull)
+            integer, optional,intent(in),check(shape(pfull, 0) == nlev),depend(pfull) :: nlev=shape(pfull, 0)
             integer intent(in) :: nlevm
             real(kind=8) dimension(nlev),intent(in) :: pfull
             real(kind=8) dimension(nlev),intent(in),depend(nlev) :: tfull
@@ -71,8 +71,8 @@ python module tropopause_height ! in
         end subroutine tropopause_profile_1d
 
     end interface
-end python module tropopause_grid
+end python module tropopause_height
 
-! This file was auto-generated with f2py (version:1.23.5).
+! This file was auto-generated with f2py (version:2.3.2).
 ! See:
 ! https://web.archive.org/web/20140822061353/http://cens.ioc.ee/projects/f2py2e
