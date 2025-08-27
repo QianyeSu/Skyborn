@@ -12,6 +12,25 @@ This page provides a comprehensive list of all functions and classes available i
 Core Calculations
 -----------------
 
+Atmospheric Physics Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. currentmodule:: skyborn.calc
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+   :class: skyborn-function-table
+
+   * - Function
+     - Description
+   * - :func:`skyborn.calc.tropopause.trop_wmo`
+     - WMO tropopause calculation for multi-dimensional data
+   * - :func:`skyborn.calc.tropopause.trop_wmo_profile`
+     - WMO tropopause calculation for single atmospheric profiles
+   * - :func:`skyborn.calc.tropopause_xarray.trop_wmo`
+     - Xarray interface for tropopause calculation with automatic pressure generation
+
 Statistical Functions
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -518,6 +537,14 @@ Function Usage Categories
 
    * - Function/Class
      - Usage Category & Description
+   * - **Atmospheric Physics**
+     -
+   * - :func:`skyborn.calc.tropopause.trop_wmo`
+     - Multi-dimensional WMO tropopause calculation
+   * - :func:`skyborn.calc.tropopause.trop_wmo_profile`
+     - Single profile tropopause identification
+   * - :func:`skyborn.calc.tropopause_xarray.trop_wmo`
+     - Xarray tropopause analysis with auto pressure generation
    * - **Statistical Analysis**
      -
    * - :func:`skyborn.calc.pearson_correlation`
