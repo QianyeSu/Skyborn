@@ -12,13 +12,13 @@ Reference
 
 from __future__ import annotations
 
-import xarray
-import numpy as np
-from sklearn import neighbors
-
-import functools
 import dataclasses
-from typing import Union, Tuple, Optional
+import functools
+from typing import Optional, Tuple, Union
+
+import numpy as np
+import xarray
+from sklearn import neighbors
 
 __all__ = [
     "Grid",

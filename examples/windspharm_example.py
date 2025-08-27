@@ -6,15 +6,17 @@ This example demonstrates both basic and advanced usage of the skyborn.windsphar
 including real-world applications for processing 4D atmospheric data with parallel computation.
 """
 
-import numpy as np
-import matplotlib.pyplot as plt
-from skyborn.windspharm import VectorWind
-from skyborn.spharm import gaussian_lats_wts
-from skyborn.windspharm.tools import prep_data, recover_data
-from skyborn.windspharm.standard import VectorWind as StandardVectorWind
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import matplotlib.pyplot as plt
+import numpy as np
+from tqdm import tqdm
+
+from skyborn.spharm import gaussian_lats_wts
+from skyborn.windspharm import VectorWind
+from skyborn.windspharm.standard import VectorWind as StandardVectorWind
+from skyborn.windspharm.tools import prep_data, recover_data
 
 
 def create_sample_wind_data():

@@ -11,13 +11,14 @@ https://github.com/LinkedEarth/Pyleoclim_util
 """
 
 __all__ = ["liang_causality", "granger_causality"]
-from statsmodels.tsa.arima_process import arma_generate_sample
-from statsmodels.tsa.arima.model import ARIMA
+from typing import Any, Dict, List, Union
+
 import numpy as np
+from scipy.stats.mstats import mquantiles
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.arima_process import arma_generate_sample
 from statsmodels.tsa.stattools import grangercausalitytests
 from tqdm import tqdm
-from scipy.stats.mstats import mquantiles
-from typing import Any, Dict, List, Union
 
 
 def ar1_fit_evenly(y: np.ndarray) -> float:

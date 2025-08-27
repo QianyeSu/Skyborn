@@ -5,9 +5,9 @@ This script runs all interpolation and regridding tests to validate
 code coverage and ensure all functionality is properly tested.
 """
 
-import sys
-import subprocess
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 

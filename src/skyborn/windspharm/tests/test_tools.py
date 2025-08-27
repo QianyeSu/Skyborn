@@ -5,14 +5,14 @@ from __future__ import absolute_import
 import numpy as np
 from numpy.testing import assert_array_equal
 
+from skyborn.windspharm.tests import VectorWindTest
 from skyborn.windspharm.tools import (
+    get_recovery,
+    order_latdim,
     prep_data,
     recover_data,
-    get_recovery,
     reverse_latdim,
-    order_latdim,
 )
-from skyborn.windspharm.tests import VectorWindTest
 
 
 class TestTools(VectorWindTest):

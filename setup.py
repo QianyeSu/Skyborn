@@ -3,15 +3,16 @@ Setup script for Skyborn - Mixed build system with meson for Fortran modules
 """
 
 import os
-import sys
 import shutil
 import subprocess
+import sys
 from pathlib import Path
-from setuptools import setup, Extension
+
+import numpy as np
+from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 from setuptools.command.develop import develop
 from setuptools.command.install import install
-import numpy as np
 
 # Check if Cython is available
 try:
@@ -75,7 +76,6 @@ def get_gridfill_extensions():
 
         # Cross-platform optimization flags based on existing project standards
         # Similar to what we use for Fortran compilation
-
         # Check compiler type on Windows
         is_msvc = platform.system() == "Windows" and (
             "MSVC" in os.environ.get("CC", "") or "cl.exe" in os.environ.get("CC", "")

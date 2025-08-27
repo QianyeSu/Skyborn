@@ -1,6 +1,7 @@
+from typing import Tuple, Union
+
 import numpy as np
 import xarray as xr
-from typing import Tuple, Union
 
 # Lazy imports to avoid loading heavy dependencies at startup
 
