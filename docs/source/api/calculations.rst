@@ -69,8 +69,8 @@ Example Usage
 
    # === 1D Profile Analysis ===
    # Single atmospheric profile
-   pressure = np.array([1000, 850, 700, 500, 300, 200, 100, 50])  # hPa
-   temperature = np.array([288, 280, 270, 250, 230, 220, 210, 200])  # K
+   pressure = np.array([50, 100, 200, 300, 500, 700, 850, 1000])  # hPa
+   temperature = np.array([200, 210, 220, 230, 250, 270, 280, 288])  # K
 
    result = skb.calc.trop_wmo_profile(temperature, pressure)
    print(f"Tropopause: {result['pressure']:.1f} hPa at {result['height']:.0f} m")
