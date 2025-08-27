@@ -5,9 +5,10 @@ This module tests the xarray-specific functionality of VectorWind,
 including coordinate preservation, metadata handling, and xarray DataArray operations.
 """
 
+import warnings
+
 import numpy as np
 import pytest
-import warnings
 
 try:
     import xarray as xr

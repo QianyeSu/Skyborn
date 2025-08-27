@@ -17,12 +17,11 @@ try:
 
     HAS_XARRAY = True
     from skyborn.gridfill.xarray import (
-        fill as xr_fill,
-        fill_multiple,
-        validate_grid_coverage,
-        _find_spatial_coordinates,
         _detect_cyclic_longitude,
+        _find_spatial_coordinates,
     )
+    from skyborn.gridfill.xarray import fill as xr_fill
+    from skyborn.gridfill.xarray import fill_multiple, validate_grid_coverage
 except ImportError:
     HAS_XARRAY = False
 
@@ -1040,6 +1039,7 @@ try:
     raise ImportError("Skipping iris tests due to package conflicts")
     import iris
     import iris.tests
+
     from skyborn.gridfill import fill_cube
 
     class TestGridfillCube:

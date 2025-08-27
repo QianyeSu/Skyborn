@@ -7,9 +7,9 @@ to convert GRIB files to NetCDF format.
 
 import skyborn
 from skyborn.conversion import (
+    batch_convert_grib_to_nc,
     convert_grib_to_nc,
     convert_grib_to_nc_simple,
-    batch_convert_grib_to_nc,
 )
 
 

@@ -16,9 +16,10 @@ Performance optimizations include:
 """
 
 from libc.math cimport fabs, fmax
-import numpy as np
-cimport numpy as np
 
+import numpy as np
+
+cimport numpy as np
 
 # Type definitions for numpy array types
 ctypedef np.float64_t FLOAT64_t

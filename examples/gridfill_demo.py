@@ -6,10 +6,11 @@ GridFill Integration Demo
 This example demonstrates the integrated gridfill functionality in skyborn.
 """
 
-from skyborn.gridfill import fill as gridfill_fill
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+
 import skyborn
+from skyborn.gridfill import fill as gridfill_fill
 
 # Create some sample data with missing values
 np.random.seed(42)

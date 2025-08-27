@@ -5,10 +5,11 @@ This module contains comprehensive tests for the spherical harmonic
 transform functionality, including Spharmt class and related utilities.
 """
 
-import pytest
-import numpy as np
 import sys
 from pathlib import Path
+
+import numpy as np
+import pytest
 
 # Add src to path for imports only if not already in PYTHONPATH
 src_path = str(Path(__file__).parent.parent / "src")
@@ -16,7 +17,7 @@ if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 try:
-    from skyborn.spharm import Spharmt, regrid, gaussian_lats_wts, getspecindx
+    from skyborn.spharm import Spharmt, gaussian_lats_wts, getspecindx, regrid
 
     SPHARM_AVAILABLE = True
     print("✓ spharm module imported successfully in test")

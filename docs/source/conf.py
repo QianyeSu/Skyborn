@@ -208,6 +208,103 @@ html_use_opensearch = 'https://skyborn.readthedocs.io/'
 # Add a custom configuration for Read the Docs
 
 
+def get_version_from_init():
+    """Get version from skyborn/__init__.py"""
+    import re
+    from pathlib import Path
+
+    init_file = Path(__file__).parent.parent.parent / "src" / "skyborn" / "__init__.py"
+
+    if init_file.exists():
+        with open(init_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+            # Find the version line
+            version_match = re.search(
+                r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+            if version_match:
+                return version_match.group(1)
+
+    return "0.3.7"  # fallback version
+
+
+def setup_entrance_page(app, exception):
+    """Setup entrance page as index.html after Sphinx build completes."""
+    if exception is not None:
+        # Build failed, skip entrance setup
+        return
+
+    import shutil
+    import re
+    from pathlib import Path
+
+    # Get paths
+    build_dir = Path(app.outdir)
+    source_dir = Path(app.srcdir)
+    entrance_source = source_dir / "entrance.html"
+    original_index = build_dir / "index.html"
+    documentation_page = build_dir / "documentation.html"
+
+    if not entrance_source.exists():
+        print("WARNING: Entrance page not found, skipping entrance setup...")
+        return
+
+    print("Setting up entrance page as main index...")
+
+    # Check if already set up
+    if documentation_page.exists() and original_index.exists():
+        try:
+            with open(original_index, 'r', encoding='utf-8') as f:
+                index_content = f.read()
+            if 'particles-canvas' in index_content:  # entrance.html feature
+                print("SUCCESS: Entrance page already set up properly, skipping...")
+                return
+        except Exception:
+            pass
+
+    # Move original index.html to documentation.html
+    if original_index.exists():
+        try:
+            with open(original_index, 'r', encoding='utf-8') as f:
+                content = f.read()
+            # If index.html contains Sphinx documentation features, move it
+            if 'particles-canvas' not in content:
+                print("   Renaming original index.html to documentation.html...")
+                if documentation_page.exists():
+                    documentation_page.unlink()
+                shutil.move(str(original_index), str(documentation_page))
+                print(f"   SUCCESS: Original documentation moved to {documentation_page}")
+        except Exception as e:
+            print(f"   ERROR: Error moving index.html: {e}")
+            return
+
+    # Read entrance.html and update version
+    try:
+        with open(entrance_source, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Get current version
+        current_version = get_version_from_init()
+
+        # Update version information
+        content = re.sub(
+            r'Version\s+[\d\.]+',
+            f'Version {current_version}',
+            content
+        )
+
+        # Write new index.html
+        with open(original_index, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        print(f"   SUCCESS: Entrance page set as main index with version {current_version}")
+        print(f"   SUCCESS: Documentation available at documentation.html")
+
+    except Exception as e:
+        print(f"   ERROR: Error setting up entrance page: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def setup(app):
     """Custom setup function for Sphinx."""
     # Check if we're building on Read the Docs
@@ -217,9 +314,9 @@ def setup(app):
         # Additional mock imports for RTD
         try:
             import skyborn
-            print("✅ Skyborn successfully imported on RTD")
+            print("SUCCESS: Skyborn successfully imported on RTD")
         except ImportError as e:
-            print(f"⚠️ Skyborn import failed on RTD: {e}")
+            print(f"WARNING: Skyborn import failed on RTD: {e}")
             # Ensure path is set correctly
             import sys
             project_root = os.path.abspath(
@@ -228,6 +325,9 @@ def setup(app):
             if src_path not in sys.path:
                 sys.path.insert(0, src_path)
                 print(f"Added {src_path} to Python path")
+
+    # Connect entrance page setup to build-finished event
+    app.connect('build-finished', setup_entrance_page)
 
     return {'version': '0.1', 'parallel_read_safe': True}
 

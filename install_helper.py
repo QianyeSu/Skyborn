@@ -3,9 +3,9 @@
 Intelligent Installation Helper - Provides optimal installation experience for different platforms and scenarios
 """
 import platform
-import sys
-import subprocess
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 

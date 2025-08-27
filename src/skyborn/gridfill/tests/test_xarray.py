@@ -6,9 +6,9 @@ ensuring proper handling of coordinate metadata, missing value detection,
 and attribute preservation.
 """
 
-import pytest
 import numpy as np
 import numpy.ma as ma
+import pytest
 
 try:
     import xarray as xr
@@ -18,11 +18,11 @@ except ImportError:
     HAS_XARRAY = False
 
 from skyborn.gridfill.xarray import (
+    _detect_cyclic_longitude,
+    _find_spatial_coordinates,
     fill,
     fill_multiple,
     validate_grid_coverage,
-    _find_spatial_coordinates,
-    _detect_cyclic_longitude,
 )
 
 
