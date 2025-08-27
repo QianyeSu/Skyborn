@@ -58,8 +58,8 @@ subroutine TROPOPAUSE_GRID_3D(NLAT, NLON, NLEV, NLEVM, &
     ! INPUT DIMENSIONS
     integer, intent(in) :: NLAT, NLON, NLEV, NLEVM, PUNIT
 
-    ! INPUT ARRAYS - assumed shape (lat, lon, level)
-    real(dp), intent(in) :: PFULL(NLAT, NLON, NLEV)    ! Pressure [hPa or Pa]
+    ! INPUT ARRAYS
+    real(dp), intent(in) :: PFULL(NLEV)                ! 1D pressure levels [hPa or Pa]
     real(dp), intent(in) :: TFULL(NLAT, NLON, NLEV)    ! Temperature [K]
     real(dp), intent(in) :: TMSG, LAPSEC               ! Missing value, lapse criterion
 
@@ -93,7 +93,7 @@ subroutine TROPOPAUSE_GRID_3D(NLAT, NLON, NLEV, NLEVM, &
             ! Extract vertical profile for this grid point
             valid_profile = .true.
             do k = 1, NLEV
-                profile_p(k) = PFULL(i, j, k)
+                profile_p(k) = PFULL(k)         ! 1D pressure array
                 profile_t(k) = TFULL(i, j, k)
 
                 ! Check for missing values
@@ -149,8 +149,8 @@ subroutine TROPOPAUSE_GRID_4D(NLAT, NLON, NLEV, NTIME, NLEVM, &
     ! INPUT DIMENSIONS
     integer, intent(in) :: NLAT, NLON, NLEV, NTIME, NLEVM, PUNIT
 
-    ! INPUT ARRAYS - assumed shape (lat, lon, level, time)
-    real(dp), intent(in) :: PFULL(NLAT, NLON, NLEV, NTIME)  ! Pressure
+    ! INPUT ARRAYS
+    real(dp), intent(in) :: PFULL(NLEV)                     ! 1D pressure levels [hPa or Pa]
     real(dp), intent(in) :: TFULL(NLAT, NLON, NLEV, NTIME)  ! Temperature
     real(dp), intent(in) :: TMSG, LAPSEC
 
@@ -167,7 +167,7 @@ subroutine TROPOPAUSE_GRID_4D(NLAT, NLON, NLEV, NTIME, NLEVM, &
     ! Process each time step
     do t = 1, NTIME
         call TROPOPAUSE_GRID_3D(NLAT, NLON, NLEV, NLEVM, &
-                               PFULL(:,:,:,t), TFULL(:,:,:,t), &
+                               PFULL, TFULL(:,:,:,t), &
                                TMSG, LAPSEC, PUNIT, &
                                PTROP_HPA(:,:,t), HTROP_M(:,:,t), ITROP(:,:,t), &
                                LAPSE_RATE(:,:,t), SUCCESS(:,:,t))
@@ -185,8 +185,8 @@ subroutine TROPOPAUSE_GRID_2D(NSPATIAL, NLEV, NLEVM, &
     ! INPUT DIMENSIONS
     integer, intent(in) :: NSPATIAL, NLEV, NLEVM, PUNIT
 
-    ! INPUT ARRAYS - assumed shape (spatial_dim, level)
-    real(dp), intent(in) :: PFULL(NSPATIAL, NLEV)    ! Pressure [hPa or Pa]
+    ! INPUT ARRAYS
+    real(dp), intent(in) :: PFULL(NLEV)              ! 1D pressure levels [hPa or Pa]
     real(dp), intent(in) :: TFULL(NSPATIAL, NLEV)    ! Temperature [K]
     real(dp), intent(in) :: TMSG, LAPSEC             ! Missing value, lapse criterion
 
@@ -219,7 +219,7 @@ subroutine TROPOPAUSE_GRID_2D(NSPATIAL, NLEV, NLEVM, &
         ! Extract vertical profile for this spatial point
         valid_profile = .true.
         do k = 1, NLEV
-            profile_p(k) = PFULL(i, k)
+            profile_p(k) = PFULL(k)         ! 1D pressure array
             profile_t(k) = TFULL(i, k)
 
             ! Check for missing values
