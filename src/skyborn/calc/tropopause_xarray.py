@@ -5,6 +5,12 @@ This module provides functions to calculate tropopause properties from xarray
 DataArrays using the WMO definition. It automatically detects spatial coordinates
 and preserves coordinate information and metadata throughout the computation process.
 
+*** DATA REQUIREMENTS ***
+- CRITICAL: This function requires ISOBARIC (constant pressure level) data
+- Temperature data must be provided on constant pressure levels
+- Pressure levels must be sorted in ASCENDING order (low pressure/high altitude to high pressure/low altitude)
+- For model level data, first interpolate to pressure levels before using this function
+
 Main Functions:
     trop_wmo : Calculate WMO tropopause properties for xarray DataArray
 
@@ -13,8 +19,8 @@ Examples:
     >>> import numpy as np
     >>> from skyborn.calc.tropopause_xarray import trop_wmo
     >>>
-    >>> # Load atmospheric data
-    >>> ds = xr.open_dataset('atmospheric_data.nc')
+    >>> # Load isobaric atmospheric data
+    >>> ds = xr.open_dataset('era5_pressure_levels.nc')  # Already on isobaric levels
     >>> result = trop_wmo(ds.temperature)  # Auto-generates pressure from level coordinate
     >>> print(result.pressure.attrs)  # Original attributes preserved
 """
@@ -68,8 +74,18 @@ def _detect_atmospheric_dimensions(
     dims = data_array.dims
 
     # Common dimension name patterns
-    lon_names = {"lon", "longitude", "x", "X", "LON", "XLON", "LONS", "LONG"}
-    lat_names = {"lat", "latitude", "y", "Y", "LAT", "YLAT", "LATS", "LATI"}
+    lon_names = {
+        "lon",
+        "longitude",
+        "x",
+        "X",
+        "LON",
+        "XLON",
+        "LONS",
+        "LONG",
+        "LONGITUDE",
+    }
+    lat_names = {"lat", "latitude", "y", "Y", "LAT", "YLAT", "LATS", "LATI", "LATITUDE"}
     lev_names = {
         "level",
         "lev",
@@ -81,6 +97,19 @@ def _detect_atmospheric_dimensions(
         "LEV",
         "PRES",
         "LEVEL",
+        "PLEVEL",
+        "PRES_LEVEL",
+        "HEIGHT",
+        "height",
+        "altitude",
+        "ALTITUDE",
+        "depth",
+        "DEPTH",
+        "isobaric",
+        "ISOBARIC",
+        "model_level",
+        "PRESSURE_LEVEL",
+        "PRESSURE",
     }
     time_names = {"time", "t", "T", "year", "month", "yr", "mn", "season"}
 
@@ -148,15 +177,20 @@ def trop_wmo(
     following the WMO definition (lapse rate < 2 K/km). It automatically
     detects coordinate dimensions and preserves all metadata.
 
+    *** DESIGNED FOR ISOBARIC DATA ***
+
     Parameters
     ----------
     temperature : xarray.DataArray
-        Atmospheric temperature data [K]. Can be 1D profile, 2D, 3D, or 4D array.
+        Atmospheric temperature data [K] on isobaric (constant pressure) levels.
+        Can be 1D profile, 2D, 3D, or 4D array.
         Must have level coordinate (for pressure generation) if pressure is not provided.
     pressure : xarray.DataArray, optional
-        Atmospheric pressure data [hPa or Pa]. If None, will be automatically generated from
-        temperature's level coordinate. **IMPORTANT**: Pressure levels should be
-        sorted in ascending order (from low pressure/high altitude to high pressure/low altitude).
+        Atmospheric pressure data [hPa or Pa] on isobaric levels. If None, will be
+        automatically generated from temperature's level coordinate.
+        **CRITICAL**: Pressure levels MUST be sorted in ASCENDING order
+        (from low pressure/high altitude to high pressure/low altitude).
+        This is required by the underlying WMO tropopause algorithm.
     xdim : int or str, optional
         Longitude dimension index/name. Auto-detected if None. Not required for 1D profiles.
     ydim : int or str, optional
@@ -193,61 +227,64 @@ def trop_wmo(
 
     Examples
     --------
-    **1D Profile Analysis:**
+    **1D Profile Analysis (Isobaric Data):**
 
     >>> import xarray as xr
     >>> import numpy as np
     >>> from skyborn.calc.tropopause_xarray import trop_wmo
     >>>
-    >>> # Create 1D profile
+    >>> # Create 1D isobaric profile (ascending pressure order)
     >>> temp_profile = xr.DataArray(
-    ...     [288, 280, 270, 250, 230, 210],
+    ...     [210, 230, 250, 270, 280, 288],  # Temperature decreasing with altitude
     ...     dims=['level'],
-    ...     coords={'level': [1000, 850, 700, 500, 300, 100]}  # hPa
+    ...     coords={'level': [100, 300, 500, 700, 850, 1000]}  # hPa - ASCENDING order
     ... )
     >>> result = trop_wmo(temp_profile)
     >>> print(f"Tropopause: {float(result.pressure)} hPa, {float(result.height)} m")
 
-    **Simplified Interface (Auto-pressure generation):**
+    **Simplified Interface (Auto-pressure generation from isobaric levels):**
 
-    >>> # Load atmospheric data with level coordinate
-    >>> ds = xr.open_dataset('era5_data.nc')  # Has 'level' coordinate in hPa
+    >>> # Load ERA5 pressure level data (already isobaric)
+    >>> ds = xr.open_dataset('era5_pressure_levels.nc')  # Has 'level' coordinate in hPa
     >>> result = trop_wmo(ds.temperature)  # Pressure auto-generated from level coordinate
     >>> print(f"Tropopause pressure shape: {result.pressure.shape}")
 
-    **2D Spatial Analysis:**
+    **2D Spatial Analysis (Isobaric Cross-sections):**
 
-    >>> # Analyze latitude or longitude cross-sections
-    >>> temp_2d = ds.temperature.isel(time=0, lon=0)  # (level, lat)
+    >>> # Analyze latitude or longitude cross-sections on isobaric levels
+    >>> temp_2d = ds.temperature.isel(time=0, lon=0)  # (level, lat) - isobaric levels
     >>> result = trop_wmo(temp_2d)
     >>> # Result shape: (lat,)
 
-    **Advanced usage with explicit pressure:**
+    **Advanced usage with explicit isobaric pressure:**
 
+    >>> # Ensure pressure levels are in ascending order
     >>> result = trop_wmo(
-    ...     temperature_data,
-    ...     pressure=pressure_data,
+    ...     temperature_data,  # On isobaric levels
+    ...     pressure=pressure_data,  # Corresponding isobaric pressure levels
     ...     xdim='longitude', ydim='latitude', levdim='level',
     ...     lapse_criterion=2.5  # Custom WMO criterion
     ... )
 
-    **4D Time Series:**
+    **4D Time Series (Isobaric Data):**
 
-    >>> # Multi-year climate data
-    >>> result = trop_wmo(temperature_4d)  # (time, level, lat, lon)
+    >>> # Multi-year isobaric climate data
+    >>> result = trop_wmo(temperature_4d)  # (time, level, lat, lon) - isobaric levels
     >>> # Result preserves time dimension: (time, lat, lon)
     >>> seasonal_mean = result.height.groupby('time.season').mean()
 
     Notes
     -----
-    This function requires compiled Fortran extensions. Install with:
-    pip install skyborn[fortran]
+    - This function is optimized for **ISOBARIC data** (constant pressure levels).
+    - For model level data, first interpolate to pressure levels before using this function.
+    - Requires compiled Fortran extensions. Install with: pip install skyborn[fortran]
+    - The underlying algorithm follows the WMO (1957) tropopause definition.
 
     The function automatically:
     - Detects spatial and temporal coordinates using metadata
     - Handles missing values (NaN or masked arrays)
     - Preserves all coordinate information and attributes
-    - Works with multi-dimensional data
+    - Works with multi-dimensional isobaric data
 
     See Also
     --------
@@ -284,23 +321,15 @@ def trop_wmo(
         level_coord = temperature.coords[level_dim_name]
         pressure_levels = level_coord.values
 
-        # Create pressure array with same dimensions as temperature
+        # Create 1D pressure array (optimized for isobaric data)
         pressure = xr.DataArray(
-            np.broadcast_to(
-                pressure_levels.reshape(
-                    *[
-                        1 if i != levdim_auto else len(pressure_levels)
-                        for i in range(temperature.ndim)
-                    ]
-                ),
-                temperature.shape,
-            ),
-            dims=temperature.dims,
-            coords=temperature.coords,
+            pressure_levels,
+            dims=[level_dim_name],
+            coords={level_dim_name: level_coord},
             attrs={
                 "units": pressure_unit,
-                "long_name": "Atmospheric pressure",
-                "description": f"Pressure levels from {level_dim_name} coordinate",
+                "long_name": "Atmospheric pressure levels",
+                "description": f"1D isobaric pressure levels from {level_dim_name} coordinate",
             },
         )
 
@@ -310,13 +339,14 @@ def trop_wmo(
         )
 
     # Auto-detect dimensions if not provided
+    # Use temperature for dimension detection since pressure might be 1D
     if (
         levdim is None
-        or (pressure.ndim >= 3 and (xdim is None or ydim is None))
-        or (pressure.ndim == 2 and xdim is None and ydim is None)
+        or (temperature.ndim >= 3 and (xdim is None or ydim is None))
+        or (temperature.ndim == 2 and xdim is None and ydim is None)
     ):
         xdim_auto, ydim_auto, levdim_auto, timedim_auto = (
-            _detect_atmospheric_dimensions(pressure)
+            _detect_atmospheric_dimensions(temperature)
         )
         if xdim is None:
             xdim = xdim_auto
@@ -327,55 +357,73 @@ def trop_wmo(
         if timedim is None:
             timedim = timedim_auto
 
-    # Store coordinate information for output
-    original_coords = pressure.coords
-    original_dims = pressure.dims
+    # Store coordinate information for output (use temperature since pressure might be 1D)
+    original_coords = temperature.coords
+    original_dims = temperature.dims
 
-    # Convert dimension names to indices if needed
+    # Convert dimension names to indices if needed (based on temperature dimensions)
     if isinstance(xdim, str):
-        xdim = list(pressure.dims).index(xdim)
+        xdim = list(temperature.dims).index(xdim) if xdim in temperature.dims else None
     if isinstance(ydim, str):
-        ydim = list(pressure.dims).index(ydim)
+        ydim = list(temperature.dims).index(ydim) if ydim in temperature.dims else None
     if isinstance(levdim, str):
-        levdim = list(pressure.dims).index(levdim)
+        levdim = (
+            list(temperature.dims).index(levdim) if levdim in temperature.dims else None
+        )
     if isinstance(timedim, str):
-        timedim = list(pressure.dims).index(timedim)
+        timedim = (
+            list(temperature.dims).index(timedim)
+            if timedim in temperature.dims
+            else None
+        )
 
     # Sort pressure levels if requested
     if auto_sort_levels:
-        # Get level dimension name for sorting
-        level_dim_name = list(pressure.dims)[levdim]
+        # Get level dimension name for sorting (from temperature)
+        level_dim_name = list(temperature.dims)[levdim]
 
-        # Check if sorting is needed by examining pressure coordinate
-        if level_dim_name in pressure.coords:
-            level_coord = pressure.coords[level_dim_name]
-            level_values = level_coord.values
-
-            # Check if already sorted in ascending order
-            if not np.all(level_values[:-1] <= level_values[1:]):
-                # Sort both pressure and temperature by level coordinate
-                pressure = pressure.sortby(level_dim_name)
-                temperature = temperature.sortby(level_dim_name)
-        else:
-            # No level coordinate, check actual pressure values
-            # Take a sample pressure profile to check ordering
-            sample_indices = {dim: 0 for dim in pressure.dims if dim != level_dim_name}
-            sample_profile = pressure.isel(**sample_indices)
-
-            if not np.all(sample_profile.values[:-1] <= sample_profile.values[1:]):
-                # Need to sort - create sorting index
-                sort_indices = np.argsort(sample_profile.values)
-
-                # Apply sorting to both arrays
-                pressure = pressure.isel({level_dim_name: sort_indices})
+        # For 1D pressure, check if it's sorted
+        if pressure.ndim == 1:
+            # Check 1D pressure values directly
+            if not np.all(pressure.values[:-1] <= pressure.values[1:]):
+                # Sort both pressure and temperature
+                sort_indices = np.argsort(pressure.values)
+                pressure = pressure.isel({pressure.dims[0]: sort_indices})
                 temperature = temperature.isel({level_dim_name: sort_indices})
+        else:
+            # Multi-dimensional pressure - use existing logic
+            # Check if sorting is needed by examining pressure coordinate
+            if level_dim_name in pressure.coords:
+                level_coord = pressure.coords[level_dim_name]
+                level_values = level_coord.values
+
+                # Check if already sorted in ascending order
+                if not np.all(level_values[:-1] <= level_values[1:]):
+                    # Sort both pressure and temperature by level coordinate
+                    pressure = pressure.sortby(level_dim_name)
+                    temperature = temperature.sortby(level_dim_name)
+            else:
+                # No level coordinate, check actual pressure values
+                # Take a sample pressure profile to check ordering
+                sample_indices = {
+                    dim: 0 for dim in pressure.dims if dim != level_dim_name
+                }
+                sample_profile = pressure.isel(**sample_indices)
+
+                if not np.all(sample_profile.values[:-1] <= sample_profile.values[1:]):
+                    # Need to sort - create sorting index
+                    sort_indices = np.argsort(sample_profile.values)
+
+                    # Apply sorting to both arrays
+                    pressure = pressure.isel({level_dim_name: sort_indices})
+                    temperature = temperature.isel({level_dim_name: sort_indices})
 
     # Extract numpy arrays
     pressure_data = pressure.values
     temperature_data = temperature.values
 
     # Handle different dimensionalities
-    if pressure.ndim == 1:
+    if temperature.ndim == 1:
         # 1D profile - use dedicated profile function
         result = tropopause.trop_wmo_profile(
             temperature_data,
@@ -390,16 +438,16 @@ def trop_wmo(
             if not isinstance(result[key], np.ndarray):
                 result[key] = np.array(result[key])
     else:
-        # Multi-dimensional data - use grid function
+        # Multi-dimensional data - use grid function with optimized 1D pressure
         # Use -1 as a placeholder for missing dimensions
         xdim_arg = xdim if xdim is not None else -1
         ydim_arg = ydim if ydim is not None else -1
         timedim_arg = timedim if timedim is not None else -1
 
-        # Call the core tropopause calculation function
+        # Call the core tropopause calculation function with 1D pressure optimization
         result = tropopause.trop_wmo(
             temperature_data,
-            pressure_data,
+            pressure_data,  # This will be 1D for isobaric data
             xdim=xdim_arg,
             ydim=ydim_arg,
             levdim=levdim,
@@ -411,20 +459,20 @@ def trop_wmo(
         )
 
     # Create output Dataset with proper coordinates
-    if pressure.ndim == 1:
+    if temperature.ndim == 1:
         # For 1D profiles, output is scalar
         output_dims = []
         output_coords = {}
     else:
         # For multi-dimensional data, remove level dimension
-        output_dims = list(original_dims)
+        output_dims = list(temperature.dims)
         level_dim_name = output_dims.pop(levdim)
 
         # Create coordinates for output (excluding level)
         output_coords = {}
         for dim_name in output_dims:
-            if dim_name in original_coords:
-                output_coords[dim_name] = original_coords[dim_name]
+            if dim_name in temperature.coords:
+                output_coords[dim_name] = temperature.coords[dim_name]
 
     # Create DataArrays for each output variable
     data_vars = {}
