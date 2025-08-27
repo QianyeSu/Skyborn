@@ -31,7 +31,7 @@ def velovect(
     cmap=None,
     norm=None,
     arrowsize=1,
-    arrowstyle="-|>",
+    arrowstyle="->",
     transform=None,
     zorder=None,
     start_points=None,
@@ -74,20 +74,18 @@ def velovect(
     arrowstyle : str
         Arrow style specification.
         See `~matplotlib.patches.FancyArrowPatch`.
-    minlength : float
-        Minimum length of streamline in axes coordinates.
-    start_points : (N, 2) array
-        Coordinates of starting points for the streamlines in data coordinates
-        (the same coordinates as the *x* and *y* arrays).
+    transform : Transform, optional
+        Coordinate transformation for the plot. Defaults to axes.transData.
     zorder : float
         The zorder of the streamlines and arrows.
         Artists with lower zorder values are drawn first.
-    maxlength : float
-        Maximum length of streamline in axes coordinates.
+    start_points : (N, 2) array
+        Coordinates of starting points for the streamlines in data coordinates
+        (the same coordinates as the *x* and *y* arrays).
     integration_direction : {'forward', 'backward', 'both'}, default: 'both'
         Integrate the streamline in forward, backward or both directions.
-    data : indexable object, optional
-        DATA_PARAMETER_PLACEHOLDER
+    grains : int, default: 15
+        Number of grains used in streamline integration.
     broken_streamlines : boolean, default: True
         If False, forces streamlines to continue until they
         leave the plot domain.  If True, they may be terminated if they
