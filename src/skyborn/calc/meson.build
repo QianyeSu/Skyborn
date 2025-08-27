@@ -81,7 +81,6 @@ fortran_args = [
     '-funroll-loops',
     '-finline-functions',
     '-ftree-vectorize',
-    '-ffinite-math-only',
     '-ffree-line-length-none',
     '-fno-common',
     '-std=legacy',
