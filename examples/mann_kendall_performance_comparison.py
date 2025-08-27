@@ -7,12 +7,15 @@ over the traditional xarray-based approach.
 """
 
 import time
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
+
 from skyborn.calc.mann_kendall import mann_kendall_multidim_numpy, trend_analysis
 
 try:
     import xarray as xr
+
     from skyborn.calc.mann_kendall import mann_kendall_xarray
 
     HAS_XARRAY = True

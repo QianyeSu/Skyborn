@@ -5,10 +5,11 @@ This module contains comprehensive tests for the windspharm functionality,
 including VectorWind class and related utilities.
 """
 
-import pytest
-import numpy as np
 import sys
 from pathlib import Path
+
+import numpy as np
+import pytest
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -17,11 +18,11 @@ try:
     from skyborn.windspharm import VectorWind, standard, tools
     from skyborn.windspharm.standard import VectorWind as StandardVectorWind
     from skyborn.windspharm.tools import (
+        get_recovery,
+        order_latdim,
         prep_data,
         recover_data,
-        get_recovery,
         reverse_latdim,
-        order_latdim,
     )
 
     WINDSPHARM_AVAILABLE = True

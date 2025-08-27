@@ -10,9 +10,11 @@ Reference
      https://github.com/rafaelcabreu/attribution, by Rafael Abreu
 """
 
+from typing import Any, Dict, Literal, Tuple
+
 import numpy as np
 import scipy.stats as stats
-from typing import Dict, Any, Tuple, Literal
+
 from .preprocess import PreProcess
 from .utils import chi2_test
 

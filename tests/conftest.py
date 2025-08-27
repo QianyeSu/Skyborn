@@ -5,14 +5,15 @@ This file provides common fixtures and pytest configuration for testing
 the skyborn library across all modules.
 """
 
-from pathlib import Path
-import matplotlib.pyplot as plt
-import pytest
-import numpy as np
-import xarray as xr
-import pandas as pd
 import tempfile
+from pathlib import Path
+
 import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pytest
+import xarray as xr
 
 matplotlib.use("Agg")  # Use non-interactive backend for testing
 

@@ -5,20 +5,21 @@ This module tests causality analysis functionality including Granger
 causality and Liang information flow analysis for time series data.
 """
 
-import pytest
-import numpy as np
 import warnings
-from numpy.testing import assert_array_almost_equal, assert_allclose
+
+import numpy as np
+import pytest
+from numpy.testing import assert_allclose, assert_array_almost_equal
 
 from skyborn.causality import (
-    granger_causality,
-    liang_causality,
-    liang,
     ar1_fit_evenly,
-    sm_ar1_sim,
+    granger_causality,
+    liang,
+    liang_causality,
     phaseran,
     signif_isopersist,
     signif_isospec,
+    sm_ar1_sim,
 )
 
 

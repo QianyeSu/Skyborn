@@ -5,10 +5,11 @@ This module tests the plotting functionality in skyborn.plot.plotting,
 including matplotlib integration and image comparison tests.
 """
 
-import pytest
-import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pytest
+
 from skyborn.plot.plotting import add_equal_axes, createFigure
 
 

@@ -5,17 +5,17 @@ This module tests the gradient calculation functionality for atmospheric
 and oceanic data on spherical coordinates.
 """
 
-import pytest
 import numpy as np
+import pytest
 import xarray as xr
 from numpy.testing import assert_array_almost_equal, assert_array_equal
 
 from skyborn.gradients import (
+    EARTH_RADIUS,
     calculate_gradient,
     calculate_meridional_gradient,
-    calculate_zonal_gradient,
     calculate_vertical_gradient,
-    EARTH_RADIUS,
+    calculate_zonal_gradient,
 )
 
 

@@ -5,27 +5,28 @@ This module tests the climate attribution analysis functionality,
 including attribution models, data preprocessing, trend analysis, and utility functions.
 """
 
-import pytest
+import warnings
+from unittest.mock import MagicMock, Mock, patch
+
 import numpy as np
 import pandas as pd
-from unittest.mock import Mock, patch, MagicMock
+import pytest
 from scipy import stats
-import warnings
 
 from skyborn.ROF import (
-    AttributionModel,
-    PreProcess,
-    calculate_trend,
-    calculate_uncertainty,
-    all_trends,
-    speco,
-    chi2_test,
-    project_vectors,
-    unproject_vectors,
     SSM,
-    get_nruns,
+    AttributionModel,
     Cm_estimate,
     Cv_estimate,
+    PreProcess,
+    all_trends,
+    calculate_trend,
+    calculate_uncertainty,
+    chi2_test,
+    get_nruns,
+    project_vectors,
+    speco,
+    unproject_vectors,
 )
 
 
