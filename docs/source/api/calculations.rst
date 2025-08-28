@@ -6,9 +6,11 @@ The Skyborn calculation module provides statistical, atmospheric, and mathematic
 Atmospheric Physics Functions
 -----------------------------
 
-.. automodule:: skyborn.calc.troposphere.tropopause
+.. autofunction:: skyborn.calc.troposphere.tropopause.trop_wmo
 
-.. automodule:: skyborn.calc.troposphere.xarray
+.. autofunction:: skyborn.calc.troposphere.tropopause.trop_wmo_profile
+
+.. autofunction:: skyborn.calc.troposphere.xarray.trop_wmo
 
 Statistical Functions
 ---------------------
