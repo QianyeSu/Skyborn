@@ -405,23 +405,39 @@ class MesonBuildExt(build_ext):
 
     def _discover_meson_modules(self):
         """
-        Auto-discover meson modules by looking for meson.build files
-        in skyborn subpackages.
+        Auto-discover meson modules by recursively looking for meson.build files
+        in skyborn subpackages and their subdirectories.
         """
         modules = []
         skyborn_src = Path("src") / "skyborn"
 
-        # Look for subdirectories with meson.build files
-        for subdir in skyborn_src.iterdir():
-            if subdir.is_dir() and (subdir / "meson.build").exists():
-                module_name = subdir.name
-                print(f"DEBUG: Discovered meson module: {module_name}")
-                modules.append(
-                    {
-                        "name": module_name,
-                        "path": subdir,
-                    }
-                )
+        def _find_meson_builds(base_path, relative_path=""):
+            """Recursively find meson.build files"""
+            for subdir in base_path.iterdir():
+                if subdir.is_dir():
+                    meson_file = subdir / "meson.build"
+                    if meson_file.exists():
+                        if relative_path:
+                            module_name = f"{relative_path}.{subdir.name}"
+                        else:
+                            module_name = subdir.name
+                        print(f"DEBUG: Discovered meson module: {module_name}")
+                        modules.append(
+                            {
+                                "name": module_name,
+                                "path": subdir,
+                            }
+                        )
+                    # Continue searching in subdirectories
+                    new_relative_path = (
+                        f"{relative_path}.{subdir.name}"
+                        if relative_path
+                        else subdir.name
+                    )
+                    _find_meson_builds(subdir, new_relative_path)
+
+        # Start recursive search from skyborn root
+        _find_meson_builds(skyborn_src)
 
         return modules
 

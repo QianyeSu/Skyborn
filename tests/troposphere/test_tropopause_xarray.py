@@ -1,5 +1,5 @@
 """
-Comprehensive tests for skyborn.calc.troposphere.tropopause_xarray module.
+Comprehensive tests for src.skyborn.calc.troposphere.tropopause_xarray module.
 
 This test suite provides 100% code coverage for the tropopause_xarray module,
 testing all functions, methods, and edge cases.
@@ -11,10 +11,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from skyborn.calc.troposphere.tropopause_xarray import (
-    _detect_atmospheric_dimensions,
-    trop_wmo,
-)
+from skyborn.calc.troposphere.xarray import _detect_atmospheric_dimensions, trop_wmo
 
 
 class TestDetectAtmosphericDimensions:
