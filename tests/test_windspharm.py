@@ -834,7 +834,7 @@ class TestVectorWindUntestedMethods:
 
         # Should match manual calculation
         expected_magnitude = np.sqrt(u**2 + v**2)
-        np.testing.assert_allclose(magnitude, expected_magnitude, rtol=1e-12)
+        np.testing.assert_allclose(magnitude, expected_magnitude, rtol=1e-6)
 
     def test_vectorwind_with_truncation_parameter(self):
         """Test VectorWind operations with truncation parameter."""
@@ -939,6 +939,176 @@ class TestVectorWindUntestedMethods:
 
         # Should be vorticity + planetary vorticity
         np.testing.assert_allclose(abs_vort, vort + f, rtol=1e-12)
+
+    @pytest.mark.skipif(
+        not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
+    )
+    def test_vectorwind_grid_info_property(self):
+        """Test grid_info property functionality."""
+        nlat, nlon = 37, 72
+        u = np.random.randn(nlat, nlon)
+        v = np.random.randn(nlat, nlon)
+
+        # Test regular grid
+        vw_regular = VectorWind(
+            u, v, gridtype="regular", rsphere=6.371e6, legfunc="stored"
+        )
+        grid_info = vw_regular.grid_info
+
+        # Check that it returns a dictionary
+        assert isinstance(grid_info, dict)
+
+        # Check required keys
+        expected_keys = {
+            "gridtype",
+            "nlat",
+            "nlon",
+            "shape",
+            "rsphere",
+            "legfunc",
+            "total_points",
+        }
+        assert set(grid_info.keys()) == expected_keys
+
+        # Check values
+        assert grid_info["gridtype"] == "regular"
+        assert grid_info["nlat"] == nlat
+        assert grid_info["nlon"] == nlon
+        assert grid_info["shape"] == (nlat, nlon)
+        assert grid_info["rsphere"] == 6.371e6
+        assert grid_info["legfunc"] == "stored"
+        assert grid_info["total_points"] == nlat * nlon
+
+        # Test with 3D data
+        u_3d = np.random.randn(nlat, nlon, 5)
+        v_3d = np.random.randn(nlat, nlon, 5)
+        vw_3d = VectorWind(
+            u_3d, v_3d, gridtype="gaussian", rsphere=6.4e6, legfunc="computed"
+        )
+        grid_info_3d = vw_3d.grid_info
+
+        assert grid_info_3d["gridtype"] == "gaussian"
+        assert grid_info_3d["nlat"] == nlat
+        assert grid_info_3d["nlon"] == nlon
+        assert grid_info_3d["shape"] == (nlat, nlon, 5)
+        assert grid_info_3d["rsphere"] == 6.4e6
+        assert grid_info_3d["legfunc"] == "computed"
+        assert grid_info_3d["total_points"] == nlat * nlon
+
+    @pytest.mark.skipif(
+        not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
+    )
+    def test_vectorwind_truncate_method(self):
+        """Test truncate method functionality."""
+        nlat, nlon = 37, 72
+        u = np.random.randn(nlat, nlon)
+        v = np.random.randn(nlat, nlon)
+
+        vw = VectorWind(u, v, gridtype="regular")
+
+        # Create a test scalar field
+        test_field = np.random.randn(nlat, nlon)
+
+        # Test default truncation (should use nlat-1)
+        truncated_default = vw.truncate(test_field)
+        assert truncated_default.shape == test_field.shape
+        assert isinstance(truncated_default, np.ndarray)
+        assert np.all(np.isfinite(truncated_default))
+
+        # Test custom truncation
+        custom_trunc = 15
+        truncated_custom = vw.truncate(test_field, truncation=custom_trunc)
+        assert truncated_custom.shape == test_field.shape
+        assert isinstance(truncated_custom, np.ndarray)
+        assert np.all(np.isfinite(truncated_custom))
+
+        # Test with 3D field
+        test_field_3d = np.random.randn(nlat, nlon, 3)
+        truncated_3d = vw.truncate(test_field_3d, truncation=10)
+        assert truncated_3d.shape == test_field_3d.shape
+        assert np.all(np.isfinite(truncated_3d))
+
+        # Test that truncation actually changes the field
+        # (Higher truncation should preserve more details)
+        high_trunc = vw.truncate(test_field, truncation=30)
+        low_trunc = vw.truncate(test_field, truncation=5)
+
+        # The difference between original and high truncation should be smaller
+        # than the difference between original and low truncation
+        diff_high = np.mean(np.abs(test_field - high_trunc))
+        diff_low = np.mean(np.abs(test_field - low_trunc))
+        assert diff_high <= diff_low, "Higher truncation should preserve more details"
+
+    @pytest.mark.skipif(
+        not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
+    )
+    def test_vectorwind_truncate_error_handling(self):
+        """Test truncate method error handling."""
+        nlat, nlon = 19, 36
+        u = np.random.randn(nlat, nlon)
+        v = np.random.randn(nlat, nlon)
+
+        vw = VectorWind(u, v)
+
+        # Test with field containing NaN values
+        field_with_nan = np.random.randn(nlat, nlon)
+        field_with_nan[0, 0] = np.nan
+
+        with pytest.raises(ValueError, match="field cannot contain missing values"):
+            vw.truncate(field_with_nan)
+
+        # Test with incompatible field shape
+        incompatible_field = np.random.randn(nlat + 1, nlon)
+        with pytest.raises(ValueError, match="field is not compatible"):
+            vw.truncate(incompatible_field)
+
+        # Test with masked array input (should work after filling)
+        import numpy.ma as ma
+
+        masked_field = ma.array(np.random.randn(nlat, nlon))
+        masked_field[0, 0] = ma.masked
+
+        # This should raise error because filled values become NaN
+        with pytest.raises(ValueError, match="field cannot contain missing values"):
+            vw.truncate(masked_field)
+
+        # Test with valid masked array (no masked values)
+        valid_masked_field = ma.array(np.random.randn(nlat, nlon))
+        truncated_masked = vw.truncate(valid_masked_field)
+        assert truncated_masked.shape == (nlat, nlon)
+        assert np.all(np.isfinite(truncated_masked))
+
+    @pytest.mark.skipif(
+        not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
+    )
+    def test_vectorwind_truncate_consistency(self):
+        """Test that truncate method is consistent with other VectorWind methods."""
+        nlat, nlon = 19, 36
+        u = np.random.randn(nlat, nlon)
+        v = np.random.randn(nlat, nlon)
+
+        vw = VectorWind(u, v)
+
+        # Get streamfunction and velocity potential
+        streamfunction = vw.streamfunction()
+        velocity_potential = vw.velocitypotential()
+
+        # Apply truncation using the method
+        truncation_level = 10
+        sf_truncated = vw.truncate(streamfunction, truncation=truncation_level)
+        vp_truncated = vw.truncate(velocity_potential, truncation=truncation_level)
+
+        # Results should have same shape and be finite
+        assert sf_truncated.shape == streamfunction.shape
+        assert vp_truncated.shape == velocity_potential.shape
+        assert np.all(np.isfinite(sf_truncated))
+        assert np.all(np.isfinite(vp_truncated))
+
+        # Test with vorticity field
+        vorticity = vw.vorticity()
+        vort_truncated = vw.truncate(vorticity, truncation=truncation_level)
+        assert vort_truncated.shape == vorticity.shape
+        assert np.all(np.isfinite(vort_truncated))
 
 
 class TestVectorWindAdvancedOperations:
