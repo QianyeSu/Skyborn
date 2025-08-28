@@ -9,7 +9,6 @@ This module contains various calculation functions including:
 - WMO tropopause calculation (with Fortran extensions)
 """
 
-from . import tropopause_xarray
 from .calculations import (
     calculate_potential_temperature,
     convert_longitude_range,
@@ -37,5 +36,5 @@ from .mann_kendall import (
     trend_analysis,
 )
 
-# Try to import tropopause calculation (requires compiled extensions)
-from .tropopause import trop_wmo
+# Import tropopause calculation (requires compiled extensions)
+from .troposphere import trop_wmo, trop_wmo_profile
