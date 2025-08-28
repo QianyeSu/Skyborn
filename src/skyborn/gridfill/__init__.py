@@ -21,11 +21,9 @@ Mathematical Background:
 
 Main Functions:
     fill: Fill missing values in numpy arrays or masked arrays
-    fill_cube: Fill missing values in iris cubes (if iris is available)
 
 Interfaces:
     - Standard numpy/masked array interface via fill() function
-    - Iris cube interface via fill_cube() function
     - Modern xarray interface via skyborn.gridfill.xarray submodule
 
 Examples:
@@ -45,16 +43,6 @@ Examples:
     >>> filled_data, converged = fill(masked_data, xdim=1, ydim=0, eps=1e-4)
     >>> print(f"Convergence: {converged[0]}")
 
-    Using with iris cubes (if iris is installed):
-
-    >>> import iris
-    >>> from skyborn.gridfill import fill_cube
-    >>>
-    >>> # Load a cube with missing data
-    >>> cube = iris.load_cube('temperature_data.nc')
-    >>>
-    >>> # Fill missing values
-    >>> filled_cube = fill_cube(cube, eps=1e-4, verbose=True)
 
     Modern xarray interface with automatic coordinate detection:
 
@@ -76,7 +64,7 @@ Notes:
 
 from __future__ import absolute_import
 
-from .gridfill import fill, fill_cube
+from .gridfill import fill
 
 # Try to import xarray interface if xarray is available
 try:
