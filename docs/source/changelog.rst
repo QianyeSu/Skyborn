@@ -38,6 +38,22 @@ Version 0.3.13 (Current)
 
 **🔧 Technical Improvements**
 
+* **Hybrid Build System**: Implemented innovative meson-setuptools hybrid architecture for seamless extension development
+
+  - **Zero-Configuration Module Addition**: New Cython/C/Fortran modules automatically discovered and built
+  - **Unified Workflow**: Single command ``python setup.py build_ext --inplace`` builds all extensions
+  - **Cross-Platform Optimization**: Automatic compiler detection and platform-specific optimization flags
+  - **Smart Extension Discovery**: ``setup.py`` automatically finds and compiles all submodules with ``meson.build`` files
+  - **Backwards Compatible**: Maintains existing CI/CD workflows while enabling modern build features
+  - **Developer Friendly**: Copy template ``meson.build``, modify module name, and it's ready to build
+
+* **Enhanced Extension Building**: Streamlined process for adding compiled extensions
+
+  - **Template-Based**: Simple copy and modify approach for new extensions
+  - **Automatic Integration**: No manual ``setup.py`` modifications required for new modules
+  - **Parallel Builds**: Meson enables efficient parallel compilation
+  - **Incremental Updates**: Only rebuilds changed modules for faster development cycles
+
 * **Fortran Extensions**: Added 2D and 1D specific interfaces (prepared for future compilation)
 * **Enhanced Error Handling**: Better validation for different data dimensionalities
 * **Memory Optimization**: Efficient processing of large multi-dimensional arrays
