@@ -256,7 +256,7 @@ def setup_entrance_page(app, exception):
         try:
             with open(original_index, 'r', encoding='utf-8') as f:
                 index_content = f.read()
-            if 'particles-canvas' in index_content:  # entrance.html feature
+            if 'id="shader"' in index_content:  # entrance.html feature
                 print("SUCCESS: Entrance page already set up properly, skipping...")
                 return
         except Exception:
@@ -268,7 +268,7 @@ def setup_entrance_page(app, exception):
             with open(original_index, 'r', encoding='utf-8') as f:
                 content = f.read()
             # If index.html contains Sphinx documentation features, move it
-            if 'particles-canvas' not in content:
+            if 'id="shader"' not in content:
                 print("   Renaming original index.html to documentation.html...")
                 if documentation_page.exists():
                     documentation_page.unlink()
