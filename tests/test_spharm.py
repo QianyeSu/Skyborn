@@ -839,14 +839,151 @@ class TestSpharmtAdditionalCoverage:
         except ImportError:
             pass
 
-        # Test specintrp function
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_specintrp_function(self):
+        """Test specintrp (spectral interpolation) function."""
         try:
-            from skyborn.spharm import specintrp
+            from skyborn.spharm import Spharmt, gaussian_lats_wts, legendre, specintrp
+        except ImportError:
+            pytest.skip("specintrp function not available")
 
-            # Skip this test as the function signature is complex
-            pass
-        except (ImportError, TypeError, AttributeError):
-            pass
+        # Create a Spharmt instance for generating test data
+        sht = Spharmt(nlon=36, nlat=19)
+
+        # Create coordinate arrays manually
+        lons = np.linspace(0, 357.5, 36)  # 0 to 360, excluding 360
+        if sht.gridtype == "gaussian":
+            lats, _ = gaussian_lats_wts(19)
+        else:
+            lats = np.linspace(-90, 90, 19)
+
+        LAT, LON = np.meshgrid(lats, lons, indexing="ij")
+
+        # Simple harmonic function for testing
+        test_data = np.sin(2 * np.radians(LAT)) * np.cos(3 * np.radians(LON))
+
+        # Transform to spectral space
+        spec_coeffs = sht.grdtospec(test_data)
+
+        # Test point for interpolation
+        test_lat = 45.0
+        test_lon = 90.0
+
+        # Get Legendre functions for test latitude
+        leg_funcs = legendre(test_lat, sht.nlat - 1)  # ntrunc = nlat - 1
+
+        # Perform spectral interpolation
+        interp_value = specintrp(test_lon, spec_coeffs, leg_funcs)
+
+        # Verify the result
+        assert isinstance(interp_value, (float, complex, np.number))
+        assert np.isfinite(interp_value)
+
+        # Compare with expected value from analytical function
+        expected = np.sin(2 * np.radians(test_lat)) * np.cos(3 * np.radians(test_lon))
+        assert abs(interp_value - expected) < 0.5  # Allow some numerical error
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_specintrp_error_handling(self):
+        """Test error handling in specintrp function."""
+        try:
+            from skyborn.spharm import ValidationError, specintrp
+        except ImportError:
+            pytest.skip("specintrp function not available")
+
+        # Test with mismatched truncation limits
+        # Create spectral coefficients for T5 (triangular truncation)
+        nspec_t5 = ((5 + 1) * (5 + 2)) // 2  # T5 truncation has 21 coefficients
+        spec_coeffs_t5 = np.random.randn(nspec_t5) + 1j * np.random.randn(nspec_t5)
+
+        # Create Legendre functions for T10 (different truncation)
+        nspec_t10 = ((10 + 1) * (10 + 2)) // 2  # T10 truncation
+        leg_funcs_t10 = np.random.randn(nspec_t10)
+
+        # This should raise ValidationError due to mismatched truncations
+        with pytest.raises(ValidationError, match="inconsistent spectral truncations"):
+            specintrp(45.0, spec_coeffs_t5, leg_funcs_t10)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_specintrp_multiple_points(self):
+        """Test specintrp at multiple geographic points."""
+        try:
+            from skyborn.spharm import Spharmt, legendre, specintrp
+        except ImportError:
+            pytest.skip("specintrp function not available")
+
+        # Create test setup
+        sht = Spharmt(nlon=72, nlat=37)
+
+        # Create coordinate arrays manually
+        lons = np.linspace(0, 355, 72)  # 0 to 360, excluding 360
+        if sht.gridtype == "gaussian":
+            lats, _ = gaussian_lats_wts(37)
+        else:
+            lats = np.linspace(-90, 90, 37)
+
+        LAT, LON = np.meshgrid(lats, lons, indexing="ij")
+        test_data = np.cos(np.radians(LAT)) * np.sin(np.radians(LON))
+
+        # Transform to spectral space
+        spec_coeffs = sht.grdtospec(test_data)
+
+        # Test interpolation at multiple points
+        test_points = [(0.0, 0.0), (45.0, 90.0), (-30.0, 180.0), (60.0, -120.0)]
+
+        for lat, lon in test_points:
+            # Get Legendre functions
+            leg_funcs = legendre(lat, sht.nlat - 1)
+
+            # Interpolate
+            interp_val = specintrp(lon, spec_coeffs, leg_funcs)
+
+            # Basic validation
+            assert isinstance(interp_val, (float, complex, np.number))
+            assert np.isfinite(interp_val)
+
+            # Check against analytical expectation
+            expected = np.cos(np.radians(lat)) * np.sin(np.radians(lon))
+            assert abs(interp_val - expected) < 0.2  # Allow numerical error
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_specintrp_real_vs_complex_data(self):
+        """Test specintrp with both real and complex spectral data."""
+        try:
+            from skyborn.spharm import Spharmt, legendre, specintrp
+        except ImportError:
+            pytest.skip("specintrp function not available")
+
+        sht = Spharmt(nlon=36, nlat=19)
+
+        # Create coordinate arrays manually
+        lons = np.linspace(0, 357.5, 36)
+        if sht.gridtype == "gaussian":
+            lats, _ = gaussian_lats_wts(19)
+        else:
+            lats = np.linspace(-90, 90, 19)
+
+        LAT, LON = np.meshgrid(lats, lons, indexing="ij")
+        real_data = np.sin(np.radians(LAT))
+
+        # Transform to spectral (will be complex)
+        real_spec = sht.grdtospec(real_data)
+
+        # Create purely complex data
+        complex_data = 1j * np.cos(np.radians(LON))
+        complex_spec = sht.grdtospec(complex_data)
+
+        test_lat, test_lon = 30.0, 45.0
+        leg_funcs = legendre(test_lat, sht.nlat - 1)
+
+        # Test real spectral data
+        real_interp = specintrp(test_lon, real_spec, leg_funcs)
+        assert np.isreal(real_interp) or abs(np.imag(real_interp)) < 1e-10
+
+        # Test complex spectral data
+        complex_interp = specintrp(test_lon, complex_spec, leg_funcs)
+        # Should be purely imaginary or have small real part due to numerical precision
+        assert abs(np.real(complex_interp)) < 0.1  # Allow some numerical error
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_spharmt_error_conditions(self):
