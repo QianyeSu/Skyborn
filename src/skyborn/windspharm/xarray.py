@@ -31,16 +31,8 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 
 __all__ = ["VectorWind"]
 
-try:
-    import xarray as xr
-except ImportError:
-    try:
-        import xray as xr  # Fallback for older versions
-    except ImportError:
-        raise ImportError(
-            "xarray is required for the xarray interface. "
-            "Install with: pip install xarray"
-        )
+
+import xarray as xr
 
 from . import standard
 from ._common import get_apiorder, inspect_gridtype, to3d
