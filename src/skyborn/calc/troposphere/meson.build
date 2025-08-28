@@ -227,21 +227,27 @@ from pathlib import Path
 
 print("=== Extension source copy check ===")
 
-current_dir = Path.cwd()
-build_dir = current_dir / "build"
-print(f"Current dir: {current_dir}")
-print(f"Build dir: {build_dir}")
+current_dir = Path.cwd()  # This is the build directory itself
+module_dir = current_dir.parent  # This is the module source directory
+print(f"Current dir (build): {current_dir}")
+print(f"Module dir (source): {module_dir}")
 
-# Check if we should copy to source (heuristic: if no existing .pyd in source, or if it's older)
-should_copy = False
-
-# Search for compiled extension files in build directory
+# Search for compiled extension files in current build directory
 patterns = ["tropopause_height*.so", "tropopause_height*.pyd", "tropopause_height*.dylib"]
 built_files = []
 
+# Search directly in the build directory (current directory)
 for pattern in patterns:
-    found_files = glob.glob(str(build_dir / "**" / pattern), recursive=True)
+    found_files = glob.glob(str(current_dir / pattern), recursive=False)
     built_files.extend(found_files)
+
+# Also search recursively in case files are in subdirectories
+for pattern in patterns:
+    found_files = glob.glob(str(current_dir / "**" / pattern), recursive=True)
+    built_files.extend(found_files)
+
+# Remove duplicates
+built_files = list(set(built_files))
 
 if built_files:
     print(f"Found built files: {built_files}")
@@ -249,7 +255,7 @@ if built_files:
     # Check if we should copy to source directory
     for built_file_str in built_files:
         built_file = Path(built_file_str)
-        source_file = current_dir / built_file.name
+        source_file = module_dir / built_file.name
 
         # Copy if source doesn't exist or is older
         if not source_file.exists():
@@ -264,11 +270,18 @@ if built_files:
                 if source_file.exists():
                     source_file.unlink()
                 shutil.copy2(str(built_file), str(source_file))
-                print(f"✓ Copied {built_file.name} to source directory")
+                print(f"Copied {built_file.name} to source directory successfully")
             except Exception as e:
-                print(f"✗ Failed to copy {built_file.name}: {e}")
-else:
+                print(f"Failed to copy {built_file.name}: {e}")
+if not built_files:
     print("No compiled extension files found")
+    print("Available files in current directory:")
+    if current_dir.exists():
+        for f in current_dir.rglob("*"):
+            if f.is_file():
+                print(f"  {f}")
+    else:
+        print("  Current directory does not exist")
 
 # Create marker
 with open("''' + '@OUTPUT@' + '''", "w") as f:
