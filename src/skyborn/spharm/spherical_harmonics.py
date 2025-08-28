@@ -140,12 +140,8 @@ import sys
 import numpy as np
 from numpy.typing import NDArray
 
-try:
-    # Try relative import first (when imported as part of skyborn.spharm)
-    from . import _spherepack
-except ImportError:
-    # Fall back to absolute import (when imported directly)
-    import _spherepack
+# Try relative import first (when imported as part of skyborn.spharm)
+from . import _spherepack
 
 # Type aliases for better readability
 GridType = Literal["regular", "gaussian"]
