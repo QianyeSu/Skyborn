@@ -190,6 +190,7 @@ else:
     endif
 
     # Build the tropopause extension module
+    # Use subdir parameter to install directly into the Python package structure
     tropopause_ext = py.extension_module(
         'tropopause_height',
         [
@@ -203,16 +204,17 @@ else:
         dependencies: dependencies,
         fortran_args: fortran_args,
         c_args: c_args,
-        install: true,
-        install_dir: get_option('python.purelibdir') / 'skyborn' / 'calc' / 'troposphere',
+        install: true,   # Install to custom location if provided
+        install_dir: get_option('python.purelibdir') / 'skyborn' / 'calc' / 'troposphere',  # Use setuptools path if available
         build_by_default: true,
     )
 
-    # Copy to source directory for development
+    # Always create a copy target for source directory (for --inplace builds)
+    # This target will run after the main extension is built, but only copy if needed
     copy_to_source = custom_target(
-        'copy_tropopause_to_source',
+        'copy_to_source_for_inplace',
         input: tropopause_ext,
-        output: 'tropopause_copy_marker.txt',
+        output: 'inplace_copy_marker.txt',
         command: [
             py,
             '-c',
@@ -220,11 +222,20 @@ else:
 import os
 import shutil
 import glob
+import sys
 from pathlib import Path
+
+print("=== Extension source copy check ===")
 
 current_dir = Path.cwd()
 build_dir = current_dir / "build"
+print(f"Current dir: {current_dir}")
+print(f"Build dir: {build_dir}")
 
+# Check if we should copy to source (heuristic: if no existing .pyd in source, or if it's older)
+should_copy = False
+
+# Search for compiled extension files in build directory
 patterns = ["tropopause_height*.so", "tropopause_height*.pyd", "tropopause_height*.dylib"]
 built_files = []
 
@@ -232,23 +243,41 @@ for pattern in patterns:
     found_files = glob.glob(str(build_dir / "**" / pattern), recursive=True)
     built_files.extend(found_files)
 
-for built_file_str in built_files:
-    built_file = Path(built_file_str)
-    source_file = current_dir / built_file.name
+if built_files:
+    print(f"Found built files: {built_files}")
 
-    try:
-        if source_file.exists():
-            source_file.unlink()
-        shutil.copy2(str(built_file), str(source_file))
-        print(f"✓ Copied {built_file.name} to source directory")
-    except Exception as e:
-        print(f"✗ Failed to copy {built_file.name}: {e}")
+    # Check if we should copy to source directory
+    for built_file_str in built_files:
+        built_file = Path(built_file_str)
+        source_file = current_dir / built_file.name
 
+        # Copy if source doesn't exist or is older
+        if not source_file.exists():
+            should_copy = True
+            print(f"Source {built_file.name} doesn't exist, will copy")
+        elif built_file.stat().st_mtime > source_file.stat().st_mtime:
+            should_copy = True
+            print(f"Source {built_file.name} is older, will copy")
+
+        if should_copy:
+            try:
+                if source_file.exists():
+                    source_file.unlink()
+                shutil.copy2(str(built_file), str(source_file))
+                print(f"✓ Copied {built_file.name} to source directory")
+            except Exception as e:
+                print(f"✗ Failed to copy {built_file.name}: {e}")
+else:
+    print("No compiled extension files found")
+
+# Create marker
 with open("''' + '@OUTPUT@' + '''", "w") as f:
-    f.write("Tropopause extension copy completed\\n")
+    f.write("Source copy check completed\\n")
+
+print("=== Extension source copy check completed ===")
 '''
         ],
-        build_by_default: true,
+        build_by_default: true,  # Always run this check
         console: true
     )
 
