@@ -28,19 +28,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 __all__ = ["fill", "fill_multiple", "validate_grid_coverage"]
 
-try:
-    import xarray as xr
-except ImportError:
-    try:
-        import xray as xr  # Fallback for older versions
-    except ImportError:
-        raise ImportError(
-            "xarray is required for the xarray interface. "
-            "Install with: pip install xarray"
-        )
-
 import numpy as np
 import numpy.ma as ma
+import xarray as xr
 
 from . import gridfill
 

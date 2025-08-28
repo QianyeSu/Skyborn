@@ -1,23 +1,52 @@
-name: Workflow for pre-commit
+name: Pre-commit CI
 
+# Trigger conditions: PRs and pushes to main branches
 on:
   pull_request:
+    branches: [main, dev]  # Include dev branch for development workflow
   push:
-    branches: [main]
+    branches: [main, dev]  # Monitor both main and dev branches
     paths:
       - "src/**"
       - "tests/**"
       - ".pre-commit-config.yaml"
       - "pyproject.toml"
+      - "requirements*.txt"
 
 jobs:
-  main:
+  code-quality:
+    name: Code Quality Checks
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
+      # Checkout repository with full history for better diff analysis
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Full history for better diffs
+
+      # Set up Python environment with dependency caching
+      - name: Set up Python
+        uses: actions/setup-python@v5.3.0
         with:
           python-version: "3.10"
-      - uses: pre-commit/action@v3.0.1
-      - uses: pre-commit-ci/lite-action@v1.1.0
-        if: always()
+          cache: 'pip'  # Cache pip dependencies for faster builds
+
+      # Install pre-commit (other dependencies installed automatically)
+      - name: Install pre-commit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pre-commit
+
+      # Run pre-commit hooks with enhanced output
+      - name: Run pre-commit hooks
+        uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: --show-diff-on-failure --color=always
+
+      # Auto-fix minor issues with pre-commit-ci lite
+      - name: Auto-fix with pre-commit-ci
+        uses: pre-commit-ci/lite-action@v1.1.0
+        if: always()  # Run even if previous steps fail
+        with:
+          msg: "pre-commit-ci: auto fixes from GitHub Actions"
