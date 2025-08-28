@@ -6,6 +6,7 @@ This module contains various calculation functions including:
 - Emergent constraint methods
 - PDF calculations and analysis
 - Mann-Kendall trend analysis
+- WMO tropopause calculation (with Fortran extensions)
 """
 
 from .calculations import (
@@ -34,3 +35,6 @@ from .mann_kendall import (
     mann_kendall_xarray,
     trend_analysis,
 )
+
+# Import tropopause calculation (requires compiled extensions)
+from .troposphere import trop_wmo, trop_wmo_profile

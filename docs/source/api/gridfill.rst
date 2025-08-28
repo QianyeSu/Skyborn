@@ -22,16 +22,15 @@ Key Features
 * Support for cyclic and non-cyclic boundaries
 * Configurable initialization (zeros or zonal mean)
 * Multi-dimensional array support
-* Integration with iris cubes and xarray DataArrays
+* Integration with xarray DataArrays
 
 Interfaces
 ~~~~~~~~~~
 
-The gridfill module provides three main interfaces:
+The gridfill module provides two main interfaces:
 
 1. **Standard Interface**: Works with numpy arrays and masked arrays
-2. **Iris Interface**: Preserves Iris cube metadata and coordinates
-3. **xarray Interface**: Modern interface with automatic coordinate detection
+2. **xarray Interface**: Modern interface with automatic coordinate detection
 
 Standard Interface
 ------------------
@@ -46,7 +45,6 @@ Main Functions
 ~~~~~~~~~~~~~~
 
 .. autofunction:: skyborn.gridfill.fill
-.. autofunction:: skyborn.gridfill.fill_cube
 
 xarray Interface
 ----------------

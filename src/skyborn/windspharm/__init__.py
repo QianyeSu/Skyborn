@@ -36,16 +36,7 @@ try:
 except ImportError:
     __version__ = "unknown"
 
-try:
-    from . import iris
-except (ImportError, RuntimeError):
-    # Skip iris if not available or if there are package conflicts
-    pass
-
-try:
-    from . import xarray
-except ImportError:
-    pass
+from . import xarray
 
 __author__ = "Qianye Su"
 __license__ = "BSD-3-Clause"

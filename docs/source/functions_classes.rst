@@ -12,6 +12,25 @@ This page provides a comprehensive list of all functions and classes available i
 Core Calculations
 -----------------
 
+Atmospheric Physics Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. currentmodule:: skyborn.calc
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+   :class: skyborn-function-table
+
+   * - Function
+     - Description
+   * - :func:`skyborn.calc.troposphere.trop_wmo`
+     - WMO tropopause calculation for multi-dimensional data
+   * - :func:`skyborn.calc.troposphere.trop_wmo_profile`
+     - WMO tropopause calculation for single atmospheric profiles
+   * - :func:`skyborn.calc.troposphere.xarray.trop_wmo`
+     - Xarray interface for tropopause calculation with automatic pressure generation
+
 Statistical Functions
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -26,6 +45,8 @@ Statistical Functions
      - Description
    * - :func:`skyborn.calc.linear_regression`
      - Linear regression analysis
+   * - :func:`skyborn.calc.spatial_correlation`
+     - Spatial correlation analysis between gridded data and time series
    * - :func:`skyborn.calc.pearson_correlation`
      - Pearson correlation coefficient
    * - :func:`skyborn.calc.spearman_correlation`
@@ -126,8 +147,6 @@ Core GridFill Functions
      - Description
    * - :func:`skyborn.gridfill.fill`
      - Fill missing data using Poisson grid filling
-   * - :func:`skyborn.gridfill.fill_cube`
-     - Fill multiple arrays simultaneously
 
 Xarray GridFill Interface
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -518,12 +537,22 @@ Function Usage Categories
 
    * - Function/Class
      - Usage Category & Description
+   * - **Atmospheric Physics**
+     -
+   * - :func:`skyborn.calc.troposphere.trop_wmo`
+     - Multi-dimensional WMO tropopause calculation
+   * - :func:`skyborn.calc.troposphere.trop_wmo_profile`
+     - Single profile tropopause identification
+   * - :func:`skyborn.calc.troposphere.xarray.trop_wmo`
+     - Xarray tropopause analysis with auto pressure generation
    * - **Statistical Analysis**
      -
    * - :func:`skyborn.calc.pearson_correlation`
      - Correlation analysis
    * - :func:`skyborn.calc.spearman_correlation`
      - Non-parametric correlation
+   * - :func:`skyborn.calc.spatial_correlation`
+     - Spatial correlation patterns
    * - :func:`skyborn.calc.linear_regression`
      - Regression analysis
    * - :func:`skyborn.calc.gaussian_pdf`

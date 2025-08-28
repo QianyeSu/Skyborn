@@ -51,7 +51,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
-    'sphinx_autodoc_typehints',
+    # 'sphinx_autodoc_typehints',
     'myst_nb',  # For Jupyter notebook support (includes myst_parser)
     'sphinx_copybutton',  # Add copy button to code blocks
 ]
@@ -213,7 +213,8 @@ def get_version_from_init():
     import re
     from pathlib import Path
 
-    init_file = Path(__file__).parent.parent.parent / "src" / "skyborn" / "__init__.py"
+    init_file = Path(__file__).parent.parent.parent / \
+        "src" / "skyborn" / "__init__.py"
 
     if init_file.exists():
         with open(init_file, 'r', encoding='utf-8') as f:
@@ -255,7 +256,7 @@ def setup_entrance_page(app, exception):
         try:
             with open(original_index, 'r', encoding='utf-8') as f:
                 index_content = f.read()
-            if 'particles-canvas' in index_content:  # entrance.html feature
+            if 'id="shader"' in index_content:  # entrance.html feature
                 print("SUCCESS: Entrance page already set up properly, skipping...")
                 return
         except Exception:
@@ -267,12 +268,13 @@ def setup_entrance_page(app, exception):
             with open(original_index, 'r', encoding='utf-8') as f:
                 content = f.read()
             # If index.html contains Sphinx documentation features, move it
-            if 'particles-canvas' not in content:
+            if 'id="shader"' not in content:
                 print("   Renaming original index.html to documentation.html...")
                 if documentation_page.exists():
                     documentation_page.unlink()
                 shutil.move(str(original_index), str(documentation_page))
-                print(f"   SUCCESS: Original documentation moved to {documentation_page}")
+                print(
+                    f"   SUCCESS: Original documentation moved to {documentation_page}")
         except Exception as e:
             print(f"   ERROR: Error moving index.html: {e}")
             return
@@ -296,7 +298,8 @@ def setup_entrance_page(app, exception):
         with open(original_index, 'w', encoding='utf-8') as f:
             f.write(content)
 
-        print(f"   SUCCESS: Entrance page set as main index with version {current_version}")
+        print(
+            f"   SUCCESS: Entrance page set as main index with version {current_version}")
         print(f"   SUCCESS: Documentation available at documentation.html")
 
     except Exception as e:
