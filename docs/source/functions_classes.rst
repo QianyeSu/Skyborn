@@ -24,11 +24,11 @@ Atmospheric Physics Functions
 
    * - Function
      - Description
-   * - :func:`skyborn.calc.tropopause.trop_wmo`
+   * - :func:`skyborn.calc.troposphere.trop_wmo`
      - WMO tropopause calculation for multi-dimensional data
-   * - :func:`skyborn.calc.tropopause.trop_wmo_profile`
+   * - :func:`skyborn.calc.troposphere.trop_wmo_profile`
      - WMO tropopause calculation for single atmospheric profiles
-   * - :func:`skyborn.calc.tropopause_xarray.trop_wmo`
+   * - :func:`skyborn.calc.troposphere.xarray.trop_wmo`
      - Xarray interface for tropopause calculation with automatic pressure generation
 
 Statistical Functions
@@ -539,11 +539,11 @@ Function Usage Categories
      - Usage Category & Description
    * - **Atmospheric Physics**
      -
-   * - :func:`skyborn.calc.tropopause.trop_wmo`
+   * - :func:`skyborn.calc.troposphere.trop_wmo`
      - Multi-dimensional WMO tropopause calculation
-   * - :func:`skyborn.calc.tropopause.trop_wmo_profile`
+   * - :func:`skyborn.calc.troposphere.trop_wmo_profile`
      - Single profile tropopause identification
-   * - :func:`skyborn.calc.tropopause_xarray.trop_wmo`
+   * - :func:`skyborn.calc.troposphere.xarray.trop_wmo`
      - Xarray tropopause analysis with auto pressure generation
    * - **Statistical Analysis**
      -

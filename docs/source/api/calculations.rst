@@ -6,11 +6,9 @@ The Skyborn calculation module provides statistical, atmospheric, and mathematic
 Atmospheric Physics Functions
 -----------------------------
 
-.. automodule:: skyborn.calc.tropopause
-   :members:
+.. automodule:: skyborn.calc.troposphere.tropopause
 
-.. automodule:: skyborn.calc.tropopause_xarray
-   :members:
+.. automodule:: skyborn.calc.troposphere.xarray
 
 Statistical Functions
 ---------------------
@@ -80,18 +78,18 @@ Example Usage
    ds = xr.open_dataset('era5_data.nc')  # Temperature with level coordinate in hPa
 
    # Auto-generate pressure from level coordinate - no pressure array needed!
-   result = skb.calc.tropopause_xarray.trop_wmo(ds.temperature)
+   result = skb.calc.troposphere.xarray.trop_wmo(ds.temperature)
    print(f"Global tropopause calculated for {result.pressure.shape}")
 
    # === 2D Cross-section Analysis ===
    # Meridional cross-section (level, lat)
    temp_meridional = ds.temperature.isel(time=0, lon=0)  # (level, lat)
-   result_2d = skb.calc.tropopause_xarray.trop_wmo(temp_meridional)
+   result_2d = skb.calc.troposphere.xarray.trop_wmo(temp_meridional)
    # Result shape: (lat,) - tropopause height at each latitude
 
    # === 4D Climate Analysis ===
    # Multi-year dataset (time, level, lat, lon)
-   result_4d = skb.calc.tropopause_xarray.trop_wmo(ds.temperature)
+   result_4d = skb.calc.troposphere.xarray.trop_wmo(ds.temperature)
    # Result shape: (time, lat, lon) - preserves time and spatial dimensions
 
    # Seasonal analysis
@@ -99,7 +97,7 @@ Example Usage
 
    # === Advanced Usage ===
    # Custom pressure field and WMO criterion
-   result = skb.calc.tropopause_xarray.trop_wmo(
+   result = skb.calc.troposphere.xarray.trop_wmo(
        temperature=ds.temperature,
        pressure=ds.pressure,  # Custom pressure field
        lapse_criterion=2.5,   # Custom WMO threshold (K/km)
