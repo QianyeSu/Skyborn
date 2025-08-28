@@ -15,7 +15,7 @@ openmp_dep = dependency('openmp', required: false)
 py.install_sources([
     '__init__.py',
     'tropopause.py',
-    'tropopause_xarray.py'
+    'xarray.py'
 ], subdir: 'skyborn/calc/troposphere')
 
 # Get numpy include directories
