@@ -638,3 +638,114 @@ class TestXarraySpecialOperations:
         assert abs_vort.shape == u.shape
         # Check that it has proper attributes
         assert "standard_name" in abs_vort.attrs
+
+    def test_truncate_function(self, special_data):
+        """Test spectral truncation of scalar fields."""
+        u, v = special_data
+        vw = VectorWind(u, v)
+
+        # Get a scalar field to truncate
+        vorticity = vw.vorticity()
+
+        # Test basic truncation without specifying level
+        vort_trunc_default = vw.truncate(vorticity)
+        assert isinstance(vort_trunc_default, xr.DataArray)
+        assert vort_trunc_default.shape == vorticity.shape
+        assert vort_trunc_default.dims == vorticity.dims
+        assert "lat" in vort_trunc_default.coords
+        assert "lon" in vort_trunc_default.coords
+
+        # Test truncation with specific level (T15 for 19 latitudes)
+        vort_trunc_t15 = vw.truncate(vorticity, truncation=15)
+        assert isinstance(vort_trunc_t15, xr.DataArray)
+        assert vort_trunc_t15.shape == vorticity.shape
+        assert vort_trunc_t15.dims == vorticity.dims
+
+        # Truncated field should be different from original (usually smoother)
+        assert not np.allclose(vort_trunc_t15.values, vorticity.values)
+
+        # Test with different scalar fields
+        divergence = vw.divergence()
+        div_trunc = vw.truncate(divergence, truncation=10)
+        assert isinstance(div_trunc, xr.DataArray)
+        assert div_trunc.shape == divergence.shape
+
+    def test_truncate_error_handling(self, special_data):
+        """Test error handling in truncate function."""
+        u, v = special_data
+        vw = VectorWind(u, v)
+        vorticity = vw.vorticity()
+
+        # Test with invalid input type
+        with pytest.raises(TypeError, match="Field must be xarray.DataArray"):
+            vw.truncate(vorticity.values)  # Pass numpy array instead
+
+        # Test with too high truncation (should be <= nlat-1 = 18)
+        with pytest.raises(Exception):
+            vw.truncate(vorticity, truncation=25)
+
+    def test_truncate_coordinate_preservation(self, special_data):
+        """Test that truncate preserves coordinate information."""
+        u, v = special_data
+        vw = VectorWind(u, v)
+
+        # Add some metadata to original data
+        vorticity = vw.vorticity()
+        vorticity.attrs["test_attr"] = "test_value"
+        vorticity.attrs["units"] = "1/s"
+
+        # Apply truncation
+        vort_trunc = vw.truncate(vorticity, truncation=12)
+
+        # Check coordinate preservation
+        assert "lat" in vort_trunc.coords
+        assert "lon" in vort_trunc.coords
+
+        # Note: windspharm automatically reverses latitude to north-to-south ordering
+        # So we check that the longitude coordinates are preserved exactly
+        np.testing.assert_array_equal(
+            vort_trunc.coords["lon"].values, u.coords["lon"].values
+        )
+
+        # For latitude, check that all values are present (may be reversed)
+        assert len(vort_trunc.coords["lat"]) == len(u.coords["lat"])
+        assert np.allclose(
+            sorted(vort_trunc.coords["lat"].values), sorted(u.coords["lat"].values)
+        )
+
+        # Check that dimensions are preserved
+        assert vort_trunc.dims == vorticity.dims
+
+    def test_truncate_multidimensional(self):
+        """Test truncate with multidimensional data."""
+        # Create 3D data (time, lat, lon)
+        lat = np.linspace(-90, 90, 19)
+        lon = np.linspace(0, 357.5, 36)
+        time = np.arange(5)
+
+        u_data = np.random.randn(5, 19, 36)
+        v_data = np.random.randn(5, 19, 36)
+
+        u = xr.DataArray(
+            u_data,
+            dims=["time", "lat", "lon"],
+            coords={"time": time, "lat": lat, "lon": lon},
+        )
+        v = xr.DataArray(
+            v_data,
+            dims=["time", "lat", "lon"],
+            coords={"time": time, "lat": lat, "lon": lon},
+        )
+
+        vw = VectorWind(u, v)
+        vorticity = vw.vorticity()
+
+        # Apply truncation to 3D field
+        vort_trunc = vw.truncate(vorticity, truncation=10)
+
+        assert isinstance(vort_trunc, xr.DataArray)
+        assert vort_trunc.shape == vorticity.shape
+        assert vort_trunc.dims == vorticity.dims
+        assert "time" in vort_trunc.coords
+        assert "lat" in vort_trunc.coords
+        assert "lon" in vort_trunc.coords

@@ -15,19 +15,14 @@ python:
       path: .
     - requirements: requirements-docs.txt
 
-# Use standard Sphinx build process for better cross-reference support
-sphinx:
-  configuration: docs/source/conf.py
-  fail_on_warning: false
-
-# Build configuration with compilation enabled (following build-wheels.yml)
+# Use custom build script optimized for RTD (no sphinx configuration to avoid double build)
 build:
   os: ubuntu-22.04
   tools:
     python: "mambaforge-22.9"
   jobs:
     pre_build:
-      # Set up compilation environment (like your Linux builds)
+      # Set up compilation environment
       - export FC=gfortran
       - export CC=gcc
       - export F77=gfortran
@@ -38,10 +33,12 @@ build:
       - gcc --version
       - meson --version
       - ninja --version
-      # Build skyborn with Fortran/Cython extensions for proper docs
+      # Build skyborn with Fortran/Cython extensions
       - echo "🏗️ Building Skyborn with compiled extensions..."
       - python setup.py build_ext --inplace --verbose
+      # Build documentation using custom script
+      - python docs/build_docs.py
     post_build:
-      # Verify documentation was generated with cross-references
-      - test -f $READTHEDOCS_OUTPUT/html/functions_classes.html && echo "✅ Functions page generated" || echo "❌ Functions page missing"
-      - test -f $READTHEDOCS_OUTPUT/html/api/spharm.html && echo "✅ Spharm API page generated" || echo "❌ Spharm API page missing"
+      # Verify documentation was generated
+      - test -f $READTHEDOCS_OUTPUT/html/index.html && echo "✅ Entry page generated" || echo "❌ Entry page missing"
+      - test -f $READTHEDOCS_OUTPUT/html/documentation.html && echo "✅ Documentation page generated" || echo "❌ Documentation page missing"

@@ -1,7 +1,14 @@
 Calculation
 =====================
 
-The Skyborn calculation module provides statistical and mathematical functions for climate data analysis.
+The Skyborn calculation module provides statistical, atmospheric, and mathematical functions for climate data analysis.
+
+Atmospheric Physics Functions
+-----------------------------
+
+.. automodule:: skyborn.calc.troposphere.tropopause
+
+.. automodule:: skyborn.calc.troposphere.xarray
 
 Statistical Functions
 ---------------------
@@ -50,11 +57,56 @@ Utility Functions
 Example Usage
 -------------
 
+**Tropopause Calculation Examples**
+
 .. code-block:: python
 
    import skyborn as skb
    import numpy as np
    import xarray as xr
+
+   # === 1D Profile Analysis ===
+   # Single atmospheric profile
+   pressure = np.array([50, 100, 200, 300, 500, 700, 850, 1000])  # hPa
+   temperature = np.array([200, 210, 220, 230, 250, 270, 280, 288])  # K
+
+   result = skb.calc.trop_wmo_profile(temperature, pressure)
+   print(f"Tropopause: {result['pressure']:.1f} hPa at {result['height']:.0f} m")
+
+   # === xarray Interface - Simplified ===
+   # Load atmospheric data with level coordinate
+   ds = xr.open_dataset('era5_data.nc')  # Temperature with level coordinate in hPa
+
+   # Auto-generate pressure from level coordinate - no pressure array needed!
+   result = skb.calc.troposphere.xarray.trop_wmo(ds.temperature)
+   print(f"Global tropopause calculated for {result.pressure.shape}")
+
+   # === 2D Cross-section Analysis ===
+   # Meridional cross-section (level, lat)
+   temp_meridional = ds.temperature.isel(time=0, lon=0)  # (level, lat)
+   result_2d = skb.calc.troposphere.xarray.trop_wmo(temp_meridional)
+   # Result shape: (lat,) - tropopause height at each latitude
+
+   # === 4D Climate Analysis ===
+   # Multi-year dataset (time, level, lat, lon)
+   result_4d = skb.calc.troposphere.xarray.trop_wmo(ds.temperature)
+   # Result shape: (time, lat, lon) - preserves time and spatial dimensions
+
+   # Seasonal analysis
+   seasonal_mean = result_4d.height.groupby('time.season').mean()
+
+   # === Advanced Usage ===
+   # Custom pressure field and WMO criterion
+   result = skb.calc.troposphere.xarray.trop_wmo(
+       temperature=ds.temperature,
+       pressure=ds.pressure,  # Custom pressure field
+       lapse_criterion=2.5,   # Custom WMO threshold (K/km)
+       pressure_unit='Pa'     # If pressure is in Pascals
+   )
+
+**Statistical Analysis Examples**
+
+.. code-block:: python
 
    # Statistical analysis
    x = np.random.randn(100)
