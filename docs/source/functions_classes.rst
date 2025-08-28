@@ -45,6 +45,8 @@ Statistical Functions
      - Description
    * - :func:`skyborn.calc.linear_regression`
      - Linear regression analysis
+   * - :func:`skyborn.calc.spatial_correlation`
+     - Spatial correlation analysis between gridded data and time series
    * - :func:`skyborn.calc.pearson_correlation`
      - Pearson correlation coefficient
    * - :func:`skyborn.calc.spearman_correlation`
@@ -551,6 +553,8 @@ Function Usage Categories
      - Correlation analysis
    * - :func:`skyborn.calc.spearman_correlation`
      - Non-parametric correlation
+   * - :func:`skyborn.calc.spatial_correlation`
+     - Spatial correlation patterns
    * - :func:`skyborn.calc.linear_regression`
      - Regression analysis
    * - :func:`skyborn.calc.gaussian_pdf`

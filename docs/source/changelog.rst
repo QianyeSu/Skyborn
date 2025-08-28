@@ -37,6 +37,8 @@ Version 0.3.13 (Current)
 
 **📊 New Functionality**
 
+* **Spatial Correlation Analysis**: Added ``skyborn.calc.spatial_correlation`` function for analyzing spatial patterns of correlation between gridded data and time series
+* **Enhanced Linear Regression**: Improved ``linear_regression`` function with robust NaN value handling for climate data with missing observations
 * **Multi-Scale Analysis**: Seamlessly analyze from single profiles to global climate datasets
 * **Time Series Support**: Process multi-year datasets with preserved temporal coordinates
 * **Cross-Section Analysis**: Dedicated support for meridional and zonal cross-sections

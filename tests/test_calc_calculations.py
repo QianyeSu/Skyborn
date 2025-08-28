@@ -162,6 +162,67 @@ class TestLinearRegression:
         assert slopes.shape == (2, 2)
         # With only one point, can't compute meaningful statistics
 
+    def test_linear_regression_with_nans(self):
+        """Test linear regression with NaN values."""
+        np.random.seed(42)
+        n_time, n_lat, n_lon = 60, 15, 20
+
+        # Create predictor with some NaN values
+        predictor = np.random.randn(n_time)
+        predictor[5:10] = np.nan  # Add NaN to predictor
+
+        # Create data with some NaN values
+        data = np.random.randn(n_time, n_lat, n_lon)
+        data[:8, :3, :3] = np.nan  # Add NaN block to data
+        data[50:55, 10:12, 15:18] = np.nan  # Add another NaN region
+
+        # Add some known relationships where there are no NaNs
+        for lat in range(8, 12):
+            for lon in range(10, 15):
+                # Create valid data points only where both data and predictor are finite
+                valid_mask = ~np.isnan(predictor)
+                data[valid_mask, lat, lon] = 0.7 * predictor[
+                    valid_mask
+                ] + 0.3 * np.random.randn(np.sum(valid_mask))
+
+        slopes, p_values = linear_regression(data, predictor)
+
+        # Check shapes
+        assert slopes.shape == (n_lat, n_lon)
+        assert p_values.shape == (n_lat, n_lon)
+
+        # Areas with too many NaNs should be NaN in results
+        assert np.all(np.isnan(slopes[:3, :3]))
+        assert np.all(np.isnan(p_values[:3, :3]))
+
+        # Areas with sufficient valid data should have finite results
+        valid_region = slopes[8:12, 10:15]
+        valid_p_region = p_values[8:12, 10:15]
+
+        # At least some points should have valid results
+        has_valid_slopes = np.any(~np.isnan(valid_region))
+        has_valid_p_values = np.any(~np.isnan(valid_p_region))
+
+        assert (
+            has_valid_slopes
+        ), "Should have some valid slope estimates in regions with sufficient data"
+        assert (
+            has_valid_p_values
+        ), "Should have some valid p-values in regions with sufficient data"
+
+        # Valid slopes should be finite and reasonable
+        finite_slopes = valid_region[~np.isnan(valid_region)]
+        finite_p_values = valid_p_region[~np.isnan(valid_p_region)]
+
+        if len(finite_slopes) > 0:
+            assert np.all(np.isfinite(finite_slopes))
+            assert np.mean(finite_slopes) > 0.3  # Should detect positive correlation
+
+        if len(finite_p_values) > 0:
+            assert np.all(np.isfinite(finite_p_values))
+            assert np.all(finite_p_values >= 0.0)
+            assert np.all(finite_p_values <= 1.0)
+
     def test_linear_regression_output_types(self, sample_regression_data):
         """Test that outputs are numpy arrays regardless of input type."""
         data, predictor = sample_regression_data
