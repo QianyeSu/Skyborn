@@ -44,11 +44,9 @@ from .gradients import (
 
 # Import key gridfill functions for convenient access
 from .gridfill import fill as gridfill_fill
-from .gridfill import fill_cube as gridfill_fill_cube
 
 # Expose gridfill functions at top level with clear names
 fill = gridfill_fill
-fill_cube = gridfill_fill_cube
 
 
 __version__ = "0.3.12.post1"
