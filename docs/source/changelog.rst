@@ -4,6 +4,14 @@ Changelog
 Version 0.3.13 (Current)
 -------------------------
 
+**🔧 Breaking Changes**
+
+* **Removed Iris Support**: Removed ``fill_cube`` function and iris dependencies from gridfill module
+
+  - Use ``skyborn.gridfill.xarray.fill`` for xarray DataArrays instead
+  - Iris cube support was causing package conflicts and installation difficulties
+  - Focus shifted to xarray-based workflows which are more common in the scientific Python ecosystem
+
 **🎯 Tropopause Calculation Enhancements**
 
 * **New Comprehensive Tropopause Module**: Complete implementation of WMO tropopause calculation with multi-dimensional support

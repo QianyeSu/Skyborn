@@ -14,7 +14,7 @@ Key Features:
     - Support for cyclic and non-cyclic boundaries
     - Configurable initialization (zeros or zonal mean)
     - Multi-dimensional array support
-    - Integration with iris cubes
+    - Integration with xarray DataArrays
 
 Mathematical Background:
     The algorithm solves the 2D Poisson equation:
@@ -54,15 +54,7 @@ import numpy.ma as ma
 
 from ._gridfill import poisson_fill_grids as _poisson_fill_grids
 
-__all__ = ["fill", "fill_cube"]
-
-# Type alias for iris cube (may not be available)
-try:
-    import iris
-
-    IrisCube = iris.cube.Cube
-except (ImportError, RuntimeError):
-    IrisCube = Any
+__all__ = ["fill"]
 
 
 def _order_dims(grid: np.ndarray, xpos: int, ypos: int) -> Tuple[np.ndarray, list]:
@@ -283,8 +275,6 @@ def fill(
 
     where the residual is computed using a 5-point stencil.
 
-    For best performance, use `fill_cube()` when working with iris cubes
-    as it automatically handles coordinate detection and cyclic boundaries.
 
     Examples
     --------
@@ -317,7 +307,7 @@ def fill(
 
     See Also
     --------
-    fill_cube : Fill iris cubes with automatic coordinate detection
+    skyborn.gridfill.xarray.fill : Fill xarray DataArrays with automatic coordinate detection
     """
     # re-shape to 3-D leaving the grid dimensions at the front:
     grids, info = _prep_data(grids, xdim, ydim)
@@ -359,139 +349,3 @@ def fill(
                 )
             )
     return grids, converged
-
-
-def fill_cube(
-    cube: Any,  # iris.cube.Cube when iris is available
-    eps: float,
-    relax: float = 0.6,
-    itermax: int = 100,
-    initzonal: bool = False,
-    initzonal_linear: bool = False,
-    initial_value: float = 0.0,
-    full_output: bool = False,
-    verbose: bool = False,
-    inplace: bool = False,
-) -> Union[Any, Tuple[Any, np.ndarray]]:
-    """
-    Fill missing values in an iris cube using Poisson equation solver.
-
-    This is a convenience function that wraps `fill()` for iris cubes,
-    automatically detecting spatial coordinates and handling cyclic boundaries.
-    It preserves all cube metadata while filling gaps in the data.
-
-    Parameters
-    ----------
-    cube : iris.cube.Cube
-        Input cube containing masked data to fill
-    eps : float
-        Convergence tolerance for the iterative solver
-    relax : float, optional
-        Relaxation parameter (0 < relax < 1). Default: 0.6
-    itermax : int, optional
-        Maximum iterations. Default: 100
-    initzonal : bool, optional
-        Initialize missing values with zonal mean instead of zeros. Default: False
-    initzonal_linear : bool, optional
-        Use linear interpolation for zonal initialization. This provides better
-        initial conditions by interpolating between valid points in each latitude
-        band rather than using a constant mean value. Can be used with both
-        cyclic and non-cyclic data. Default: False
-    initial_value : float, optional
-        Custom initial value for missing data when using zero initialization
-        (i.e., when both initzonal=False and initzonal_linear=False).
-        Default: 0.0
-    full_output : bool, optional
-        Return convergence information along with filled cube. Default: False
-    verbose : bool, optional
-        Print convergence diagnostics. Default: False
-    inplace : bool, optional
-        Modify input cube in-place instead of creating copy. Default: False
-
-    Returns
-    -------
-    filled_cube : iris.cube.Cube
-        Cube with missing values filled
-    not_converged : numpy.ndarray, optional
-        Boolean array indicating non-converged slices (only if full_output=True)
-
-    Raises
-    ------
-    CoordinateNotFoundError
-        If cube lacks recognizable x or y coordinates
-
-    Warnings
-    --------
-    Issues warning if algorithm fails to converge on any slices
-
-    Notes
-    -----
-    - Automatically detects longitude/latitude coordinates using iris conventions
-    - Handles cyclic longitude boundaries automatically
-    - Preserves all cube attributes, coordinates, and metadata
-    - For global grids, cyclic boundary conditions are applied automatically
-
-    Examples
-    --------
-    Fill missing values in a temperature cube:
-
-    >>> import iris
-    >>> from skyborn.gridfill import fill_cube
-    >>>
-    >>> # Load cube with missing data
-    >>> cube = iris.load_cube('temperature_with_gaps.nc')
-    >>>
-    >>> # Fill gaps with tight convergence
-    >>> filled_cube = fill_cube(cube, eps=1e-5, verbose=True)
-    >>>
-    >>> # Get convergence information
-    >>> filled_cube, not_converged = fill_cube(
-    ...     cube, eps=1e-4, full_output=True
-    ... )
-    >>> print(f"Failed slices: {not_converged.sum()}")
-
-    See Also
-    --------
-    fill : Lower-level function for numpy arrays
-    """
-    # Detect if longitude coordinate is cyclic
-    cyclic = cube.coord(axis="x").circular
-
-    # Get coordinate dimension indices
-    x_dim = cube.coord_dims(cube.coord(axis="x"))[0]
-    y_dim = cube.coord_dims(cube.coord(axis="y"))[0]
-
-    # Fill the data
-    filled_data, cnv = fill(
-        cube.data,
-        x_dim,
-        y_dim,
-        eps=eps,
-        relax=relax,
-        itermax=itermax,
-        initzonal=initzonal,
-        initzonal_linear=initzonal_linear,
-        cyclic=cyclic,
-        initial_value=initial_value,
-        verbose=verbose,
-    )
-
-    # Check convergence and issue warnings
-    not_converged = np.logical_not(cnv)
-    if np.any(not_converged):
-        warnings.warn(
-            "gridfill did not converge on {} out of {} "
-            "slices".format(not_converged.sum(), not_converged.size)
-        )
-
-    # Create output cube
-    if inplace:
-        cube.data = filled_data
-        retcube = cube
-    else:
-        retcube = cube.copy(data=filled_data)
-
-    if full_output:
-        return retcube, not_converged
-    else:
-        return retcube
