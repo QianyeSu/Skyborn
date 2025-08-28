@@ -64,15 +64,9 @@ Notes:
 
 from __future__ import absolute_import
 
-from .gridfill import fill
-
 # Try to import xarray interface if xarray is available
-try:
-    from . import xarray
-
-    _has_xarray = True
-except ImportError:
-    _has_xarray = False
+from . import xarray
+from .gridfill import fill
 
 try:
     from skyborn import __version__
