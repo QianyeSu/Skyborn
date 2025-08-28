@@ -12,6 +12,7 @@ For xarray interface:
     >>> from skyborn.calc.troposphere.xarray import trop_wmo
 """
 
+from . import xarray
 from .tropopause import trop_wmo, trop_wmo_profile
 
 __all__ = ["trop_wmo", "trop_wmo_profile"]

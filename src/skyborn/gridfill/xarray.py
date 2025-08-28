@@ -343,7 +343,6 @@ def fill(
     See Also
     --------
     skyborn.gridfill.fill : Lower-level function for numpy arrays
-    skyborn.gridfill.fill_cube : Fill iris cubes
     """
     # Validate input type
     if not isinstance(data, xr.DataArray):
