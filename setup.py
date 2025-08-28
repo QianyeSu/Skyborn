@@ -67,92 +67,7 @@ else:
     print("📚 Skipping gfortran check in documentation build mode")
 
 
-def get_gridfill_extensions():
-    """Get Cython extensions for gridfill module with cross-platform optimizations"""
-    extensions = []
-
-    if HAVE_CYTHON:
-        import platform
-
-        # Cross-platform optimization flags based on existing project standards
-        # Similar to what we use for Fortran compilation
-        # Check compiler type on Windows
-        is_msvc = platform.system() == "Windows" and (
-            "MSVC" in os.environ.get("CC", "") or "cl.exe" in os.environ.get("CC", "")
-        )
-
-        # Check for Apple Silicon (arm64) architecture
-        is_macos_arm64 = platform.system() == "Darwin" and platform.machine() == "arm64"
-
-        if is_msvc:
-            # MSVC flags for Windows
-            extra_compile_args = [
-                # Maximum speed optimization (stable, Microsoft recommended)
-                "/O2",
-                "/Oy",  # Frame pointer omission
-                "/GT",  # Support fiber-safe thread-local storage
-                # Use SSE2 instructions (widely supported on x86-64)
-                "/arch:SSE2",
-                # Note: Removed /fp:fast to preserve numerical precision
-            ]
-        elif is_macos_arm64:
-            # Apple Silicon (arm64) optimized flags
-            extra_compile_args = [
-                "-O3",  # Maximum optimization
-                "-march=armv8-a",  # ARM64 architecture
-                "-mtune=apple-m1",  # Tune for Apple Silicon
-                "-fPIC",  # Position Independent Code
-                "-funroll-loops",  # Unroll loops for performance
-                "-finline-functions",  # Inline functions
-                "-ftree-vectorize",  # Enable vectorization
-                "-ffinite-math-only",  # Assume finite math
-                "-fno-trapping-math",  # Disable floating-point traps
-                "-falign-functions=32",  # Function alignment
-            ]
-        else:
-            # GCC/Clang compatible flags (Linux/x86-64 macOS/MinGW)
-            # Using same strategy as Fortran compilation in this project
-            extra_compile_args = [
-                "-O3",  # Maximum optimization
-                # Target x86-64 architecture (portable)
-                "-march=x86-64",
-                "-mtune=generic",  # Generic tuning (not CPU-specific)
-                "-fPIC",  # Position Independent Code
-                "-funroll-loops",  # Unroll loops for performance
-                "-finline-functions",  # Inline functions
-                "-ftree-vectorize",  # Enable vectorization
-                # Assume finite math (same as Fortran config)
-                "-ffinite-math-only",
-                "-fno-trapping-math",  # Disable floating-point traps
-                "-falign-functions=32",  # Function alignment
-                # Note: Removed -ffast-math to preserve IEEE 754 compliance
-            ]
-
-        # Define the Cython extension for gridfill with optimizations
-        gridfill_ext = Extension(
-            "skyborn.gridfill._gridfill",
-            ["src/skyborn/gridfill/_gridfill.pyx"],
-            include_dirs=[np.get_include()],
-            define_macros=[
-                ("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"),
-                ("CYTHON_TRACE", "0"),  # Disable tracing for performance
-                ("CYTHON_TRACE_NOGIL", "0"),  # Disable nogil tracing
-            ],
-            extra_compile_args=extra_compile_args,
-            language="c",
-        )
-        extensions.append(gridfill_ext)
-
-        compiler_type = "MSVC" if is_msvc else "GCC/Clang"
-        print(f"Found Cython - will build cross-platform optimized gridfill extensions")
-        print(f"Using {compiler_type} with flags: {extra_compile_args}")
-    else:
-        print(
-            "Warning: Cython not found - gridfill Cython extensions will not be built"
-        )
-        print("Install Cython to enable gridfill functionality: pip install Cython")
-
-    return extensions
+# gridfill extensions now handled by meson.build in src/skyborn/gridfill/
 
 
 class MesonBuildExt(build_ext):
@@ -178,10 +93,10 @@ class MesonBuildExt(build_ext):
         # Determine target directory based on --inplace flag
         if self.inplace:
             print("DEBUG: --inplace detected, building to source directory")
-            spharm_target = Path("src") / "skyborn" / "spharm"
+            # spharm_target = Path("src") / "skyborn" / "spharm"
         else:
             print("DEBUG: Building to build directory")
-            spharm_target = Path(self.build_lib) / "skyborn" / "spharm"
+            # spharm_target = Path(self.build_lib) / "skyborn" / "spharm"
 
         # Auto-discover meson modules based on directory structure
         # Each module should have a meson.build file
@@ -467,15 +382,11 @@ setup_config = {
         "develop": CustomDevelop,
         "install": CustomInstall,
     },
-    # Add extensions for both dummy (Windows compatibility) and gridfill
+    # Add extensions for dummy (Windows compatibility) only
+    # gridfill extensions now handled by meson.build
     "ext_modules": [
         Extension("skyborn._dummy", sources=["src/skyborn/_dummy.c"], optional=True)
-    ]
-    + (
-        cythonize(get_gridfill_extensions())
-        if HAVE_CYTHON and get_gridfill_extensions()
-        else []
-    ),
+    ],
 }
 
 if __name__ == "__main__":
