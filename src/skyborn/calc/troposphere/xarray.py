@@ -171,124 +171,124 @@ def trop_wmo(
     auto_sort_levels: bool = True,
 ) -> xr.Dataset:
     """
-        Calculate WMO tropopause properties for xarray DataArrays.
+    Calculate WMO tropopause properties for xarray DataArrays.
 
-        This function processes gridded atmospheric data to find the tropopause
-        following the WMO definition (lapse rate < 2 K/km). It automatically
-        detects coordinate dimensions and preserves all metadata.
+    This function processes gridded atmospheric data to find the tropopause
+    following the WMO definition (lapse rate < 2 K/km). It automatically
+    detects coordinate dimensions and preserves all metadata.
 
-        *** DESIGNED FOR ISOBARIC DATA ***
+    *** DESIGNED FOR ISOBARIC DATA ***
 
-        Parameters
-        ----------
-        temperature : xarray.DataArray
-            Atmospheric temperature data [K] on isobaric (constant pressure) levels.
-            Can be 1D profile, 2D, 3D, or 4D array.
-            Must have level coordinate (for pressure generation) if pressure is not provided.
-        pressure : xarray.DataArray, optional
-            Atmospheric pressure data [hPa or Pa] on isobaric levels. If None, will be
-            automatically generated from temperature's level coordinate.
-            **CRITICAL**: Pressure levels MUST be sorted in ASCENDING order
-            (from low pressure/high altitude to high pressure/low altitude).
-            This is required by the underlying WMO tropopause algorithm.
-        xdim : int or str, optional
-            Longitude dimension index/name. Auto-detected if None. Not required for 1D profiles.
-        ydim : int or str, optional
-            Latitude dimension index/name. Auto-detected if None. Not required for 1D profiles.
-        levdim : int or str, optional
-            Vertical level dimension index/name. Auto-detected if None.
-        timedim : int or str, optional
-            Time dimension index/name. Auto-detected if None.
-        pressure_unit : str, default 'hPa'
-            Unit of pressure data ('hPa' or 'Pa')
-        lapse_criterion : float, default 2.0
-            WMO lapse rate criterion [K/km] for tropopause definition
-        missing_value : float, default -999.0
-            Value to use for missing data
-        keep_attrs : bool, default True
-            Preserve input DataArray attributes in output
-        auto_sort_levels : bool, default True
-            Automatically sort pressure levels in ascending order along the level dimension
+    Parameters
+    ----------
+    temperature : xarray.DataArray
+        Atmospheric temperature data [K] on isobaric (constant pressure) levels.
+        Can be 1D profile, 2D, 3D, or 4D array.
+        Must have level coordinate (for pressure generation) if pressure is not provided.
+    pressure : xarray.DataArray, optional
+        Atmospheric pressure data [hPa or Pa] on isobaric levels. If None, will be
+        automatically generated from temperature's level coordinate.
+        **CRITICAL**: Pressure levels MUST be sorted in ASCENDING order
+        (from low pressure/high altitude to high pressure/low altitude).
+        This is required by the underlying WMO tropopause algorithm.
+    xdim : int or str, optional
+        Longitude dimension index/name. Auto-detected if None. Not required for 1D profiles.
+    ydim : int or str, optional
+        Latitude dimension index/name. Auto-detected if None. Not required for 1D profiles.
+    levdim : int or str, optional
+        Vertical level dimension index/name. Auto-detected if None.
+    timedim : int or str, optional
+        Time dimension index/name. Auto-detected if None.
+    pressure_unit : str, default 'hPa'
+        Unit of pressure data ('hPa' or 'Pa')
+    lapse_criterion : float, default 2.0
+        WMO lapse rate criterion [K/km] for tropopause definition
+    missing_value : float, default -999.0
+        Value to use for missing data
+    keep_attrs : bool, default True
+        Preserve input DataArray attributes in output
+    auto_sort_levels : bool, default True
+        Automatically sort pressure levels in ascending order along the level dimension
 
-        Returns
-        -------
-        xarray.Dataset
-            Dataset containing tropopause properties:
+    Returns
+    -------
+    xarray.Dataset
+        Dataset containing tropopause properties:
 
-            For multi-dimensional data (2D, 3D, 4D):
-            - 'pressure': Tropopause pressure [hPa] with spatial/temporal coordinates
-            - 'height': Tropopause height [m] with spatial/temporal coordinates
-            - 'level_index': Tropopause level index (0-based)
-            - 'lapse_rate': Tropopause lapse rate [K/km]
-            - 'success': Success flag for each grid point
+        For multi-dimensional data (2D, 3D, 4D):
+        - 'pressure': Tropopause pressure [hPa] with spatial/temporal coordinates
+        - 'height': Tropopause height [m] with spatial/temporal coordinates
+        - 'level_index': Tropopause level index (0-based)
+        - 'lapse_rate': Tropopause lapse rate [K/km]
+        - 'success': Success flag for each grid point
 
-            For 1D profile data:
-            - Same variables but as scalar values (0D DataArrays)
-    s
-        Examples
-        --------
-        **1D Profile Analysis (Isobaric Data):**
+        For 1D profile data:
+        - Same variables but as scalar values (0D DataArrays)
 
-        >>> import xarray as xr
-        >>> import numpy as np
-        >>> from skyborn.calc.troposphere.xarray import trop_wmo
-        >>>
-        >>> # Create 1D isobaric profile (ascending pressure order)
-        >>> temp_profile = xr.DataArray(
-        ...     [210, 230, 250, 270, 280, 288],  # Temperature decreasing with altitude
-        ...     dims=['level'],
-        ...     coords={'level': [100, 300, 500, 700, 850, 1000]}  # hPa - ASCENDING order
-        ... )
-        >>> result = trop_wmo(temp_profile)
-        >>> print(f"Tropopause: {float(result.pressure)} hPa, {float(result.height)} m")
+    Examples
+    --------
+    **1D Profile Analysis (Isobaric Data):**
 
-        **Simplified Interface (Auto-pressure generation from isobaric levels):**
+    >>> import xarray as xr
+    >>> import numpy as np
+    >>> from skyborn.calc.troposphere.xarray import trop_wmo
+    >>>
+    >>> # Create 1D isobaric profile (ascending pressure order)
+    >>> temp_profile = xr.DataArray(
+    ...     [210, 230, 250, 270, 280, 288],  # Temperature decreasing with altitude
+    ...     dims=['level'],
+    ...     coords={'level': [100, 300, 500, 700, 850, 1000]}  # hPa - ASCENDING order
+    ... )
+    >>> result = trop_wmo(temp_profile)
+    >>> print(f"Tropopause: {float(result.pressure)} hPa, {float(result.height)} m")
 
-        >>> # Load ERA5 pressure level data (already isobaric)
-        >>> ds = xr.open_dataset('era5_pressure_levels.nc')  # Has 'level' coordinate in hPa
-        >>> result = trop_wmo(ds.temperature)  # Pressure auto-generated from level coordinate
-        >>> print(f"Tropopause pressure shape: {result.pressure.shape}")
+    **Simplified Interface (Auto-pressure generation from isobaric levels):**
 
-        **2D Spatial Analysis (Isobaric Cross-sections):**
+    >>> # Load ERA5 pressure level data (already isobaric)
+    >>> ds = xr.open_dataset('era5_pressure_levels.nc')  # Has 'level' coordinate in hPa
+    >>> result = trop_wmo(ds.temperature)  # Pressure auto-generated from level coordinate
+    >>> print(f"Tropopause pressure shape: {result.pressure.shape}")
 
-        >>> # Analyze latitude or longitude cross-sections on isobaric levels
-        >>> temp_2d = ds.temperature.isel(time=0, lon=0)  # (level, lat) - isobaric levels
-        >>> result = trop_wmo(temp_2d)
-        >>> # Result shape: (lat,)
+    **2D Spatial Analysis (Isobaric Cross-sections):**
 
-        **Advanced usage with explicit isobaric pressure:**
+    >>> # Analyze latitude or longitude cross-sections on isobaric levels
+    >>> temp_2d = ds.temperature.isel(time=0, lon=0)  # (level, lat) - isobaric levels
+    >>> result = trop_wmo(temp_2d)
+    >>> # Result shape: (lat,)
 
-        >>> # Ensure pressure levels are in ascending order
-        >>> result = trop_wmo(
-        ...     temperature_data,  # On isobaric levels
-        ...     pressure=pressure_data,  # Corresponding isobaric pressure levels
-        ...     xdim='longitude', ydim='latitude', levdim='level',
-        ...     lapse_criterion=2.5  # Custom WMO criterion
-        ... )
+    **Advanced usage with explicit isobaric pressure:**
 
-        **4D Time Series (Isobaric Data):**
+    >>> # Ensure pressure levels are in ascending order
+    >>> result = trop_wmo(
+    ...     temperature_data,  # On isobaric levels
+    ...     pressure=pressure_data,  # Corresponding isobaric pressure levels
+    ...     xdim='longitude', ydim='latitude', levdim='level',
+    ...     lapse_criterion=2.5  # Custom WMO criterion
+    ... )
 
-        >>> # Multi-year isobaric climate data
-        >>> result = trop_wmo(temperature_4d)  # (time, level, lat, lon) - isobaric levels
-        >>> # Result preserves time dimension: (time, lat, lon)
-        >>> seasonal_mean = result.height.groupby('time.season').mean()
+    **4D Time Series (Isobaric Data):**
 
-        Notes
-        -----
-        - This function is optimized for **ISOBARIC data** (constant pressure levels).
-        - For model level data, first interpolate to pressure levels before using this function.
-        - Requires compiled Fortran extensions. Install with: pip install skyborn[fortran]
-        - The underlying algorithm follows the WMO (1957) tropopause definition.
+    >>> # Multi-year isobaric climate data
+    >>> result = trop_wmo(temperature_4d)  # (time, level, lat, lon) - isobaric levels
+    >>> # Result preserves time dimension: (time, lat, lon)
+    >>> seasonal_mean = result.height.groupby('time.season').mean()
 
-        The function automatically:
-        - Detects spatial and temporal coordinates using metadata
-        - Handles missing values (NaN or masked arrays)
-        - Preserves all coordinate information and attributes
-        - Works with multi-dimensional isobaric data
+    Notes
+    -----
+    - This function is optimized for **ISOBARIC data** (constant pressure levels).
+    - For model level data, first interpolate to pressure levels before using this function.
+    - Requires compiled Fortran extensions. Install with: pip install skyborn[fortran]
+    - The underlying algorithm follows the WMO (1957) tropopause definition.
 
-        See Also
-        --------
-        skyborn.calc.troposphere.tropopause.trop_wmo : Lower-level function for numpy arrays
+    The function automatically:
+    - Detects spatial and temporal coordinates using metadata
+    - Handles missing values (NaN or masked arrays)
+    - Preserves all coordinate information and attributes
+    - Works with multi-dimensional isobaric data
+
+    See Also
+    --------
+    skyborn.calc.troposphere.tropopause.trop_wmo : Lower-level function for numpy arrays
     """
     # Validate input types
     if not isinstance(temperature, xr.DataArray):
