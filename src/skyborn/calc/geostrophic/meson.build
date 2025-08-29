@@ -157,6 +157,7 @@ else:
             '-m', 'numpy.f2py',
             '--lower', '@INPUT@',
             '--build-dir', '@OUTDIR@',
+            '-m', 'geostrophicwind',
         ],
         build_by_default: true,
         install: false,
