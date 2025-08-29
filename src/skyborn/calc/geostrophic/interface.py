@@ -12,12 +12,13 @@ integration with the optimized Fortran backend.
 import warnings
 from typing import Optional, Tuple, Union
 
-# Import the compiled Fortran functions (only 2D and 3D needed)
-import geostrophicwind as _geostrophic_module
 import numpy as np
 
 # Import windspharm tools for data preparation
 from skyborn.windspharm.tools import prep_data, recover_data
+
+# Import the compiled Fortran functions (only 2D and 3D needed)
+from . import geostrophicwind as _geostrophic_module
 
 z2geouv = _geostrophic_module.z2geouv  # For 2D data
 # For 3D data (handles combined dimensions)
