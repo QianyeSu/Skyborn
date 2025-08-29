@@ -149,9 +149,9 @@ else:
     # Generate f2py interface files for geostrophic wind calculation
     geostrophic_sources = []
     geostrophic_source = custom_target(
-        'geostrophicmodule.c',
+        'geostrophicwindmodule.c',
         input: ['fortran/z2geouv.pyf'],
-        output: ['geostrophicmodule.c', 'geostrophic-f2pywrappers.f'],
+        output: ['geostrophicwindmodule.c', 'geostrophicwind-f2pywrappers.f'],
         command: [
             py,
             '-m', 'numpy.f2py',
@@ -193,7 +193,7 @@ else:
     # Build the geostrophic extension module
     # Use subdir parameter to install directly into the Python package structure
     geostrophic_ext = py.extension_module(
-        'geostrophic',
+        'geostrophicwind',
         [
             # Core geostrophic wind Fortran sources
             'fortran/z2geouv.f90',
@@ -232,7 +232,7 @@ print(f"Current dir (build): {current_dir}")
 print(f"Module dir (source): {module_dir}")
 
 # Search for compiled extension files in current build directory
-patterns = ["geostrophic*.so", "geostrophic*.pyd", "geostrophic*.dylib"]
+patterns = ["geostrophicwind*.so", "geostrophicwind*.pyd", "geostrophicwind*.dylib"]
 built_files = []
 
 # Search directly in the build directory (current directory)

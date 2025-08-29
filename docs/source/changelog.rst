@@ -36,6 +36,29 @@ Version 0.3.13 (Current)
   - **Better Documentation**: Comprehensive examples for all supported data formats
   - **Removed Unused Code**: Cleaned up ``_detect_cyclic_longitude`` function
 
+**🌊 New Geostrophic Wind Module**
+
+* **Complete Geostrophic Wind Implementation**: New high-performance module for calculating geostrophic wind components from geopotential height fields
+
+  - **SIMD-Optimized Fortran Backend**: Vectorized calculations with OpenMP parallelization for optimal performance
+  - **Multi-Dimensional Support**: Handles 2D, 3D, and 4D data arrays with automatic dimension handling
+  - **Automatic Parameter Detection**: Smart longitude cyclicity detection and south-to-north latitude ordering
+  - **Dual Interface Design**: Both NumPy arrays and xarray DataArrays supported
+
+* **xarray Integration**: Seamless integration following established patterns
+
+  - **Auto-Coordinate Detection**: ``from skyborn.calc.geostrophic.xarray import geostrophic_wind``
+  - **Zero Manual Parameters**: ``result = geostrophic_wind(z)`` - that's it!
+  - **CF-Compliant Output**: Standard metadata with eastward/northward wind components
+  - **Multi-Resolution Support**: Adaptive algorithms work with 0.25° to 10° grids
+
+* **Optimized Algorithms**: Production-ready implementation
+
+  - **Finite Difference Method**: Uses geostrophic balance equations with proper boundary conditions
+  - **Coriolis Parameter Handling**: Accurate f-plane approximation with pole region handling
+  - **Memory Efficient**: Single precision (float32) processing with minimal memory footprint
+  - **Flexible Grid Support**: Works with both cyclic and regional domains
+
 **🔧 Technical Improvements**
 
 * **Hybrid Build System**: Implemented innovative meson-setuptools hybrid architecture for seamless extension development
