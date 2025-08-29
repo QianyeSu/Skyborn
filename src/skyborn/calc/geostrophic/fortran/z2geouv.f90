@@ -137,7 +137,7 @@ subroutine zuvnew(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
 
     ! Local temporary arrays
     real(kind=8) :: ztmp(nlat, mlon), glattmp(nlat)
-    real(kind=8) :: utmp(mlon), vtmp(mlon)
+    real(kind=8) :: utmp(nlat), vtmp(nlat)
     integer :: nl, ml, nlat1
 
     nlat1 = nlat + 1
@@ -156,17 +156,18 @@ subroutine zuvnew(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
     call z2guv(ztmp, nlat, mlon, zmsg, glon, glattmp, ug, vg, iopt)
 
     ! Put results back in original order with SIMD
-    do nl = 1, nlat
+    ! Need to match original .f file logic: loop by longitude first
+    do ml = 1, mlon
         !$omp simd
-        do ml = 1, mlon
-            utmp(ml) = ug(nlat1-nl, ml)
-            vtmp(ml) = vg(nlat1-nl, ml)
+        do nl = 1, nlat
+            utmp(nlat1-nl) = ug(nl, ml)
+            vtmp(nlat1-nl) = vg(nl, ml)
         end do
         !$omp end simd
         !$omp simd
-        do ml = 1, mlon
-            ug(nl, ml) = utmp(ml)
-            vg(nl, ml) = vtmp(ml)
+        do nl = 1, nlat
+            ug(nl, ml) = utmp(nl)
+            vg(nl, ml) = vtmp(nl)
         end do
         !$omp end simd
     end do

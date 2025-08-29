@@ -10,8 +10,8 @@ python module geostrophicwind ! in
             real(kind=8) intent(in) :: zmsg
             real(kind=8) dimension(mlon),intent(in),depend(mlon) :: glon
             real(kind=8) dimension(nlat),intent(in),depend(nlat) :: glat
-            real(kind=8) dimension(nlat,mlon),intent(out),depend(nlat,mlon) :: ug
-            real(kind=8) dimension(nlat,mlon),intent(out),depend(nlat,mlon) :: vg
+            real(kind=8) dimension(nlat,mlon),intent(out),depend(mlon,nlat) :: ug
+            real(kind=8) dimension(nlat,mlon),intent(out),depend(mlon,nlat) :: vg
             integer intent(in) :: iopt
         end subroutine z2geouv
         subroutine z2geouv_3d(z,nlat,mlon,n3rd,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophicwind:z2geouv.f90
@@ -22,8 +22,8 @@ python module geostrophicwind ! in
             real(kind=8) intent(in) :: zmsg
             real(kind=8) dimension(mlon),intent(in),depend(mlon) :: glon
             real(kind=8) dimension(nlat),intent(in),depend(nlat) :: glat
-            real(kind=8) dimension(nlat,mlon,n3rd),intent(out),depend(n3rd,nlat,mlon) :: ug
-            real(kind=8) dimension(nlat,mlon,n3rd),intent(out),depend(n3rd,nlat,mlon) :: vg
+            real(kind=8) dimension(nlat,mlon,n3rd),intent(out),depend(n3rd,mlon,nlat) :: ug
+            real(kind=8) dimension(nlat,mlon,n3rd),intent(out),depend(n3rd,mlon,nlat) :: vg
             integer intent(in) :: iopt
         end subroutine z2geouv_3d
         subroutine z2geouv_4d(z,nlat,mlon,n3rd,n4th,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophicwind:z2geouv.f90
@@ -35,8 +35,8 @@ python module geostrophicwind ! in
             real(kind=8) intent(in) :: zmsg
             real(kind=8) dimension(mlon),intent(in),depend(mlon) :: glon
             real(kind=8) dimension(nlat),intent(in),depend(nlat) :: glat
-            real(kind=8) dimension(nlat,mlon,n3rd,n4th),intent(out),depend(n3rd,n4th,nlat,mlon) :: ug
-            real(kind=8) dimension(nlat,mlon,n3rd,n4th),intent(out),depend(n3rd,n4th,nlat,mlon) :: vg
+            real(kind=8) dimension(nlat,mlon,n3rd,n4th),intent(out),depend(n4th,n3rd,mlon,nlat) :: ug
+            real(kind=8) dimension(nlat,mlon,n3rd,n4th),intent(out),depend(n4th,n3rd,mlon,nlat) :: vg
             integer intent(in) :: iopt
         end subroutine z2geouv_4d
         subroutine zuvnew(z,nlat,mlon,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophicwind:z2geouv.f90
@@ -46,8 +46,8 @@ python module geostrophicwind ! in
             real(kind=8) intent(in) :: zmsg
             real(kind=8) dimension(mlon),intent(in),depend(mlon) :: glon
             real(kind=8) dimension(nlat),intent(in),depend(nlat) :: glat
-            real(kind=8) dimension(nlat,mlon),intent(out),depend(nlat,mlon) :: ug
-            real(kind=8) dimension(nlat,mlon),intent(out),depend(nlat,mlon) :: vg
+            real(kind=8) dimension(nlat,mlon),intent(out),depend(mlon,nlat) :: ug
+            real(kind=8) dimension(nlat,mlon),intent(out),depend(mlon,nlat) :: vg
             integer intent(in) :: iopt
         end subroutine zuvnew
         subroutine z2guv(z,nlat,mlon,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophicwind:z2geouv.f90
@@ -57,12 +57,12 @@ python module geostrophicwind ! in
             real(kind=8) intent(in) :: zmsg
             real(kind=8) dimension(mlon),intent(in),depend(mlon) :: glon
             real(kind=8) dimension(nlat),intent(in),depend(nlat) :: glat
-            real(kind=8) dimension(nlat,mlon),intent(out),depend(nlat,mlon) :: ug
-            real(kind=8) dimension(nlat,mlon),intent(out),depend(nlat,mlon) :: vg
+            real(kind=8) dimension(nlat,mlon),intent(out),depend(mlon,nlat) :: ug
+            real(kind=8) dimension(nlat,mlon),intent(out),depend(mlon,nlat) :: vg
             integer intent(in) :: iopt
         end subroutine z2guv
     end interface
-end python module geostrophic
+end python module geostrophicwind
 
 ! This file was auto-generated with f2py (version:2.3.2).
 ! See:
