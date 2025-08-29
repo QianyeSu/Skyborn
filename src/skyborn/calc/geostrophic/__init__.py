@@ -26,8 +26,9 @@ High-level Python Interface:
 - geostrophic_uv, geostrophic_speed, geostrophic_direction: Convenience functions
 
 Physical Equations:
-- ug = -(g/f) * ∂Z/∂y   (zonal wind component)
-- vg =  (g/f) * ∂Z/∂x   (meridional wind component)
+- Geostrophic balance: f * Vg = -∇(Z) x k
+- ug = -(g/f) * dZ/dy   (zonal wind component)
+- vg =  (g/f) * dZ/dx   (meridional wind component)
 
 where:
 - g = 9.80616 m/s² (gravity)
@@ -48,9 +49,6 @@ Examples
 >>> gw = GeostrophicWind(z, glon, glat, 'tzyx')
 >>> speed = gw.speed()
 """
-
-# Import xarray interface
-from . import xarray
 
 # Import high-level Python interface (user-facing API)
 from .interface import (

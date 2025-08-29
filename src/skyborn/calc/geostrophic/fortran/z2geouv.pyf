@@ -1,9 +1,9 @@
 !    -*- f90 -*-
 ! Note: the context of this file is case sensitive.
 
-python module geostrophic ! in
-    interface  ! in :geostrophic
-        subroutine z2geouv(z,nlat,mlon,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophic:z2geouv.f90
+python module geostrophicwind ! in
+    interface  ! in :geostrophicwind
+        subroutine z2geouv(z,nlat,mlon,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophicwind:z2geouv.f90
             real(kind=8) dimension(nlat,mlon),intent(in) :: z
             integer, optional,intent(in),check(shape(z, 0) == nlat),depend(z) :: nlat=shape(z, 0)
             integer, optional,intent(in),check(shape(z, 1) == mlon),depend(z) :: mlon=shape(z, 1)
@@ -14,7 +14,7 @@ python module geostrophic ! in
             real(kind=8) dimension(nlat,mlon),intent(out),depend(nlat,mlon) :: vg
             integer intent(in) :: iopt
         end subroutine z2geouv
-        subroutine z2geouv_3d(z,nlat,mlon,n3rd,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophic:z2geouv.f90
+        subroutine z2geouv_3d(z,nlat,mlon,n3rd,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophicwind:z2geouv.f90
             real(kind=8) dimension(nlat,mlon,n3rd),intent(in) :: z
             integer, optional,intent(in),check(shape(z, 0) == nlat),depend(z) :: nlat=shape(z, 0)
             integer, optional,intent(in),check(shape(z, 1) == mlon),depend(z) :: mlon=shape(z, 1)
@@ -26,7 +26,7 @@ python module geostrophic ! in
             real(kind=8) dimension(nlat,mlon,n3rd),intent(out),depend(n3rd,nlat,mlon) :: vg
             integer intent(in) :: iopt
         end subroutine z2geouv_3d
-        subroutine z2geouv_4d(z,nlat,mlon,n3rd,n4th,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophic:z2geouv.f90
+        subroutine z2geouv_4d(z,nlat,mlon,n3rd,n4th,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophicwind:z2geouv.f90
             real(kind=8) dimension(nlat,mlon,n3rd,n4th),intent(in) :: z
             integer, optional,intent(in),check(shape(z, 0) == nlat),depend(z) :: nlat=shape(z, 0)
             integer, optional,intent(in),check(shape(z, 1) == mlon),depend(z) :: mlon=shape(z, 1)
@@ -39,7 +39,7 @@ python module geostrophic ! in
             real(kind=8) dimension(nlat,mlon,n3rd,n4th),intent(out),depend(n3rd,n4th,nlat,mlon) :: vg
             integer intent(in) :: iopt
         end subroutine z2geouv_4d
-        subroutine zuvnew(z,nlat,mlon,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophic:z2geouv.f90
+        subroutine zuvnew(z,nlat,mlon,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophicwind:z2geouv.f90
             real(kind=8) dimension(nlat,mlon),intent(in) :: z
             integer, optional,intent(in),check(shape(z, 0) == nlat),depend(z) :: nlat=shape(z, 0)
             integer, optional,intent(in),check(shape(z, 1) == mlon),depend(z) :: mlon=shape(z, 1)
@@ -50,7 +50,7 @@ python module geostrophic ! in
             real(kind=8) dimension(nlat,mlon),intent(out),depend(nlat,mlon) :: vg
             integer intent(in) :: iopt
         end subroutine zuvnew
-        subroutine z2guv(z,nlat,mlon,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophic:z2geouv.f90
+        subroutine z2guv(z,nlat,mlon,zmsg,glon,glat,ug,vg,iopt) ! in :geostrophicwind:z2geouv.f90
             real(kind=8) dimension(nlat,mlon),intent(in) :: z
             integer, optional,intent(in),check(shape(z, 0) == nlat),depend(z) :: nlat=shape(z, 0)
             integer, optional,intent(in),check(shape(z, 1) == mlon),depend(z) :: mlon=shape(z, 1)
