@@ -19,13 +19,13 @@ subroutine z2geouv(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
     ! INPUT
     integer, intent(in) :: nlat        ! number of latitudes (south to north)
     integer, intent(in) :: mlon        ! number of longitudes
-    integer, intent(in) :: iopt         ! longitude boundary option:
-                                        !   iopt=0: z is not cyclic in longitude
-                                        !   iopt=1: z is cyclic in longitude
+    integer, intent(in) :: iopt        ! longitude boundary option:
+                                       ! iopt=0: z is not cyclic in longitude
+                                       ! iopt=1: z is cyclic in longitude
     real(kind=8), intent(in) :: z(nlat, mlon)  ! geopotential height [gpm] (nlat x mlon)
-    real(kind=8), intent(in) :: zmsg            ! missing value code
-    real(kind=8), intent(in) :: glat(nlat)      ! latitudes of grid points [degrees] (south to north)
-    real(kind=8), intent(in) :: glon(mlon)      ! longitudes of grid points [degrees]
+    real(kind=8), intent(in) :: zmsg           ! missing value code
+    real(kind=8), intent(in) :: glat(nlat)     ! latitudes of grid points [degrees] (south to north)
+    real(kind=8), intent(in) :: glon(mlon)     ! longitudes of grid points [degrees]
 
     ! OUTPUT
     real(kind=8), intent(out) :: ug(nlat, mlon) ! zonal geostrophic wind [m/s] (nlat x mlon)
@@ -54,9 +54,9 @@ subroutine z2geouv_3d(z, nlat, mlon, n3rd, zmsg, glon, glat, ug, vg, iopt)
     integer, intent(in) :: n3rd               ! size of 3rd dimension (e.g., pressure levels)
     integer, intent(in) :: iopt               ! longitude boundary option (0=non-cyclic, 1=cyclic)
     real(kind=8), intent(in) :: z(nlat, mlon, n3rd)    ! geopotential height [gpm]
-    real(kind=8), intent(in) :: zmsg                    ! missing value code
-    real(kind=8), intent(in) :: glat(nlat)              ! latitudes [degrees] (south to north)
-    real(kind=8), intent(in) :: glon(mlon)              ! longitudes [degrees]
+    real(kind=8), intent(in) :: zmsg                   ! missing value code
+    real(kind=8), intent(in) :: glat(nlat)             ! latitudes [degrees] (south to north)
+    real(kind=8), intent(in) :: glon(mlon)             ! longitudes [degrees]
 
     ! OUTPUT
     real(kind=8), intent(out) :: ug(nlat, mlon, n3rd)  ! zonal geostrophic wind [m/s]
@@ -90,9 +90,9 @@ subroutine z2geouv_4d(z, nlat, mlon, n3rd, n4th, zmsg, glon, glat, ug, vg, iopt)
     integer, intent(in) :: n4th                    ! size of 4th dimension (e.g., time steps)
     integer, intent(in) :: iopt                    ! longitude boundary option (0=non-cyclic, 1=cyclic)
     real(kind=8), intent(in) :: z(nlat, mlon, n3rd, n4th)    ! geopotential height [gpm]
-    real(kind=8), intent(in) :: zmsg                          ! missing value code
-    real(kind=8), intent(in) :: glat(nlat)                    ! latitudes [degrees] (south to north)
-    real(kind=8), intent(in) :: glon(mlon)                    ! longitudes [degrees]
+    real(kind=8), intent(in) :: zmsg                         ! missing value code
+    real(kind=8), intent(in) :: glat(nlat)                   ! latitudes [degrees] (south to north)
+    real(kind=8), intent(in) :: glon(mlon)                   ! longitudes [degrees]
 
     ! OUTPUT
     real(kind=8), intent(out) :: ug(nlat, mlon, n3rd, n4th)  ! zonal geostrophic wind [m/s]
@@ -302,7 +302,7 @@ subroutine z2guv(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
         ! Specify cyclic values
         !$omp simd
         do nl = 0, nlat+1
-            zz(nl, 0) = zz(nl, mlon)      ! West boundary = East end
+            zz(nl, 0) = zz(nl, mlon)     ! West boundary = East end
             zz(nl, mlon+1) = zz(nl, 1)   ! East boundary = West start
         end do
         !$omp end simd

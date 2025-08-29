@@ -1034,7 +1034,8 @@ def _find_latitude_coordinate(array: DataArray) -> Tuple[Any, int]:
     def is_latitude(coord: Any) -> bool:
         """Check if coordinate represents latitude."""
         return (
-            coord.name in ("latitude", "lat")
+            coord.name
+            in ("latitude", "lat", "LAT", "LATITUDE", "Y", "y", "LATS", "YLAT")
             or coord.attrs.get("units") == "degrees_north"
             or coord.attrs.get("axis") == "Y"
         )
@@ -1067,7 +1068,8 @@ def _find_longitude_coordinate(array: DataArray) -> Tuple[Any, int]:
     def is_longitude(coord: Any) -> bool:
         """Check if coordinate represents longitude."""
         return (
-            coord.name in ("longitude", "lon")
+            coord.name
+            in ("longitude", "lon", "LON", "LONGITUDE", "X", "x", "LONS", "XLONG")
             or coord.attrs.get("units") == "degrees_east"
             or coord.attrs.get("axis") == "X"
         )
