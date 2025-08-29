@@ -7,6 +7,7 @@ This module contains various calculation functions including:
 - PDF calculations and analysis
 - Mann-Kendall trend analysis
 - WMO tropopause calculation (with Fortran extensions)
+- Geostrophic wind calculation (with SIMD-optimized Fortran extensions)
 """
 
 from .calculations import (
@@ -26,6 +27,14 @@ from .emergent_constraints import (  # New improved function names; Legacy funct
     emergent_constraint_prior,
     find_std_from_PDF,
     gaussian_pdf,
+)
+
+# Import geostrophic wind calculation (high-level interface)
+from .geostrophic import (
+    GeostrophicWind,
+    geostrophic_speed,
+    geostrophic_uv,
+    geostrophic_wind,
 )
 from .mann_kendall import mk_multidim  # alias
 from .mann_kendall import mk_test  # alias

@@ -6,11 +6,25 @@ The Skyborn calculation module provides statistical, atmospheric, and mathematic
 Atmospheric Physics Functions
 -----------------------------
 
+Tropopause Calculations
+~~~~~~~~~~~~~~~~~~~~~~~~
+
 .. autofunction:: skyborn.calc.troposphere.tropopause.trop_wmo
 
 .. autofunction:: skyborn.calc.troposphere.tropopause.trop_wmo_profile
 
 .. autofunction:: skyborn.calc.troposphere.xarray.trop_wmo
+
+Geostrophic Wind Calculations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: skyborn.calc.geostrophic.interface.geostrophic_wind
+
+.. autoclass:: skyborn.calc.geostrophic.interface.GeostrophicWind
+
+.. autofunction:: skyborn.calc.geostrophic.xarray.geostrophic_wind
+
+.. autoclass:: skyborn.calc.geostrophic.xarray.GeostrophicWind
 
 Statistical Functions
 ---------------------
@@ -105,6 +119,93 @@ Example Usage
        lapse_criterion=2.5,   # Custom WMO threshold (K/km)
        pressure_unit='Pa'     # If pressure is in Pascals
    )
+
+**Geostrophic Wind Examples**
+
+.. code-block:: python
+
+   import skyborn as skb
+   import numpy as np
+   import xarray as xr
+
+   # === NumPy Interface ===
+   # Traditional interface with manual parameter specification
+   nlat, nlon = 73, 144
+   z_data = np.random.randn(nlat, nlon) * 100 + 5500  # Geopotential height [gpm]
+   lat = np.linspace(-90, 90, nlat)  # Degrees north
+   lon = np.linspace(0, 360, nlon)[:-1]  # Degrees east (0-357.5)
+
+   # Calculate geostrophic wind components
+   ug, vg = skb.calc.geostrophic_wind(z_data, lon, lat, 'yx')
+   print(f"Wind components: ug{ug.shape}, vg{vg.shape}")
+
+   # Class interface for derived quantities
+   gw = skb.calc.GeostrophicWind(z_data, lon, lat, 'yx')
+   speed = gw.speed()
+   print(f"Max wind speed: {speed.max():.1f} m/s")
+
+   # === xarray Interface - Simplified ===
+   # Load geopotential height data
+   z = xr.DataArray(
+       z_data,
+       dims=['lat', 'lon'],
+       coords={
+           'lat': (['lat'], lat, {'units': 'degrees_north'}),
+           'lon': (['lon'], lon, {'units': 'degrees_east'})
+       },
+       attrs={'long_name': '500 hPa geopotential height', 'units': 'gpm'}
+   )
+
+   # Automatic coordinate detection and parameter inference
+   from skyborn.calc.geostrophic.xarray import geostrophic_wind
+   result = geostrophic_wind(z)  # That's it!
+
+   print(f"Automatic features:")
+   print(f"  Longitude cyclic: {result.attrs['longitude_cyclic']}")
+   print(f"  Latitude ordering: {result.attrs['latitude_ordering']}")
+   print(f"  Output: ug{result.ug.shape}, vg{result.vg.shape}")
+
+   # === Multi-dimensional Examples ===
+   # 3D time series (time, lat, lon)
+   nt = 12
+   z_3d_data = np.random.randn(nt, nlat, nlon) * 100 + 5500
+   z_3d = xr.DataArray(
+       z_3d_data,
+       dims=['time', 'lat', 'lon'],
+       coords={
+           'time': pd.date_range('2023-01-01', periods=nt, freq='MS'),
+           'lat': lat, 'lon': lon
+       }
+   )
+
+   result_3d = geostrophic_wind(z_3d)
+   print(f"3D result: ug{result_3d.ug.shape}, vg{result_3d.vg.shape}")
+
+   # Seasonal analysis
+   seasonal_winds = result_3d.ug.groupby('time.season').mean()
+
+   # 4D multi-level data (time, level, lat, lon)
+   nz = 17
+   levels = [50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 775, 850, 925, 1000]
+   z_4d_data = np.random.randn(nt, len(levels), nlat, nlon) * 100 + 5500
+   z_4d = xr.DataArray(
+       z_4d_data,
+       dims=['time', 'level', 'lat', 'lon'],
+       coords={
+           'time': pd.date_range('2023-01-01', periods=nt, freq='MS'),
+           'level': (['level'], levels, {'units': 'hPa'}),
+           'lat': lat, 'lon': lon
+       }
+   )
+
+   result_4d = geostrophic_wind(z_4d)
+   print(f"4D result: ug{result_4d.ug.shape}, vg{result_4d.vg.shape}")
+
+   # Class interface with xarray
+   from skyborn.calc.geostrophic.xarray import GeostrophicWind
+   gw_xr = GeostrophicWind(z)
+   speed_xr = gw_xr.speed()
+   print(f"xarray class speed: {speed_xr.attrs['standard_name']}")
 
 **Statistical Analysis Examples**
 

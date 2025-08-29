@@ -13,7 +13,7 @@ import warnings
 from typing import Optional, Tuple, Union
 
 # Import the compiled Fortran functions (only 2D and 3D needed)
-import geostrophic as _geostrophic_module
+import geostrophicwind as _geostrophic_module
 import numpy as np
 
 # Import windspharm tools for data preparation
