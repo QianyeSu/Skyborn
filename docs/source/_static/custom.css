@@ -37,7 +37,7 @@
     z-index: 1;
 }
 
-/* ========== 导航栏样式 ========== */
+/* ========== Navbar Styles ========== */
 .bd-header {
     background: var(--gradient-blue-deep) !important;
     border-bottom: 3px solid var(--dark-blue);
@@ -50,7 +50,7 @@
     box-shadow: 0 8px 35px var(--shadow-blue-hover);
 }
 
-/* ========== 头部按钮区域对齐 ========== */
+/* ========== Header Button Area Alignment ========== */
 .bd-header-article {
     display: flex;
     align-items: center;
@@ -78,14 +78,14 @@
     margin-left: auto;
 }
 
-/* 文章头部按钮区域 */
+/* Article header button area */
 .article-header-buttons {
     display: flex;
     align-items: center;
     gap: 0.5rem;
 }
 
-/* 所有头部按钮的通用样式 */
+/* Common styles for all header buttons */
 .article-header-buttons .btn,
 .article-header-buttons .dropdown-toggle {
     background: transparent !important;
@@ -113,7 +113,7 @@
     color: white !important;
 }
 
-/* 主题切换按钮特殊样式 */
+/* Special styles for theme switch button */
 .theme-switch-button {
     background: transparent !important;
     border: none !important;
@@ -139,20 +139,20 @@
     color: white !important;
 }
 
-/* 确保按钮图标颜色正确 */
+/* Ensure button icon colors are correct */
 .article-header-buttons .btn i,
 .article-header-buttons .dropdown-toggle i,
 .theme-switch-button i {
     color: white !important;
 }
 
-/* 隐藏下拉菜单中的特定按钮 */
+/* Hide specific buttons in dropdown menus */
 .dropdown-source-buttons .btn-source-file-button,
 .dropdown-source-buttons .btn-source-edit-button {
     display: none !important;
 }
 
-/* 确保所有头部按钮垂直对齐 */
+/* Ensure all header buttons are vertically aligned */
 .bd-navbar,
 .bd-navbar .navbar-nav,
 .bd-header .navbar-nav {
@@ -161,7 +161,7 @@
     height: 100%;
 }
 
-/* ========== 侧边栏样式 ========== */
+/* ========== Sidebar Styles ========== */
 .bd-sidebar-primary {
     background: var(--gradient-blue-light);
     border-right: 3px solid white;
@@ -184,7 +184,7 @@
     background: transparent;
 }
 
-/* 侧边栏所有文字加粗 */
+/* Make all sidebar text bold */
 .bd-sidebar-primary,
 .bd-sidebar-primary a,
 .bd-sidebar-primary .toctree-l1 > a,
@@ -194,10 +194,10 @@
 .bd-sidebar-primary li,
 .bd-sidebar-primary p,
 .bd-sidebar-primary span {
-    font-weight: 700 !important; /* 使用更粗的字体 */
+    font-weight: 700 !important; /* Use a bolder font */
 }
 
-/* 侧边栏链接悬停效果 */
+/* Sidebar link hover effect */
 .bd-sidebar-primary .toctree-l1 > a {
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     border-radius: 8px;
@@ -229,7 +229,7 @@
     box-shadow: 0 6px 20px var(--shadow-blue);
 }
 
-/* ========== Notebook图片优化 ========== */
+/* ========== Notebook Image Enhancements ========== */
 .nboutput img,
 .cell_output img {
     max-width: 85% !important;
@@ -275,8 +275,8 @@
     border-color: var(--primary-color);
 }
 
-/* ========== 通用图片样式 - 应用notebook图片效果到所有图片 ========== */
-/* 排除notebook图片，因为它们已经有特定样式 */
+/* ========== General Image Styles - apply notebook image effects to all images ========== */
+/* Exclude notebook images because they already have specific styles */
 img:not(.nboutput img):not(.cell_output img):not(.bd-header img):not(.bd-sidebar img) {
     max-width: 90% !important;
     height: auto !important;
@@ -293,7 +293,7 @@ img:not(.nboutput img):not(.cell_output img):not(.bd-header img):not(.bd-sidebar
     cursor: pointer;
 }
 
-/* 通用图片的悬停前景效果 */
+/* Hover foreground effect for general images */
 img:not(.nboutput img):not(.cell_output img):not(.bd-header img):not(.bd-sidebar img)::before {
     content: '';
     position: absolute;
@@ -308,7 +308,7 @@ img:not(.nboutput img):not(.cell_output img):not(.bd-header img):not(.bd-sidebar
     transition: opacity 0.3s ease;
 }
 
-/* 通用图片的悬停效果 */
+/* Hover effect for general images */
 img:not(.nboutput img):not(.cell_output img):not(.bd-header img):not(.bd-sidebar img):hover::before {
     opacity: 1;
 }
@@ -320,7 +320,7 @@ img:not(.nboutput img):not(.cell_output img):not(.bd-header img):not(.bd-sidebar
     border-color: var(--primary-color);
 }
 
-/* 特殊处理：文档中的图片 */
+/* Special handling: images in documents */
 .bd-content img,
 .bd-article img,
 article img,
@@ -374,7 +374,7 @@ article img:hover,
     border-color: var(--primary-color);
 }
 
-/* 排除小图标和装饰性图片 */
+/* Exclude small icons and decorative images */
 .bd-header img,
 .bd-sidebar img,
 .bd-footer img,
@@ -400,7 +400,7 @@ img[height="32"],
     display: inline !important;
 }
 
-/* 图片说明文字样式 */
+/* Figure caption styles */
 .figure-caption,
 .caption,
 figcaption {
@@ -411,7 +411,7 @@ figcaption {
     font-size: 0.9em !important;
 }
 
-/* ========== 代码块样式 ========== */
+/* ========== Code Block Styles ========== */
 .nbinput .highlight pre,
 .nboutput .highlight pre,
 .cell_input .highlight pre,
@@ -453,7 +453,7 @@ figcaption {
                 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
-/* 输入单元格：蓝色主题 */
+/* Input cells: blue theme */
 .cell_input {
     background: var(--gradient-blue-light);
     border-left: 4px solid var(--primary-color);
@@ -486,7 +486,7 @@ figcaption {
                 0 6px 20px rgba(0, 0, 0, 0.1);
 }
 
-/* 输出单元格：蓝绿色主题 */
+/* Output cells: teal/green theme */
 .cell_output {
     background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%);
     border-left: 4px solid #3b82f6;
@@ -519,8 +519,8 @@ figcaption {
                 0 6px 20px rgba(0, 0, 0, 0.1);
 }
 
-/* ========== 按钮样式 ========== */
-/* 排除头部按钮的全局按钮样式 */
+/* ========== Button Styles ========== */
+/* Exclude header buttons from global button styles */
 .btn:not(.bd-header .btn):not(.bd-navbar .btn),
 .bd-button:not(.bd-header .bd-button):not(.bd-navbar .bd-button) {
     background: white !important;
@@ -560,14 +560,14 @@ figcaption {
     box-shadow: 0 12px 35px var(--shadow-blue-hover) !important;
 }
 
-/* 按钮点击动画 */
+/* Button click animation */
 .btn:not(.bd-header .btn):not(.bd-navbar .btn):active,
 .bd-button:not(.bd-header .bd-button):not(.bd-navbar .bd-button):active {
     transform: translateY(-1px) scale(1.02) !important;
     box-shadow: 0 6px 20px var(--shadow-blue) !important;
 }
 
-/* ========== 链接样式 ========== */
+/* ========== Link Styles ========== */
 a {
     color: var(--primary-color) !important;
     text-decoration: none !important;
@@ -596,7 +596,7 @@ a:hover {
     transform: translateY(-1px) !important;
 }
 
-/* ========== 标题样式 ========== */
+/* ========== Heading Styles ========== */
 h1, h2, h3, h4, h5, h6 {
     color: var(--secondary-color) !important;
     text-shadow: 0 3px 8px rgba(0, 0, 0, 0.1) !important;
@@ -627,7 +627,7 @@ h1:hover, h2:hover, h3:hover {
     text-shadow: 0 4px 12px var(--shadow-blue) !important;
 }
 
-/* ========== 响应式设计 ========== */
+/* ========== Responsive Design ========== */
 @media (max-width: 768px) {
     .nboutput img,
     .cell_output img {
@@ -640,7 +640,7 @@ h1:hover, h2:hover, h3:hover {
     }
 }
 
-/* ========== 动画关键帧 ========== */
+/* ========== Animation Keyframes ========== */
 @keyframes fadeInUp {
     from {
         opacity: 0;
@@ -661,44 +661,44 @@ h1:hover, h2:hover, h3:hover {
     }
 }
 
-/* 页面加载动画 */
+/* Page load animation */
 .bd-article {
     animation: fadeInUp 0.6s ease-out;
 }
 
-/* Notebook单元格出现动画 */
+/* Notebook cell entrance animation */
 .cell {
     animation: fadeInUp 0.4s ease-out;
     margin-bottom: 1.8rem;
 }
 
-/* ========== 滚动条样式 ========== */
-/* 整体滚动条 */
+/* ========== Scrollbar Styles ========== */
+/* Global scrollbar */
 ::-webkit-scrollbar {
     width: 12px;
     height: 12px;
 }
 
-/* 滚动条轨道 */
+/* Scrollbar track */
 ::-webkit-scrollbar-track {
     background: var(--light-blue);
     border-radius: 6px;
 }
 
-/* 滚动条滑块 */
+/* Scrollbar thumb */
 ::-webkit-scrollbar-thumb {
-    background: #6b7280 !important; /* 灰色滑块 */
+    background: #6b7280 !important; /* Gray thumb */
     border-radius: 6px;
     border: 2px solid var(--light-blue);
     transition: background 0.3s ease;
 }
 
-/* 滚动条滑块悬停效果 */
+/* Scrollbar thumb hover effect */
 ::-webkit-scrollbar-thumb:hover {
-    background: #4b5563 !important; /* 深灰色悬停 */
+    background: #4b5563 !important; /* Darker gray on hover */
 }
 
-/* 侧边栏专用滚动条 */
+/* Sidebar-specific scrollbar */
 .bd-sidebar-primary ::-webkit-scrollbar {
     width: 8px;
 }
@@ -708,16 +708,16 @@ h1:hover, h2:hover, h3:hover {
 }
 
 .bd-sidebar-primary ::-webkit-scrollbar-thumb {
-    background: #9ca3af !important; /* 浅灰色滑块 */
+    background: #9ca3af !important; /* Light gray thumb */
     border-radius: 4px;
     border: none;
 }
 
 .bd-sidebar-primary ::-webkit-scrollbar-thumb:hover {
-    background: #6b7280 !important; /* 深灰色悬停 */
+    background: #6b7280 !important; /* Dark gray on hover */
 }
 
-/* Firefox 滚动条样式 */
+/* Firefox scrollbar styles */
 * {
     scrollbar-width: thin;
     scrollbar-color: #6b7280 var(--light-blue);
@@ -727,8 +727,8 @@ h1:hover, h2:hover, h3:hover {
     scrollbar-color: #9ca3af transparent;
 }
 
-/* ========== 文本溢出处理 ========== */
-/* 防止文本超出容器 */
+/* ========== Text Overflow Handling ========== */
+/* Prevent text overflow */
 .bd-content {
     word-wrap: break-word !important;
     word-break: break-word !important;
@@ -736,7 +736,7 @@ h1:hover, h2:hover, h3:hover {
     hyphens: auto !important;
 }
 
-/* API文档和代码文档的文本处理 */
+/* Text handling for API and code docs */
 .sig-name,
 .sig-prename,
 .highlight .n,
@@ -757,7 +757,7 @@ h1:hover, h2:hover, h3:hover {
     overflow-wrap: break-word !important;
 }
 
-/* 函数签名和参数的处理 */
+/* Handling function signatures and parameters */
 .sig-param {
     word-wrap: break-word !important;
     word-break: break-all !important;
@@ -766,7 +766,7 @@ h1:hover, h2:hover, h3:hover {
     display: inline-block !important;
 }
 
-/* 代码块内的长行处理 */
+/* Handle long lines inside code blocks */
 .highlight pre,
 .highlight code,
 pre,
@@ -780,14 +780,14 @@ code {
     scrollbar-width: thin !important;
 }
 
-/* 表格内容的处理 - 修复表格显示问题 */
+/* Table content handling - fix table display issues */
 .bd-article-container table {
     table-layout: auto !important;
     width: 100% !important;
     max-width: none !important;
     overflow-x: visible !important;
-    display: table !important; /* 修复：保持正常表格显示 */
-    white-space: normal !important; /* 修复：允许正常换行 */
+    display: table !important; /* Fix: keep normal table display */
+    white-space: normal !important; /* Fix: allow normal wrapping */
     border-collapse: collapse !important;
 }
 
@@ -796,14 +796,14 @@ code {
     word-wrap: break-word !important;
     word-break: break-word !important;
     overflow-wrap: break-word !important;
-    max-width: none !important; /* 修复：移除最大宽度限制 */
-    overflow: visible !important; /* 修复：允许内容正常显示 */
-    text-overflow: clip !important; /* 修复：不裁剪文本 */
+    max-width: none !important; /* Fix: remove max-width constraint */
+    overflow: visible !important; /* Fix: allow content to show */
+    text-overflow: clip !important; /* Fix: don't clip text */
     vertical-align: top !important;
     padding: 8px !important;
 }
 
-/* 长URL和链接的处理 */
+/* Handling long URLs and links */
 a[href] {
     word-wrap: break-word !important;
     word-break: break-all !important;
@@ -811,7 +811,7 @@ a[href] {
     max-width: 100% !important;
 }
 
-/* 文档标题和标签的处理 */
+/* Document titles and labels handling */
 .sig-prename,
 .descname {
     word-wrap: break-word !important;
@@ -820,7 +820,7 @@ a[href] {
     max-width: 100% !important;
 }
 
-/* 参数列表的处理 */
+/* Parameter list handling */
 .field-list,
 .field-list .field-name,
 .field-list .field-body {
@@ -830,7 +830,7 @@ a[href] {
     max-width: 100% !important;
 }
 
-/* Notebook单元格内容的特殊处理 */
+/* Special handling for notebook cell content */
 .nbinput .highlight pre,
 .nboutput .highlight pre,
 .cell_input .highlight pre,
@@ -845,7 +845,7 @@ a[href] {
     scrollbar-color: var(--primary-color) var(--light-blue) !important;
 }
 
-/* 内联代码的处理 */
+/* Inline code handling */
 code {
     white-space: normal !important;
     word-wrap: break-word !important;
@@ -857,7 +857,7 @@ code {
     border: 1px solid var(--light-blue) !important;
 }
 
-/* 警告和提示框的文本处理 */
+/* Text handling for admonitions */
 .admonition,
 .attention,
 .caution,
@@ -876,7 +876,7 @@ code {
     overflow: hidden !important;
 }
 
-/* 修复API文档中的长函数名 */
+/* Fix long function names in API docs */
 .signature {
     word-wrap: break-word !important;
     word-break: break-all !important;
@@ -891,7 +891,7 @@ code {
     margin: 10px 0 !important;
 }
 
-/* 响应式表格 */
+/* Responsive tables */
 .table-responsive {
     display: block !important;
     width: 100% !important;
@@ -899,7 +899,7 @@ code {
     -webkit-overflow-scrolling: touch !important;
 }
 
-/* 确保容器不会超出视口 */
+/* Ensure containers don't overflow the viewport */
 .bd-article-container,
 .bd-content,
 .bd-main {
@@ -907,7 +907,7 @@ code {
     overflow-x: hidden !important;
 }
 
-/* 移动设备上的特殊处理 */
+/* Mobile-specific handling */
 @media (max-width: 768px) {
     table td,
     table th {
@@ -926,7 +926,7 @@ code {
     }
 }
 
-/* 下拉菜单样式 - 确保子按钮宽度一致 */
+/* Dropdown menu styles - ensure sub-buttons have consistent width */
 .article-header-buttons .dropdown-menu {
     z-index: 1050 !important;
     position: absolute !important;
@@ -956,7 +956,7 @@ code {
     color: var(--secondary-color) !important;
 }
 
-/* 确保下拉按钮容器不会被截断 */
+/* Ensure dropdown button container isn't clipped */
 .bd-header .navbar-nav,
 .bd-header .nav-item,
 .dropdown {
@@ -964,14 +964,14 @@ code {
     height: auto !important;
 }
 
-/* ========== Dark模式支持 ========== */
-/* Dark模式下的主题颜色配置 */
+/* ========== Dark Mode Support ========== */
+/* Theme colors for dark mode */
 [data-theme="dark"] {
-    --primary-color: #60a5fa;      /* 浅蓝色主色调 */
-    --secondary-color: #3b82f6;    /* 中蓝色 */
-    --accent-color: #1d4ed8;       /* 深蓝色 */
-    --light-blue: #1e293b;         /* 深色背景 */
-    --dark-blue: #0f172a;          /* 更深的背景 */
+    --primary-color: #60a5fa;      /* Light blue primary color */
+    --secondary-color: #3b82f6;    /* Medium blue */
+    --accent-color: #1d4ed8;       /* Deep blue */
+    --light-blue: #1e293b;         /* Dark background */
+    --dark-blue: #0f172a;          /* Deeper background */
     --gradient-blue: linear-gradient(135deg, #1e293b, #334155);
     --gradient-blue-deep: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
     --gradient-blue-light: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%);
@@ -980,19 +980,19 @@ code {
     --shadow-blue-hover: rgba(96, 165, 250, 0.3);
 }
 
-/* Dark模式下的页面整体样式 */
+/* Page styles under dark mode */
 [data-theme="dark"] .bd-main .bd-content .bd-article-container {
     background: var(--gradient-blue-light) !important;
     color: #e2e8f0 !important;
 }
 
-/* Dark模式下的导航栏样式 */
+/* Navbar styles under dark mode */
 [data-theme="dark"] .bd-header {
     background: var(--gradient-blue-deep) !important;
     border-bottom: 3px solid var(--dark-blue) !important;
 }
 
-/* Dark模式下的侧边栏样式 */
+/* Sidebar styles under dark mode */
 [data-theme="dark"] .bd-sidebar-primary {
     background: var(--gradient-blue-light) !important;
     border-right: 3px solid #334155 !important;
@@ -1002,7 +1002,7 @@ code {
     background: #334155 !important;
 }
 
-/* Dark模式下的侧边栏文字颜色 */
+/* Sidebar text color under dark mode */
 [data-theme="dark"] .bd-sidebar-primary,
 [data-theme="dark"] .bd-sidebar-primary a,
 [data-theme="dark"] .bd-sidebar-primary .toctree-l1 > a,
@@ -1015,7 +1015,7 @@ code {
     color: #e2e8f0 !important;
 }
 
-/* Dark模式下的代码块样式 */
+/* Code block styles under dark mode */
 [data-theme="dark"] .nbinput .highlight pre,
 [data-theme="dark"] .nboutput .highlight pre,
 [data-theme="dark"] .cell_input .highlight pre,
@@ -1024,19 +1024,19 @@ code {
     color: #e2e8f0 !important;
 }
 
-/* Dark模式下的输入单元格 */
+/* Input cells under dark mode */
 [data-theme="dark"] .cell_input {
     background: var(--gradient-blue-light) !important;
     border-left: 4px solid var(--primary-color) !important;
 }
 
-/* Dark模式下的输出单元格 */
+/* Output cells under dark mode */
 [data-theme="dark"] .cell_output {
     background: linear-gradient(135deg, #134e4a 0%, #1f2937 50%, #374151 100%) !important;
     border-left: 4px solid #3b82f6 !important;
 }
 
-/* Dark模式下的标题样式 */
+/* Heading styles under dark mode */
 [data-theme="dark"] h1,
 [data-theme="dark"] h2,
 [data-theme="dark"] h3,
@@ -1046,12 +1046,12 @@ code {
     color: #f1f5f9 !important;
 }
 
-/* Dark模式下的链接样式 */
+/* Link styles under dark mode */
 [data-theme="dark"] a {
     color: var(--primary-color) !important;
 }
 
-/* Dark模式下的按钮样式 */
+/* Button styles under dark mode */
 [data-theme="dark"] .btn:not(.bd-header .btn):not(.bd-navbar .btn),
 [data-theme="dark"] .bd-button:not(.bd-header .bd-button):not(.bd-navbar .bd-button) {
     background: #374151 !important;
@@ -1065,7 +1065,7 @@ code {
     color: #1e293b !important;
 }
 
-/* Dark模式下的下拉菜单样式 */
+/* Dropdown menu styles under dark mode */
 [data-theme="dark"] .article-header-buttons .dropdown-menu {
     background: #374151 !important;
     border: 1px solid #4b5563 !important;
@@ -1080,7 +1080,7 @@ code {
     color: var(--primary-color) !important;
 }
 
-/* Dark模式下的图片样式 */
+/* Image styles under dark mode */
 [data-theme="dark"] .nboutput img,
 [data-theme="dark"] .cell_output img {
     border: 3px solid #4b5563 !important;
@@ -1096,7 +1096,7 @@ code {
     background: var(--gradient-blue-light) !important;
 }
 
-/* Dark模式下的滚动条样式 */
+/* Scrollbar styles under dark mode */
 [data-theme="dark"] ::-webkit-scrollbar-track {
     background: #1e293b !important;
 }
@@ -1110,19 +1110,19 @@ code {
     background: #6b7280 !important;
 }
 
-/* Dark模式下的Firefox滚动条 */
+/* Firefox scrollbar under dark mode */
 [data-theme="dark"] * {
     scrollbar-color: #4b5563 #1e293b !important;
 }
 
-/* Dark模式下的内联代码 */
+/* Inline code under dark mode */
 [data-theme="dark"] code {
     background-color: #374151 !important;
     color: #e2e8f0 !important;
     border: 1px solid #4b5563 !important;
 }
 
-/* Dark模式下的警告和提示框 */
+/* Admonitions under dark mode */
 [data-theme="dark"] .admonition,
 [data-theme="dark"] .attention,
 [data-theme="dark"] .caution,
@@ -1139,7 +1139,7 @@ code {
     border: 1px solid #4b5563 !important;
 }
 
-/* Dark模式下的表格样式 */
+/* Table styles under dark mode */
 [data-theme="dark"] table {
     background: #374151 !important;
     color: #e2e8f0 !important;
@@ -1152,7 +1152,7 @@ code {
     color: #e2e8f0 !important;
 }
 
-/* Dark模式下的图片说明文字 */
+/* Figure caption under dark mode */
 [data-theme="dark"] .figure-caption,
 [data-theme="dark"] .caption,
 [data-theme="dark"] figcaption {
@@ -1197,8 +1197,8 @@ code {
     margin-top: 0.5rem;
 }
 
-/* ========== LaTeX数学公式样式优化 ========== */
-/* 强制所有LaTeX公式居中显示 - 最高优先级样式 */
+/* ========== LaTeX Math Formula Styling Optimizations ========== */
+/* Force all LaTeX formulas to center - high priority styles */
 .MathJax_Display,
 .MathJax_Display *,
 mjx-container[display="block"],
@@ -1230,7 +1230,7 @@ span.math,
     outline: none !important;
 }
 
-/* 确保所有MathJax内部元素也居中 */
+/* Ensure all MathJax internal elements are centered as well */
 .MathJax_Display > *,
 .MathJax_Display .MathJax,
 .MathJax_Display .MathJax_SVG,
@@ -1249,7 +1249,7 @@ mjx-container[display="block"] mjx-assistive-mml {
     float: none !important;
 }
 
-/* 强制覆盖任何可能的右对齐样式 */
+/* Force override any potential right-aligned styles */
 .MathJax_Display,
 mjx-container[display="block"] {
     text-align: center !important;
@@ -1259,7 +1259,7 @@ mjx-container[display="block"] {
     box-sizing: border-box !important;
 }
 
-/* 公式容器的居中样式 */
+/* Centering styles for formula containers */
 .MathJax_Display:before,
 .MathJax_Display:after,
 mjx-container[display="block"]:before,
@@ -1269,7 +1269,7 @@ mjx-container[display="block"]:after {
     clear: both !important;
 }
 
-/* 悬停效果优化 */
+/* Hover effect enhancements */
 .MathJax_Display:hover,
 mjx-container[display="block"]:hover {
     transform: none !important;
@@ -1279,7 +1279,7 @@ mjx-container[display="block"]:hover {
     transition: all 0.3s ease !important;
 }
 
-/* MathJax行内公式样式 */
+/* MathJax inline formula styles */
 .MathJax,
 mjx-container:not([display="block"]) {
     font-size: 1.1em !important;
@@ -1295,7 +1295,7 @@ mjx-container:not([display="block"]):hover {
     transform: scale(1.05) !important;
 }
 
-/* MathJax SVG样式 */
+/* MathJax SVG styles */
 .MathJax_SVG {
     color: var(--secondary-color) !important;
     transition: all 0.3s ease !important;
@@ -1306,7 +1306,7 @@ mjx-container:not([display="block"]):hover {
     filter: drop-shadow(0 2px 8px var(--shadow-blue)) !important;
 }
 
-/* 数学公式区块样式 */
+/* Math formula block styles */
 .math {
     font-size: 1.1em !important;
     color: var(--secondary-color) !important;
@@ -1322,7 +1322,7 @@ mjx-container:not([display="block"]):hover {
     transform: scale(1.02) !important;
 }
 
-/* 显示公式容器 */
+/* Display formula container */
 .math.display {
     display: block !important;
     text-align: center !important;
@@ -1359,7 +1359,7 @@ mjx-container:not([display="block"]):hover {
     box-shadow: 0 8px 25px var(--shadow-blue);
 }
 
-/* 特定的数学符号和公式优化 */
+/* Specific math symbol and formula optimizations */
 .math .mfrac {
     margin: 0.2rem 0 !important;
 }
@@ -1373,7 +1373,7 @@ mjx-container:not([display="block"]):hover {
     margin: 0.1rem 0 !important;
 }
 
-/* 数学公式编号样式 */
+/* Math formula numbering styles */
 .eqno {
     float: right !important;
     margin-right: 1rem !important;
@@ -1390,7 +1390,7 @@ mjx-container:not([display="block"]):hover {
     transform: scale(1.05) !important;
 }
 
-/* Dark模式下的数学公式样式 */
+/* Math formula styles under dark mode */
 [data-theme="dark"] .MathJax_Display {
     background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
     border-left: 4px solid var(--primary-color) !important;
@@ -1431,7 +1431,7 @@ mjx-container:not([display="block"]):hover {
     background: rgba(96, 165, 250, 0.25) !important;
 }
 
-/* 数学公式的无障碍访问优化 */
+/* Accessibility improvements for math formulas */
 .MathJax_Display[aria-hidden="false"],
 .MathJax[aria-hidden="false"] {
     outline: 2px solid transparent !important;
@@ -1444,7 +1444,7 @@ mjx-container:not([display="block"]):hover {
     outline-color: var(--primary-color) !important;
 }
 
-/* 数学公式中的特殊字符优化 */
+/* Special character optimizations inside math formulas */
 .math .mo {
     padding: 0 0.1em !important;
 }
@@ -1467,7 +1467,7 @@ mjx-container:not([display="block"]):hover {
     color: #93c5fd !important;
 }
 
-/* 改进MathJax渲染质量 */
+/* Improve MathJax rendering quality */
 .MathJax_Display svg,
 .MathJax svg {
     shape-rendering: geometricPrecision !important;
@@ -1477,7 +1477,7 @@ mjx-container:not([display="block"]):hover {
     -moz-osx-font-smoothing: grayscale !important;
 }
 
-/* 数学公式的加载动画 */
+/* Math formula loading animation */
 .MathJax_Display.MathJax_Processing,
 .MathJax.MathJax_Processing {
     opacity: 0.7 !important;
@@ -1505,7 +1505,7 @@ mjx-container:not([display="block"]):hover {
     }
 }
 
-/* 响应式数学公式 */
+/* Responsive math formulas */
 @media (max-width: 768px) {
     .MathJax_Display {
         margin: 1rem 0 !important;
@@ -1524,7 +1524,7 @@ mjx-container:not([display="block"]):hover {
     }
 }
 
-/* 数学公式的选择样式 */
+/* Selection styles for math formulas */
 .MathJax_Display::selection,
 .MathJax::selection {
     background: rgba(37, 99, 235, 0.2) !important;
@@ -1796,7 +1796,7 @@ mjx-container:not([display="block"]):hover {
 [data-theme="dark"] .functions-classes-page .admonition p {
     color: #e2e8f0 !important;
 }
-/* 左上角标题点击回到首页功能 */
+/* Top-left title click-to-home functionality */
 .bd-header .navbar-brand,
 .bd-header .navbar-brand:hover,
 .bd-header .navbar-brand:focus,
@@ -1807,13 +1807,13 @@ mjx-container:not([display="block"]):hover {
     transition: all 0.3s ease !important;
 }
 
-/* 点击效果 */
+/* Click effect */
 .bd-header .navbar-brand:hover {
     transform: scale(1.05) !important;
     text-shadow: 0 0 20px rgba(255, 255, 255, 0.8) !important;
 }
 
-/* 添加JavaScript功能，让标题点击回到首页 */
+/* Add JS to make the title click go to the homepage */
 .bd-header .navbar-brand {
     position: relative;
 }
@@ -1833,19 +1833,19 @@ mjx-container:not([display="block"]):hover {
     width: 100%;
 }
 
-/* 确保标题可点击 */
+/* Ensure title is clickable */
 .bd-header .navbar-brand {
     pointer-events: auto !important;
 }
 
-/* 标题文字样式增强 */
+/* Enhance title text styling */
 .bd-header .navbar-brand .navbar-text {
     color: white !important;
     font-weight: 600 !important;
     letter-spacing: 0.5px !important;
 }
 
-/* Logo图片样式 - 增强悬停和点击效果 */
+/* Logo image styles - enhance hover and click effects */
 .bd-header .navbar-brand img,
 .bd-sidebar-primary .navbar-brand img,
 .navbar-brand img {
@@ -1869,7 +1869,7 @@ mjx-container:not([display="block"]):hover {
     transition: transform 0.1s ease !important;
 }
 
-/* 确保logo链接也可点击 */
+/* Ensure logo link is clickable */
 .bd-header .navbar-brand,
 .bd-sidebar-primary .navbar-brand,
 .navbar-brand {
@@ -1883,7 +1883,7 @@ mjx-container:not([display="block"]):hover {
     transform: scale(1.05) !important;
 }
 
-/* Logo发光动画 - 渐变色光晕 */
+/* Logo glow animation - gradient halo */
 @keyframes logoGlow {
     0%, 100% {
         box-shadow: 0 0 0 rgba(59, 130, 246, 0),
@@ -1895,7 +1895,7 @@ mjx-container:not([display="block"]):hover {
     }
 }
 
-/* Logo点击涟漪动画 */
+/* Logo click ripple animation */
 @keyframes ripple {
     to {
         transform: scale(1.5);
@@ -1903,13 +1903,13 @@ mjx-container:not([display="block"]):hover {
     }
 }
 
-/* 强制logo可点击样式 */
+/* Force logo clickable styles */
 .logo-clickable,
 .logo-clickable img {
     cursor: pointer !important;
 }
 
-/* 响应式标题样式 */
+/* Responsive title styles */
 @media (max-width: 768px) {
     .bd-header .navbar-brand {
         font-size: 1.1rem !important;
@@ -1981,18 +1981,18 @@ button.copybtn svg {
     }
 }
 
-/* ========== 表格显示修复与响应式增强 ========== */
-/* 修复表格被裁剪的问题 */
+/* ========== Table display fixes and responsive enhancements ========== */
+/* Fix table clipping issues */
 .bd-main .bd-content .bd-article-container {
-    overflow: visible !important; /* 允许内容溢出显示 */
+    overflow: visible !important; /* Allow content overflow to be visible */
 }
 
-/* 确保表格容器可以水平滚动 */
+/* Ensure table containers can scroll horizontally */
 .bd-article {
     overflow-x: auto !important;
 }
 
-/* 响应式表格包装器 */
+/* Responsive table wrapper */
 .responsive-table-wrapper {
     position: relative;
     width: 100%;
@@ -2009,7 +2009,7 @@ button.copybtn svg {
     transform: translateY(-2px);
 }
 
-/* 表格控制栏样式 */
+/* Table control bar styles */
 .table-controls {
     display: flex;
     justify-content: space-between;
@@ -2022,7 +2022,7 @@ button.copybtn svg {
     transition: all 0.3s ease;
 }
 
-/* 表格滚动容器 */
+/* Table scroll container */
 .table-scroll-container {
     width: 100%;
     overflow-x: auto;
@@ -2052,7 +2052,7 @@ button.copybtn svg {
     background: #2563eb;
 }
 
-/* 响应式表格基础样式 */
+/* Base styles for responsive tables */
 .responsive-table-processed {
     width: 100% !important;
     table-layout: fixed !important;
@@ -2062,7 +2062,7 @@ button.copybtn svg {
     transition: all 0.3s ease !important;
 }
 
-/* 表格单元格增强样式 */
+/* Enhanced table cell styles */
 .responsive-table-processed th,
 .responsive-table-processed td {
     padding: 12px 16px !important;
@@ -2076,7 +2076,7 @@ button.copybtn svg {
     transition: all 0.2s ease !important;
 }
 
-/* 表格头部增强样式 */
+/* Enhanced table header styles */
 .responsive-table-processed th {
     background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
     font-weight: 600 !important;
@@ -2087,14 +2087,14 @@ button.copybtn svg {
     cursor: pointer !important;
 }
 
-/* 紧凑模式样式 */
+/* Compact mode styles */
 .responsive-table-processed.compact-mode th,
 .responsive-table-processed.compact-mode td {
     padding: 6px 8px !important;
     font-size: 0.9rem !important;
 }
 
-/* 行悬停效果 */
+/* Row hover effect */
 .responsive-table-processed tbody tr {
     transition: all 0.2s ease !important;
 }
@@ -2105,7 +2105,7 @@ button.copybtn svg {
     box-shadow: 2px 0 8px rgba(37, 99, 235, 0.1) !important;
 }
 
-/* 斑马纹效果 */
+/* Zebra striping */
 .responsive-table-processed tbody tr:nth-child(even) {
     background-color: #f8fafc !important;
 }
@@ -2114,7 +2114,7 @@ button.copybtn svg {
     background: rgba(37, 99, 235, 0.05) !important;
 }
 
-/* 长函数名特殊样式 */
+/* Special styles for long function names */
 .responsive-table-processed td:has(a[href*="skyborn."]),
 .responsive-table-processed th:has(a[href*="skyborn."]) {
     font-family: 'Monaco', 'Lucida Console', monospace !important;
@@ -2123,7 +2123,7 @@ button.copybtn svg {
     font-weight: 500 !important;
 }
 
-/* 函数链接样式增强 */
+/* Enhanced styles for function links */
 .responsive-table-processed a[href*="skyborn."] {
     text-decoration: none !important;
     border-bottom: 1px dotted #3b82f6 !important;
@@ -2139,7 +2139,7 @@ button.copybtn svg {
     box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2) !important;
 }
 
-/* Toast 通知样式 */
+/* Toast notification styles */
 .table-toast {
     position: fixed;
     top: 20px;
@@ -2156,14 +2156,14 @@ button.copybtn svg {
     transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* 列高亮效果 */
+/* Column highlight effect */
 .responsive-table-processed .column-highlight {
     background: rgba(37, 99, 235, 0.08) !important;
     border-left: 2px solid #3b82f6 !important;
     border-right: 2px solid #3b82f6 !important;
 }
 
-/* 响应式设计 */
+/* Responsive design */
 @media (max-width: 768px) {
     .table-controls {
         flex-direction: column;
@@ -2207,7 +2207,7 @@ button.copybtn svg {
     }
 }
 
-/* Dark模式支持 */
+/* Dark mode support */
 [data-theme="dark"] .responsive-table-wrapper {
     background: #374151 !important;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
@@ -2252,7 +2252,7 @@ button.copybtn svg {
     border-bottom: 1px solid #60a5fa !important;
 }
 
-/* 动画关键帧 */
+/* Animation keyframes */
 @keyframes tableScale {
     0% {
         transform: scale(1);
@@ -2274,17 +2274,17 @@ button.copybtn svg {
     }
 }
 
-/* 表格加载动画 */
+/* Table loading animation */
 .responsive-table-processed.loading {
     animation: tableScale 0.3s ease-out;
 }
 
-/* 列自动调整动画 */
+/* Column auto-adjust animation */
 .responsive-table-processed .auto-fitting {
     animation: columnPulse 0.5s ease-in-out;
 }
 
-/* 原始表格样式（作为后备） */
+/* Original table styles (fallback) */
 table:not(.responsive-table-processed) {
     width: 100% !important;
     max-width: none !important;
@@ -2295,7 +2295,7 @@ table:not(.responsive-table-processed) {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
 }
 
-/* 原始表格单元格样式 */
+/* Original table cell styles */
 table:not(.responsive-table-processed) th,
 table:not(.responsive-table-processed) td {
     padding: 12px 16px !important;
@@ -2305,14 +2305,14 @@ table:not(.responsive-table-processed) td {
     word-wrap: break-word !important;
 }
 
-/* 原始表格头部样式 */
+/* Original table header styles */
 table:not(.responsive-table-processed) th {
     background: var(--gradient-blue-light) !important;
     font-weight: 600 !important;
     color: var(--dark-blue) !important;
 }
 
-/* 原始表格行悬停效果 */
+/* Original table row hover effect */
 table:not(.responsive-table-processed) tbody tr:hover {
     background: rgba(37, 99, 235, 0.05) !important;
     transition: background-color 0.2s ease !important;
