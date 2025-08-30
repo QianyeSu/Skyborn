@@ -347,28 +347,28 @@ document.addEventListener('DOMContentLoaded', function() {
         document.head.appendChild(style);
     }
 
-    // ========== 通用图片放大功能 ==========
+    // ========== Image Zoom Utility ==========
     function addImageZoomFunction() {
-        // 查找所有图片（包括Jupyter notebook输出、文档图片等）
-        // 但排除MathJax公式相关的图片和元素
+    // Find all images (including Jupyter notebook outputs and documentation images)
+    // but exclude MathJax-related images and elements
         const allImages = document.querySelectorAll('img:not(.MathJax img):not([class*="MathJax"]):not(mjx-container img)');
 
         allImages.forEach(img => {
-            // 跳过导航栏logo、favicon、MathJax相关图片等小图片
+            // Skip navbar logos, favicons, MathJax-related small images, etc.
             if (img.src &&
                 !img.src.includes('favicon') &&
                 !img.classList.contains('navbar-logo') &&
-                !img.closest('.MathJax') && // 排除在MathJax容器内的图片
-                !img.closest('mjx-container') && // 排除在mjx-container内的图片
-                !img.closest('.enhanced-formula') && // 排除在公式包装器内的图片
-                !img.parentElement.classList.contains('formula-wrapper') && // 排除公式包装器
-                img.offsetWidth > 100 && // 只处理较大的图片
+                !img.closest('.MathJax') && // exclude images inside MathJax containers
+                !img.closest('mjx-container') && // exclude images inside mjx-container
+                !img.closest('.enhanced-formula') && // exclude images inside enhanced-formula wrappers
+                !img.parentElement.classList.contains('formula-wrapper') && // exclude formula wrapper parents
+                img.offsetWidth > 100 && // only handle larger images
                 img.offsetHeight > 100) {
 
                 img.style.cursor = 'pointer';
                 img.style.transition = 'transform 0.3s ease';
 
-                // 添加hover效果
+                // add hover effect
                 img.addEventListener('mouseenter', function() {
                     this.style.transform = 'scale(1.05)';
                 });
@@ -377,14 +377,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     this.style.transform = 'scale(1)';
                 });
 
-                // 移除默认的图片点击事件
+                // remove default image click handler
                 img.onclick = null;
 
                 img.addEventListener('click', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
 
-                    // 判断是否是logo，使用不同的模态窗口
+                    // determine if it's a logo and use a different modal
                     if (this.src.includes('SkyBornLogo') || this.alt.toLowerCase().includes('logo')) {
                         createLogoModal(this);
                     } else {
@@ -395,20 +395,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ========== 中间Logo放大动画 ==========
+    // ========== Center Logo Zoom Animation ==========
     function addMainLogoAnimation() {
-        // 这个函数现在由addImageZoomFunction统一处理
-        // 保留用于向后兼容
+    // This function is now handled by addImageZoomFunction
+    // Kept for backward compatibility
     }
 
-    // 创建Logo模态弹窗
+    // Create logo modal dialog
     function createLogoModal(logoElement) {
-        // 防止重复创建
+    // prevent duplicate creation
         if (document.querySelector('.logo-modal')) {
             return;
         }
 
-        // 创建遮罩层
+    // create overlay
         const overlay = document.createElement('div');
         overlay.className = 'logo-modal-overlay';
         overlay.style.cssText = `
@@ -427,7 +427,7 @@ document.addEventListener('DOMContentLoaded', function() {
             backdrop-filter: blur(10px);
         `;
 
-        // 创建模态容器
+    // create modal container
         const modal = document.createElement('div');
         modal.className = 'logo-modal';
         modal.style.cssText = `
@@ -452,7 +452,7 @@ document.addEventListener('DOMContentLoaded', function() {
             align-items: center;
         `;
 
-        // 创建关闭按钮
+    // create close button
         const closeBtn = document.createElement('button');
         closeBtn.innerHTML = '×';
         closeBtn.style.cssText = `
@@ -478,7 +478,7 @@ document.addEventListener('DOMContentLoaded', function() {
             closeBtn.style.transform = 'scale(1)';
         });
 
-        // 创建logo图片副本
+    // create a clone of the logo image
         const logoClone = logoElement.cloneNode(true);
         logoClone.style.cssText = `
             max-width: 70%;
@@ -493,7 +493,7 @@ document.addEventListener('DOMContentLoaded', function() {
             animation: logoFloat 3s ease-in-out infinite;
         `;
 
-        // 创建描述
+    // create description
         const description = document.createElement('p');
         description.textContent = 'Climate Data Analysis & Visualization Toolkit';
         description.style.cssText = `
@@ -505,24 +505,24 @@ document.addEventListener('DOMContentLoaded', function() {
             font-weight: 500;
         `;
 
-        // 组装模态内容（不包含标题）
+    // assemble modal content (excluding title)
         modal.appendChild(closeBtn);
         modal.appendChild(logoClone);
         modal.appendChild(description);
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
 
-        // 阻止页面滚动
+    // prevent page scrolling
         document.body.style.overflow = 'hidden';
 
-        // 动画显示
+    // animate display
         requestAnimationFrame(() => {
             overlay.style.opacity = '1';
             modal.style.transform = 'scale(1) rotate(0deg)';
             modal.style.opacity = '1';
         });
 
-        // 关闭功能
+    // close functionality
         function closeModal() {
             overlay.style.opacity = '0';
             modal.style.transform = 'scale(0.3) rotate(-10deg)';
@@ -534,7 +534,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 400);
         }
 
-        // 绑定关闭事件
+    // bind close events
         closeBtn.addEventListener('click', closeModal);
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) {
@@ -542,7 +542,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // ESC键关闭
+    // close on ESC key
         const escHandler = (e) => {
             if (e.key === 'Escape') {
                 closeModal();
@@ -551,11 +551,11 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         document.addEventListener('keydown', escHandler);
 
-        // 添加粒子效果背景
+    // add particle effect background
         addModalParticles(modal);
     }
 
-    // 为模态添加粒子效果
+    // Add modal particle effects
     function addModalParticles(modal) {
         const canvas = document.createElement('canvas');
         canvas.style.cssText = `
@@ -573,14 +573,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const ctx = canvas.getContext('2d');
         const particles = [];
 
-        // 调整canvas大小
+    // resize canvas
         function resizeCanvas() {
             canvas.width = modal.offsetWidth;
             canvas.height = modal.offsetHeight;
         }
         resizeCanvas();
 
-        // 创建粒子
+    // create particles
         for (let i = 0; i < 30; i++) {
             particles.push({
                 x: Math.random() * canvas.width,
@@ -593,7 +593,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        // 动画循环
+    // animation loop
         function animate() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -601,11 +601,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 particle.x += particle.vx;
                 particle.y += particle.vy;
 
-                // 边界检测
+                // boundary detection
                 if (particle.x < 0 || particle.x > canvas.width) particle.vx *= -1;
                 if (particle.y < 0 || particle.y > canvas.height) particle.vy *= -1;
 
-                // 绘制粒子
+                // draw particles
                 ctx.beginPath();
                 ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
                 ctx.fillStyle = particle.color;
@@ -620,14 +620,14 @@ document.addEventListener('DOMContentLoaded', function() {
         animate();
     }
 
-    // ========== 通用图片模态弹窗 ==========
+    // ========== Generic Image Modal Dialog ==========
     function createImageModal(imageElement) {
-        // 防止重复创建
+    // prevent duplicate creation
         if (document.querySelector('.image-modal')) {
             return;
         }
 
-        // 创建遮罩层
+    // create overlay
         const overlay = document.createElement('div');
         overlay.className = 'image-modal-overlay';
         overlay.style.cssText = `
@@ -646,7 +646,7 @@ document.addEventListener('DOMContentLoaded', function() {
             backdrop-filter: blur(10px);
         `;
 
-        // 创建模态容器
+    // create modal container
         const modal = document.createElement('div');
         modal.className = 'image-modal';
         modal.style.cssText = `
@@ -669,7 +669,7 @@ document.addEventListener('DOMContentLoaded', function() {
             align-items: center;
         `;
 
-        // 创建关闭按钮
+    // create close button
         const closeBtn = document.createElement('button');
         closeBtn.innerHTML = '×';
         closeBtn.style.cssText = `
@@ -704,7 +704,7 @@ document.addEventListener('DOMContentLoaded', function() {
             closeBtn.style.transform = 'scale(1)';
         });
 
-        // 创建图片副本
+    // create image clone
         const imageClone = imageElement.cloneNode(true);
         imageClone.style.cssText = `
             max-width: 100%;
@@ -722,7 +722,7 @@ document.addEventListener('DOMContentLoaded', function() {
             animation: imageZoom 0.5s ease-out;
         `;
 
-        // 创建图片信息
+    // create image info
         const imageInfo = document.createElement('div');
         const fileName = imageElement.src.split('/').pop() || 'Image';
         const imageTitle = imageElement.alt || imageElement.title || fileName;
@@ -732,13 +732,13 @@ document.addEventListener('DOMContentLoaded', function() {
         //     <p style="margin: 0; color: #666; font-size: 0.9rem; text-align: center;">Click and drag to pan • Scroll to zoom</p>
         // `;
 
-        // 添加图片交互功能
+    // add image interaction features
         let isDragging = false;
         let startX, startY, translateX = 0, translateY = 0;
         let scale = 1;
         let lastTranslateX = 0, lastTranslateY = 0;
 
-        // 鼠标按下开始拖拽
+    // mouse down: start dragging
         imageClone.addEventListener('mousedown', (e) => {
             e.preventDefault();
             isDragging = true;
@@ -746,10 +746,10 @@ document.addEventListener('DOMContentLoaded', function() {
             startY = e.clientY - translateY;
             imageClone.style.cursor = 'grabbing';
             imageClone.style.userSelect = 'none';
-            imageClone.style.transition = 'none'; // 拖拽时禁用过渡动画
+            imageClone.style.transition = 'none'; // disable transitions during drag
         });
 
-        // 鼠标移动拖拽图片
+    // mouse move: dragging image
         document.addEventListener('mousemove', (e) => {
             if (!isDragging) return;
             e.preventDefault();
@@ -758,20 +758,20 @@ document.addEventListener('DOMContentLoaded', function() {
             imageClone.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
         });
 
-        // 鼠标抬起结束拖拽
+    // mouse up: end dragging
         document.addEventListener('mouseup', (e) => {
             if (isDragging) {
                 isDragging = false;
                 imageClone.style.cursor = 'grab';
                 imageClone.style.userSelect = 'auto';
-                imageClone.style.transition = 'transform 0.2s ease'; // 恢复过渡动画
-                // 保存当前位置
+                imageClone.style.transition = 'transform 0.2s ease'; // restore transitions
+                // save current position
                 lastTranslateX = translateX;
                 lastTranslateY = translateY;
             }
         });
 
-        // 滚轮缩放（优化缩放中心点）
+    // wheel zoom (optimize zoom center)
         imageClone.addEventListener('wheel', (e) => {
             e.preventDefault();
             const rect = imageClone.getBoundingClientRect();
@@ -782,7 +782,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const newScale = Math.max(0.5, Math.min(5, scale * delta));
 
             if (newScale !== scale) {
-                // 计算缩放中心调整
+                // calculate zoom center adjustment
                 const scaleChange = newScale / scale;
                 translateX = translateX * scaleChange + mouseX * (1 - scaleChange);
                 translateY = translateY * scaleChange + mouseY * (1 - scaleChange);
@@ -790,13 +790,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 scale = newScale;
                 imageClone.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
 
-                // 更新保存的位置
+                // update saved position
                 lastTranslateX = translateX;
                 lastTranslateY = translateY;
             }
         });
 
-        // 双击重置图片位置和缩放
+    // double-click: reset position and zoom
         imageClone.addEventListener('dblclick', (e) => {
             e.preventDefault();
             translateX = 0;
@@ -811,31 +811,31 @@ document.addEventListener('DOMContentLoaded', function() {
             lastTranslateY = 0;
         });
 
-        // 防止图片拖拽时的默认行为
+    // prevent default drag behavior for images
         imageClone.addEventListener('dragstart', (e) => {
             e.preventDefault();
         });
 
         imageClone.style.cursor = 'grab';
 
-        // 组装模态内容
+    // assemble modal content
         modal.appendChild(closeBtn);
         modal.appendChild(imageClone);
         modal.appendChild(imageInfo);
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
 
-        // 阻止页面滚动
+    // prevent page scrolling
         document.body.style.overflow = 'hidden';
 
-        // 动画显示
+    // animate display
         requestAnimationFrame(() => {
             overlay.style.opacity = '1';
             modal.style.transform = 'scale(1) rotate(0deg)';
             modal.style.opacity = '1';
         });
 
-        // 关闭功能
+    // close functionality
         function closeModal() {
             overlay.style.opacity = '0';
             modal.style.transform = 'scale(0.3) rotate(-5deg)';
@@ -847,7 +847,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 400);
         }
 
-        // 绑定关闭事件
+    // bind close events
         closeBtn.addEventListener('click', closeModal);
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) {
@@ -855,7 +855,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // ESC键关闭
+    // close on ESC key
         const escHandler = (e) => {
             if (e.key === 'Escape') {
                 closeModal();
@@ -864,11 +864,11 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         document.addEventListener('keydown', escHandler);
 
-        // 添加背景动画效果
+    // add background animation effects
         addImageModalEffects(modal);
     }
 
-    // 为图片模态添加背景效果
+    // Add background effects for image modal
     function addImageModalEffects(modal) {
         const canvas = document.createElement('canvas');
         canvas.style.cssText = `
@@ -893,7 +893,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         resizeCanvas();
 
-        // 创建装饰性点阵
+    // create decorative dots
         for (let i = 0; i < 20; i++) {
             dots.push({
                 x: Math.random() * canvas.width,
@@ -930,7 +930,7 @@ document.addEventListener('DOMContentLoaded', function() {
         animate();
     }
     function addLogoClickToHome() {
-        // 查找所有可能的logo元素
+    // find all possible logo elements
         const logoSelectors = [
             '.bd-header .navbar-brand',
             '.bd-header .navbar-brand img',
@@ -947,40 +947,40 @@ document.addEventListener('DOMContentLoaded', function() {
         logoSelectors.forEach(selector => {
             const logos = document.querySelectorAll(selector);
             logos.forEach(logo => {
-                // 设置样式
+                // set styles
                 logo.style.cursor = 'pointer';
 
-                // 移除之前的事件监听器（防止重复绑定）
+                // remove previous event listeners (prevent duplicate bindings)
                 logo.removeEventListener('click', handleLogoClick);
 
-                // 添加新的事件监听器
+                // add new event listeners
                 logo.addEventListener('click', handleLogoClick);
 
-                // 添加鼠标悬停效果
+                // add hover effect
                 logo.addEventListener('mouseenter', function() {
                     this.style.cursor = 'pointer';
                 });
 
-                // 强制设置指针样式
+                // force pointer style
                 logo.classList.add('logo-clickable');
             });
         });
 
-        // Logo点击处理函数
+    // Logo click handler function
         function handleLogoClick(e) {
             e.preventDefault();
             e.stopPropagation();
 
             console.log('Logo clicked! Navigating to index.html');
 
-            // 添加点击动画效果
+            // add click animation effect
             this.style.transform = 'scale(0.9)';
             this.style.transition = 'transform 0.15s ease';
 
-            // 添加涟漪效果
+            // add ripple effect
             const ripple = document.createElement('div');
             const rect = this.getBoundingClientRect();
-            const size = Math.min(rect.width, rect.height) * 0.8; // 缩小到0.8倍
+            const size = Math.min(rect.width, rect.height) * 0.8; // scaled down to 0.8x
 
             ripple.style.cssText = `
                 position: fixed;
@@ -998,7 +998,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             document.body.appendChild(ripple);
 
-            // 动画完成后重置
+            // reset after animation completes
             setTimeout(() => {
                 this.style.transform = 'scale(1)';
                 if (ripple.parentNode) {
@@ -1006,7 +1006,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }, 150);
 
-            // 导航到首页（粒子效果页面）
+            // navigate to homepage (particle effect page)
             setTimeout(() => {
                 window.location.href = 'index.html';
             }, 200);
@@ -1026,7 +1026,7 @@ document.addEventListener('DOMContentLoaded', function() {
         addScrollProgress();
         addThemeTransitions();
         addLogoClickToHome();
-        addImageZoomFunction(); // 添加通用图片放大功能（包括logo）
+    addImageZoomFunction(); // add generic image zoom function (including logos)
 
         console.log('🎉 Skyborn Documentation interactive effects loaded!');
     }
@@ -1038,20 +1038,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Delayed initialization to ensure all elements are loaded
     setTimeout(initializeEffects, 100);
 
-    // 多次尝试添加logo点击事件，因为logo可能是动态加载的
+    // Retry adding logo click handlers multiple times because logos may load dynamically
     setTimeout(() => {
         addLogoClickToHome();
-        addImageZoomFunction(); // 也要重新添加图片缩放事件
+    addImageZoomFunction(); // also re-add image zoom handlers
         console.log('Logo click handlers re-added after 1 second');
     }, 1000);
 
     setTimeout(() => {
         addLogoClickToHome();
-        addImageZoomFunction(); // 也要重新添加图片缩放事件
+    addImageZoomFunction(); // also re-add image zoom handlers
         console.log('Logo click handlers re-added after 2 seconds');
     }, 2000);
 
-    // 监听页面变化，动态添加logo点击事件
+    // Observe DOM mutations to dynamically add logo click handlers
     const observer = new MutationObserver(function(mutations) {
         let shouldAddLogoHandler = false;
         mutations.forEach(function(mutation) {
@@ -1071,7 +1071,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (shouldAddLogoHandler) {
             setTimeout(() => {
                 addLogoClickToHome();
-                addImageZoomFunction(); // 也要重新添加图片缩放事件
+                addImageZoomFunction(); // also re-add image zoom handlers
                 console.log('Logo click handlers added after DOM mutation');
             }, 100);
         }
@@ -1152,7 +1152,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        /* 通用图片悬停效果 */
+    /* General image hover effects */
         img:not(.navbar-brand img):not([src*="favicon"]) {
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
@@ -1161,7 +1161,7 @@ document.addEventListener('DOMContentLoaded', function() {
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
         }
 
-        /* 防止中间logo的默认点击行为 */
+    /* Prevent default click behavior for center logo */
         .bd-content img[src*="SkyBornLogo"],
         .bd-article img[src*="SkyBornLogo"],
         article img[src*="SkyBornLogo"],
@@ -1169,12 +1169,12 @@ document.addEventListener('DOMContentLoaded', function() {
             cursor: pointer !important;
         }
 
-        /* 所有大图片都可点击放大 */
+    /* All large images are clickable for zoom */
         img[width]:not(.navbar-brand img):not([src*="favicon"]) {
             cursor: pointer !important;
         }
 
-        /* 图片模态窗口相关样式 */
+    /* Styles for image modal window */
         .image-modal-overlay {
             backdrop-filter: blur(15px) !important;
         }
