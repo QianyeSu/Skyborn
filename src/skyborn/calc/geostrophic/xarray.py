@@ -491,7 +491,7 @@ class GeostrophicWind:
         vg_valid = vg.where(vg != self._missing_value, 0)
 
         # Calculate speed
-        speed = np.sqrt(ug_valid**2 + vg_valid**2)
+        speed = np.hypot(ug_valid, vg_valid)
 
         # Restore missing values where either component was missing
         missing_mask = (ug == self._missing_value) | (vg == self._missing_value)
