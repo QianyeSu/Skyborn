@@ -3,6 +3,8 @@
 # Import calculation functions
 # Import submodules
 from . import ROF, calc, conversion, gridfill, interp, plot, spharm, windspharm
+
+# Expose calc submodules at package top-level for convenience
 from .calc import (  # Mann-Kendall functions; New emergent constraint function names; Legacy names for backward compatibility
     calc_GAUSSIAN_PDF,
     calc_PDF_EC,
@@ -13,6 +15,7 @@ from .calc import (  # Mann-Kendall functions; New emergent constraint function 
     emergent_constraint_prior,
     find_std_from_PDF,
     gaussian_pdf,
+    geostrophic,
     kendall_correlation,
     linear_regression,
     mann_kendall_multidim,
@@ -23,6 +26,7 @@ from .calc import (  # Mann-Kendall functions; New emergent constraint function 
     pearson_correlation,
     spearman_correlation,
     trend_analysis,
+    troposphere,
 )
 from .causality import granger_causality, liang_causality
 
@@ -49,4 +53,4 @@ from .gridfill import fill as gridfill_fill
 fill = gridfill_fill
 
 
-__version__ = "0.3.12.post1"
+__version__ = "0.3.13"
