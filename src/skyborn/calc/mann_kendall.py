@@ -764,7 +764,7 @@ def mann_kendall_xarray(
     use_dask: bool = True,
 ):  # -> xr.Dataset
     """
-    Mann-Kendall test for xarray DataArray.
+    Mann-Kendall test for xarray DataArray that handles 1D data.
 
     Parameters
     ----------
@@ -805,24 +805,80 @@ def mann_kendall_xarray(
     # Create output coordinates (all dims except time)
     coords = {k: v for k, v in data.coords.items() if k != dim}
 
-    # Create Dataset
-    ds = xr.Dataset(
-        data_vars={
-            "trend": (list(coords.keys()), results["trend"]),
-            "h": (list(coords.keys()), results["h"]),
-            "p": (list(coords.keys()), results["p"]),
-            "z": (list(coords.keys()), results["z"]),
-            "tau": (list(coords.keys()), results["tau"]),
-            "std_error": (list(coords.keys()), results["std_error"]),
-        },
-        coords=coords,
-        attrs={
-            "title": "Mann-Kendall Trend Analysis",
-            "alpha": alpha,
-            "method": method,
-            "modified": modified,
-        },
-    )
+    # Handle 1D case (no non-time dimensions)
+    if not coords:  # coords is empty for 1D data
+        # For 1D data, create scalar variables without dimensions
+        ds = xr.Dataset(
+            data_vars={
+                "trend": (
+                    [],
+                    (
+                        results["trend"]
+                        if np.isscalar(results["trend"])
+                        else results["trend"].item()
+                    ),
+                ),
+                "h": (
+                    [],
+                    results["h"] if np.isscalar(results["h"]) else results["h"].item(),
+                ),
+                "p": (
+                    [],
+                    results["p"] if np.isscalar(results["p"]) else results["p"].item(),
+                ),
+                "z": (
+                    [],
+                    results["z"] if np.isscalar(results["z"]) else results["z"].item(),
+                ),
+                "tau": (
+                    [],
+                    (
+                        results["tau"]
+                        if np.isscalar(results["tau"])
+                        else results["tau"].item()
+                    ),
+                ),
+                "std_error": (
+                    [],
+                    (
+                        results["std_error"]
+                        if np.isscalar(results["std_error"])
+                        else results["std_error"].item()
+                    ),
+                ),
+            },
+            coords={},
+            attrs={
+                "title": "Mann-Kendall Trend Analysis",
+                "alpha": alpha,
+                "method": method,
+                "modified": modified,
+                "input_dims": str(data.dims),
+                "analyzed_dim": dim,
+            },
+        )
+    else:
+        # Handle multi-dimensional case (original logic)
+        coord_dims = list(coords.keys())
+        ds = xr.Dataset(
+            data_vars={
+                "trend": (coord_dims, results["trend"]),
+                "h": (coord_dims, results["h"]),
+                "p": (coord_dims, results["p"]),
+                "z": (coord_dims, results["z"]),
+                "tau": (coord_dims, results["tau"]),
+                "std_error": (coord_dims, results["std_error"]),
+            },
+            coords=coords,
+            attrs={
+                "title": "Mann-Kendall Trend Analysis",
+                "alpha": alpha,
+                "method": method,
+                "modified": modified,
+                "input_dims": str(data.dims),
+                "analyzed_dim": dim,
+            },
+        )
 
     return ds
 
