@@ -945,8 +945,7 @@ def _dask_mann_kendall(
                 output_2d[5, i] = result["std_error"]
 
             except Exception:
-                # Skip problematic series
-                continue
+                continue  # Skip problematic series
 
         return output.reshape(output_shape)
 
