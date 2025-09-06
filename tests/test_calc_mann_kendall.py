@@ -419,6 +419,90 @@ class TestMannKendallComprehensive:
         # Check shapes
         assert result["trend"].shape == (len(lat), len(lon))
 
+    def test_xarray_1d_interface(self):
+        """Test xarray interface with 1D data (time dimension only)."""
+        # Create 1D time series with trend
+        time_steps = 30
+        time_coords = np.arange(time_steps)
+
+        # Generate data with positive trend and some noise
+        np.random.seed(42)  # For reproducible results
+        trend_data = 0.1 * np.arange(time_steps) + np.random.randn(time_steps) * 0.2
+
+        # Create 1D xarray DataArray
+        da_1d = xr.DataArray(
+            trend_data,
+            dims=["time"],
+            coords={"time": time_coords},
+            attrs={"units": "test_units", "description": "1D test data"},
+        )
+
+        # Test with time dimension
+        result = mann_kendall_xarray(da_1d, dim="time")
+
+        # Check output structure
+        assert isinstance(result, xr.Dataset)
+        assert "trend" in result.data_vars
+        assert "h" in result.data_vars
+        assert "p" in result.data_vars
+        assert "z" in result.data_vars
+        assert "tau" in result.data_vars
+        assert "std_error" in result.data_vars
+
+        # For 1D data, all variables should be scalar (no dimensions)
+        assert result["trend"].dims == ()  # Empty tuple = scalar
+        assert result["h"].dims == ()
+        assert result["p"].dims == ()
+        assert result["z"].dims == ()
+        assert result["tau"].dims == ()
+        assert result["std_error"].dims == ()
+
+        # Check that values are 0-dimensional arrays (which is how xarray stores scalars)
+        assert result["trend"].values.ndim == 0
+        assert result["h"].values.ndim == 0
+        assert result["p"].values.ndim == 0
+
+        # No spatial coordinates should remain
+        assert len(result.coords) == 0
+
+        # Check attributes are preserved
+        assert "title" in result.attrs
+        assert "alpha" in result.attrs
+        assert "method" in result.attrs
+        assert "input_dims" in result.attrs
+        assert "analyzed_dim" in result.attrs
+        assert result.attrs["analyzed_dim"] == "time"
+
+        # Should detect positive trend
+        assert result["trend"].values > 0
+        assert result["tau"].values > 0
+
+        # Test with "year" dimension name
+        da_year = xr.DataArray(
+            trend_data,
+            dims=["year"],
+            coords={"year": time_coords + 2000},  # Years 2000-2029
+            attrs={"units": "test_units"},
+        )
+
+        result_year = mann_kendall_xarray(da_year, dim="year")
+
+        # Should work the same way
+        assert isinstance(result_year, xr.Dataset)
+        assert result_year["trend"].dims == ()
+        assert len(result_year.coords) == 0
+        assert result_year.attrs["analyzed_dim"] == "year"
+
+        # Test with use_dask=False to ensure numpy path works
+        result_no_dask = mann_kendall_xarray(da_1d, dim="time", use_dask=False)
+        assert isinstance(result_no_dask, xr.Dataset)
+        assert result_no_dask["trend"].dims == ()
+
+        # Results should be essentially the same
+        np.testing.assert_allclose(
+            result["trend"].values, result_no_dask["trend"].values, rtol=1e-10
+        )
+
     def test_trend_analysis_unified_interface(self):
         """Test the unified trend_analysis interface."""
         # Test with numpy array
