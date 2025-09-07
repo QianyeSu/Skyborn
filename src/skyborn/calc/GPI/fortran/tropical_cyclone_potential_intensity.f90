@@ -52,6 +52,7 @@ subroutine calculate_pi_gridded_data(sst_in, psl_in, pressure_levels, temp_in, m
     integer, intent(out) :: error_flag
 
     ! Pre-computed constants for faster arithmetic
+    real, parameter :: UNDEF = -9.99e33
     real, parameter :: PA_TO_MB = 0.01               ! 1/100.0 - use multiplication instead of division
     real, parameter :: K_TO_C = -273.15              ! Kelvin to Celsius conversion
     real, parameter :: KG_TO_G = 1000.0              ! kg/kg to g/kg conversion
@@ -67,6 +68,13 @@ subroutine calculate_pi_gridded_data(sst_in, psl_in, pressure_levels, temp_in, m
             ! Optimized unit conversion using pre-computed constants
             psl_mb = psl_in(ilat, ilon) * PA_TO_MB                 ! Pa to mb (multiplication is faster)
             sst_celsius = sst_in(ilat, ilon) + K_TO_C              ! K to C
+
+            ! Physical constraint check: SST must exceed 5°C for tropical cyclone formation
+            if (sst_celsius <= 5.0) then
+                min_pressure(ilat, ilon) = UNDEF
+                max_wind(ilat, ilon) = UNDEF
+                cycle  ! Skip to next grid point
+            end if
 
             ! Optimized unit conversion loop
             do k = 1, num_levels
@@ -142,6 +150,14 @@ subroutine calculate_pi_gridded_with_missing(sst_in, psl_in, pressure_levels, te
             ! Optimized unit conversion (only if SST/PSL are valid)
             psl_mb = psl_in(ilat, ilon) * PA_TO_MB
             sst_celsius = sst_in(ilat, ilon) + K_TO_C
+
+            ! Physical constraint check: SST must exceed 5°C for tropical cyclone formation
+            if (sst_celsius <= 5.0) then
+                min_pressure(ilat, ilon) = UNDEF
+                max_wind(ilat, ilon) = UNDEF
+                cycle  ! Skip to next grid point
+            end if
+
             valid_start_level = num_levels
 
             ! Find valid data and convert units (optimized)
@@ -206,6 +222,7 @@ subroutine calculate_pi_single_profile(sst_in, psl_in, pressure_levels, temp_in,
     integer, intent(out) :: error_flag
 
     ! Pre-computed constants
+    real, parameter :: UNDEF = -9.99e33
     real, parameter :: PA_TO_MB = 0.01
     real, parameter :: K_TO_C = -273.15
     real, parameter :: KG_TO_G = 1000.0
@@ -218,6 +235,14 @@ subroutine calculate_pi_single_profile(sst_in, psl_in, pressure_levels, temp_in,
     ! Optimized unit conversion
     psl_mb = psl_in * PA_TO_MB                  ! Pa to mb (multiplication faster than division)
     sst_celsius = sst_in + K_TO_C               ! K to C
+
+    ! Physical constraint check: SST must exceed 5°C for tropical cyclone formation
+    if (sst_celsius <= 5.0) then
+        min_pressure = UNDEF
+        max_wind = UNDEF
+        error_flag = 0  ! No convergence (insufficient SST for TC formation)
+        return
+    end if
 
     ! Optimized unit conversion loop
     do k = 1, num_levels
@@ -283,9 +308,9 @@ subroutine calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius,
     real, parameter :: G_TO_DECIMAL = 0.001           ! g/kg to decimal conversion
     real, parameter :: C_TO_K = 273.15                ! Celsius to Kelvin
 
-    ! Convergence parameters
-    real, parameter :: PRESSURE_CONVERGENCE = 0.2    ! mb
-    integer, parameter :: MAX_ITERATIONS = 1000
+    ! Convergence parameters (matching tcpyPI)
+    real, parameter :: PRESSURE_CONVERGENCE = 0.5    ! mb
+    integer, parameter :: MAX_ITERATIONS = 200       ! iterations
     real, parameter :: MIN_PRESSURE_LIMIT = 400.0    ! mb
 
     ! Local variables
@@ -343,7 +368,7 @@ subroutine calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius,
 
     ! Iterative solution for minimum pressure
     iteration_count = 0
-    pressure_estimate = 950.0
+    pressure_estimate = 970.0
     converged = .false.
 
     do while (.not. converged .and. iteration_count < MAX_ITERATIONS)
@@ -747,6 +772,7 @@ subroutine calculate_pi_4d_data(sst_in, psl_in, pressure_levels, temp_in, mixing
     integer, intent(out) :: error_flag
 
     ! Pre-computed constants for faster arithmetic
+    real, parameter :: UNDEF = -9.99e33
     real, parameter :: PA_TO_MB = 0.01               ! 1/100.0 - use multiplication instead of division
     real, parameter :: K_TO_C = -273.15              ! Kelvin to Celsius conversion
     real, parameter :: KG_TO_G = 1000.0              ! kg/kg to g/kg conversion
@@ -767,6 +793,13 @@ subroutine calculate_pi_4d_data(sst_in, psl_in, pressure_levels, temp_in, mixing
                 ! Optimized unit conversion using pre-computed constants
                 psl_mb = psl_in(t, ilat, ilon) * PA_TO_MB                 ! Pa to mb (multiplication is faster)
                 sst_celsius = sst_in(t, ilat, ilon) + K_TO_C              ! K to C
+
+                ! Physical constraint check: SST must exceed 5°C for tropical cyclone formation
+                if (sst_celsius <= 5.0) then
+                    min_pressure(t, ilat, ilon) = UNDEF
+                    max_wind(t, ilat, ilon) = UNDEF
+                    cycle  ! Skip to next time step
+                end if
 
                 ! Process entire vertical profile for this time/location
                 do k = 1, num_levels
@@ -849,6 +882,14 @@ subroutine calculate_pi_4d_with_missing(sst_in, psl_in, pressure_levels, temp_in
                 ! Optimized unit conversion (only if SST/PSL are valid)
                 psl_mb = psl_in(t, ilat, ilon) * PA_TO_MB
                 sst_celsius = sst_in(t, ilat, ilon) + K_TO_C
+
+                ! Physical constraint check: SST must exceed 5°C for tropical cyclone formation
+                if (sst_celsius <= 5.0) then
+                    min_pressure(t, ilat, ilon) = UNDEF
+                    max_wind(t, ilat, ilon) = UNDEF
+                    cycle  ! Skip to next time step
+                end if
+
                 valid_start_level = num_levels
 
                 ! Find valid data and convert units (optimized)
