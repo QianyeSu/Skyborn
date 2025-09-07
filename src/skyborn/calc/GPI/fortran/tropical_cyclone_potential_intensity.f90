@@ -498,7 +498,7 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
     ! Convergence parameters
     real, parameter :: TEMP_CONVERGENCE = 0.001      ! K
     integer, parameter :: MAX_ITERATIONS = 500
-    real, parameter :: MIN_PRESSURE_THRESHOLD = 59.0 ! mb
+    real, parameter :: MIN_PRESSURE_THRESHOLD = 50.0 ! mb
 
     ! Local variables
     real :: virtual_temp_diff(100)
