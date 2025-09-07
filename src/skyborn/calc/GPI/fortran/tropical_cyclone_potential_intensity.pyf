@@ -1,0 +1,103 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module tropical_cyclone_potential_intensity ! in
+    interface  ! in :tropical_cyclone_potential_intensity
+        subroutine calculate_pi_gridded_data(sst_in,psl_in,pressure_levels,temp_in,mixing_ratio_in,nlat,nlon,num_levels,min_pressure,max_wind,error_flag) ! in :tropical_cyclone_potential_intensity:tropical_cyclone_potential_intensity.f90
+            real dimension(nlat,nlon),intent(in) :: sst_in
+            real dimension(nlat,nlon),intent(in),depend(nlon,nlat) :: psl_in
+            real dimension(num_levels),intent(in) :: pressure_levels
+            real dimension(num_levels,nlat,nlon),intent(in),depend(num_levels,nlon,nlat) :: temp_in
+            real dimension(num_levels,nlat,nlon),intent(in),depend(num_levels,nlon,nlat) :: mixing_ratio_in
+            integer, optional,intent(in),check(shape(sst_in, 0) == nlat),depend(sst_in) :: nlat=shape(sst_in, 0)
+            integer, optional,intent(in),check(shape(sst_in, 1) == nlon),depend(sst_in) :: nlon=shape(sst_in, 1)
+            integer, optional,intent(in),check(shape(pressure_levels, 0) == num_levels),depend(pressure_levels) :: num_levels=shape(pressure_levels, 0)
+            real dimension(nlat,nlon),intent(out),depend(nlon,nlat) :: min_pressure
+            real dimension(nlat,nlon),intent(out),depend(nlon,nlat) :: max_wind
+            integer intent(out) :: error_flag
+        end subroutine calculate_pi_gridded_data
+        subroutine calculate_pi_gridded_with_missing(sst_in,psl_in,pressure_levels,temp_in,mixing_ratio_in,nlat,nlon,num_levels,min_pressure,max_wind,error_flag) ! in :tropical_cyclone_potential_intensity:tropical_cyclone_potential_intensity.f90
+            real dimension(nlat,nlon),intent(in) :: sst_in
+            real dimension(nlat,nlon),intent(in),depend(nlon,nlat) :: psl_in
+            real dimension(num_levels),intent(in) :: pressure_levels
+            real dimension(num_levels,nlat,nlon),intent(in),depend(num_levels,nlon,nlat) :: temp_in
+            real dimension(num_levels,nlat,nlon),intent(in),depend(num_levels,nlon,nlat) :: mixing_ratio_in
+            integer, optional,intent(in),check(shape(sst_in, 0) == nlat),depend(sst_in) :: nlat=shape(sst_in, 0)
+            integer, optional,intent(in),check(shape(sst_in, 1) == nlon),depend(sst_in) :: nlon=shape(sst_in, 1)
+            integer, optional,intent(in),check(shape(pressure_levels, 0) == num_levels),depend(pressure_levels) :: num_levels=shape(pressure_levels, 0)
+            real dimension(nlat,nlon),intent(out),depend(nlon,nlat) :: min_pressure
+            real dimension(nlat,nlon),intent(out),depend(nlon,nlat) :: max_wind
+            integer intent(out) :: error_flag
+        end subroutine calculate_pi_gridded_with_missing
+        subroutine calculate_pi_single_profile(sst_in,psl_in,pressure_levels,temp_in,mixing_ratio_in,num_levels,actual_levels,min_pressure,max_wind,error_flag) ! in :tropical_cyclone_potential_intensity:tropical_cyclone_potential_intensity.f90
+            real intent(in) :: sst_in
+            real intent(in) :: psl_in
+            real dimension(num_levels),intent(in) :: pressure_levels
+            real dimension(num_levels),intent(in),depend(num_levels) :: temp_in
+            real dimension(num_levels),intent(in),depend(num_levels) :: mixing_ratio_in
+            integer, optional,intent(in),check(shape(pressure_levels, 0) == num_levels),depend(pressure_levels) :: num_levels=shape(pressure_levels, 0)
+            integer intent(in) :: actual_levels
+            real intent(out) :: min_pressure
+            real intent(out) :: max_wind
+            integer intent(out) :: error_flag
+        end subroutine calculate_pi_single_profile
+        subroutine calculate_pi_core(sst_celsius,psl_mb,pressure_levels,temp_celsius,mixing_ratio_gkg,array_size,num_points,min_pressure,max_wind,error_flag) ! in :tropical_cyclone_potential_intensity:tropical_cyclone_potential_intensity.f90
+            real intent(in) :: sst_celsius
+            real intent(in) :: psl_mb
+            real dimension(array_size),intent(in) :: pressure_levels
+            real dimension(array_size),intent(in),depend(array_size) :: temp_celsius
+            real dimension(array_size),intent(in),depend(array_size) :: mixing_ratio_gkg
+            integer, optional,intent(in),check(shape(pressure_levels, 0) == array_size),depend(pressure_levels) :: array_size=shape(pressure_levels, 0)
+            integer intent(in) :: num_points
+            real intent(out) :: min_pressure
+            real intent(out) :: max_wind
+            integer intent(out) :: error_flag
+        end subroutine calculate_pi_core
+        subroutine cape(parcel_temp,parcel_mixing_ratio,parcel_pressure,temp_profile,mixing_ratio_profile,pressure_profile,array_size,num_points,buoyancy_param,cape_value,outflow_temp,error_flag) ! in :tropical_cyclone_potential_intensity:tropical_cyclone_potential_intensity.f90
+            real intent(in) :: parcel_temp
+            real intent(in) :: parcel_mixing_ratio
+            real intent(in) :: parcel_pressure
+            real dimension(array_size),intent(in) :: temp_profile
+            real dimension(array_size),intent(in),depend(array_size) :: mixing_ratio_profile
+            real dimension(array_size),intent(in),depend(array_size) :: pressure_profile
+            integer, optional,intent(in),check(shape(temp_profile, 0) == array_size),depend(temp_profile) :: array_size=shape(temp_profile, 0)
+            integer intent(in) :: num_points
+            real intent(in) :: buoyancy_param
+            real intent(out) :: cape_value
+            real intent(out) :: outflow_temp
+            integer intent(out) :: error_flag
+        end subroutine cape
+        subroutine calculate_pi_4d_data(sst_in,psl_in,pressure_levels,temp_in,mixing_ratio_in,nlat,nlon,num_levels,num_times,min_pressure,max_wind,error_flag) ! in :tropical_cyclone_potential_intensity:tropical_cyclone_potential_intensity.f90
+            real dimension(num_times,nlat,nlon),intent(in) :: sst_in
+            real dimension(num_times,nlat,nlon),intent(in),depend(nlon,nlat,num_times) :: psl_in
+            real dimension(num_levels),intent(in) :: pressure_levels
+            real dimension(num_times,num_levels,nlat,nlon),intent(in),depend(num_levels,nlon,nlat,num_times) :: temp_in
+            real dimension(num_times,num_levels,nlat,nlon),intent(in),depend(num_levels,nlon,nlat,num_times) :: mixing_ratio_in
+            integer, optional,intent(in),check(shape(sst_in, 1) == nlat),depend(sst_in) :: nlat=shape(sst_in, 1)
+            integer, optional,intent(in),check(shape(sst_in, 2) == nlon),depend(sst_in) :: nlon=shape(sst_in, 2)
+            integer, optional,intent(in),check(shape(pressure_levels, 0) == num_levels),depend(pressure_levels) :: num_levels=shape(pressure_levels, 0)
+            integer, optional,intent(in),check(shape(sst_in, 0) == num_times),depend(sst_in) :: num_times=shape(sst_in, 0)
+            real dimension(num_times,nlat,nlon),intent(out),depend(nlon,nlat,num_times) :: min_pressure
+            real dimension(num_times,nlat,nlon),intent(out),depend(nlon,nlat,num_times) :: max_wind
+            integer intent(out) :: error_flag
+        end subroutine calculate_pi_4d_data
+        subroutine calculate_pi_4d_with_missing(sst_in,psl_in,pressure_levels,temp_in,mixing_ratio_in,nlat,nlon,num_levels,num_times,min_pressure,max_wind,error_flag) ! in :tropical_cyclone_potential_intensity:tropical_cyclone_potential_intensity.f90
+            real dimension(num_times,nlat,nlon),intent(in) :: sst_in
+            real dimension(num_times,nlat,nlon),intent(in),depend(nlon,nlat,num_times) :: psl_in
+            real dimension(num_levels),intent(in) :: pressure_levels
+            real dimension(num_times,num_levels,nlat,nlon),intent(in),depend(num_levels,nlon,nlat,num_times) :: temp_in
+            real dimension(num_times,num_levels,nlat,nlon),intent(in),depend(num_levels,nlon,nlat,num_times) :: mixing_ratio_in
+            integer, optional,intent(in),check(shape(sst_in, 1) == nlat),depend(sst_in) :: nlat=shape(sst_in, 1)
+            integer, optional,intent(in),check(shape(sst_in, 2) == nlon),depend(sst_in) :: nlon=shape(sst_in, 2)
+            integer, optional,intent(in),check(shape(pressure_levels, 0) == num_levels),depend(pressure_levels) :: num_levels=shape(pressure_levels, 0)
+            integer, optional,intent(in),check(shape(sst_in, 0) == num_times),depend(sst_in) :: num_times=shape(sst_in, 0)
+            real dimension(num_times,nlat,nlon),intent(out),depend(nlon,nlat,num_times) :: min_pressure
+            real dimension(num_times,nlat,nlon),intent(out),depend(nlon,nlat,num_times) :: max_wind
+            integer intent(out) :: error_flag
+        end subroutine calculate_pi_4d_with_missing
+    end interface
+end python module tropical_cyclone_potential_intensity
+
+! This file was auto-generated with f2py (version:2.2.6).
+! See:
+! https://web.archive.org/web/20140822061353/http://cens.ioc.ee/projects/f2py2e
