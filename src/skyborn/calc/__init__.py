@@ -8,6 +8,7 @@ This module contains various calculation functions including:
 - Mann-Kendall trend analysis
 - WMO tropopause calculation (with Fortran extensions)
 - Geostrophic wind calculation (with SIMD-optimized Fortran extensions)
+- Tropical cyclone potential intensity calculation (with Fortran extensions)
 """
 
 from .calculations import (
@@ -36,6 +37,9 @@ from .geostrophic import (
     geostrophic_uv,
     geostrophic_wind,
 )
+
+# Import tropical cyclone potential intensity calculation
+from .GPI import potential_intensity
 from .mann_kendall import mk_multidim  # alias
 from .mann_kendall import mk_test  # alias
 from .mann_kendall import (
