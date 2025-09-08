@@ -5,6 +5,7 @@
 from . import ROF, calc, conversion, gridfill, interp, plot, spharm, windspharm
 
 # Expose calc submodules at package top-level for convenience
+from .calc import potential_intensity  # GPI module's main function
 from .calc import (  # Mann-Kendall functions; New emergent constraint function names; Legacy names for backward compatibility
     calc_GAUSSIAN_PDF,
     calc_PDF_EC,
@@ -53,4 +54,4 @@ from .gridfill import fill as gridfill_fill
 fill = gridfill_fill
 
 
-__version__ = "0.3.13"
+__version__ = "0.3.14"
