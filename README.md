@@ -39,12 +39,7 @@ pip install -U --index-url https://pypi.org/simple/ skyborn
 
 **Full documentation is available at: [Documentation ](https://skyborn.readthedocs.io/en/latest/)**
 
-Visit our documentation to find:
-- **API Reference**: Complete function and class documentation
-- **Tutorials**: Step-by-step guides and examples
-- **Gallery**: Visualization examples and benchmarks
-- **Installation Guide**: Detailed setup instructions
-- **Submodule Guides**: In-depth documentation for each Skyborn submodule
+
 
 ## 🎯 Key Features & Submodules
 
@@ -118,13 +113,11 @@ The Genesis Potential Index (GPI) module achieves **dramatic speedups** through 
 - **19-25x faster** than point-by-point implementations
 - Processes entire atmospheric grids in seconds
 - Native multi-dimensional support (3D/4D data)
-- High-accuracy results with 99% test coverage
 
 ![GPI Global Distribution](docs/source/images/gpi_global_distribution.png)
 
 **Accuracy Validation:**
 - Correlation coefficient > 0.99 with reference implementations
 - RMSE < 1% for both VMAX and PMIN calculations
-- Successfully validated against CESM2 model output
 
 ![GPI Scatter Comparison](docs/source/images/gpi_scatter_comparison.png)

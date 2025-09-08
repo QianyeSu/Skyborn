@@ -18,7 +18,6 @@ Version 0.3.14 (Current)
   - **Potential Intensity Calculation**: Maximum sustained wind speed and minimum central pressure
   - **Smart Dimension Detection**: Automatically identifies time, level, lat, and lon dimensions
   - **Extensive Unit Support**: Handles various unit formats (K/°C/°F, Pa/hPa/mb/atm, kg/kg/g/kg/%)
-  - **99% Test Coverage**: Comprehensive test suite ensuring reliability and accuracy
 
 * **Usage Examples**::
 
