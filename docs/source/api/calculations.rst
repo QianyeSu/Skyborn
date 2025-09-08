@@ -216,6 +216,170 @@ Example Usage
    speed_xr = gw_xr.speed()
    print(f"xarray class speed: {speed_xr.attrs['standard_name']}")
 
+**Tropical Cyclone Potential Intensity (GPI) Examples**
+
+.. code-block:: python
+
+   import skyborn as skb
+   import numpy as np
+   import xarray as xr
+
+   # === Single Profile Calculation ===
+   # Atmospheric profile data
+   pressure_levels = np.array([1000, 850, 700, 500, 300, 200, 100])  # mb
+   temperature = np.array([300, 290, 280, 270, 250, 230, 210])  # K
+   mixing_ratio = np.array([0.015, 0.010, 0.005, 0.002, 0.0005, 0.0001, 0.00005])  # kg/kg
+
+   # Surface conditions
+   sst = 302.0  # K (29°C - warm tropical ocean)
+   psl = 101325.0  # Pa (sea level pressure)
+
+   # NumPy interface
+   from skyborn.calc.GPI.interface import potential_intensity
+   min_p, pi, err = potential_intensity(
+       sst, psl, pressure_levels, temperature, mixing_ratio
+   )
+   print(f"Potential Intensity: {pi:.1f} m/s, Min Pressure: {min_p:.1f} mb")
+   print(f"Error flag: {err} (1 = success)")
+
+   # === xarray Interface with Automatic Unit Conversion ===
+   from skyborn.calc.GPI.xarray import potential_intensity
+
+   # Create xarray data with various units (will be auto-converted)
+   temp_xr = xr.DataArray(
+       temperature - 273.15,  # Convert to Celsius for demo
+       dims=['level'],
+       attrs={'units': '°C'}  # Will be auto-converted to K
+   )
+
+   mixr_xr = xr.DataArray(
+       mixing_ratio * 1000,  # Convert to g/kg for demo
+       dims=['level'],
+       attrs={'units': 'g/kg'}  # Will be auto-converted to kg/kg
+   )
+
+   pres_xr = xr.DataArray(
+       pressure_levels,
+       dims=['level'],
+       attrs={'units': 'mb'}
+   )
+
+   # Automatic unit conversion and dimension detection
+   result = potential_intensity(sst, psl, pres_xr, temp_xr, mixr_xr)
+   print(f"xarray PI: {result.pi.values:.1f} m/s")
+   print(f"Minimum pressure: {result.min_pressure.values:.1f} mb")
+
+   # === 3D Gridded Data (Spatial Analysis) ===
+   nlat, nlon = 20, 30
+   nlevs = len(pressure_levels)
+
+   # Create 3D atmospheric data
+   temp_3d = xr.DataArray(
+       np.random.randn(nlevs, nlat, nlon) * 5 + 280,
+       dims=['level', 'lat', 'lon'],
+       coords={
+           'level': pressure_levels,
+           'lat': np.linspace(-30, 30, nlat),
+           'lon': np.linspace(0, 360, nlon, endpoint=False)
+       },
+       attrs={'units': 'K', 'long_name': 'Temperature'}
+   )
+
+   mixr_3d = xr.DataArray(
+       np.random.rand(nlevs, nlat, nlon) * 0.01 + 0.005,
+       dims=['level', 'lat', 'lon'],
+       coords=temp_3d.coords,
+       attrs={'units': 'kg/kg', 'long_name': 'Water vapor mixing ratio'}
+   )
+
+   sst_3d = xr.DataArray(
+       np.random.randn(nlat, nlon) * 2 + 300,
+       dims=['lat', 'lon'],
+       coords={'lat': temp_3d.lat, 'lon': temp_3d.lon},
+       attrs={'units': 'K', 'long_name': 'Sea surface temperature'}
+   )
+
+   psl_3d = xr.DataArray(
+       np.random.randn(nlat, nlon) * 500 + 101325,
+       dims=['lat', 'lon'],
+       coords={'lat': temp_3d.lat, 'lon': temp_3d.lon},
+       attrs={'units': 'Pa', 'long_name': 'Sea level pressure'}
+   )
+
+   # Calculate potential intensity for entire grid
+   result_3d = potential_intensity(sst_3d, psl_3d, pres_xr, temp_3d, mixr_3d)
+   print(f"3D PI shape: {result_3d.pi.shape}")
+   print(f"Max PI: {result_3d.pi.max().values:.1f} m/s")
+   print(f"Min central pressure: {result_3d.min_pressure.min().values:.1f} mb")
+
+   # Analyze tropical regions only
+   tropical_mask = np.abs(result_3d.lat) <= 25
+   tropical_pi = result_3d.pi.where(tropical_mask)
+   print(f"Mean tropical PI: {tropical_pi.mean().values:.1f} m/s")
+
+   # === 4D Time Series Analysis ===
+   ntimes = 12  # Monthly data
+
+   # Create 4D data (time, level, lat, lon)
+   temp_4d = xr.DataArray(
+       np.random.randn(ntimes, nlevs, nlat, nlon) * 5 + 280,
+       dims=['time', 'level', 'lat', 'lon'],
+       coords={
+           'time': pd.date_range('2023-01', periods=ntimes, freq='MS'),
+           'level': pressure_levels,
+           'lat': np.linspace(-30, 30, nlat),
+           'lon': np.linspace(0, 360, nlon, endpoint=False)
+       },
+       attrs={'units': 'K'}
+   )
+
+   mixr_4d = xr.DataArray(
+       np.random.rand(ntimes, nlevs, nlat, nlon) * 0.01 + 0.005,
+       dims=['time', 'level', 'lat', 'lon'],
+       coords=temp_4d.coords,
+       attrs={'units': 'kg/kg'}
+   )
+
+   sst_4d = xr.DataArray(
+       np.random.randn(ntimes, nlat, nlon) * 2 + 300,
+       dims=['time', 'lat', 'lon'],
+       coords={'time': temp_4d.time, 'lat': temp_4d.lat, 'lon': temp_4d.lon},
+       attrs={'units': 'K'}
+   )
+
+   psl_4d = xr.DataArray(
+       np.random.randn(ntimes, nlat, nlon) * 500 + 101325,
+       dims=['time', 'lat', 'lon'],
+       coords={'time': temp_4d.time, 'lat': temp_4d.lat, 'lon': temp_4d.lon},
+       attrs={'units': 'Pa'}
+   )
+
+   # Calculate monthly potential intensity
+   result_4d = potential_intensity(sst_4d, psl_4d, pres_xr, temp_4d, mixr_4d)
+   print(f"4D result shape: {result_4d.pi.shape}")  # (time, lat, lon)
+
+   # Seasonal analysis
+   seasonal_pi = result_4d.pi.groupby('time.season').mean()
+   print(f"Summer mean PI: {seasonal_pi.sel(season='JJA').mean().values:.1f} m/s")
+   print(f"Winter mean PI: {seasonal_pi.sel(season='DJF').mean().values:.1f} m/s")
+
+   # === Class Interface for Batch Processing ===
+   from skyborn.calc.GPI.interface import PotentialIntensityCalculator
+
+   # Process multiple profiles efficiently
+   calculator = PotentialIntensityCalculator(
+       sst_3d.values, psl_3d.values,
+       pressure_levels, temp_3d.values, mixr_3d.values
+   )
+   calculator.calculate()
+   results = calculator.results
+
+   print(f"\nClass interface results:")
+   print(f"  Mean PI: {results['pi'].mean():.1f} m/s")
+   print(f"  Std PI: {results['pi'].std():.1f} m/s")
+   print(f"  Success rate: {(results['error_flag'] == 1).mean() * 100:.1f}%")
+
+
 **Statistical Analysis Examples**
 
 .. code-block:: python
