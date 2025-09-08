@@ -34,3 +34,97 @@ or
 ```bash
 pip install -U --index-url https://pypi.org/simple/ skyborn
 ```
+
+## 📚 Documentation
+
+**Full documentation is available at: [Documentation ](https://skyborn.readthedocs.io/en/latest/)**
+
+Visit our documentation to find:
+- **API Reference**: Complete function and class documentation
+- **Tutorials**: Step-by-step guides and examples
+- **Gallery**: Visualization examples and benchmarks
+- **Installation Guide**: Detailed setup instructions
+- **Submodule Guides**: In-depth documentation for each Skyborn submodule
+
+## 🎯 Key Features & Submodules
+
+### 🌍 Skyborn Windspharm Submodule - Atmospheric Analysis
+
+The Skyborn `windspharm` submodule provides powerful tools for analyzing global wind patterns through **streamfunction** and **velocity potential** calculations:
+
+![Streamfunction and Velocity Potential](docs/source/images/windspharm_sfvp_analysis.png)
+
+**Key Capabilities:**
+- **Streamfunction Analysis**: Identifies rotational (non-divergent) wind components
+  - Visualizes atmospheric circulation patterns
+  - Reveals jet streams and vortices
+  - Essential for understanding weather systems
+
+- **Velocity Potential Analysis**: Captures divergent wind components
+  - Shows areas of convergence and divergence
+  - Critical for tropical meteorology
+  - Identifies monsoon circulation patterns
+
+**Applications:**
+- Climate dynamics research
+- Weather pattern analysis
+- Atmospheric wave propagation studies
+- Tropical cyclone formation analysis
+
+### 🔧 Skyborn Gridfill Submodule - Data Interpolation
+
+The Skyborn `gridfill` submodule provides advanced interpolation techniques for filling missing data in atmospheric and climate datasets:
+
+![Gridfill Missing Data Interpolation](docs/source/images/gridfill_demo_result_readme.png)
+
+**Key Features:**
+- **Poisson-based Interpolation**: Physically consistent gap filling
+- **Preserves Data Patterns**: Maintains spatial correlations and gradients
+- **Multiple Methods Available**:
+  - Basic Poisson solver
+  - High-precision iterative refinement
+  - Zonal initialization options
+  - Relaxation parameter tuning
+
+**Applications:**
+- Satellite data gap filling
+- Model output post-processing
+- Climate data reanalysis
+- Quality control for observational datasets
+
+The example above demonstrates filling gaps in global precipitation data, where the algorithm successfully reconstructs missing values while preserving the underlying meteorological patterns.
+
+## Performance Benchmarks
+
+### 🚀 Windspharm Performance
+
+The Skyborn `windspharm` submodule delivers **~25% performance improvement** over standard implementations through modernized Fortran code and optimized algorithms:
+
+![Windspharm Performance Comparison](docs/source/images/windspharm_performance_comparison.png)
+
+**Key Performance Metrics:**
+- **Vorticity Calculation**: ~25% faster
+- **Divergence Calculation**: ~25% faster
+- **Helmholtz Decomposition**: ~25% faster
+- **Streamfunction/Velocity Potential**: ~25% faster
+
+### ⚡ GPI Module Performance
+
+The Genesis Potential Index (GPI) module achieves **dramatic speedups** through vectorized Fortran implementation and native 3D processing:
+
+![GPI Speed Comparison](docs/source/images/gpi_speed_comparison.png)
+
+**Performance Highlights:**
+- **19-25x faster** than point-by-point implementations
+- Processes entire atmospheric grids in seconds
+- Native multi-dimensional support (3D/4D data)
+- High-accuracy results with 99% test coverage
+
+![GPI Global Distribution](docs/source/images/gpi_global_distribution.png)
+
+**Accuracy Validation:**
+- Correlation coefficient > 0.99 with reference implementations
+- RMSE < 1% for both VMAX and PMIN calculations
+- Successfully validated against CESM2 model output
+
+![GPI Scatter Comparison](docs/source/images/gpi_scatter_comparison.png)
