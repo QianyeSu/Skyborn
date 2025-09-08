@@ -685,6 +685,11 @@ def _potential_intensity_profile(
     _, _, levdim, _ = _detect_atmospheric_dimensions(temperature)
     vertical_dim = list(temperature.dims)[levdim]
 
+    # Sort data by pressure levels in descending order (from surface to top)
+    pressure_levels = pressure_levels.sortby(vertical_dim, ascending=False)
+    temperature = temperature.sortby(vertical_dim, ascending=False)
+    mixing_ratio = mixing_ratio.sortby(vertical_dim, ascending=False)
+
     # Ensure 1D profiles
     if temperature.ndim != 1 or mixing_ratio.ndim != 1 or pressure_levels.ndim != 1:
         raise ValueError(
@@ -757,6 +762,11 @@ def _potential_intensity_3d(
     # Auto-detect dimensions
     _, _, levdim, _ = _detect_atmospheric_dimensions(temperature)
     vertical_dim = list(temperature.dims)[levdim]
+
+    # Sort data by pressure levels in descending order (from surface to top)
+    pressure_levels = pressure_levels.sortby(vertical_dim, ascending=False)
+    temperature = temperature.sortby(vertical_dim, ascending=False)
+    mixing_ratio = mixing_ratio.sortby(vertical_dim, ascending=False)
 
     # Ensure temperature and mixing_ratio are 3D (level + 2 spatial dims)
     if temperature.ndim != 3 or mixing_ratio.ndim != 3:
@@ -836,6 +846,11 @@ def _potential_intensity_4d(
     _, _, levdim, timedim = _detect_atmospheric_dimensions(temperature)
     vertical_dim = list(temperature.dims)[levdim]
     time_dim = list(temperature.dims)[timedim]
+
+    # Sort data by pressure levels in descending order (from surface to top)
+    pressure_levels = pressure_levels.sortby(vertical_dim, ascending=False)
+    temperature = temperature.sortby(vertical_dim, ascending=False)
+    mixing_ratio = mixing_ratio.sortby(vertical_dim, ascending=False)
 
     # Ensure correct number of dimensions
     if temperature.ndim != 4 or mixing_ratio.ndim != 4:
