@@ -1,8 +1,35 @@
 Changelog
 =========
 
-Version 0.3.13 (Current)
+Version 0.3.14 (Current)
 -------------------------
+
+**🌀 New Genesis Potential Index (GPI) Module**
+
+* **Tropical Cyclone Potential Intensity Calculations**: Complete implementation of Emanuel's potential intensity theory
+
+  - **High-Performance Fortran Backend**: Optimized F90 implementation with vectorized calculations
+  - **Multi-Dimensional Support**: Handles single profiles, 3D gridded, and 4D time series data
+  - **Comprehensive Unit Handling**: Automatic unit detection and conversion for temperature, pressure, and humidity
+  - **xarray Native Interface**: Full integration with xarray data structures and metadata preservation
+
+* **Key Features**:
+
+  - **Potential Intensity Calculation**: Maximum sustained wind speed and minimum central pressure
+  - **Smart Dimension Detection**: Automatically identifies time, level, lat, and lon dimensions
+  - **Extensive Unit Support**: Handles various unit formats (K/°C/°F, Pa/hPa/mb/atm, kg/kg/g/kg/%)
+  - **99% Test Coverage**: Comprehensive test suite ensuring reliability and accuracy
+
+* **Usage Examples**::
+
+    from skyborn.calc.GPI.xarray import potential_intensity
+
+    # Automatic dimension detection and unit conversion
+    result = potential_intensity(sst, psl, pressure_levels, temperature, mixing_ratio)
+    # Returns Dataset with min_pressure and pi (potential intensity)
+
+Version 0.3.13
+--------------
 
 **🔧 Breaking Changes**
 

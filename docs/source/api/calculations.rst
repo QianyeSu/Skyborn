@@ -26,6 +26,15 @@ Geostrophic Wind Calculations
 
 .. autoclass:: skyborn.calc.geostrophic.xarray.GeostrophicWind
 
+Genesis Potential Index (GPI) / Tropical Cyclone Potential Intensity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: skyborn.calc.GPI.interface.potential_intensity
+
+.. autoclass:: skyborn.calc.GPI.interface.PotentialIntensityCalculator
+
+.. autofunction:: skyborn.calc.GPI.xarray.potential_intensity
+
 Statistical Functions
 ---------------------
 
