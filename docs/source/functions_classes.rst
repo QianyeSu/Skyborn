@@ -38,6 +38,12 @@ Atmospheric Physics Functions
      - Xarray interface for geostrophic winds with automatic coordinate detection
    * - :class:`skyborn.calc.geostrophic.xarray.GeostrophicWind`
      - Xarray-based class interface for geostrophic wind analysis
+   * - :func:`skyborn.calc.GPI.interface.potential_intensity`
+     - Calculate tropical cyclone potential intensity (NumPy interface)
+   * - :class:`skyborn.calc.GPI.interface.PotentialIntensityCalculator`
+     - Class-based interface for potential intensity calculations
+   * - :func:`skyborn.calc.GPI.xarray.potential_intensity`
+     - Xarray interface for potential intensity with automatic unit conversion
 
 Statistical Functions
 ~~~~~~~~~~~~~~~~~~~~~
