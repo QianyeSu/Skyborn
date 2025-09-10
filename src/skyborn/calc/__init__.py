@@ -49,5 +49,8 @@ from .mann_kendall import (
     trend_analysis,
 )
 
+# Import Standardized Precipitation Index calculation
+from .spi import spi, spi_xarray, standardized_precipitation_index
+
 # Import tropopause calculation (requires compiled extensions)
 from .troposphere import trop_wmo, trop_wmo_profile
