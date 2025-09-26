@@ -43,6 +43,29 @@ pip install -U --index-url https://pypi.org/simple/ skyborn
 
 ## 🎯 Key Features & Submodules
 
+### 📊 Spatial Trend Analysis & Climate Index Regression
+
+Skyborn provides ultra-fast spatial trend calculation and climate index regression analysis for atmospheric data:
+
+![Precipitation Trends Comparison](docs/source/images/precipitation_trends_comparison_1979_2014.png)
+
+**Key Capabilities:**
+- **High-Speed Spatial Trends**: Calculate long-term climate trends across global grids
+  - Linear trend analysis for temperature, precipitation, and other variables
+  - Statistical significance testing
+  - Vectorized operations for massive datasets
+
+- **Climate Index Regression**: Rapid correlation and regression analysis with climate indices
+  - NINO 3.4, PDO, NAO, AMO index integration
+  - Pattern correlation analysis
+  - Teleconnection mapping
+
+**Other Applications:**
+- Climate change signal detection
+- Decadal variability analysis
+- Teleconnection pattern identification
+- Regional climate impact assessment
+
 ### 🌍 Skyborn Windspharm Submodule - Atmospheric Analysis
 
 The Skyborn `windspharm` submodule provides powerful tools for analyzing global wind patterns through **streamfunction** and **velocity potential** calculations:
