@@ -485,3 +485,81 @@ def calculate_potential_temperature(
             potential_temp.attrs = {"units": "K", "long_name": "Potential Temperature"}
 
     return potential_temp
+
+def calculate_theta_se(
+    temperature: Union[np.ndarray, xr.DataArray],
+    pressure: Union[np.ndarray, xr.DataArray],
+    mixing_ratio: Union[np.ndarray, xr.DataArray],
+    dewpoint: Union[np.ndarray, xr.DataArray],
+) -> Union[np.ndarray, xr.DataArray]:
+    """
+    Calculate Pseudo-equivalent potential temperature (theta-se) 
+
+    the fomula is θ_se = T * (1000 / (p - e)) ** (Ra / cpd) * exp(L * r / (cpd * Tc))
+    from http://stream1.cmatc.cn/cmatcvod/12/tqx/second_content.html
+    Parameters
+    ----------
+    temperature : array-like
+        Temperature in Kelvin.
+    pressure : array-like
+        Pressure in hPa.
+    mixing_ratio : array-like
+        Water vapor mixing ratio in kg/kg.
+    dewpoint : array-like
+        Dewpoint temperature in Celsius.
+
+    Returns
+    -------
+    array-like
+        Pseudo-Equivalent potential temperature in Kelvin.
+
+    Notes
+    -----
+    This function uses MetPy's `vapor_pressure` and `lcl` functions internally.
+    """
+    # Lazy imports
+    mpcalc = _get_metpy_calc()
+    units = _get_metpy_units()
+
+    # Convert units
+    p = pressure * units.hPa
+    T = temperature * units.kelvin
+    r = mixing_ratio * units("kg/kg")
+    td = dewpoint * units.degC
+
+    # Convert mixing ratio to g/kg for vapor_pressure
+    r_gkg = r.to("g/kg")
+
+    # Calculate vapor pressure
+    e = mpcalc.vapor_pressure(p, r_gkg)
+
+    # Calculate LCL temperature
+    _, T_lcl = mpcalc.lcl(p, T, td)
+
+    # Convert LCL temperature to Kelvin
+    T_lcl_K = T_lcl.to("kelvin").magnitude
+
+    # Constants
+    Rd = 287.0  # J/kg/K
+    cp_d = 1004.0  # J/kg/K
+    L = 2.5e6  # J/kg
+
+    # Dry air pressure
+    p_dry = (p - e)
+
+    # Theta_e calculation
+    theta_e_part = temperature * (1000.0 / p_dry) ** (Rd / cp_d)
+    latent_part = np.exp((L * mixing_ratio) / (cp_d * T_lcl_K))
+    theta_se = theta_e_part * latent_part
+
+    # Preserve xarray structure if input is xarray
+    if hasattr(temperature, "attrs"):
+        if isinstance(theta_se, np.ndarray):
+            return xr.DataArray(
+                theta_se,
+                attrs={"units": "K", "long_name": "Pseudo-Equivalent Potential Temperature"},
+            )
+        else:
+            theta_se.attrs = {"units": "K", "long_name": "Pseudo-Equivalent Potential Temperature"}
+
+    return theta_se
