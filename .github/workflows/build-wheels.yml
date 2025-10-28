@@ -259,7 +259,7 @@ jobs:
       id-token: write # Use trusted publishing
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           pattern: "*"
           path: dist-artifacts
@@ -309,7 +309,7 @@ jobs:
           python-version: ${{ env.PYVER }}
 
       - name: Download wheels
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           pattern: "wheel-${{ matrix.python }}-*"
           path: wheels
