@@ -21,8 +21,8 @@ py.install_sources(
         'rcm2points.py',
         'rcm2rgrid.py',
         'triple_to_grid.py',
-        '_errors.py',
-        '_missing_values.py',
+        'errors.py',
+        'missing_values.py',
     ],
     subdir: 'skyborn/interp',
 )
@@ -421,9 +421,11 @@ with open(sys.argv[1], 'w') as f:
             '''import sys
 with open(sys.argv[1], 'w') as f:
     f.write('# Fortran interpolation extensions' + chr(10))
-    f.write('from .drcm2points import drcm2points' + chr(10))
-    f.write('from .drcm2rgrid import drcm2rgrid, drgrid2rcm' + chr(10))
-    f.write('from .fortran import triple2grid1, grid2triple' + chr(10))
+    # Import Fortran-exported symbols from their extension modules
+    f.write('from .rcm2points import drcm2points' + chr(10))
+    f.write('from .rcm2rgrid import drcm2rgrid, drgrid2rcm' + chr(10))
+    f.write('from .triple2grid import triple2grid1' + chr(10))
+    f.write('from .grid2triple import grid2triple' + chr(10))
     f.write(chr(10))
     f.write('__all__ = [' + chr(39) + 'drcm2points' + chr(39) + ', ' + chr(39) + 'drcm2rgrid' + chr(39) + ', ' + chr(39) + 'drgrid2rcm' + chr(39) + ', ' + chr(39) + 'triple2grid1' + chr(39) + ', ' + chr(39) + 'grid2triple' + chr(39) + ']' + chr(10))
 ''',
