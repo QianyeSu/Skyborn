@@ -12,6 +12,8 @@ on:
         description: "Reason for manual trigger"
         required: false
         default: "Manual testing"
+  release:
+    types: [published]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -249,10 +251,10 @@ jobs:
           name: sdist
           path: dist/*.tar.gz
 
-  # Publish to PyPI (only on tags)
+  # Publish to PyPI (only on tags or release)
   publish:
     name: Publish to PyPI
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'release' && github.event.action == 'published')
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
     permissions:
@@ -275,11 +277,7 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          # Option 1: Use API Token (set PYPI_API_TOKEN in GitHub Secrets)
           password: ${{ secrets.PYPI_API_TOKEN }}
-
-          # Option 2: Use Trusted Publishing (pre-configure project trust on PyPI)
-          # If using Trusted Publishing, remove the password line above
 
   # Test installation (multi-platform, multi-Python)
   test_install:
