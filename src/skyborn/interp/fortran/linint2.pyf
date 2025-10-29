@@ -1,0 +1,133 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module linint2 ! in
+    interface  ! in :linint2
+        ! signature : fo = dlinint1(xi,fi,xo,[icycx,xmsg,iopt])
+        subroutine dlinint1(nxi,xi,fi,icycx,nxo,xo,fo,xiw,fxiw,nxi2,xmsg,iopt,ier) ! in :linint2:linint2.f
+            integer,            depend(xi),                                     intent(hide)    :: nxi=len(xi)
+            double precision,   dimension(nxi),                                 intent(in)      :: xi
+            double precision,   dimension(nxi),depend(nxi),                     intent(in)      :: fi
+            integer,            optional,                                       intent(in)      :: icycx=0
+            integer,            depend(xo),                                     intent(hide)    :: nxo=len(xo)
+            double precision,   dimension(nxo),                                 intent(in)      :: xo
+            double precision,   dimension(nxo),depend(nxo),                     intent(out)     :: fo(nxo)
+            double precision,   dimension(nxi2),depend(nxi2),                   intent(hide)    :: xiw(nxi2)
+            double precision,   dimension(nxi2),depend(nxi2),                   intent(hide)    :: fxiw(nxi2)
+            integer,            depend(xi),                                     intent(hide)    :: nxi2=len(xi)
+            double precision,   optional,                                       intent(in)      :: xmsg=-99
+            integer,            optional,                                       intent(in)      :: iopt=0
+            integer,                                                            intent(hide)    :: ier=0
+        end subroutine dlinint1
+        ! signature : fo = dlinint2(xi,yi,fi,xo,yo,[icycx,xmsg,iopt])
+        subroutine dlinint2(nxi,xi,nyi,yi,fi,icycx,nxo,xo,nyo,yo,fo,xiw,fxiw,nxi2,xmsg,iopt,ier) ! in :linint2:linint2.f
+            integer,            depend(xi),                                     intent(hide)    :: nxi=len(xi)
+            double precision,   dimension(nxi),                                 intent(in)      :: xi
+            integer,            depend(yi),                                     intent(hide)    :: nyi=len(yi)
+            double precision,   dimension(nyi),                                 intent(in)      :: yi
+            double precision,   dimension(nxi,nyi),                             intent(in)      :: fi
+            integer,            optional,                                       intent(in)      :: icycx=0
+            integer,            depend(xo),                                     intent(hide)    :: nxo=len(xo)
+            double precision,   dimension(nxo),                                 intent(in)      :: xo
+            integer,            depend(yo),                                     intent(hide)    :: nyo=len(yo)
+            double precision,   dimension(nyo),                                 intent(in)      :: yo
+            double precision,   dimension(nxo,nyo),depend(nxo,nyo),             intent(out)     :: fo(nxo,nyo)
+            double precision,   dimension(nxi2),depend(nxi2),                   intent(hide)    :: xiw(nxi2)
+            double precision,   dimension(nxi2),depend(nxi2),                   intent(hide)    :: fxiw(nxi2)
+            integer,            depend(xi),                                     intent(hide)    :: nxi2=len(xi)
+            double precision,   optional,                                       intent(in)      :: xmsg=-99
+            integer,            optional,                                       intent(in)      :: iopt=0
+            integer,                                                            intent(hide)    :: ier=0
+        end subroutine dlinint2
+        subroutine dlin2int1(nin,xi,fi,nout,xo,fo,xmsg,iflag) ! in :linint2:linint2.f
+            integer, optional,check(len(xi)>=nin),depend(xi) :: nin=len(xi)
+            double precision dimension(nin) :: xi
+            double precision dimension(nin),depend(nin) :: fi
+            integer, optional,check(len(xo)>=nout),depend(xo) :: nout=len(xo)
+            double precision dimension(nout) :: xo
+            double precision dimension(nout),depend(nout) :: fo
+            double precision :: xmsg
+            integer :: iflag
+        end subroutine dlin2int1
+        subroutine dlincyc(nxi,xi,fi,nxstrt,nxlast,iflag,xiw,fxiw,npts) ! in :linint2:linint2.f
+            integer, optional,check(len(xi)>=nxi),depend(xi) :: nxi=len(xi)
+            double precision dimension(nxi) :: xi
+            double precision dimension(nxi),depend(nxi) :: fi
+            integer :: nxstrt
+            integer :: nxlast
+            integer :: iflag
+            double precision dimension(nxi + 2),depend(nxi) :: xiw
+            double precision dimension(nxi + 2),depend(nxi) :: fxiw
+            integer :: npts
+        end subroutine dlincyc
+        subroutine dmonoinc(x,nx,ner,ier) ! in :linint2:linint2.f
+            double precision dimension(nx) :: x
+            integer, optional,check(len(x)>=nx),depend(x) :: nx=len(x)
+            integer :: ner
+            integer :: ier
+        end subroutine dmonoinc
+        subroutine dmonoid1(nin,xi,iflag,ier) ! in :linint2:linint2.f
+            integer, optional,check(len(xi)>=nin),depend(xi) :: nin=len(xi)
+            double precision dimension(nin) :: xi
+            integer :: iflag
+            integer :: ier
+        end subroutine dmonoid1
+        subroutine dmonoid2(nin,xi,nout,xo,iflag,ier) ! in :linint2:linint2.f
+            integer, optional,check(len(xi)>=nin),depend(xi) :: nin=len(xi)
+            double precision dimension(nin) :: xi
+            integer, optional,check(len(xo)>=nout),depend(xo) :: nout=len(xo)
+            double precision dimension(nout) :: xo
+            integer :: iflag
+            integer :: ier
+        end subroutine dmonoid2
+        ! signature : fo = dlinint2pts(xi,yi,fi,xo,yo,[icycx,xmsg])
+        subroutine dlinint2pts(nxi,xi,nyi,yi,fi,icycx,nxyo,xo,yo,fo,xiw,fixw,nxi2,xmsg,ier) ! in :linint2:linint2.f
+            integer,            depend(xi),                                     intent(hide)    :: nxi=len(xi)
+            double precision,   dimension(nxi),                                 intent(in)      :: xi
+            integer,            depend(yi),                                     intent(hide)    :: nyi=len(yi)
+            double precision,   dimension(nyi),                                 intent(in)      :: yi
+            double precision,   dimension(nxi,nyi),depend(nxi,nyi),             intent(in)      :: fi
+            integer,            optional,                                       intent(in)      :: icycx=0
+            integer,            depend(xo),                                     intent(hide)    :: nxyo=len(xo)
+            double precision,   dimension(nxyo),                                intent(in)      :: xo
+            double precision,   dimension(nxyo),                                intent(in)      :: yo
+            double precision,   dimension(nxyo),depend(nxyo),                   intent(out)     :: fo(nxyo)
+            double precision,   dimension(nxi2),                                intent(hide)    :: xiw(nxi2)
+            double precision,   dimension(nxi2,nyi),depend(nxi2,nyi),           intent(hide)    :: fixw(nxi2,nyi)
+            integer,            depend(xw),                                     intent(hide)    :: nxi2=len(xi)
+            double precision,   optional,                                       intent(in)      :: xmsg
+            integer,                                                            intent(out)     :: ier
+        end subroutine dlinint2pts
+        subroutine dlint2xy(nxi,xi,nyi,yi,fi,nxyo,xo,yo,fo,xmsg,nopt,ier) ! in :linint2:linint2.f
+            integer, optional,check(len(xi)>=nxi),depend(xi) :: nxi=len(xi)
+            double precision dimension(nxi) :: xi
+            integer, optional,check(len(yi)>=nyi),depend(yi) :: nyi=len(yi)
+            double precision dimension(nyi) :: yi
+            double precision dimension(nxi,nyi),depend(nxi,nyi) :: fi
+            integer, optional,check(len(xo)>=nxyo),depend(xo) :: nxyo=len(xo)
+            double precision dimension(nxyo) :: xo
+            double precision dimension(nxyo),depend(nxyo) :: yo
+            double precision dimension(nxyo),depend(nxyo) :: fo
+            double precision :: xmsg
+            integer :: nopt
+            integer :: ier
+        end subroutine dlint2xy
+        subroutine estfow(f1,f2,f3,f4,x1,x2,y1,y2,f0,x0,y0,xmsg) ! in :linint2:linint2.f
+            double precision :: f1
+            double precision :: f2
+            double precision :: f3
+            double precision :: f4
+            double precision :: x1
+            double precision :: x2
+            double precision :: y1
+            double precision :: y2
+            double precision :: f0
+            double precision :: x0
+            double precision :: y0
+            double precision :: xmsg
+        end subroutine estfow
+    end interface
+end python module linint2
+
+! This file was auto-generated with f2py (version:2).
+! See http://cens.ioc.ee/projects/f2py2e/
