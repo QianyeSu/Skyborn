@@ -175,6 +175,25 @@ def grid_to_triple(
 
         is_input_xr = False
 
+        # Pre-validate numpy inputs before wrapping into xarray to ensure
+        # consistent DimensionError types rather than backend-specific errors
+        if np.asarray(data).ndim != 2:
+            raise DimensionError("grid_to_triple: `data` must have two dimensions !\n")
+        if np.asarray(x_in).ndim != 1:
+            raise DimensionError("grid_to_triple: `x_in` must have one dimension !\n")
+        if np.asarray(y_in).ndim != 1:
+            raise DimensionError("grid_to_triple: `y_in` must have one dimension !\n")
+        if np.asarray(x_in).shape[0] != np.asarray(data).shape[1]:
+            raise DimensionError(
+                "grid_to_triple: `x_in` must have the same size (call it `mx`) as the "
+                "right dimension of `data`. !\n"
+            )
+        if np.asarray(y_in).shape[0] != np.asarray(data).shape[0]:
+            raise DimensionError(
+                "grid_to_triple: `y_in` must have the same size (call it `ny`) as the "
+                "left dimension of `data`. !\n"
+            )
+
         data = xr.DataArray(data)
         data = data.assign_coords({data.dims[-1]: x_in, data.dims[-2]: y_in})
 
