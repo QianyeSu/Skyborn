@@ -1,0 +1,28 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module moc_loops ! in
+    interface  ! in :moc_loops
+        ! signature : tmp1,tmp2,tmp3 = mocloops(tlat,lat_aux_grid,rmlak,work1,work2,work3,wmsg)
+        subroutine mocloops(nyaux,mlon,nlat,kdep,nrx,tlat,lat_aux_grid,rmlak,work1,work2,work3,wmsg,tmp1,tmp2,tmp3) ! in :moc_globe_atl_f2py:MOC.loops.f
+            integer,    optional,                          intent(hide) :: nyaux=len(lat_aux_grid)
+            integer,    optional,                          intent(hide) :: mlon=shape(tlat,0)
+            integer,    optional,                          intent(hide) :: nlat=shape(tlat,1)
+            integer,    optional,                          intent(hide) :: kdep=shape(work1,2)
+            integer,    optional,                          intent(hide) :: nrx=2
+            double precision, dimension(mlon,nlat),                             intent(in)   :: tlat
+            double precision, dimension(nyaux),                                 intent(in)   :: lat_aux_grid
+            integer, dimension(mlon,nlat,2),                                    intent(in)   :: rmlak
+            double precision, dimension(mlon,nlat,kdep),                        intent(in)   :: work1
+            double precision, dimension(mlon,nlat,kdep),                        intent(in)   :: work2
+            double precision, dimension(mlon,nlat,kdep),                        intent(in)   :: work3
+            double precision,                                                   intent(in)   :: wmsg
+            double precision, dimension(nyaux,kdep,2),                          intent(out)  :: tmp1(nyaux,kdep,2)
+            double precision, dimension(nyaux,kdep,2),                          intent(out)  :: tmp2(nyaux,kdep,2)
+            double precision, dimension(nyaux,kdep,2),                          intent(out)  :: tmp3(nyaux,kdep,2)
+        end subroutine mocloops
+    end interface
+end python module moc_loops
+
+! This file was auto-generated with f2py (version:2).
+! See http://cens.ioc.ee/projects/f2py2e/

@@ -1,0 +1,54 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module rcm2rgrid ! in
+    interface  ! in :rcm2rgrid
+        ! signature : fo = drcm2rgrid(yi,xi,fi,yo,xo,xmsg,[ncrit,opt])
+        subroutine drcm2rgrid(ngrd,nyi,nxi,yi,xi,fi,nyo,yo,nxo,xo,fo,xmsg,ncrit,opt,ier) ! in :rcm2rgrid:rcm2rgrid.f
+            integer,            depend(fi),                                     intent(hide)    :: ngrd=shape(fi,2)
+            integer,            depend(yi),                                     intent(hide)    :: nyi=shape(yi,1)
+            integer,            depend(yi),                                     intent(hide)    :: nxi=shape(yi,0)
+            double precision,   dimension(nxi,nyi),                             intent(in)      :: yi
+            double precision,   dimension(nxi,nyi),      depend(nxi,nyi),       intent(in)      :: xi
+            double precision,   dimension(nxi,nyi,ngrd), depend(nxi,nyi),       intent(in)      :: fi
+            integer,            depend(yo),                                     intent(hide)    :: nyo=len(yo)
+            double precision,   dimension(nyo),                                 intent(in)      :: yo
+            integer,            depend(xo),                                     intent(hide)    :: nxo=len(xo)
+            double precision,   dimension(nxo),                                 intent(in)      :: xo
+            double precision,   dimension(nxo,nyo,ngrd), depend(nxo,nyo,ngrd),  intent(out)     :: fo(nxo,nyo,ngrd)
+            double precision,                                                   intent(in)      :: xmsg
+            integer,            optional                                        intent(in)      :: ncrit=1
+            integer,            optional                                        intent(in)      :: opt=1
+            integer,                                                            intent(hide)    :: ier
+        end subroutine drcm2rgrid
+        ! signature : fo = drgrid2rcm(yi,xi,fi,yo,xo,[xmsg,ncrit,opt])
+        subroutine drgrid2rcm(ngrd,nyi,nxi,yi,xi,fi,nyo,nxo,yo,xo,fo,xmsg,ncrit,opt,ier) ! in :rgrid2rcm:rgrid2rcm.f
+            integer,            depend(fi),                                         intent(hide)    :: ngrd=shape(fi,2)
+            integer,            depend(yi),                                         intent(hide)    :: nyi=len(yi)
+            integer,            depend(xi),                                         intent(hide)    :: nxi=len(xi)
+            double precision,   dimension(nyi),                                     intent(in)      :: yi
+            double precision,   dimension(nxi),                                     intent(in)      :: xi
+            double precision,   dimension(nxi,nyi,ngrd),    depend(nxi,nyi),        intent(in)      :: fi
+            integer,            depend(yo),                                         intent(hide)    :: nyo=shape(yo,1)
+            integer,            depend(yo),                                         intent(hide)    :: nxo=shape(yo,0)
+            double precision,   dimension(nxo,nyo),                                 intent(in)      :: yo
+            double precision,   dimension(nxo,nyo),         depend(nxo,nyo),        intent(in)      :: xo
+            double precision,   dimension(nxo,nyo,ngrd),    depend(nxo,nyo,ngrd),   intent(out)     :: fo(nxo,nyo,ngrd)
+            double precision,                                                       intent(in)      :: xmsg
+            integer,            optional                                            intent(in)      :: ncrit=1
+            integer,            optional                                            intent(in)      :: opt=1
+            integer,                                                                intent(hide)    :: ier
+        end subroutine drgrid2rcm
+        function dgcdist(rlat1,rlon1,rlat2,rlon2,iu) ! in :rcm2rgrid:rcm2rgrid.f
+            double precision,   intent(in)  :: rlat1
+            double precision,   intent(in), :: rlon1
+            double precision,   intent(in)  :: rlat2
+            double precision,   intent(in)  :: rlon2
+            integer,            intent(in)  :: iu
+            double precision,   intent(out) :: dgcdist
+        end function dgcdist
+    end interface
+end python module rcm2rgrid
+
+! This file was auto-generated with f2py (version:2).
+! See http://cens.ioc.ee/projects/f2py2e/
