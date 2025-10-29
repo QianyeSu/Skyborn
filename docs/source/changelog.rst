@@ -1,7 +1,7 @@
 Changelog
 =========
 
-Version 0.3.15
+Version 0.3.15 (Current)
 ---------------
 
 **New Features in the interp Submodule: Enhanced Interpolation and Regridding Capabilities**
@@ -13,7 +13,7 @@ Version 0.3.15
 - **Added `triple_to_grid`**: Map irregular triplets to regular grids (nearest neighbor, supports search radius/spherical distance)
 
 
-Version 0.3.14 (Current)
+Version 0.3.14
 -------------------------
 
 **🌀 New Genesis Potential Index (GPI) Module**
