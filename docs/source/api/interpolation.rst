@@ -49,6 +49,20 @@ Interpolation Functions
 .. autofunction:: skyborn.interp.interp_multidim
 
 
+Curvilinear and Unstructured Interpolation
+------------------------------------------
+
+.. autofunction:: skyborn.interp.rcm2points
+
+.. autofunction:: skyborn.interp.rcm2rgrid
+
+.. autofunction:: skyborn.interp.rgrid2rcm
+
+.. autofunction:: skyborn.interp.grid_to_triple
+
+.. autofunction:: skyborn.interp.triple_to_grid
+
+
 Example Usage
 -------------
 
@@ -68,3 +82,11 @@ Example Usage
 
    # Regrid data
    regridded_data = regridder.regrid_array(data['temperature'])
+
+   # Convert gridded data to triples (x, y, value) and back to a rectilinear grid
+   from skyborn.interp import grid_to_triple, triple_to_grid
+   triples = grid_to_triple(data['temperature'], data['lon'], data['lat'])
+   # Define target 1D coordinates
+   x_out = xr.DataArray(np.linspace(float(data['lon'].min()), float(data['lon'].max()), 100), dims=('x',))
+   y_out = xr.DataArray(np.linspace(float(data['lat'].min()), float(data['lat'].max()), 80), dims=('y',))
+   gridded = triple_to_grid(triples[2], triples[0], triples[1], x_out, y_out, method=1, domain=1.0)

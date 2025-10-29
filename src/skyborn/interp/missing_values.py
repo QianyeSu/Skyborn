@@ -67,7 +67,7 @@ def py2fort_msg(ndarray, msg_py=None, msg_fort=None):
 
 
 # todo: Should we force output missing value to (1) always be np.nan or (2) whatever it was given in input
-#      GeoCAT-f2py implements (2) while most GeoCAT-ncomp functions implemented (1) (e.g. linint2)
+#      Skyborn Fortran-backed functions currently implement (2), while some legacy tools implement (1)
 def fort2py_msg(ndarray, msg_fort=None, msg_py=None):
     msg_indices = None
     ndtype = ndarray.dtype.type

@@ -7,8 +7,7 @@ interpolation with optional extrapolation.
 
 References
 ----------
-Based on NCAR geocat-comp interpolation methods:
-    https://github.com/NCAR/geocat-comp/blob/main/geocat/comp/interpolation.py
+General interpolation formulations adapted for atmospheric datasets.
 """
 
 import typing
