@@ -142,9 +142,9 @@ def rcm2rgrid(
 
     .. code-block:: python
 
-        import numpy as np
-        import xarray as xr
-        import geocat.comp
+    import numpy as np
+    import xarray as xr
+    from skyborn.interp import rcm2rgrid
 
         # Open a netCDF data file using xarray default engine and load the data stream
         ds = xr.open_dataset("./ruc.nc")
@@ -159,7 +159,7 @@ def rcm2rgrid(
         newlat1D_rect=np.linspace(lat2D_curv.min(), lat2D_curv.max(), 100)
         newlon1D_rect=np.linspace(lon2D_curv.min(), lon2D_curv.max(), 100)
 
-        ht_rect = geocat.comp.rcm2rgrid(lat2D_curv, lon2D_curv, ht_curv, newlat1D_rect, newlon1D_rect)
+    ht_rect = rcm2rgrid(lat2D_curv, lon2D_curv, ht_curv, newlat1D_rect, newlon1D_rect)
     """
     if (lon2d is None) | (lat2d is None):
         raise CoordinateError("rcm2rgrid: lon2d and lat2d should always be provided!")
@@ -284,9 +284,9 @@ def rgrid2rcm(
 
     .. code-block:: python
 
-        import numpy as np
-        import xarray as xr
-        import geocat.comp
+    import numpy as np
+    import xarray as xr
+    from skyborn.interp import rgrid2rcm
 
         # Open a netCDF data file using xarray default engine and load the data stream
         # input grid and data
@@ -306,7 +306,7 @@ def rgrid2rcm(
         newlat2D_rect=ds_curv.gridlat2D_[:]
         newlon2D_rect=ds_curv.gridlat2D_[:]
 
-        ht_curv = geocat.comp.rgrid2rcm(lat1D_rect, lon1D_rect, ht_rect, newlat2D_curv, newlon2D_curv)
+    ht_curv = rgrid2rcm(lat1D_rect, lon1D_rect, ht_rect, newlat2D_curv, newlon2D_curv)
     """
 
     # ''' Start of boilerplate
