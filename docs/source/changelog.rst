@@ -1,6 +1,18 @@
 Changelog
 =========
 
+Version 0.3.15
+---------------
+
+**New Features in the interp Submodule: Enhanced Interpolation and Regridding Capabilities**
+
+- **Added `rcm2points`**: Nearest neighbor interpolation from curvilinear grids to arbitrary point sets
+- **Added `rcm2rgrid`**: Regridding from curvilinear grids to regular latitude-longitude grids
+- **Added `rgrid2rcm`**: Reverse regridding from regular latitude-longitude grids to curvilinear grids
+- **Added `grid_to_triple`**: Convert regular grids to irregular triplet representation (x, y, value)
+- **Added `triple_to_grid`**: Map irregular triplets to regular grids (nearest neighbor, supports search radius/spherical distance)
+
+
 Version 0.3.14 (Current)
 -------------------------
 

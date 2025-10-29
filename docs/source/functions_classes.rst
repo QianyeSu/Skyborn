@@ -225,6 +225,16 @@ Interpolation Functions
      - Find nearest neighbor indices
    * - :func:`skyborn.interp.regrid_dataset`
      - Regrid entire dataset
+   * - :func:`skyborn.interp.rcm2points`
+     - Curvilinear grid to scattered points (nearest neighbor)
+   * - :func:`skyborn.interp.rcm2rgrid`
+     - Curvilinear grid to rectilinear lat/lon grid regridding
+   * - :func:`skyborn.interp.rgrid2rcm`
+     - Rectilinear lat/lon grid to curvilinear grid regridding
+   * - :func:`skyborn.interp.grid_to_triple`
+     - Convert a 2D rectilinear grid to unstructured triples (x, y, value)
+   * - :func:`skyborn.interp.triple_to_grid`
+     - Place unstructured triples onto a rectilinear grid (nearest neighbor)
 
 Spatial Gradients
 -----------------

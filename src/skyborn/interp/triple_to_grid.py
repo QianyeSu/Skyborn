@@ -82,7 +82,7 @@ def _triple_to_grid(
     return grid
 
 
-# TODO: Revisit for implementing this function after deprecating geocat.ncomp
+# TODO: Revisit for implementing this function after deprecating legacy ncomp-style aliases
 def _triple_to_grid_2d(x_in, y_in, data, x_out, y_out, msg_py):
     # ''' signature:  grid = _triple2grid(x_in, y_in,data,x_out,y_out,msg_py)
     pass
@@ -149,7 +149,7 @@ def grid_to_triple(
 
             import numpy as np
             import xarray as xr
-            import geocat.comp
+            from skyborn.interp import grid_to_triple
 
             # Open a netCDF data file using xarray default engine and load the data stream
             ds = xr.open_dataset("./NETCDF_FILE.nc")
@@ -159,7 +159,7 @@ def grid_to_triple(
             x_in = ds.gridlat_236[:]
             y_in = ds.gridlon_236[:]
 
-            output = geocat.comp.grid_to_triple(data, x_in, y_in)
+            output = grid_to_triple(data, x_in, y_in)
     """
 
     # ''' Start of boilerplate
@@ -342,7 +342,7 @@ def triple_to_grid(
 
         import numpy as np
         import xarray as xr
-        import geocat.comp
+    from skyborn.interp import triple_to_grid
 
         # Open a netCDF data file using xarray default engine and load the data stream
         ds = xr.open_dataset("./ruc.nc")
@@ -359,7 +359,7 @@ def triple_to_grid(
         newlat1D_points=np.linspace(lat2D_curv.min(), lat2D_curv.max(), 100)
         newlon1D_points=np.linspace(lon2D_curv.min(), lon2D_curv.max(), 100)
 
-        output = geocat.comp.triple_to_grid(data, x_in, y_in, x_out, y_out)
+    output = triple_to_grid(data, x_in, y_in, x_out, y_out)
     """
 
     if (x_in is None) | (y_in is None):
@@ -501,13 +501,13 @@ def triple_to_grid(
     return grid
 
 
-# TODO: Revisit for implementing this function after deprecating geocat.ncomp
+# TODO: Revisit for implementing this function after deprecating legacy ncomp-style aliases
 def triple_to_grid_2d(x_in, y_in, data, x_out, y_out, msg_py):
 
     warnings.warn("triple_to_grid_2d function not yet implemented!!! ")
 
 
-# Transparent wrappers for geocat.ncomp backwards compatibility
+# Transparent wrappers for legacy ncomp-style backwards compatibility
 def grid2triple(x_in, y_in, data, msg_py):
     warnings.warn(
         "grid2triple function name and signature will be deprecated soon "
@@ -518,7 +518,7 @@ def grid2triple(x_in, y_in, data, msg_py):
     return grid_to_triple(data, x_in, y_in, msg_py)
 
 
-# Transparent wrappers for geocat.ncomp backwards compatibility
+# Transparent wrappers for legacy ncomp-style backwards compatibility
 def triple2grid(x_in, y_in, data, x_out, y_out, **kwargs):
     warnings.warn(
         "triple2grid function name and signature will be deprecated soon "
