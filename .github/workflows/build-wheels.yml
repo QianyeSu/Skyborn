@@ -33,7 +33,6 @@ jobs:
         buildplat:
           - [ubuntu-latest, manylinux_x86_64]
           # - [ubuntu-22.04, manylinux_aarch64]  # ARM64 Linux support - disabled due to Python version availability
-          - [macos-13, macosx_x86_64] # macOS Intel
           - [macos-14, macosx_arm64] # macOS Apple Silicon
           - [windows-2022, win_amd64]
         python: ["cp39", "cp310", "cp311", "cp312", "cp313"]
@@ -79,12 +78,8 @@ jobs:
           echo "OpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp" >> "$GITHUB_ENV"
           echo "OpenMP_CXX_LIB_NAMES=omp" >> "$GITHUB_ENV"
           echo "OpenMP_omp_LIBRARY=$(brew --prefix libomp)/lib/libomp.dylib" >> "$GITHUB_ENV"
-          # Set macOS deployment target depending on runner version
-          if [ "${{ matrix.buildplat[0] }}" = "macos-14" ]; then
-            echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "$GITHUB_ENV"
-          else
-            echo "MACOSX_DEPLOYMENT_TARGET=13.0" >> "$GITHUB_ENV"
-          fi
+          # Set macOS deployment target for Apple Silicon (macos-14)
+          echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "$GITHUB_ENV"
 
       # Setup for Linux (install gfortran in container)
       - name: Setup Linux environment

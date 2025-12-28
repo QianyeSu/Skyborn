@@ -388,8 +388,11 @@ Example Usage
    x = np.random.randn(100)
    y = 2 * x + np.random.randn(100) * 0.5
 
-   slope, intercept, r_value = skb.linear_regression(x, y)
+   slope, p_value = skb.linear_regression(x, y)
+   print(f"Linear regression: slope={slope:.4f}, p_value={p_value:.6f}")
+
    correlation = skb.pearson_correlation(x, y)
+   print(f"Pearson correlation: {correlation:.4f}")
 
    # Spatial correlation analysis
    # Create sample spatial data (time, lat, lon)

@@ -83,8 +83,8 @@ def linear_regression(
             f"length of predictor ({len(predictor)})"
         )
 
-    # Check for NaN values in data only
-    has_nan = np.any(np.isnan(data))
+    # Check for NaN values in both data and predictor
+    has_nan = np.any(np.isnan(data)) or np.any(np.isnan(predictor))
     # Calculate p-values using lazy import
     f_regression = _get_f_regression()
     if has_nan:
@@ -92,27 +92,36 @@ def linear_regression(
         undef = np.nan
         # Handle NaN case: record locations and replace with 0 in-place
         nan_mask_data = np.isnan(data)
+        nan_mask_predictor = np.isnan(predictor)
         data[nan_mask_data] = 0  # Replace NaN with 0 in original array
+        predictor_work = predictor.copy()
+        # Replace NaN with 0 in predictor
+        predictor_work[nan_mask_predictor] = 0
 
         # Create design matrix with predictor and intercept
-        design_matrix = np.column_stack((predictor, np.ones(predictor.shape[0])))
+        design_matrix = np.column_stack(
+            (predictor_work, np.ones(predictor_work.shape[0]))
+        )
 
         # Get original dimensions and reshape for regression
         n_samples, dim1, dim2 = data.shape
         data_flat = data.reshape((n_samples, dim1 * dim2))
 
         # Perform linear regression
-        regression_coef = np.linalg.lstsq(design_matrix, data_flat, rcond=None)[0][0]
+        regression_coef, intercept = np.linalg.lstsq(
+            design_matrix, data_flat, rcond=None
+        )[0]
+        regression_coef, intercept = regression_coef.reshape(
+            (dim1, dim2)
+        ), intercept.reshape((dim1, dim2))
 
-        # Reshape results back to original dimensions
-        regression_coef = regression_coef.reshape((dim1, dim2))
-
-        p_values = f_regression(data_flat, predictor)[1].reshape(dim1, dim2)
+        p_values = f_regression(data_flat, predictor_work)[1].reshape(dim1, dim2)
 
         # Restore original NaN values in data array
         data[nan_mask_data] = undef
 
-        # Set results back to NaN where original data had NaN
+        # Set results back to NaN where original data had too many NaN
+        # Only consider data NaN, not predictor NaN (predictor NaN affects all gridpoints equally)
         nan_mask_gridpoint = np.any(nan_mask_data, axis=0)
         regression_coef = np.where(nan_mask_gridpoint, undef, regression_coef)
         p_values = np.where(nan_mask_gridpoint, undef, p_values)
@@ -127,9 +136,7 @@ def linear_regression(
         data_flat = data.reshape((n_samples, dim1 * dim2))
 
         # Perform linear regression
-        regression_coef = np.linalg.lstsq(design_matrix, data_flat, rcond=None)[0][0]
-
-        # Reshape results back to original dimensions
+        regression_coef, _ = np.linalg.lstsq(design_matrix, data_flat, rcond=None)[0]
         regression_coef = regression_coef.reshape((dim1, dim2))
 
         p_values = f_regression(data_flat, predictor)[1].reshape(dim1, dim2)
@@ -486,6 +493,7 @@ def calculate_potential_temperature(
 
     return potential_temp
 
+
 def calculate_theta_se(
     temperature: Union[np.ndarray, xr.DataArray],
     pressure: Union[np.ndarray, xr.DataArray],
@@ -493,7 +501,7 @@ def calculate_theta_se(
     dewpoint: Union[np.ndarray, xr.DataArray],
 ) -> Union[np.ndarray, xr.DataArray]:
     """
-    Calculate Pseudo-equivalent potential temperature (theta-se) 
+    Calculate Pseudo-equivalent potential temperature (theta-se)
 
     the fomula is θ_se = T * (1000 / (p - e)) ** (Ra / cpd) * exp(L * r / (cpd * Tc))
     from http://stream1.cmatc.cn/cmatcvod/12/tqx/second_content.html
@@ -521,11 +529,24 @@ def calculate_theta_se(
     mpcalc = _get_metpy_calc()
     units = _get_metpy_units()
 
+    # Extract values if xarray
+    is_xarray = hasattr(temperature, "attrs")
+    if is_xarray:
+        temp_values = temperature.values
+        pres_values = pressure.values
+        mixr_values = mixing_ratio.values
+        dewp_values = dewpoint.values
+    else:
+        temp_values = temperature
+        pres_values = pressure
+        mixr_values = mixing_ratio
+        dewp_values = dewpoint
+
     # Convert units
-    p = pressure * units.hPa
-    T = temperature * units.kelvin
-    r = mixing_ratio * units("kg/kg")
-    td = dewpoint * units.degC
+    p = pres_values * units.hPa
+    T = temp_values * units.kelvin
+    r = mixr_values * units("kg/kg")
+    td = dewp_values * units.degC
 
     # Convert mixing ratio to g/kg for vapor_pressure
     r_gkg = r.to("g/kg")
@@ -545,21 +566,27 @@ def calculate_theta_se(
     L = 2.5e6  # J/kg
 
     # Dry air pressure
-    p_dry = (p - e)
+    p_dry = p - e
 
     # Theta_e calculation
-    theta_e_part = temperature * (1000.0 / p_dry) ** (Rd / cp_d)
-    latent_part = np.exp((L * mixing_ratio) / (cp_d * T_lcl_K))
+    theta_e_part = temp_values * (1000.0 / p_dry) ** (Rd / cp_d)
+    latent_part = np.exp((L * mixr_values) / (cp_d * T_lcl_K))
     theta_se = theta_e_part * latent_part
 
+    # Extract magnitude if result is Quantity
+    if hasattr(theta_se, "magnitude"):
+        theta_se = theta_se.magnitude
+
     # Preserve xarray structure if input is xarray
-    if hasattr(temperature, "attrs"):
-        if isinstance(theta_se, np.ndarray):
-            return xr.DataArray(
-                theta_se,
-                attrs={"units": "K", "long_name": "Pseudo-Equivalent Potential Temperature"},
-            )
-        else:
-            theta_se.attrs = {"units": "K", "long_name": "Pseudo-Equivalent Potential Temperature"}
+    if is_xarray:
+        return xr.DataArray(
+            theta_se,
+            dims=temperature.dims,
+            coords=temperature.coords,
+            attrs={
+                "units": "K",
+                "long_name": "Pseudo-Equivalent Potential Temperature",
+            },
+        )
 
     return theta_se
