@@ -1,7 +1,43 @@
 Changelog
 =========
 
-Version 0.3.15 (Current)
+Version 0.3.16 (Current)
+------------------------
+
+**🐛 Bug Fixes**
+
+* **Fixed Mann-Kendall xarray Dimension Handling**: Resolved critical dimension processing issues in ``mann_kendall_xarray`` function
+
+  - **Scalar Dimension Filtering**: Fixed error when using ``sel()`` or ``isel()`` operations that create scalar dimensions (size=1)
+  - **Dimension Order Preservation**: Corrected dimension ordering to preserve original array dimension sequence
+  - **Root Cause**: Previous implementation didn't filter scalar dimensions and relied on unstable dictionary key ordering
+  - **Solution**: Added ``data.sizes[d] > 1`` check and switched to ``data.dims`` iteration for stable ordering
+  - **Impact**: Users can now safely use selective indexing (e.g., ``data.sel(lat=0)``) without dimension mismatch errors
+
+* **CI/CD Infrastructure Updates**:
+
+  - **Removed macOS Intel Support**: Dropped deprecated macos-13 (Intel) builds following GitHub's architecture policy changes
+  - **Apple Silicon Focus**: Now exclusively building for macos-14 (Apple Silicon) for better performance and compatibility
+  - **Simplified Deployment**: Streamlined macOS build configuration by removing conditional logic
+
+* **Academic Metadata Enhancement**:
+
+  - **Enhanced .zenodo.json**: Comprehensive package description now accurately covers all major features
+  - **Better Citations**: Improved metadata for DOI generation including windspharm, gridfill, geostrophic wind, GPI/PI, trend analysis, and tropopause calculations
+  - **Academic Impact**: More accurate representation for citation tracking and research attribution
+
+**📦 Dependencies**
+
+* Bump pypa/cibuildwheel from 3.2.1 to 3.3.0
+* Bump actions/checkout from 5 to 6
+
+**🧪 Testing**
+
+* Added comprehensive dimension handling test suite with 5 test scenarios
+* All 105 tests passing with 97% code coverage maintained
+* Validated scalar dimension filtering and dimension order preservation
+
+Version 0.3.15
 ---------------
 
 **New Features in the interp Submodule: Enhanced Interpolation and Regridding Capabilities**
