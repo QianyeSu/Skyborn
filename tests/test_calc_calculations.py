@@ -12,6 +12,7 @@ from numpy.testing import assert_array_almost_equal, assert_array_equal
 
 from skyborn.calc.calculations import (
     calculate_potential_temperature,
+    calculate_theta_se,
     convert_longitude_range,
     kendall_correlation,
     linear_regression,
@@ -216,7 +217,8 @@ class TestLinearRegression:
 
         if len(finite_slopes) > 0:
             assert np.all(np.isfinite(finite_slopes))
-            assert np.mean(finite_slopes) > 0.3  # Should detect positive correlation
+            # Should detect positive correlation
+            assert np.mean(finite_slopes) > 0.3
 
         if len(finite_p_values) > 0:
             assert np.all(np.isfinite(finite_p_values))
@@ -885,8 +887,9 @@ class TestCalculationsIntegration:
     def test_calculations_error_handling(self):
         """Test comprehensive error handling."""
         # Test with wrong input types
-        with pytest.raises(ValueError):
-            linear_regression("not_an_array", np.array([1, 2, 3]))
+        # linear_regression now extracts values via getattr, so test shape mismatch instead
+        with pytest.raises(ValueError, match="must match"):
+            linear_regression(np.random.randn(10, 5, 5), np.array([1, 2, 3]))
 
         with pytest.raises(ValueError):
             linear_regression(np.array([1, 2, 3]), "not_an_array")
@@ -1367,6 +1370,209 @@ class TestEmergentConstraintsIntegration:
         # Posterior uncertainty should be reduced
         prior_std = np.std(target_models)
         assert posterior_std < 0.8 * prior_std
+
+
+class TestCalculateThetaSE:
+    """Test calculate_theta_se (Pseudo-Equivalent Potential Temperature) functionality."""
+
+    def test_calculate_theta_se_basic(self):
+        """Test basic theta-se calculation with realistic atmospheric values."""
+        # Typical surface conditions in tropics
+        temperature = 300.0  # K (27°C)
+        pressure = 1000.0  # hPa
+        mixing_ratio = 0.015  # kg/kg (15 g/kg)
+        dewpoint = 20.0  # °C
+
+        theta_se = calculate_theta_se(temperature, pressure, mixing_ratio, dewpoint)
+
+        # Extract magnitude if it's a Quantity object
+        if hasattr(theta_se, "magnitude"):
+            theta_se_value = theta_se.magnitude
+        else:
+            theta_se_value = theta_se
+
+        # Theta-se should be greater than temperature due to latent heat
+        assert theta_se_value > temperature
+        # Typical range for tropical theta-se is 330-360 K
+        assert 330 < theta_se_value < 370
+        # Should be finite
+        assert np.isfinite(theta_se_value)
+
+    def test_calculate_theta_se_arrays(self):
+        """Test theta-se calculation with numpy arrays."""
+        # Vertical profile
+        temperatures = np.array([300, 290, 280, 270])  # K
+        pressures = np.array([1000, 850, 700, 500])  # hPa
+        mixing_ratios = np.array([0.015, 0.010, 0.005, 0.002])  # kg/kg
+        dewpoints = np.array([20, 15, 10, 5])  # °C
+
+        theta_se = calculate_theta_se(temperatures, pressures, mixing_ratios, dewpoints)
+
+        # Extract magnitude if it's a Quantity object
+        if hasattr(theta_se, "magnitude"):
+            theta_se_value = theta_se.magnitude
+        else:
+            theta_se_value = theta_se
+
+        # Check shape
+        assert theta_se_value.shape == temperatures.shape
+        # All values should be finite
+        assert np.all(np.isfinite(theta_se_value))
+        # Theta-se should increase or stay similar with height in convective atmosphere
+        # (though this is profile-dependent)
+        assert np.all(theta_se_value > temperatures)
+
+    def test_calculate_theta_se_xarray(self):
+        """Test theta-se calculation with xarray DataArrays."""
+        # Create xarray inputs with plain numpy values (no units in attrs)
+        temperature = xr.DataArray(
+            [300, 295, 290],
+            dims=["level"],
+            attrs={"long_name": "Temperature"},
+        )
+        pressure = xr.DataArray([1000, 900, 800], dims=["level"])
+        mixing_ratio = xr.DataArray([0.015, 0.012, 0.009], dims=["level"])
+        dewpoint = xr.DataArray([20, 18, 15], dims=["level"])
+
+        theta_se = calculate_theta_se(temperature, pressure, mixing_ratio, dewpoint)
+
+        # Should return xarray with attributes
+        assert isinstance(theta_se, xr.DataArray)
+        assert "units" in theta_se.attrs
+        assert theta_se.attrs["units"] == "K"
+        assert "long_name" in theta_se.attrs
+        # Values should be reasonable - extract magnitude if needed
+        theta_se_values = (
+            theta_se.values
+            if not hasattr(theta_se.values, "magnitude")
+            else theta_se.values.magnitude
+        )
+        temp_values = temperature.values
+        assert np.all(theta_se_values > temp_values)
+
+    def test_calculate_theta_se_dry_conditions(self):
+        """Test theta-se with very dry conditions."""
+        temperature = 300.0  # K
+        pressure = 1000.0  # hPa
+        mixing_ratio = 0.001  # kg/kg (very dry - 1 g/kg)
+        dewpoint = 0.0  # °C (low dewpoint)
+
+        theta_se = calculate_theta_se(temperature, pressure, mixing_ratio, dewpoint)
+
+        # Extract magnitude if it's a Quantity object
+        if hasattr(theta_se, "magnitude"):
+            theta_se_value = theta_se.magnitude
+        else:
+            theta_se_value = theta_se
+
+        # Should still produce finite result
+        assert np.isfinite(theta_se_value)
+        # With low moisture, theta-se should be closer to potential temperature
+        # but still higher due to some latent heat
+        assert theta_se_value > temperature
+
+    def test_calculate_theta_se_high_altitude(self):
+        """Test theta-se at high altitude (low pressure)."""
+        temperature = 250.0  # K (cold upper troposphere)
+        pressure = 300.0  # hPa (~ 9 km altitude)
+        mixing_ratio = 0.0005  # kg/kg (0.5 g/kg - very dry at altitude)
+        dewpoint = -30.0  # °C
+
+        theta_se = calculate_theta_se(temperature, pressure, mixing_ratio, dewpoint)
+
+        # Extract magnitude if it's a Quantity object
+        if hasattr(theta_se, "magnitude"):
+            theta_se_value = theta_se.magnitude
+        else:
+            theta_se_value = theta_se
+
+        # Should produce finite result
+        assert np.isfinite(theta_se_value)
+        # At high altitude, theta-se should still be significantly higher than T
+        assert theta_se_value > temperature
+
+    def test_calculate_theta_se_comparison_numpy_xarray(self):
+        """Test that numpy and xarray inputs give same results."""
+        # NumPy inputs
+        temp_np = np.array([300, 295, 290])
+        pres_np = np.array([1000, 900, 800])
+        mixr_np = np.array([0.015, 0.012, 0.009])
+        dewp_np = np.array([20, 18, 15])
+
+        theta_se_np = calculate_theta_se(temp_np, pres_np, mixr_np, dewp_np)
+
+        # xarray inputs
+        temp_xr = xr.DataArray(temp_np, dims=["level"])
+        pres_xr = xr.DataArray(pres_np, dims=["level"])
+        mixr_xr = xr.DataArray(mixr_np, dims=["level"])
+        dewp_xr = xr.DataArray(dewp_np, dims=["level"])
+
+        theta_se_xr = calculate_theta_se(temp_xr, pres_xr, mixr_xr, dewp_xr)
+
+        # Extract magnitudes for comparison
+        if hasattr(theta_se_np, "magnitude"):
+            theta_se_np_values = theta_se_np.magnitude
+        else:
+            theta_se_np_values = theta_se_np
+
+        if hasattr(theta_se_xr.values, "magnitude"):
+            theta_se_xr_values = theta_se_xr.values.magnitude
+        else:
+            theta_se_xr_values = theta_se_xr.values
+
+        # Results should be nearly identical
+        assert_array_almost_equal(theta_se_np_values, theta_se_xr_values, decimal=6)
+
+    def test_calculate_theta_se_scalar_vs_array(self):
+        """Test that scalar and single-element array give same result."""
+        # Scalar inputs
+        theta_se_scalar = calculate_theta_se(300.0, 1000.0, 0.015, 20.0)
+
+        # Array inputs with single element
+        theta_se_array = calculate_theta_se(
+            np.array([300.0]),
+            np.array([1000.0]),
+            np.array([0.015]),
+            np.array([20.0]),
+        )
+
+        # Extract magnitudes for comparison
+        if hasattr(theta_se_scalar, "magnitude"):
+            theta_se_scalar_value = theta_se_scalar.magnitude
+        else:
+            theta_se_scalar_value = theta_se_scalar
+
+        if hasattr(theta_se_array, "magnitude"):
+            theta_se_array_value = theta_se_array.magnitude[0]
+        else:
+            theta_se_array_value = theta_se_array[0]
+
+        # Should be very close
+        assert np.abs(theta_se_scalar_value - theta_se_array_value) < 0.01
+
+    def test_calculate_theta_se_multidimensional(self):
+        """Test theta-se calculation with 2D arrays (e.g., spatial grid)."""
+        # Create 2D grid (e.g., lat-lon)
+        nlat, nlon = 5, 6
+        temperatures = np.random.uniform(280, 310, (nlat, nlon))
+        pressures = np.full((nlat, nlon), 1000.0)  # Surface pressure
+        mixing_ratios = np.random.uniform(0.005, 0.020, (nlat, nlon))
+        dewpoints = np.random.uniform(10, 25, (nlat, nlon))
+
+        theta_se = calculate_theta_se(temperatures, pressures, mixing_ratios, dewpoints)
+
+        # Extract magnitude if it's a Quantity object
+        if hasattr(theta_se, "magnitude"):
+            theta_se_value = theta_se.magnitude
+        else:
+            theta_se_value = theta_se
+
+        # Check shape
+        assert theta_se_value.shape == (nlat, nlon)
+        # All values should be finite
+        assert np.all(np.isfinite(theta_se_value))
+        # All theta-se should be greater than temperature
+        assert np.all(theta_se_value > temperatures)
 
 
 # Performance tests (marked as slow)
