@@ -1,6 +1,6 @@
 {
-  "title": "Skyborn: High-Performance Climate Data Analysis Toolkit",
-  "description": "Skyborn is a comprehensive Python library for atmospheric and climate science data analysis, featuring high-performance Fortran/Cython implementations with OpenMP/SIMD optimization. Core capabilities include: (1) Atmospheric circulation analysis with windspharm (spherical harmonics, streamfunction/velocity potential, Rossby wave analysis) and geostrophic wind calculations; (2) Tropical cyclone dynamics (Genesis Potential Index, potential intensity calculations based on Emanuel's thermodynamic theory); (3) Statistical trend analysis (Mann-Kendall test, Spearman/Kendall/Pearson correlations) with xarray integration; (4) Tropopause height calculations following WMO standards; (5) Data interpolation (gridfill Poisson solver, CMIP6 regridding, RCM-to-point/grid transformations); (6) Emergent constraints methods for climate sensitivity analysis; (7) Advanced scientific visualization tools. Designed for processing multi-dimensional climate model outputs and reanalysis datasets with automatic dimension detection and metadata preservation.",
+  "title": "Skyborn: Climate Data Analysis Toolkit",
+  "description": "<p><strong>Skyborn</strong> is a comprehensive Python library for atmospheric and climate science data analysis, featuring high-performance Fortran/Cython implementations with OpenMP/SIMD optimization.</p><p><strong>Core capabilities include:</strong></p><ul><li><strong>Atmospheric circulation analysis:</strong> windspharm (spherical harmonics, streamfunction/velocity potential, Rossby wave analysis) and geostrophic wind calculations.</li><li><strong>Tropical cyclone dynamics:</strong> Genesis Potential Index (GPI), potential intensity calculations based on Emanuel's thermodynamic theory.</li><li><strong>Statistical trend analysis:</strong> Mann-Kendall test, Spearman/Kendall/Pearson correlations with xarray integration.</li><li><strong>Tropopause height:</strong> Calculations following WMO standards.</li><li><strong>Data interpolation:</strong> gridfill Poisson solver, CMIP6 regridding, RCM-to-point/grid transformations.</li><li><strong>Emergent constraints:</strong> Methods for climate sensitivity analysis.</li><li><strong>Visualization:</strong> Advanced scientific visualization tools.</li></ul><p>Designed for processing multi-dimensional climate model outputs and reanalysis datasets with automatic dimension detection and metadata preservation.</p>",
   "creators": [
     {
       "name": "Su, Qianye",
@@ -29,6 +29,11 @@
   "related_identifiers": [
     {
       "identifier": "https://github.com/QianyeSu/Skyborn",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://pypi.org/project/skyborn/",
       "relation": "isSupplementTo",
       "scheme": "url"
     }
