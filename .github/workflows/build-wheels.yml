@@ -141,19 +141,20 @@ jobs:
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
-      - name: Build wheels (macOS x86_64)
-        if: matrix.buildplat[1] == 'macosx_x86_64'
-        uses: pypa/cibuildwheel@v3.3.0
-        with:
-          output-dir: wheelhouse
-        env:
-          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-          CIBW_SKIP: "*-win32 *-musllinux*"
-          # x86_64 on macos-13: target 13.0
-          CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc-13 CXX=g++-13 MACOSX_DEPLOYMENT_TARGET=13.0
-          MACOSX_DEPLOYMENT_TARGET: "13.0"
-          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
-          CIBW_BUILD_VERBOSITY: 1
+      # Build wheels for macOS Intel (x86_64) - Currently disabled
+      # - name: Build wheels (macOS x86_64)
+      #   if: matrix.buildplat[1] == 'macosx_x86_64'
+      #   uses: pypa/cibuildwheel@v3.3.0
+      #   with:
+      #     output-dir: wheelhouse
+      #   env:
+      #     CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
+      #     CIBW_SKIP: "*-win32 *-musllinux*"
+      #     # x86_64 on macos-13: target 13.0
+      #     CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc-13 CXX=g++-13 MACOSX_DEPLOYMENT_TARGET=13.0
+      #     MACOSX_DEPLOYMENT_TARGET: "13.0"
+      #     CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
+      #     CIBW_BUILD_VERBOSITY: 1
 
       - name: Build wheels (macOS arm64)
         if: matrix.buildplat[1] == 'macosx_arm64'
@@ -281,7 +282,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        os: [ubuntu-latest, windows-latest, macos-14] # macos-13 removed
         python: ["cp39", "cp310", "cp311", "cp312", "cp313"]
     steps:
       - name: Map abi tag to python version
@@ -315,10 +316,12 @@ jobs:
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             pip install wheels/skyborn*-$PYTAG-*-manylinux*.whl
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            # Only macos-14 (Apple Silicon) is currently supported
+            # if [[ "${{ matrix.os }}" == "macos-13" ]]; then
+            #   pip install wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl
+            # el
             if [[ "${{ matrix.os }}" == "macos-14" ]]; then
               pip install wheels/skyborn*-$PYTAG-*-macosx*_arm64.whl
-            elif [[ "${{ matrix.os }}" == "macos-13" ]]; then
-              pip install wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl
             fi
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             pip install wheels/skyborn*-$PYTAG-*-win_amd64*.whl
