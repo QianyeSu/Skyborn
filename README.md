@@ -14,6 +14,8 @@
 [![Code style](https://img.shields.io/badge/code%20style-black-blue.svg)](https://github.com/psf/black)
 [![Build Status](https://github.com/QianyeSu/Skyborn/actions/workflows/test-coverage.yml/badge.svg?branch=main)](https://github.com/QianyeSu/Skyborn/actions/workflows/test-coverage.yml?query=branch%3Amain)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://skyborn.readthedocs.io/en/latest/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18075252.svg)](https://doi.org/10.5281/zenodo.18075252)
+
 ## System Requirements
 
 **Operating System:** 🖥️ **Cross-Platform**
@@ -144,3 +146,20 @@ The Genesis Potential Index (GPI) module achieves **dramatic speedups** through 
 - RMSE < 1% for both VMAX and PMIN calculations
 
 ![GPI Scatter Comparison](docs/source/images/gpi_scatter_comparison.png)
+
+## 📖 Citation
+
+If you use Skyborn in your research, please cite it using the following format:
+
+```bibtex
+@software{su2025skyborn,
+  author = {Su, Qianye},
+  title = {Skyborn: Climate Data Analysis Toolkit},
+  year = {2025},
+  doi = {10.5281/zenodo.18075252},
+  url = {https://doi.org/10.5281/zenodo.18075252}
+}
+```
+
+Or in text:
+> Su, Q. (2025). Skyborn: Climate Data Analysis Toolkit. Zenodo. https://doi.org/10.5281/zenodo.18075252
