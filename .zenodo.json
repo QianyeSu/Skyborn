@@ -1,0 +1,36 @@
+{
+  "title": "Skyborn: High-Performance Climate Data Analysis Toolkit",
+  "description": "Skyborn is a comprehensive Python library for atmospheric and climate science data analysis, featuring high-performance Fortran/Cython implementations with OpenMP/SIMD optimization. Core capabilities include: (1) Atmospheric circulation analysis with windspharm (spherical harmonics, streamfunction/velocity potential, Rossby wave analysis) and geostrophic wind calculations; (2) Tropical cyclone dynamics (Genesis Potential Index, potential intensity calculations based on Emanuel's thermodynamic theory); (3) Statistical trend analysis (Mann-Kendall test, Spearman/Kendall/Pearson correlations) with xarray integration; (4) Tropopause height calculations following WMO standards; (5) Data interpolation (gridfill Poisson solver, CMIP6 regridding, RCM-to-point/grid transformations); (6) Emergent constraints methods for climate sensitivity analysis; (7) Advanced scientific visualization tools. Designed for processing multi-dimensional climate model outputs and reanalysis datasets with automatic dimension detection and metadata preservation.",
+  "creators": [
+    {
+      "name": "Su, Qianye",
+      "affiliation": "Guangdong Ocean University",
+      "orcid": "0009-0005-6063-3007"
+    }
+  ],
+  "keywords": [
+    "climate science",
+    "atmospheric science",
+    "Mann-Kendall test",
+    "trend analysis",
+    "Kuo-Eliassen equation",
+    "geostrophic wind",
+    "tropopause height",
+    "GPI (Genesis Potential Index)",
+    "data interpolation",
+    "scientific computing",
+    "xarray",
+    "Python",
+    "climate data analysis"
+  ],
+  "license": "BSD-3-Clause",
+  "upload_type": "software",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/QianyeSu/Skyborn",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}

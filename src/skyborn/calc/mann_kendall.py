@@ -764,14 +764,20 @@ def mann_kendall_xarray(
     use_dask: bool = True,
 ):  # -> xr.Dataset
     """
-    Mann-Kendall test for xarray DataArray that handles 1D data.
+    Mann-Kendall test for xarray DataArray with intelligent dimension handling.
+
+    Automatically handles:
+    - 1D time series (pure time dimension)
+    - Multi-dimensional data with preserved dimension order
+    - Scalar dimensions (size=1) from sel() operations
+    - Correct dimension ordering in output
 
     Parameters
     ----------
     data : xr.DataArray
         Input data array
     dim : str, default 'time'
-        Time dimension name
+        Time dimension name to analyze along
     alpha : float, default 0.05
         Significance level
     method : str, default 'theilslopes'
@@ -784,7 +790,19 @@ def mann_kendall_xarray(
     Returns
     -------
     result : xr.Dataset
-        Dataset containing trend analysis results
+        Dataset containing trend analysis results with preserved dimension order
+
+    Examples
+    --------
+    >>> # 3D data (time, lat, lon) -> (lat, lon)
+    >>> ds = mann_kendall_xarray(data_3d, dim='time')
+    >>>
+    >>> # 3D data (year, ensemble, lat) -> (ensemble, lat)
+    >>> ds = mann_kendall_xarray(data_3d, dim='year')
+    >>>
+    >>> # Handle scalar dimension from sel
+    >>> subset = data.sel(lat=0)  # lat becomes scalar
+    >>> ds = mann_kendall_xarray(subset, dim='time')  # Works correctly
     """
     # Get time axis
     time_axis = data.get_axis_num(dim)
@@ -802,12 +820,26 @@ def mann_kendall_xarray(
             modified=modified,
         )
 
-    # Create output coordinates (all dims except time)
-    coords = {k: v for k, v in data.coords.items() if k != dim}
+    # Smart dimension handling: preserve order and filter scalar dimensions
+    # Get all dimensions except the analyzed dimension, in original order
+    output_dims = []
+    output_coords = {}
 
-    # Handle 1D case (no non-time dimensions)
-    if not coords:  # coords is empty for 1D data
-        # For 1D data, create scalar variables without dimensions
+    for d in data.dims:
+        if d == dim:
+            # Skip the analyzed dimension
+            continue
+
+        # Check if this is a true dimension (size > 1) or scalar (size == 1)
+        if data.sizes[d] > 1:
+            output_dims.append(d)
+            output_coords[d] = data.coords[d]
+        # Scalar dimensions (size == 1) are excluded from output
+
+    # Handle different cases based on output dimensions
+    if not output_dims:
+        # Pure scalar output: no non-time dimensions or all are size=1
+        # Return scalar dataset
         ds = xr.Dataset(
             data_vars={
                 "trend": (
@@ -858,18 +890,17 @@ def mann_kendall_xarray(
             },
         )
     else:
-        # Handle multi-dimensional case (original logic)
-        coord_dims = list(coords.keys())
+        # Multi-dimensional output: preserve original dimension order
         ds = xr.Dataset(
             data_vars={
-                "trend": (coord_dims, results["trend"]),
-                "h": (coord_dims, results["h"]),
-                "p": (coord_dims, results["p"]),
-                "z": (coord_dims, results["z"]),
-                "tau": (coord_dims, results["tau"]),
-                "std_error": (coord_dims, results["std_error"]),
+                "trend": (output_dims, results["trend"]),
+                "h": (output_dims, results["h"]),
+                "p": (output_dims, results["p"]),
+                "z": (output_dims, results["z"]),
+                "tau": (output_dims, results["tau"]),
+                "std_error": (output_dims, results["std_error"]),
             },
-            coords=coords,
+            coords=output_coords,
             attrs={
                 "title": "Mann-Kendall Trend Analysis",
                 "alpha": alpha,
