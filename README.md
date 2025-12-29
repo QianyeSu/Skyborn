@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/QianyeSu/Skyborn" target="_blank">
-    <img src="docs/source/_static/SkyBornLogo.svg" alt="Skyborn Logo" width="400"/>
+    <img src="https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/_static/SkyBornLogo.svg" alt="Skyborn Logo" width="400"/>
   </a>
 </p>
 
