@@ -50,7 +50,7 @@ jobs:
           pip-audit --desc --output-format=json --output-file=audit-report.json || echo "Audit completed"
 
       - name: Upload security reports
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: security-reports
           path: |
@@ -82,7 +82,7 @@ jobs:
           pip list --outdated || echo "All dependencies up to date"
 
       - name: Upload dependency report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: dependency-report
           path: outdated-deps.json
