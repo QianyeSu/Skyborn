@@ -16,7 +16,7 @@ import matplotlib.lines as mlines
 import numpy as np
 from matplotlib import cm, patches
 
-__all__ = ["velovect"]
+__all__ = ["velovect", "_is_regular_grid", "_interpolate_to_regular_grid"]
 
 
 def velovect(
@@ -789,3 +789,73 @@ def _gen_starting_points(x, y, grains):
     seed_points = np.array([xs, ys])
 
     return seed_points.T
+
+
+def _is_regular_grid(x, y, rtol=1e-5, atol=1e-8):
+    """
+    Check if grid is regular (equally spaced).
+
+    Parameters
+    ----------
+    x, y : 1D arrays
+        Coordinate arrays
+    rtol, atol : float
+        Relative and absolute tolerances for np.allclose
+
+    Returns
+    -------
+    bool
+        True if grid is regular, False otherwise
+    """
+    x_regular = np.allclose(np.diff(x), (x[-1] - x[0]) / (len(x) - 1), rtol=rtol, atol=atol)
+    y_regular = np.allclose(np.diff(y), (y[-1] - y[0]) / (len(y) - 1), rtol=rtol, atol=atol)
+    return x_regular and y_regular
+
+
+def _interpolate_to_regular_grid(x, y, u, v, nx=None, ny=None, method='linear'):
+    """
+    Interpolate irregular grid data to a regular grid.
+
+    Parameters
+    ----------
+    x, y : 1D arrays
+        Original coordinate arrays (can be irregular)
+    u, v : 2D arrays
+        Velocity fields on original grid
+    nx, ny : int, optional
+        Target grid resolution. If None, use original resolution.
+    method : str
+        Interpolation method: 'linear' (default), 'nearest', 'cubic'
+
+    Returns
+    -------
+    x_reg, y_reg : 1D arrays
+        Regular coordinate arrays
+    u_reg, v_reg : 2D arrays
+        Interpolated velocity fields on regular grid
+    """
+    try:
+        from scipy.interpolate import griddata
+    except ImportError:
+        raise ImportError(
+            "scipy is required for interpolation on irregular grids. "
+            "Install with: pip install scipy"
+        )
+
+    if nx is None:
+        nx = len(x)
+    if ny is None:
+        ny = len(y)
+
+    X, Y = np.meshgrid(x, y, indexing='xy')
+
+    points = np.column_stack([X.ravel(), Y.ravel()])
+
+    xi = np.linspace(x.min(), x.max(), nx)
+    yi = np.linspace(y.min(), y.max(), ny)
+    Xi, Yi = np.meshgrid(xi, yi, indexing='xy')
+
+    u_reg = griddata(points, u.ravel(), (Xi, Yi), method=method)
+    v_reg = griddata(points, v.ravel(), (Xi, Yi), method=method)
+
+    return xi, yi, u_reg, v_reg
