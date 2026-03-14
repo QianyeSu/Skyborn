@@ -207,14 +207,14 @@ jobs:
             # Install gfortran (manylinux2014 is CentOS7-based, uses yum)
             yum install -y gcc-gfortran || echo 'gfortran install failed'
             # Install modern geospatial stack from conda-forge
-            curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -o mambaforge.sh
+            curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -o mambaforge.sh
             bash mambaforge.sh -b -p /opt/mambaforge
             /opt/mambaforge/bin/mamba install -y -c conda-forge "proj>=9.4.0" "pyproj>=3.6.0" geos gdal hdf5 libnetcdf sqlite
             /opt/mambaforge/bin/proj --version || echo 'PROJ not available'
           CIBW_BEFORE_TEST_LINUX: |
             # cibuildwheel runs tests in a separate test environment/container
             # so the native stack needed by netCDF4/cartopy must be installed again here.
-            curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -o mambaforge.sh
+            curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -o mambaforge.sh
             bash mambaforge.sh -b -p /opt/mambaforge
             /opt/mambaforge/bin/mamba install -y -c conda-forge "proj>=9.4.0" "pyproj>=3.6.0" geos gdal hdf5 libnetcdf sqlite
             /opt/mambaforge/bin/proj --version || echo 'PROJ not available'
