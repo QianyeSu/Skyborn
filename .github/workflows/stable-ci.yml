@@ -29,7 +29,7 @@ jobs:
 
       - name: Install package in development mode
         shell: bash -l {0}
-        run: pip install -e .
+        run: pip install -e . --no-deps
 
       - name: List installed packages
         shell: bash -l {0}
