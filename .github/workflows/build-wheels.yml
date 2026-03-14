@@ -371,7 +371,7 @@ jobs:
             echo "Selected wheel: $WHEEL"
             pip install --no-deps "$WHEEL"
             # Install only minimal deps required for importing skyborn.
-            pip install numpy xarray matplotlib scipy dask statsmodels tqdm
+            pip install numpy xarray matplotlib scipy dask statsmodels tqdm metpy scikit-learn
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             # Only macos-14 (Apple Silicon) is currently supported
             # if [[ "${{ matrix.os }}" == "macos-13" ]]; then
@@ -381,12 +381,12 @@ jobs:
               WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-macosx*_arm64.whl | head -n 1)
               echo "Selected wheel: $WHEEL"
               pip install --no-deps "$WHEEL"
-              pip install numpy xarray matplotlib scipy dask statsmodels tqdm
+              pip install numpy xarray matplotlib scipy dask statsmodels tqdm metpy scikit-learn
             fi
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-win_amd64*.whl | head -n 1)
             echo "Selected wheel: $WHEEL"
             pip install --no-deps "$WHEEL"
-            pip install numpy xarray matplotlib scipy dask statsmodels tqdm
+            pip install numpy xarray matplotlib scipy dask statsmodels tqdm metpy scikit-learn
           fi
           python -c "import skyborn; print('Wheel installation test passed')"
