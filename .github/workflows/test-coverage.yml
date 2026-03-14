@@ -72,7 +72,7 @@ jobs:
 
           # Try to install package in development mode, but continue if it fails
           echo "=== Attempting to install package ==="
-          if pip install -e .; then
+          if pip install -e . --no-deps; then
             echo "✓ Package installed successfully"
           else
             echo "✗ Package installation failed, trying manual setup"
@@ -115,7 +115,6 @@ jobs:
           end subroutine' > test.f90
           python -m numpy.f2py -c test.f90 -m test_mod --fcompiler=gnu95 && echo "✓ f2py works with gfortran $GFORTRAN_VERSION" || echo "✗ f2py failed"
           rm -f test.f90 test_mod*.so *.mod
-
 
       - name: Manual build attempt with detailed output
         run: |
@@ -364,7 +363,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -e . || echo "Package install failed, continuing with available modules"
+          pip install -e . --no-deps || echo "Package install failed, continuing with available modules"
           pip install pytest-benchmark memory-profiler numpy xarray
 
       - name: Run performance tests
@@ -439,7 +438,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -e .
+          pip install -e . --no-deps
           pip install -r requirements-docs.txt
 
       - name: Test documentation build

@@ -350,16 +350,32 @@ jobs:
         run: |
           PYTAG=${{ matrix.python }}
           if [[ "$RUNNER_OS" == "Linux" ]]; then
-            pip install wheels/skyborn*-$PYTAG-*-manylinux*.whl
+            # We build two Linux wheels for cp39/cp310 (manylinux2014 + manylinux_2_28).
+            # Pick exactly one wheel to avoid passing two local wheel files to pip.
+            if [[ "$PYTAG" == "cp39" || "$PYTAG" == "cp310" ]]; then
+              WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-manylinux2014_x86_64*.whl | head -n 1)
+            else
+              WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl | head -n 1)
+            fi
+            echo "Selected wheel: $WHEEL"
+            pip install --no-deps "$WHEEL"
+            # Install only minimal deps required for importing skyborn.
+            pip install numpy xarray matplotlib scipy
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             # Only macos-14 (Apple Silicon) is currently supported
             # if [[ "${{ matrix.os }}" == "macos-13" ]]; then
             #   pip install wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl
             # el
             if [[ "${{ matrix.os }}" == "macos-14" ]]; then
-              pip install wheels/skyborn*-$PYTAG-*-macosx*_arm64.whl
+              WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-macosx*_arm64.whl | head -n 1)
+              echo "Selected wheel: $WHEEL"
+              pip install --no-deps "$WHEEL"
+              pip install numpy xarray matplotlib scipy
             fi
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            pip install wheels/skyborn*-$PYTAG-*-win_amd64*.whl
+            WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-win_amd64*.whl | head -n 1)
+            echo "Selected wheel: $WHEEL"
+            pip install --no-deps "$WHEEL"
+            pip install numpy xarray matplotlib scipy
           fi
           python -c "import skyborn; print('Wheel installation test passed')"
