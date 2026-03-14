@@ -1,8 +1,21 @@
 Changelog
 =========
 
-Version 0.3.16 (Current)
+Version 0.3.17 (Current)
 ------------------------
+
+**🚀 New Features**
+
+* **Python 3.14 Support**: Added official support for Python 3.14 across all platforms (Linux, macOS, Windows)
+
+* **manylinux2014 Wheels**: Added ``manylinux2014`` (glibc 2.17) wheel builds for compatibility with older Linux servers
+
+  - Supports systems with glibc >= 2.17 (e.g., CentOS 7, RHEL 7 and equivalent)
+  - Resolves installation failures on HPC clusters and older server environments
+  - Wheel tag: ``manylinux_2_17_x86_64`` / ``manylinux2014_x86_64``
+
+Version 0.3.16
+--------------
 
 **🐛 Bug Fixes**
 
