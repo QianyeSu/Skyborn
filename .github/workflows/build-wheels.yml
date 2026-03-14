@@ -37,17 +37,17 @@ jobs:
           - [macos-14, macosx_arm64] # macOS Apple Silicon
           - [windows-2022, win_amd64]
         python: ["cp39", "cp310", "cp311", "cp312", "cp313", "cp314"]
-        exclude:
-          # manylinux2014 (CentOS7/glibc 2.17) only ships cp39 and cp310 interpreters.
-          # Users on Python 3.11+ almost always have glibc > 2.17 and can use manylinux_2_28 wheels.
-          - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-            python: "cp311"
-          - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-            python: "cp312"
-          - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-            python: "cp313"
-          - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-            python: "cp314"
+        # exclude:
+        #   # manylinux2014 (CentOS7/glibc 2.17) only ships cp39 and cp310 interpreters.
+        #   # Users on Python 3.11+ almost always have glibc > 2.17 and can use manylinux_2_28 wheels.
+        #   - buildplat: [ubuntu-latest, manylinux2014_x86_64]
+        #     python: "cp311"
+        #   - buildplat: [ubuntu-latest, manylinux2014_x86_64]
+        #     python: "cp312"
+        #   - buildplat: [ubuntu-latest, manylinux2014_x86_64]
+        #     python: "cp313"
+        #   - buildplat: [ubuntu-latest, manylinux2014_x86_64]
+        #     python: "cp314"
         # exclude:
         #   # Exclude unsupported Python versions on ARM64 Linux
         #   - buildplat: [ubuntu-22.04, manylinux_aarch64]
