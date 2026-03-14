@@ -33,7 +33,7 @@ jobs:
           pip install safety bandit pip-audit
           # Install package in a way that doesn't fail if dependencies are missing
           pip install numpy  # Core dependency
-          pip install -e . || echo "Package installation had issues, continuing with security checks"
+          pip install -e . --no-deps || echo "Package installation had issues, continuing with security checks"
 
       - name: Check for security vulnerabilities
         run: |
