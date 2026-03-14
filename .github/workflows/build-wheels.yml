@@ -130,7 +130,7 @@ jobs:
       - name: Build wheels (Windows)
         if: matrix.buildplat[1] == 'win_amd64'
         # uses: pypa/cibuildwheel@v2.21.3
-        uses: pypa/cibuildwheel@63fd63b352a9a8bdcc24791c9dbee952ee9a8abc # v3.3.0
+        uses: pypa/cibuildwheel@ee02a1537ce3071a004a6b08c41e72f0fdc42d9a # v3.4.0
         with:
           output-dir: wheelhouse
         env:
@@ -145,7 +145,7 @@ jobs:
       # Build wheels for macOS Intel (x86_64) - Currently disabled
       # - name: Build wheels (macOS x86_64)
       #   if: matrix.buildplat[1] == 'macosx_x86_64'
-      #   uses: pypa/cibuildwheel@v3.3.0
+      #   uses: pypa/cibuildwheel@v3.4.0
       #   with:
       #     output-dir: wheelhouse
       #   env:
@@ -159,7 +159,7 @@ jobs:
 
       - name: Build wheels (macOS arm64)
         if: matrix.buildplat[1] == 'macosx_arm64'
-        uses: pypa/cibuildwheel@v3.3.0
+        uses: pypa/cibuildwheel@v3.4.0
         with:
           output-dir: wheelhouse
         env:
@@ -174,7 +174,7 @@ jobs:
       - name: Build wheels (Linux x86_64)
         if: matrix.buildplat[1] == 'manylinux_x86_64'
         # uses: pypa/cibuildwheel@v2.21.3
-        uses: pypa/cibuildwheel@63fd63b352a9a8bdcc24791c9dbee952ee9a8abc # v3.3.0
+        uses: pypa/cibuildwheel@ee02a1537ce3071a004a6b08c41e72f0fdc42d9a # v3.4.0
         with:
           output-dir: wheelhouse
         env:
@@ -196,7 +196,7 @@ jobs:
 
       - name: Build wheels (Linux manylinux2014 x86_64)
         if: matrix.buildplat[1] == 'manylinux2014_x86_64'
-        uses: pypa/cibuildwheel@63fd63b352a9a8bdcc24791c9dbee952ee9a8abc # v3.3.0
+        uses: pypa/cibuildwheel@ee02a1537ce3071a004a6b08c41e72f0fdc42d9a # v3.4.0
         with:
           output-dir: wheelhouse
         env:
@@ -218,7 +218,7 @@ jobs:
       # Build wheels (Linux aarch64) - Temporarily disabled due to Python version availability
       # - name: Build wheels (Linux aarch64)
       #   if: matrix.buildplat[1] == 'manylinux_aarch64'
-      #   uses: pypa/cibuildwheel@63fd63b352a9a8bdcc24791c9dbee952ee9a8abc # v3.3.0
+      #   uses: pypa/cibuildwheel@ee02a1537ce3071a004a6b08c41e72f0fdc42d9a # v3.4.0
       #   with:
       #     output-dir: wheelhouse
       #   env:
