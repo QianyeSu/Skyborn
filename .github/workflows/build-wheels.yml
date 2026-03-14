@@ -32,10 +32,11 @@ jobs:
         # Following NumPy's matrix pattern
         buildplat:
           - [ubuntu-latest, manylinux_x86_64]
+          - [ubuntu-latest, manylinux2014_x86_64] # manylinux2014 (glibc 2.17) for older servers
           # - [ubuntu-22.04, manylinux_aarch64]  # ARM64 Linux support - disabled due to Python version availability
           - [macos-14, macosx_arm64] # macOS Apple Silicon
           - [windows-2022, win_amd64]
-        python: ["cp39", "cp310", "cp311", "cp312", "cp313"]
+        python: ["cp39", "cp310", "cp311", "cp312", "cp313", "cp314"]
         # exclude:
         #   # Exclude unsupported Python versions on ARM64 Linux
         #   - buildplat: [ubuntu-22.04, manylinux_aarch64]
@@ -193,6 +194,27 @@ jobs:
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
+      - name: Build wheels (Linux manylinux2014 x86_64)
+        if: matrix.buildplat[1] == 'manylinux2014_x86_64'
+        uses: pypa/cibuildwheel@63fd63b352a9a8bdcc24791c9dbee952ee9a8abc # v3.3.0
+        with:
+          output-dir: wheelhouse
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-manylinux_x86_64
+          CIBW_SKIP: "*-win32 *-musllinux*"
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_BEFORE_BUILD_LINUX: |
+            # Install gfortran (manylinux2014 is CentOS7-based, uses yum)
+            yum install -y gcc-gfortran || echo 'gfortran install failed'
+            # Install modern geospatial stack from conda-forge
+            curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -o mambaforge.sh
+            bash mambaforge.sh -b -p /opt/mambaforge
+            /opt/mambaforge/bin/mamba install -y -c conda-forge "proj>=9.4.0" "pyproj>=3.6.0" geos gdal sqlite
+            /opt/mambaforge/bin/proj --version || echo 'PROJ not available'
+          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PROJ_DIR=/opt/mambaforge PKG_CONFIG_PATH=/opt/mambaforge/lib/pkgconfig PATH=/opt/mambaforge/bin:$PATH LD_LIBRARY_PATH=/opt/mambaforge/lib:$LD_LIBRARY_PATH
+          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
+          CIBW_BUILD_VERBOSITY: 1
+
       # Build wheels (Linux aarch64) - Temporarily disabled due to Python version availability
       # - name: Build wheels (Linux aarch64)
       #   if: matrix.buildplat[1] == 'manylinux_aarch64'
@@ -283,7 +305,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-14] # macos-13 removed
-        python: ["cp39", "cp310", "cp311", "cp312", "cp313"]
+        python: ["cp39", "cp310", "cp311", "cp312", "cp313", "cp314"]
     steps:
       - name: Map abi tag to python version
         id: mapver
@@ -295,6 +317,7 @@ jobs:
             cp311) echo "PYVER=3.11" >> $GITHUB_ENV ;;
             cp312) echo "PYVER=3.12" >> $GITHUB_ENV ;;
             cp313) echo "PYVER=3.13" >> $GITHUB_ENV ;;
+            cp314) echo "PYVER=3.14" >> $GITHUB_ENV ;;
           esac
 
       - name: Setup Python
