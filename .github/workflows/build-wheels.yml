@@ -218,7 +218,7 @@ jobs:
             bash mambaforge.sh -b -p /opt/mambaforge
             /opt/mambaforge/bin/mamba install -y -c conda-forge "proj>=9.4.0" "pyproj>=3.6.0" geos gdal hdf5 libnetcdf sqlite
             /opt/mambaforge/bin/proj --version || echo 'PROJ not available'
-          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PROJ_DIR=/opt/mambaforge HDF5_DIR=/opt/mambaforge PKG_CONFIG_PATH=/opt/mambaforge/lib/pkgconfig PATH=/opt/mambaforge/bin:$PATH LD_LIBRARY_PATH=/opt/mambaforge/lib:$LD_LIBRARY_PATH
+          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PROJ_DIR=/opt/mambaforge HDF5_DIR=/opt/mambaforge PKG_CONFIG_PATH=/opt/mambaforge/lib/pkgconfig LD_LIBRARY_PATH=/opt/mambaforge/lib:$LD_LIBRARY_PATH
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
       # Build wheels (Linux aarch64) - Temporarily disabled due to Python version availability
