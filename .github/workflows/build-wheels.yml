@@ -107,13 +107,24 @@ jobs:
       #     # Set environment for Windows builds
       #     echo "CIBW_BEFORE_BUILD_WINDOWS=choco install -y mingw --no-progress && pip install delvewheel" >> "$GITHUB_ENV"
       #     echo "CIBW_REPAIR_WHEEL_COMMAND_WINDOWS=delvewheel repair -w {dest_dir} {wheel}" >> "$GITHUB_ENV"
-      # Install delvewheel for Windows builds
-      - name: Setup Windows Fortran (msys2)
+      - name: Setup Windows MSYS2
         if: matrix.buildplat[1] == 'win_amd64'
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc-fortran
+
+      # Install delvewheel and expose gfortran/gcc in PATH for cibuildwheel
+      - name: Setup Windows Fortran and delvewheel
+        if: matrix.buildplat[1] == 'win_amd64'
+        shell: pwsh
         run: |
-          choco install -y msys2
-          C:\tools\msys64\usr\bin\bash -lc "pacman -Sy --noconfirm mingw-w64-x86_64-gcc-fortran"
-          echo "C:\tools\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          if (Test-Path "C:\msys64\mingw64\bin") {
+            "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          } else {
+            throw "MSYS2 mingw64 bin path not found: C:\msys64\mingw64\bin"
+          }
           pip install delvewheel
 
       - name: Validate matrix combination
