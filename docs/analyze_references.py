@@ -5,6 +5,7 @@
 import re
 from pathlib import Path
 
+
 def analyze_functions_classes_references():
     """分析functions_classes.rst中的所有:func:、:class:、:meth:引用"""
 
@@ -50,7 +51,8 @@ def analyze_functions_classes_references():
                 module = '.'.join(parts[:2])  # skyborn.calc, skyborn.gridfill等
 
                 if module not in modules:
-                    modules[module] = {'funcs': set(), 'classes': set(), 'methods': set()}
+                    modules[module] = {
+                        'funcs': set(), 'classes': set(), 'methods': set()}
 
                 if ref_type == 'func':
                     modules[module]['funcs'].add(ref)
@@ -90,7 +92,6 @@ def analyze_functions_classes_references():
 
     api_file_mapping = {
         'skyborn.calc': 'api/calculations.rst',
-        'skyborn.conversion': 'api/conversion.rst',
         'skyborn.gridfill': 'api/gridfill.rst',
         'skyborn.interp': 'api/interpolation.rst',
         'skyborn.gradients': 'api/gradients.rst',
@@ -116,6 +117,7 @@ def analyze_functions_classes_references():
                     print(f"    - {cls}")
 
     return modules
+
 
 if __name__ == "__main__":
     analyze_functions_classes_references()

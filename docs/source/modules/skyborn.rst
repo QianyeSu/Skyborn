@@ -9,7 +9,6 @@ Core Modules
 The Skyborn package contains the following main modules:
 
 * **calc**: Statistical calculations and emergent constraint methods
-* **conversion**: Data format conversion utilities (GRIB to NetCDF)
 * **gridfill**: Advanced data interpolation using Poisson equation solvers
 * **interp**: Interpolation and regridding functions
 * **plot**: Specialized plotting and visualization tools
@@ -24,9 +23,6 @@ Module Overview
 
 **calc**
    Statistical calculations and emergent constraint methods for climate data analysis
-
-**conversion**
-   Data format conversion utilities (GRIB to NetCDF) with enhanced error handling
 
 **gridfill** *(New in v0.3.10)*
    Advanced data interpolation using Poisson equation solvers for filling missing values in gridded data.
@@ -71,9 +67,6 @@ To use any module, import Skyborn and access the module:
 
    # Use calculation functions
    pdf = skb.calc.gaussian_pdf(mu=0, sigma=1, x=x_values)
-
-   # Convert data formats
-   skb.conversion.grib_to_netcdf('input.grib', 'output.nc')
 
    # Fill missing data with GridFill
    from skyborn.gridfill.xarray import fill

@@ -5,7 +5,7 @@
    :width: 600px
    :alt: Skyborn Logo
 
-Skyborn is a comprehensive Python package for climate data analysis, featuring advanced statistical methods, emergent constraint techniques, and data conversion utilities.
+Skyborn is a comprehensive Python package for climate data analysis, featuring advanced statistical methods, emergent constraint techniques, and interpolation, plotting, and spectral analysis utilities.
 
 .. toctree::
    :maxdepth: 2
@@ -27,7 +27,6 @@ Features
 * **Emergent Constraint Methods**: Advanced statistical techniques for reducing uncertainty in climate projections
 * **GridFill Interpolation**: Sophisticated atmospheric data gap-filling using Poisson equation solvers
 * **Windspharm Analysis**: Comprehensive spherical harmonic vector wind field analysis
-* **GRIB to NetCDF Conversion**: Robust data format conversion utilities
 * **Statistical Analysis**: Comprehensive statistical and correlation functions
 * **Gradient Calculations**: Spatial and temporal gradient analysis tools
 * **Causality Analysis**: Granger and Liang causality methods
@@ -54,9 +53,6 @@ Install Skyborn and start analyzing climate data:
 
    # Advanced atmospheric data interpolation (NEW in v0.3.10)
    filled_data = gridfill_xarray(atmospheric_data, eps=1e-4)
-
-   # Convert GRIB to NetCDF
-   skb.grib_to_netcdf('input.grib', 'output.nc')
 
    # Statistical analysis
    correlation = skb.pearson_correlation(x_data, y_data)

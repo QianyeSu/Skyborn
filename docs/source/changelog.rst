@@ -14,6 +14,10 @@ Version 0.3.17 (Current)
   - Resolves installation failures on HPC clusters and older server environments
   - Wheel tag: ``manylinux_2_17_x86_64`` / ``manylinux2014_x86_64``
 
+**🧹 Cleanup**
+
+* **Removed conversion module**: Deleted the ``skyborn.conversion`` GRIB-to-NetCDF conversion module and its related tests and documentation
+
 Version 0.3.16
 --------------
 

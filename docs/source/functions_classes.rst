@@ -116,34 +116,6 @@ Trend Analysis
    * - :func:`skyborn.calc.trend_analysis`
      - Comprehensive trend analysis
 
-Data Conversion
----------------
-
-Conversion Functions
-~~~~~~~~~~~~~~~~~~~~
-
-.. currentmodule:: skyborn.conversion
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 70
-   :class: skyborn-function-table
-
-   * - Function
-     - Description
-   * - :func:`skyborn.conversion.convert_grib_to_nc`
-     - Convert GRIB to NetCDF
-   * - :func:`skyborn.conversion.convert_grib_to_nc_simple`
-     - Simple GRIB to NetCDF conversion
-   * - :func:`~skyborn.conversion.batch_convert_grib_to_nc`
-     - Batch conversion utility
-   * - :func:`skyborn.conversion.grib2nc`
-     - GRIB to NetCDF converter
-   * - :func:`skyborn.conversion.grib_to_netcdf`
-     - GRIB to NetCDF transformation
-
-
-
 GridFill - Atmospheric Data Interpolation
 ------------------------------------------
 
@@ -518,8 +490,6 @@ Complete Page Reference
      - Mann-Kendall trend analysis
    * - :doc:`api/causality`
      - Causality analysis methods
-   * - :doc:`api/conversion`
-     - Data format conversion
    * - :doc:`api/gridfill`
      - Grid interpolation functions
    * - :doc:`api/interpolation`
@@ -591,8 +561,6 @@ Function Usage Categories
      - Comprehensive trend analysis
    * - **Data Processing**
      -
-   * - :func:`skyborn.conversion.grib_to_netcdf`
-     - Format conversion
    * - :func:`skyborn.gridfill.fill`
      - Missing data interpolation
    * - :func:`skyborn.gridfill.xarray.fill`

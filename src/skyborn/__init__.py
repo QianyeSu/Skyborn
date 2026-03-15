@@ -2,7 +2,7 @@
 
 # Import calculation functions
 # Import submodules
-from . import ROF, calc, conversion, gridfill, interp, plot, spharm, windspharm
+from . import ROF, calc, gridfill, interp, plot, spharm, windspharm
 
 # Expose calc submodules at package top-level for convenience
 from .calc import potential_intensity  # GPI module's main function
@@ -30,16 +30,6 @@ from .calc import (  # Mann-Kendall functions; New emergent constraint function 
     troposphere,
 )
 from .causality import granger_causality, liang_causality
-
-# Import conversion functions for easy access
-from .conversion import (
-    GribToNetCDFError,
-    batch_convert_grib_to_nc,
-    convert_grib_to_nc,
-    convert_grib_to_nc_simple,
-    grib2nc,
-    grib_to_netcdf,
-)
 from .gradients import (
     calculate_gradient,
     calculate_meridional_gradient,
@@ -54,4 +44,4 @@ from .gridfill import fill as gridfill_fill
 fill = gridfill_fill
 
 
-__version__ = "0.3.16"
+__version__ = "0.3.17"
