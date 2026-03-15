@@ -6,7 +6,6 @@ API Reference
 
    calculations
    mann_kendall
-   conversion
    plotting
    interpolation
    gridfill
@@ -32,11 +31,6 @@ High-performance trend detection for climate data with vectorized implementation
 - Climate data optimized (40×192×288 processed in ~30 seconds)
 - Memory efficient chunking (~25MB usage)
 - Enhanced Dask support for distributed computing
-
-Conversion
---------------------
-
-Data format conversion utilities.
 
 Plotting
 ------------------
