@@ -17,7 +17,8 @@ import metpy.interpolate
 import numpy as np
 import xarray as xr
 
-__all__ = ["interp_hybrid_to_pressure", "interp_sigma_to_hybrid", "interp_multidim"]
+__all__ = ["interp_hybrid_to_pressure",
+           "interp_sigma_to_hybrid", "interp_multidim"]
 
 supported_types = typing.Union[xr.DataArray, np.ndarray]
 
@@ -217,7 +218,8 @@ def _temp_extrapolate(data, lev_dim, lev, p_sfc, ps, phi_sfc):
     g_inv = 1 / 9.80616  # inverse of gravity
     alpha = 0.0065 * R_d * g_inv
 
-    tstar = data.isel({lev_dim: -1}, drop=True) * (1 + alpha * (ps / p_sfc - 1))
+    tstar = data.isel({lev_dim: -1}, drop=True) * \
+        (1 + alpha * (ps / p_sfc - 1))
     hgt = phi_sfc * g_inv
     t0 = tstar + 0.0065 * hgt
     tplat = xr.apply_ufunc(np.minimum, 298, t0, dask="parallelized")
@@ -284,7 +286,8 @@ def _geo_height_extrapolate(t_bot, lev, p_sfc, ps, phi_sfc):
     )
 
     alph = xr.where((tstar > 290.5) & (t0 > 290.5), 0, alph)
-    tstar = xr.where((tstar > 290.5) & (t0 > 290.5), 0.5 * (290.5 + tstar), tstar)
+    tstar = xr.where((tstar > 290.5) & (t0 > 290.5),
+                     0.5 * (290.5 + tstar), tstar)
 
     tstar = xr.where((tstar < 255), 0.5 * (tstar + 255), tstar)
 
@@ -339,7 +342,8 @@ def _vertical_remap_extrap(
         A DataArray containing the data after extrapolation.
     """
 
-    sfc_index = pressure[lev_dim].argmax(dim=lev_dim)  # index of the model surface
+    sfc_index = pressure[lev_dim].argmax(
+        dim=lev_dim)  # index of the model surface
     p_sfc = pressure.isel(
         {lev_dim: sfc_index}, drop=True
     )  # extract pressure at lowest level
@@ -467,7 +471,6 @@ def interp_hybrid_to_pressure(
     See Also
     --------
     interp_sigma_to_hybrid : Interpolate from sigma to hybrid coordinates
-    skyborn.conversion.grib_to_netcdf : Convert GRIB data with hybrid coordinates
 
     Related NCL Functions:
     `vinth2p <https://www.ncl.ucar.edu/Document/Functions/Built-in/vinth2p.shtml>`__,
@@ -476,7 +479,8 @@ def interp_hybrid_to_pressure(
 
     # Check inputs
     if extrapolate and (variable is None):
-        raise ValueError("If `extrapolate` is True, `variable` must be provided.")
+        raise ValueError(
+            "If `extrapolate` is True, `variable` must be provided.")
 
     if variable in ["geopotential", "temperature"] and (
         t_bot is None or phi_sfc is None
@@ -546,7 +550,8 @@ def interp_hybrid_to_pressure(
 
     # If an unchunked Xarray input is given, chunk it just with its dims
     if data.chunks is None:
-        data_chunk = dict([(k, v) for (k, v) in zip(list(data.dims), list(data.shape))])
+        data_chunk = dict([(k, v) for (k, v) in zip(
+            list(data.dims), list(data.shape))])
         data = data.chunk(data_chunk)
 
     # Chunk pressure equal to data's chunks
@@ -579,7 +584,8 @@ def interp_hybrid_to_pressure(
     output = xr.DataArray(output, name=data.name, attrs=data.attrs)
 
     # Set output dims and coords
-    dims = [data.dims[i] if i != interp_axis else "plev" for i in range(data.ndim)]
+    dims = [data.dims[i] if i !=
+            interp_axis else "plev" for i in range(data.ndim)]
 
     # Rename output dims. This is only needed with above workaround block
     dims_dict = {output.dims[i]: dims[i] for i in range(len(output.dims))}
@@ -669,7 +675,6 @@ def interp_sigma_to_hybrid(
     See Also
     --------
     interp_hybrid_to_pressure : Interpolate from hybrid to pressure coordinates
-    skyborn.conversion.grib_to_netcdf : Convert GRIB data with different coordinates
 
     Related NCL Function:
     `sigma2hybrid <https://www.ncl.ucar.edu/Document/Functions/Built-in/sigma2hybrid.shtml>`__
@@ -704,7 +709,8 @@ def interp_sigma_to_hybrid(
 
         for idx, (d, s) in enumerate(zip(data_stacked, sigma_stacked)):
             output[idx, :] = xr.DataArray(
-                _vertical_remap(func_interpolate, s.data, sig_coords.data, d.data),
+                _vertical_remap(func_interpolate, s.data,
+                                sig_coords.data, d.data),
                 dims=[lev_dim],
             )
 
@@ -715,7 +721,8 @@ def interp_sigma_to_hybrid(
 
         output = data[: len(hyam)].copy()
         output[: len(hyam)] = xr.DataArray(
-            _vertical_remap(func_interpolate, sigma.data, sig_coords.data, data.data),
+            _vertical_remap(func_interpolate, sigma.data,
+                            sig_coords.data, data.data),
             dims=[lev_dim],
         )
 
@@ -849,6 +856,7 @@ def interp_multidim(
     data_out = data_in_modified.interp(
         output_coords, method=method, kwargs={"fill_value": fill_value}
     )
-    data_out_modified = _post_interp_multidim(data_out, missing_val=missing_val)
+    data_out_modified = _post_interp_multidim(
+        data_out, missing_val=missing_val)
 
     return data_out_modified

@@ -7,7 +7,7 @@ default_stages:
 
 # Set the default language version
 default_language_version:
-  python: python3.10  # Use current environment Python version
+  python: python3.13 # Use Python 3.13 available in current environment
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -22,7 +22,7 @@ repos:
       - id: check-toml
 
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    rev: 26.3.1
     hooks:
       - id: black
         types: [python]

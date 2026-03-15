@@ -1,8 +1,6 @@
 numpy
 xarray
 matplotlib
-seaborn
-cartopy
 netCDF4
 metpy
 tqdm
