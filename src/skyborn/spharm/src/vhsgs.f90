@@ -751,12 +751,8 @@ subroutine vhgsi1(nlat, imid, vb, wb, dthet, dwts, dpbar, work)
 
     ! Local variables
     integer, parameter :: real64 = kind(1.0d0)
-    integer :: lwk, ierror, i, n, nm, nz, np, m, ix, iy, ldim
+    integer :: lwk, ierror, i, n, nm, nz, np, m, ix, iy
     real(kind=real64) :: abel, bbel, cbel, ssqr2, dcf
-
-    ! Statement function for index calculation (as in original F77 code)
-    integer :: indx
-    indx(m, n, ldim) = (m-1) * ldim - (m-1)*(m-2)/2 + (n-m+1)
 
     ! --- Compute Gauss points and weights ---
     lwk = nlat * (nlat + 2)
@@ -807,8 +803,8 @@ subroutine vhgsi1(nlat, imid, vb, wb, dthet, dwts, dpbar, work)
         end if
 
         ! --- Compute vb (derivative of pbar) ---
-        ix = n * (n + 1) / 2
-        iy = ix + n
+        ix = indx(0, n)
+        iy = indx(n, n)
         do i = 1, imid
             vb(i, ix) = -dpbar(i, 2, np)
             vb(i, iy) = dpbar(i, n, np) / sqrt(real(2*(n+1), kind=real64))
@@ -817,7 +813,7 @@ subroutine vhgsi1(nlat, imid, vb, wb, dthet, dwts, dpbar, work)
         if (n >= 2) then
             dcf = sqrt(real(4*n*(n+1), kind=real64))
             do m = 1, n - 1
-                ix = (m-1)*nlat - (m-1)*(m-2)/2 + (n-m+1)
+                ix = indx(m, n)
                 abel = sqrt(real((n+m)*(n-m+1), kind=real64)) / dcf
                 bbel = sqrt(real((n-m)*(n+m+1), kind=real64)) / dcf
                 do i = 1, imid
@@ -827,14 +823,14 @@ subroutine vhgsi1(nlat, imid, vb, wb, dthet, dwts, dpbar, work)
         end if
 
         ! --- Compute wb (m*pbar/sin(theta)) ---
-        ix = n * (n + 1) / 2
+        ix = indx(0, n)
         do i = 1, imid
             wb(i, ix) = 0.0_real64
         end do
 
         dcf = sqrt(real(2*n+1, kind=real64) / real(4*n*(n+1)*(2*n-1), kind=real64))
         do m = 1, n
-            ix = (m-1)*nlat - (m-1)*(m-2)/2 + (n-m+1)
+            ix = indx(m, n)
             abel = dcf * sqrt(real((n+m)*(n+m-1), kind=real64))
             bbel = dcf * sqrt(real((n-m)*(n-m-1), kind=real64))
             if (m < n - 1) then
@@ -848,5 +844,12 @@ subroutine vhgsi1(nlat, imid, vb, wb, dthet, dwts, dpbar, work)
             end if
         end do
     end do
+
+contains
+
+    integer function indx(m, n)
+        integer, intent(in) :: m, n
+        indx = m * nlat - (m * (m + 1)) / 2 + n + 1
+    end function indx
 
 end subroutine vhgsi1
