@@ -1184,6 +1184,32 @@ class TestSpharmtAdditionalCoverage:
         assert np.all(np.isfinite(u_back))
         assert np.all(np.isfinite(v_back))
 
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_gaussian_stored_vector_matches_computed(self):
+        """Gaussian stored Legendre vector synthesis should match computed mode."""
+        rng = np.random.default_rng(20260329)
+        nlat, nlon = 18, 36
+        u = rng.standard_normal((nlat, nlon), dtype=np.float32)
+        v = rng.standard_normal((nlat, nlon), dtype=np.float32)
+
+        sht_computed = Spharmt(
+            nlon=nlon, nlat=nlat, gridtype="gaussian", legfunc="computed"
+        )
+        sht_stored = Spharmt(
+            nlon=nlon, nlat=nlat, gridtype="gaussian", legfunc="stored"
+        )
+
+        vrt_computed, div_computed = sht_computed.getvrtdivspec(u, v)
+        vrt_stored, div_stored = sht_stored.getvrtdivspec(u, v)
+
+        u_computed, v_computed = sht_computed.getuv(vrt_computed, div_computed)
+        u_stored, v_stored = sht_stored.getuv(vrt_stored, div_stored)
+
+        np.testing.assert_allclose(vrt_stored, vrt_computed, rtol=1e-6, atol=1e-10)
+        np.testing.assert_allclose(div_stored, div_computed, rtol=1e-6, atol=1e-10)
+        np.testing.assert_allclose(u_stored, u_computed, rtol=1e-5, atol=1e-5)
+        np.testing.assert_allclose(v_stored, v_computed, rtol=1e-5, atol=1e-5)
+
 
 if __name__ == "__main__":
     # Run tests
