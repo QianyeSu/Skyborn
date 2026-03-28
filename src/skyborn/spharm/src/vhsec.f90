@@ -264,47 +264,47 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
     select case(ityp)
     case(0)
         ! No symmetries - most general and performance-critical case
-        call vhsec_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+        call vhsec_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                   ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, &
                                   vb, wb, wvbin, wwbin)
     case(1)
         ! No symmetries, cr and ci equal zero
-        call vhsec_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+        call vhsec_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                   ve, vo, we, wo, br, bi, mdab, ndab, &
                                   vb, wb, wvbin, wwbin)
     case(2)
         ! No symmetries, br and bi equal zero
-        call vhsec_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+        call vhsec_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                   ve, vo, we, wo, cr, ci, mdab, ndab, &
                                   vb, wb, wvbin, wwbin)
     case(3)
         ! v even, w odd
-        call vhsec_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+        call vhsec_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                   ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, &
                                   vb, wb, wvbin, wwbin)
     case(4)
         ! v even, w odd, cr and ci equal zero
-        call vhsec_case4(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+        call vhsec_case4(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                   ve, vo, we, wo, br, bi, mdab, ndab, &
                                   vb, wb, wvbin, wwbin)
     case(5)
         ! v even, w odd, br and bi equal zero
-        call vhsec_case5(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+        call vhsec_case5(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                   ve, vo, we, wo, cr, ci, mdab, ndab, &
                                   vb, wb, wvbin, wwbin)
     case(6)
         ! v odd, w even
-        call vhsec_case6(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+        call vhsec_case6(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                   ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, &
                                   vb, wb, wvbin, wwbin)
     case(7)
         ! v odd, w even, cr and ci equal zero
-        call vhsec_case7(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+        call vhsec_case7(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                   ve, vo, we, wo, br, bi, mdab, ndab, &
                                   vb, wb, wvbin, wwbin)
     case(8)
         ! v odd, w even, br and bi equal zero
-        call vhsec_case8(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+        call vhsec_case8(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                   ve, vo, we, wo, cr, ci, mdab, ndab, &
                                   vb, wb, wvbin, wwbin)
     end select
@@ -366,15 +366,15 @@ end subroutine vhsec1
 !> @brief Case 0: No symmetries - HIGHLY OPTIMIZED VERSION
 !> This is the most performance-critical case, used for general vector field synthesis
 !> 30-50% faster than original through advanced optimizations
-subroutine vhsec_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+subroutine vhsec_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                 ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, &
                                 vb, wb, wvbin, wwbin)
     implicit none
 
     ! Input parameters
-    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
-    real, intent(inout) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
-    real, intent(inout) :: we(imid, nlon, nt), wo(imid, nlon, nt)
+    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, mdab, ndab
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
+    real, intent(inout) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(in) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
     real, intent(in) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
     real, intent(inout) :: vb(imid, nlat, 3), wb(imid, nlat, 3)
@@ -496,14 +496,14 @@ end subroutine vhsec_case0
 !> @brief Case 1: No symmetries, cr and ci equal zero (curl-free) - OPTIMIZED VERSION
 !> This case is used for divergent-only wind fields (no vorticity)
 !> Similar to case 0 but with cr=ci=0, reducing computational load by ~50%
-subroutine vhsec_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+subroutine vhsec_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                 ve, vo, we, wo, br, bi, mdab, ndab, vb, wb, wvbin, wwbin)
     implicit none
 
     ! Input parameters
-    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
-    real, intent(inout) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
-    real, intent(inout) :: we(imid, nlon, nt), wo(imid, nlon, nt)
+    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, mdab, ndab
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
+    real, intent(inout) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(in) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
     real, intent(inout) :: vb(imid, nlat, 3), wb(imid, nlat, 3)
     real, intent(in) :: wvbin(*), wwbin(*)
@@ -613,14 +613,14 @@ end subroutine vhsec_case1
 !> @brief Case 2: No symmetries, br and bi equal zero (divergence-free) - OPTIMIZED VERSION
 !> This case is used for rotational-only wind fields (no divergence)
 !> Similar to case 0 but with br=bi=0, reducing computational load by ~50%
-subroutine vhsec_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+subroutine vhsec_case2(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                 ve, vo, we, wo, cr, ci, mdab, ndab, vb, wb, wvbin, wwbin)
     implicit none
 
     ! Input parameters
-    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
-    real, intent(inout) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
-    real, intent(inout) :: we(imid, nlon, nt), wo(imid, nlon, nt)
+    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, mdab, ndab
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
+    real, intent(inout) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(in) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
     real, intent(inout) :: vb(imid, nlat, 3), wb(imid, nlat, 3)
     real, intent(in) :: wvbin(*), wwbin(*)
@@ -738,14 +738,14 @@ end subroutine vhsec_case2
 !> @brief Case 3: v symmetric, w antisymmetric about equator - OPTIMIZED VERSION
 !> This case is used for northern hemisphere synthesis with v even, w odd symmetry
 !> Optimized for half-sphere computation with symmetry exploitation
-subroutine vhsec_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+subroutine vhsec_case3(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                 ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, vb, wb, wvbin, wwbin)
     implicit none
 
     ! Input parameters
-    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
-    real, intent(inout) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
-    real, intent(inout) :: we(imid, nlon, nt), wo(imid, nlon, nt)
+    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, mdab, ndab
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
+    real, intent(inout) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(in) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
     real, intent(in) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
     real, intent(inout) :: vb(imid, nlat, 3), wb(imid, nlat, 3)
@@ -860,13 +860,13 @@ end subroutine vhsec_case3
 
 !> @brief Case 4: v symmetric, w antisymmetric, cr=ci=0 - OPTIMIZED VERSION
 !> Combination of case 3 symmetry with case 1 constraint (curl-free)
-subroutine vhsec_case4(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+subroutine vhsec_case4(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                 ve, vo, we, wo, br, bi, mdab, ndab, vb, wb, wvbin, wwbin)
     implicit none
 
-    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
-    real, intent(inout) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
-    real, intent(inout) :: we(imid, nlon, nt), wo(imid, nlon, nt)
+    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, mdab, ndab
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
+    real, intent(inout) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(in) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
     real, intent(inout) :: vb(imid, nlat, 3), wb(imid, nlat, 3)
     real, intent(in) :: wvbin(*), wwbin(*)
@@ -919,13 +919,13 @@ end subroutine vhsec_case4
 
 !> @brief Case 5: v symmetric, w antisymmetric, br=bi=0 - OPTIMIZED VERSION
 !> Combination of case 3 symmetry with case 2 constraint (divergence-free)
-subroutine vhsec_case5(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+subroutine vhsec_case5(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                 ve, vo, we, wo, cr, ci, mdab, ndab, vb, wb, wvbin, wwbin)
     implicit none
 
-    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
-    real, intent(inout) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
-    real, intent(inout) :: we(imid, nlon, nt), wo(imid, nlon, nt)
+    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, mdab, ndab
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
+    real, intent(inout) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(in) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
     real, intent(inout) :: vb(imid, nlat, 3), wb(imid, nlat, 3)
     real, intent(in) :: wvbin(*), wwbin(*)
@@ -962,13 +962,13 @@ end subroutine vhsec_case5
 
 !> @brief Case 6: v antisymmetric, w symmetric - OPTIMIZED VERSION
 !> Opposite symmetry to case 3 (v odd, w even)
-subroutine vhsec_case6(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+subroutine vhsec_case6(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                 ve, vo, we, wo, br, bi, cr, ci, mdab, ndab, vb, wb, wvbin, wwbin)
     implicit none
 
-    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
-    real, intent(inout) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
-    real, intent(inout) :: we(imid, nlon, nt), wo(imid, nlon, nt)
+    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, mdab, ndab
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
+    real, intent(inout) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(in) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
     real, intent(in) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
     real, intent(inout) :: vb(imid, nlat, 3), wb(imid, nlat, 3)
@@ -1031,13 +1031,13 @@ end subroutine vhsec_case6
 
 !> @brief Case 7: v antisymmetric, w symmetric, cr=ci=0 - OPTIMIZED VERSION
 !> Case 6 with curl-free constraint
-subroutine vhsec_case7(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+subroutine vhsec_case7(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                 ve, vo, we, wo, br, bi, mdab, ndab, vb, wb, wvbin, wwbin)
     implicit none
 
-    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
-    real, intent(inout) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
-    real, intent(inout) :: we(imid, nlon, nt), wo(imid, nlon, nt)
+    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, mdab, ndab
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
+    real, intent(inout) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(in) :: br(mdab, ndab, nt), bi(mdab, ndab, nt)
     real, intent(inout) :: vb(imid, nlat, 3), wb(imid, nlat, 3)
     real, intent(in) :: wvbin(*), wwbin(*)
@@ -1085,13 +1085,13 @@ end subroutine vhsec_case7
 
 !> @brief Case 8: v antisymmetric, w symmetric, br=bi=0 - OPTIMIZED VERSION
 !> Case 6 with divergence-free constraint
-subroutine vhsec_case8(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, &
+subroutine vhsec_case8(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, &
                                 ve, vo, we, wo, cr, ci, mdab, ndab, vb, wb, wvbin, wwbin)
     implicit none
 
-    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, mdab, ndab
-    real, intent(inout) :: ve(imid, nlon, nt), vo(imid, nlon, nt)
-    real, intent(inout) :: we(imid, nlon, nt), wo(imid, nlon, nt)
+    integer, intent(in) :: nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, mdab, ndab
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt)
+    real, intent(inout) :: we(idv, nlon, nt), wo(idv, nlon, nt)
     real, intent(in) :: cr(mdab, ndab, nt), ci(mdab, ndab, nt)
     real, intent(inout) :: vb(imid, nlat, 3), wb(imid, nlat, 3)
     real, intent(in) :: wvbin(*), wwbin(*)
