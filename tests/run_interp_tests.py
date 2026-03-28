@@ -163,8 +163,7 @@ def validate_documentation_compatibility():
 
 
 if __name__ == "__main__":
-    print(
-        """
+    print("""
     ██████╗ ██╗   ██╗██████╗  ██████╗ ██████╗ ███╗   ██╗
     ██╔═══██╗██║   ██║██╔══██╗██╔═══██╗██╔══██╗████╗  ██║
     ██║   ██║██║   ██║██████╔╝██║   ██║██████╔╝██╔██╗ ██║
@@ -173,8 +172,7 @@ if __name__ == "__main__":
      ╚═════╝  ╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝
 
     Interpolation Module Test Suite
-    """
-    )
+    """)
 
     success = run_test_suite()
 
