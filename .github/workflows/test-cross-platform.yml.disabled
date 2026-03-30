@@ -31,7 +31,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements/**/*.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
@@ -55,9 +55,9 @@ jobs:
         run: |
           pip install pytest pytest-cov pytest-xdist
           if [ "$RUNNER_OS" != "Windows" ]; then
-            if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+            if [ -f requirements/dev.txt ]; then pip install -r requirements/dev.txt; fi
           else
-            if exist requirements-dev.txt pip install -r requirements-dev.txt
+            if exist requirements\dev.txt pip install -r requirements\dev.txt
           fi
 
       - name: Install optional dependencies
