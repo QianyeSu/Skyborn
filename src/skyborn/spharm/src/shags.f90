@@ -240,9 +240,15 @@ subroutine shags1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
     ! Input/Output parameters - IDENTICAL interface to original
     integer, intent(in) :: nlat, nlon, l, lat, mode, idg, jdg, nt, mdab, ndab, late
     real, intent(in) :: gs(idg, jdg, nt), wts(nlat)
-    real, intent(in) :: wfft(*), pmn(late, *)
+    ! Original modernized declarations kept these workers as assumed-size:
+    ! real, intent(in) :: wfft(*), pmn(late, *)
+    ! real, intent(out) :: a(mdab, ndab, nt), b(mdab, ndab, nt)
+    ! real, intent(inout) :: g(lat, nlon, nt), work(*)
+    ! Performance note (2026-03-29): use explicit-shape worker arguments so gfortran
+    ! can see tighter bounds/strides without changing the algorithm.
+    real, intent(in) :: wfft(nlon + 15), pmn(late, (l * (2 * nlat - l + 1)) / 2)
     real, intent(out) :: a(mdab, ndab, nt), b(mdab, ndab, nt)
-    real, intent(inout) :: g(lat, nlon, nt), work(*)
+    real, intent(inout) :: g(lat, nlon, nt), work(lat * nlon)
 
     ! Local variables
     integer :: k, i, j, mp1, np1, m, mp2, lm1, nl2, is, mn, ms, ns, lp1, mml1
@@ -310,6 +316,9 @@ contains
 
     !> @brief Process full sphere analysis (mode=0)
     subroutine process_full_sphere_mode()
+        real :: sum_a, sum_b
+        integer :: mr, mi
+
         ! For full sphere (mode=0) and even/odd reduction:
         ! overwrite g(i) with (g(i)+g(nlat-i+1))*wts(i)
         ! overwrite g(nlat-i+1) with (g(i)-g(nlat-i+1))*wts(i)
@@ -338,48 +347,63 @@ contains
         mp1 = 1
         m = 0
         mml1 = m * (2 * nlat - m - 1) / 2
-        ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1)
+        ! Reduce into scalars first so SIMD can run on the contiguous i dimension.
         do k = 1, nt
-            do i = 1, late
-                is = nlat - i + 1
-                ! n even
-                !DIR$ VECTOR ALWAYS
-                do np1 = 1, nlat, 2
-                    a(1, np1, k) = a(1, np1, k) + g(i, 1, k) * pmn(i, mml1 + np1)
+            do np1 = 1, nlat, 2
+                mn = mml1 + np1
+                sum_a = 0.0
+                !$omp simd reduction(+:sum_a)
+                do i = 1, late
+                    sum_a = sum_a + g(i, 1, k) * pmn(i, mn)
                 end do
-                ! n odd
-                !DIR$ VECTOR ALWAYS
-                do np1 = 2, nlat, 2
-                    a(1, np1, k) = a(1, np1, k) + g(is, 1, k) * pmn(i, mml1 + np1)
+                a(1, np1, k) = sum_a
+            end do
+            do np1 = 2, nlat, 2
+                mn = mml1 + np1
+                sum_a = 0.0
+                !$omp simd reduction(+:sum_a)
+                do i = 1, late
+                    is = nlat - i + 1
+                    sum_a = sum_a + g(is, 1, k) * pmn(i, mn)
                 end do
+                a(1, np1, k) = sum_a
             end do
         end do
-        ! END PARALLEL DO
 
         ! Compute m >= 1 coefficients next
         do mp1 = 2, lm1
             m = mp1 - 1
             mml1 = m * (2 * nlat - m - 1) / 2
             mp2 = mp1 + 1
-            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1)
+            mr = 2 * m
+            mi = mr + 1
             do k = 1, nt
-                do i = 1, late
-                    is = nlat - i + 1
-                    ! n-m even
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = mp1, nlat, 2
-                        a(mp1, np1, k) = a(mp1, np1, k) + g(i, 2*m, k) * pmn(i, mml1 + np1)
-                        b(mp1, np1, k) = b(mp1, np1, k) + g(i, 2*m+1, k) * pmn(i, mml1 + np1)
+                do np1 = mp1, nlat, 2
+                    mn = mml1 + np1
+                    sum_a = 0.0
+                    sum_b = 0.0
+                    !$omp simd reduction(+:sum_a,sum_b)
+                    do i = 1, late
+                        sum_a = sum_a + g(i, mr, k) * pmn(i, mn)
+                        sum_b = sum_b + g(i, mi, k) * pmn(i, mn)
                     end do
-                    ! n-m odd
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = mp2, nlat, 2
-                        a(mp1, np1, k) = a(mp1, np1, k) + g(is, 2*m, k) * pmn(i, mml1 + np1)
-                        b(mp1, np1, k) = b(mp1, np1, k) + g(is, 2*m+1, k) * pmn(i, mml1 + np1)
+                    a(mp1, np1, k) = sum_a
+                    b(mp1, np1, k) = sum_b
+                end do
+                do np1 = mp2, nlat, 2
+                    mn = mml1 + np1
+                    sum_a = 0.0
+                    sum_b = 0.0
+                    !$omp simd reduction(+:sum_a,sum_b)
+                    do i = 1, late
+                        is = nlat - i + 1
+                        sum_a = sum_a + g(is, mr, k) * pmn(i, mn)
+                        sum_b = sum_b + g(is, mi, k) * pmn(i, mn)
                     end do
+                    a(mp1, np1, k) = sum_a
+                    b(mp1, np1, k) = sum_b
                 end do
             end do
-            ! END PARALLEL DO
         end do
 
         ! Handle special case for nlon == l+l-2
@@ -387,31 +411,36 @@ contains
             ! Compute m=l-1, n=l-1,l,...,nlat-1 coefficients
             m = l - 1
             mml1 = m * (2 * nlat - m - 1) / 2
-            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1,mn)
+            lp1 = l + 1
             do k = 1, nt
-                do i = 1, late
-                    is = nlat - i + 1
-                    ! n-m even
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = l, nlat, 2
-                        mn = mml1 + np1
-                        a(l, np1, k) = a(l, np1, k) + 0.5 * g(i, nlon, k) * pmn(i, mn)
+                do np1 = l, nlat, 2
+                    mn = mml1 + np1
+                    sum_a = 0.0
+                    !$omp simd reduction(+:sum_a)
+                    do i = 1, late
+                        sum_a = sum_a + g(i, nlon, k) * pmn(i, mn)
                     end do
-                    ! n-m odd
-                    lp1 = l + 1
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = lp1, nlat, 2
-                        mn = mml1 + np1
-                        a(l, np1, k) = a(l, np1, k) + 0.5 * g(is, nlon, k) * pmn(i, mn)
+                    a(l, np1, k) = 0.5 * sum_a
+                end do
+                do np1 = lp1, nlat, 2
+                    mn = mml1 + np1
+                    sum_a = 0.0
+                    !$omp simd reduction(+:sum_a)
+                    do i = 1, late
+                        is = nlat - i + 1
+                        sum_a = sum_a + g(is, nlon, k) * pmn(i, mn)
                     end do
+                    a(l, np1, k) = 0.5 * sum_a
                 end do
             end do
-            ! END PARALLEL DO
         end if
     end subroutine process_full_sphere_mode
 
     !> @brief Process half sphere analysis (mode=1 or 2)
     subroutine process_half_sphere_mode()
+        real :: sum_a, sum_b
+        integer :: mr, mi
+
         ! Half sphere: overwrite g(i) with wts(i)*(g(i)+g(i)) for i=1,...,nlate/2
         nl2 = nlat / 2
         ! PARALLEL DO COLLAPSE(2) IF(nt*nlon > 5000) PRIVATE(k,j,i)
@@ -437,16 +466,17 @@ contains
         ms = 1
         if (mode == 1) ms = 2
 
-        ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1)
         do k = 1, nt
-            do i = 1, late
-                !DIR$ VECTOR ALWAYS
-                do np1 = ms, nlat, 2
-                    a(1, np1, k) = a(1, np1, k) + g(i, 1, k) * pmn(i, mml1 + np1)
+            do np1 = ms, nlat, 2
+                mn = mml1 + np1
+                sum_a = 0.0
+                !$omp simd reduction(+:sum_a)
+                do i = 1, late
+                    sum_a = sum_a + g(i, 1, k) * pmn(i, mn)
                 end do
+                a(1, np1, k) = sum_a
             end do
         end do
-        ! END PARALLEL DO
 
         ! Compute m >= 1 coefficients next
         do mp1 = 2, lm1
@@ -454,17 +484,22 @@ contains
             mml1 = m * (2 * nlat - m - 1) / 2
             ms = mp1
             if (mode == 1) ms = mp1 + 1
-            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1)
+            mr = 2 * m
+            mi = mr + 1
             do k = 1, nt
-                do i = 1, late
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = ms, nlat, 2
-                        a(mp1, np1, k) = a(mp1, np1, k) + g(i, 2*m, k) * pmn(i, mml1 + np1)
-                        b(mp1, np1, k) = b(mp1, np1, k) + g(i, 2*m+1, k) * pmn(i, mml1 + np1)
+                do np1 = ms, nlat, 2
+                    mn = mml1 + np1
+                    sum_a = 0.0
+                    sum_b = 0.0
+                    !$omp simd reduction(+:sum_a,sum_b)
+                    do i = 1, late
+                        sum_a = sum_a + g(i, mr, k) * pmn(i, mn)
+                        sum_b = sum_b + g(i, mi, k) * pmn(i, mn)
                     end do
+                    a(mp1, np1, k) = sum_a
+                    b(mp1, np1, k) = sum_b
                 end do
             end do
-            ! END PARALLEL DO
         end do
 
         ! Handle special case for nlon == l+l-2
@@ -476,17 +511,17 @@ contains
             ns = l
             ! Set starting n for mode odd
             if (mode == 1) ns = l + 1
-            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1,mn)
             do k = 1, nt
-                do i = 1, late
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = ns, nlat, 2
-                        mn = mml1 + np1
-                        a(l, np1, k) = a(l, np1, k) + 0.5 * g(i, nlon, k) * pmn(i, mn)
+                do np1 = ns, nlat, 2
+                    mn = mml1 + np1
+                    sum_a = 0.0
+                    !$omp simd reduction(+:sum_a)
+                    do i = 1, late
+                        sum_a = sum_a + g(i, nlon, k) * pmn(i, mn)
                     end do
+                    a(l, np1, k) = 0.5 * sum_a
                 end do
             end do
-            ! END PARALLEL DO
         end if
     end subroutine process_half_sphere_mode
 

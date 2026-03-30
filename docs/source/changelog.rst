@@ -18,6 +18,15 @@ Version 0.3.17 (Current)
 
 * **Removed conversion module**: Deleted the ``skyborn.conversion`` GRIB-to-NetCDF conversion module and its related tests and documentation
 
+**🐛 Bug Fixes**
+
+* **Aligned Modern spharm Fortran With Legacy SPHEREPACK Behavior**: Fixed the remaining numerical drift between the modernized ``.f90`` implementation and the legacy ``.f`` sources used by ``windspharm``
+
+  - **Gaussian Stored Vector Synthesis Fix**: Corrected the ``vhsgs.f90`` ``vhgsi1`` coefficient index layout so ``gridtype='gaussian'`` with ``legfunc='stored'`` now matches the legacy implementation
+  - **Precision Alignment**: Preserved the earlier modern Fortran fixes in ``vhaec.f90`` and ``vhsec.f90`` to keep transform precision aligned with the legacy sources
+  - **Regression Coverage**: Added a dedicated ``spharm`` regression test to verify Gaussian stored vector analysis/synthesis matches ``legfunc='computed'``
+  - **Integration Validation**: Rebuilt both modern ``.f90`` and legacy ``.f`` ``_spherepack`` extensions and verified ``spharm`` and ``windspharm`` workflows on synthetic cases and bundled example wind datasets
+
 Version 0.3.16
 --------------
 

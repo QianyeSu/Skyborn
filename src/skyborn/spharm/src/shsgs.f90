@@ -159,9 +159,15 @@ subroutine shsgs1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
     ! Input/Output parameters - IDENTICAL interface to original
     integer, intent(in) :: nlat, nlon, l, lat, mode, idg, jdg, nt, mdab, ndab, late
     real, intent(in) :: a(mdab, ndab, nt), b(mdab, ndab, nt)
-    real, intent(in) :: wfft(*), pmn(late, *)
+    ! Original modernized declarations kept these workers as assumed-size:
+    ! real, intent(in) :: wfft(*), pmn(late, *)
+    ! real, intent(out) :: gs(idg, jdg, nt)
+    ! real, intent(inout) :: g(lat, nlon, nt), work(*)
+    ! Performance note (2026-03-29): use explicit-shape worker arguments so gfortran
+    ! can see tighter bounds/strides without changing the algorithm.
+    real, intent(in) :: wfft(nlon + 15), pmn(late, (l * (2 * nlat - l + 1)) / 2)
     real, intent(out) :: gs(idg, jdg, nt)
-    real, intent(inout) :: g(lat, nlon, nt), work(*)
+    real, intent(inout) :: g(lat, nlon, nt), work(lat * nlon)
 
     ! Local variables
     integer :: lm1, m, mml1, mp1, mp2, k, np1, mn, i, is, nl2
@@ -205,6 +211,7 @@ subroutine shsgs1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
     !DIR$ VECTOR ALWAYS
     do k = 1, nt
         do j = 1, nlon
+            !$OMP SIMD
             do i = 1, lat
                 gs(i, j, k) = 0.5 * g(i, j, k)
             end do
@@ -216,6 +223,9 @@ contains
 
     !> @brief Process full sphere synthesis (mode=0)
     subroutine process_full_sphere_mode()
+        real :: a_val, b_val, two_a_val
+        integer :: mr, mi
+
         ! Set first column in g (m = 0)
         m = 0
         mml1 = m * (2 * nlat - m - 1) / 2
@@ -226,8 +236,9 @@ contains
             !DIR$ VECTOR ALWAYS
             do np1 = 1, nlat, 2
                 mn = mml1 + np1
+                a_val = a(1, np1, k)
                 do i = 1, late
-                    g(i, 1, k) = g(i, 1, k) + a(1, np1, k) * pmn(i, mn)
+                    g(i, 1, k) = g(i, 1, k) + a_val * pmn(i, mn)
                 end do
             end do
         end do
@@ -240,9 +251,10 @@ contains
             !DIR$ VECTOR ALWAYS
             do np1 = 2, nlat, 2
                 mn = mml1 + np1
+                a_val = a(1, np1, k)
                 do i = 1, nl2
                     is = nlat - i + 1
-                    g(is, 1, k) = g(is, 1, k) + a(1, np1, k) * pmn(i, mn)
+                    g(is, 1, k) = g(is, 1, k) + a_val * pmn(i, mn)
                 end do
             end do
         end do
@@ -267,6 +279,8 @@ contains
             m = mp1 - 1
             mml1 = m * (2 * nlat - m - 1) / 2
             mp2 = m + 2
+            mr = 2 * m
+            mi = mr + 1
 
             ! For n-m even store synthesis in g(i,p,k) p=2*m,2*m+1
             ! PARALLEL DO COLLAPSE(2) IF(nt*nlat > 5000) PRIVATE(k,np1,mn,i)
@@ -274,9 +288,11 @@ contains
                 !DIR$ VECTOR ALWAYS
                 do np1 = mp1, nlat, 2
                     mn = mml1 + np1
+                    a_val = a(mp1, np1, k)
+                    b_val = b(mp1, np1, k)
                     do i = 1, late
-                        g(i, 2*m, k) = g(i, 2*m, k) + a(mp1, np1, k) * pmn(i, mn)
-                        g(i, 2*m+1, k) = g(i, 2*m+1, k) + b(mp1, np1, k) * pmn(i, mn)
+                        g(i, mr, k) = g(i, mr, k) + a_val * pmn(i, mn)
+                        g(i, mi, k) = g(i, mi, k) + b_val * pmn(i, mn)
                     end do
                 end do
             end do
@@ -288,10 +304,12 @@ contains
                 !DIR$ VECTOR ALWAYS
                 do np1 = mp2, nlat, 2
                     mn = mml1 + np1
+                    a_val = a(mp1, np1, k)
+                    b_val = b(mp1, np1, k)
                     do i = 1, nl2
                         is = nlat - i + 1
-                        g(is, 2*m, k) = g(is, 2*m, k) + a(mp1, np1, k) * pmn(i, mn)
-                        g(is, 2*m+1, k) = g(is, 2*m+1, k) + b(mp1, np1, k) * pmn(i, mn)
+                        g(is, mr, k) = g(is, mr, k) + a_val * pmn(i, mn)
+                        g(is, mi, k) = g(is, mi, k) + b_val * pmn(i, mn)
                     end do
                 end do
             end do
@@ -303,14 +321,14 @@ contains
                 !DIR$ VECTOR ALWAYS
                 do i = 1, nl2
                     is = nlat - i + 1
-                    t1 = g(i, 2*m, k)
-                    t2 = g(i, 2*m+1, k)
-                    t3 = g(is, 2*m, k)
-                    t4 = g(is, 2*m+1, k)
-                    g(i, 2*m, k) = t1 + t3
-                    g(i, 2*m+1, k) = t2 + t4
-                    g(is, 2*m, k) = t1 - t3
-                    g(is, 2*m+1, k) = t2 - t4
+                    t1 = g(i, mr, k)
+                    t2 = g(i, mi, k)
+                    t3 = g(is, mr, k)
+                    t4 = g(is, mi, k)
+                    g(i, mr, k) = t1 + t3
+                    g(i, mi, k) = t2 + t4
+                    g(is, mr, k) = t1 - t3
+                    g(is, mi, k) = t2 - t4
                 end do
             end do
             ! END PARALLEL DO
@@ -327,8 +345,9 @@ contains
                 !DIR$ VECTOR ALWAYS
                 do np1 = l, nlat, 2
                     mn = mml1 + np1
+                    two_a_val = 2.0 * a(l, np1, k)
                     do i = 1, late
-                        g(i, nlon, k) = g(i, nlon, k) + 2.0 * a(l, np1, k) * pmn(i, mn)
+                        g(i, nlon, k) = g(i, nlon, k) + two_a_val * pmn(i, mn)
                     end do
                 end do
             end do
@@ -341,9 +360,10 @@ contains
                 !DIR$ VECTOR ALWAYS
                 do np1 = lp1, nlat, 2
                     mn = mml1 + np1
+                    two_a_val = 2.0 * a(l, np1, k)
                     do i = 1, nl2
                         is = nlat - i + 1
-                        g(is, nlon, k) = g(is, nlon, k) + 2.0 * a(l, np1, k) * pmn(i, mn)
+                        g(is, nlon, k) = g(is, nlon, k) + two_a_val * pmn(i, mn)
                     end do
                 end do
             end do
@@ -366,6 +386,9 @@ contains
 
     !> @brief Process half sphere synthesis (mode=1 or 2)
     subroutine process_half_sphere_mode()
+        real :: a_val, b_val, two_a_val
+        integer :: mr, mi
+
         ! Set first column in g
         m = 0
         mml1 = m * (2 * nlat - m - 1) / 2
@@ -378,8 +401,9 @@ contains
             !DIR$ VECTOR ALWAYS
             do np1 = ms, nlat, 2
                 mn = mml1 + np1
+                a_val = a(1, np1, k)
                 do i = 1, late
-                    g(i, 1, k) = g(i, 1, k) + a(1, np1, k) * pmn(i, mn)
+                    g(i, 1, k) = g(i, 1, k) + a_val * pmn(i, mn)
                 end do
             end do
         end do
@@ -390,15 +414,19 @@ contains
             m = mp1 - 1
             mml1 = m * (2 * nlat - m - 1) / 2
             ms = m + meo
+            mr = 2 * m
+            mi = mr + 1
 
             ! PARALLEL DO COLLAPSE(2) IF(nt*nlat > 5000) PRIVATE(k,np1,mn,i)
             do k = 1, nt
                 !DIR$ VECTOR ALWAYS
                 do np1 = ms, nlat, 2
                     mn = mml1 + np1
+                    a_val = a(mp1, np1, k)
+                    b_val = b(mp1, np1, k)
                     do i = 1, late
-                        g(i, 2*m, k) = g(i, 2*m, k) + a(mp1, np1, k) * pmn(i, mn)
-                        g(i, 2*m+1, k) = g(i, 2*m+1, k) + b(mp1, np1, k) * pmn(i, mn)
+                        g(i, mr, k) = g(i, mr, k) + a_val * pmn(i, mn)
+                        g(i, mi, k) = g(i, mi, k) + b_val * pmn(i, mn)
                     end do
                 end do
             end do
@@ -417,8 +445,9 @@ contains
                 !DIR$ VECTOR ALWAYS
                 do np1 = ns, nlat, 2
                     mn = mml1 + np1
+                    two_a_val = 2.0 * a(l, np1, k)
                     do i = 1, late
-                        g(i, nlon, k) = g(i, nlon, k) + 2.0 * a(l, np1, k) * pmn(i, mn)
+                        g(i, nlon, k) = g(i, nlon, k) + two_a_val * pmn(i, mn)
                     end do
                 end do
             end do

@@ -90,8 +90,8 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
 
     ! Local variables
     integer :: ls, nlon, mmax, mdo, nlp1, imid, modl, imm1, k, i, j
-    integer :: mp1, mp2, np1, m, mb, ndo
-    real :: tsn, fsn
+    integer :: mp1, mp2, np1, m, mb, ndo, col_even, col_odd
+    real :: tsn, fsn, coef_even, coef_odd
 
     ! Initialize key variables (CRITICAL - missing in previous version)
     ls = idg
@@ -112,8 +112,9 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
     case (0)
         ! No symmetries - process entire sphere
         do k = 1, nt
-            do i = 1, imm1
-                do j = 1, nlon
+            do j = 1, nlon
+                !$omp simd
+                do i = 1, imm1
                     ge(i, j, k) = tsn * (g(i, j, k) + g(nlp1 - i, j, k))
                     go(i, j, k) = tsn * (g(i, j, k) - g(nlp1 - i, j, k))
                 end do
@@ -123,8 +124,9 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
         ! Antisymmetric case (isym=1): f(π-θ,φ) = -f(θ,φ)
         ! Only northern hemisphere data provided, function is antisymmetric about equator
         do k = 1, nt
-            do i = 1, imm1
-                do j = 1, nlon
+            do j = 1, nlon
+                !$omp simd
+                do i = 1, imm1
                     ge(i, j, k) = fsn * g(i, j, k)
                     go(i, j, k) = 0.0  ! SAFETY: Explicit initialization
                 end do
@@ -135,8 +137,9 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
         ! Symmetric case (isym=2): f(π-θ,φ) = f(θ,φ)
         ! Only northern hemisphere data provided, function is symmetric about equator
         do k = 1, nt
-            do i = 1, imm1
-                do j = 1, nlon
+            do j = 1, nlon
+                !$omp simd
+                do i = 1, imm1
                     ge(i, j, k) = fsn * g(i, j, k)
                     go(i, j, k) = 0.0  ! SAFETY: Explicit initialization (won't be used due to early return)
                 end do
@@ -158,6 +161,7 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
         call hrfftf(ls, nlon, ge(1, 1, k), ls, whrfft, work)
         ! Handle even nlon case (CRITICAL adjustment)
         if (mod(nlon, 2) == 0) then
+            !$omp simd
             do i = 1, ls
                 ge(i, nlon, k) = 0.5 * ge(i, nlon, k)
             end do
@@ -194,12 +198,17 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
         do mp1 = 2, mdo
             m = mp1 - 1
             mb = m * (nlat - 1) - (m * (m - 1)) / 2
+            col_even = 2 * mp1 - 2
+            col_odd = col_even + 1
             do k = 1, nt
                 do i = 1, imid
+                    coef_even = ge(i, col_even, k)
+                    coef_odd = ge(i, col_odd, k)
+                    !$omp simd
                     do np1 = mp1, ndo, 2
                         ! CORRECTED: Use proper FFT coefficient indexing
-                        a(mp1, np1, k) = a(mp1, np1, k) + z(np1 + mb, i) * ge(i, 2 * mp1 - 2, k)
-                        b(mp1, np1, k) = b(mp1, np1, k) + z(np1 + mb, i) * ge(i, 2 * mp1 - 1, k)
+                        a(mp1, np1, k) = a(mp1, np1, k) + z(np1 + mb, i) * coef_even
+                        b(mp1, np1, k) = b(mp1, np1, k) + z(np1 + mb, i) * coef_odd
                     end do
                 end do
             end do
@@ -208,10 +217,13 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
         ! Handle special case when mdo < mmax (CRITICAL - was missing)
         if (mdo /= mmax .and. mmax <= ndo) then
             mb = mdo * (nlat - 1) - (mdo * (mdo - 1)) / 2
+            col_even = 2 * mmax - 2
             do k = 1, nt
                 do i = 1, imid
+                    coef_even = ge(i, col_even, k)
+                    !$omp simd
                     do np1 = mmax, ndo, 2
-                        a(mmax, np1, k) = a(mmax, np1, k) + z(np1 + mb, i) * ge(i, 2 * mmax - 2, k)
+                        a(mmax, np1, k) = a(mmax, np1, k) + z(np1 + mb, i) * coef_even
                     end do
                 end do
             end do
@@ -236,12 +248,17 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
             m = mp1 - 1
             mp2 = mp1 + 1
             mb = m * (nlat - 1) - (m * (m - 1)) / 2
+            col_even = 2 * mp1 - 2
+            col_odd = col_even + 1
             do k = 1, nt
                 do i = 1, imm1
+                    coef_even = go(i, col_even, k)
+                    coef_odd = go(i, col_odd, k)
+                    !$omp simd
                     do np1 = mp2, ndo, 2
                         ! CORRECTED: Use proper FFT coefficient indexing
-                        a(mp1, np1, k) = a(mp1, np1, k) + z(np1 + mb, i) * go(i, 2 * mp1 - 2, k)
-                        b(mp1, np1, k) = b(mp1, np1, k) + z(np1 + mb, i) * go(i, 2 * mp1 - 1, k)
+                        a(mp1, np1, k) = a(mp1, np1, k) + z(np1 + mb, i) * coef_even
+                        b(mp1, np1, k) = b(mp1, np1, k) + z(np1 + mb, i) * coef_odd
                     end do
                 end do
             end do
@@ -251,10 +268,13 @@ subroutine shaes1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, z, idz, &
         mp2 = mmax + 1
         if (mdo == mmax .and. mp2 <= ndo) then
             mb = mdo * (nlat - 1) - (mdo * (mdo - 1)) / 2
+            col_even = 2 * mmax - 2
             do k = 1, nt
                 do i = 1, imm1
+                    coef_even = go(i, col_even, k)
+                    !$omp simd
                     do np1 = mp2, ndo, 2
-                        a(mmax, np1, k) = a(mmax, np1, k) + z(np1 + mb, i) * go(i, 2 * mmax - 2, k)
+                        a(mmax, np1, k) = a(mmax, np1, k) + z(np1 + mb, i) * coef_even
                     end do
                 end do
             end do

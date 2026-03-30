@@ -281,6 +281,7 @@ subroutine hradf4(mp, ido, l1, cc, mdimcc, ch, mdimch, wa1, wa2, wa3)
     real, dimension(ido), intent(in) :: wa1, wa2, wa3
 
     integer :: k, i, ic, idp2, m
+    real :: wa1r, wa1i, wa2r, wa2i, wa3r, wa3i
     ! Precomputed constants for radix-4 FFT
     real, parameter :: HSQT2 = 0.7071067811865475  ! sqrt(2)/2
     real, parameter :: SQRT2 = 1.4142135623730951   ! sqrt(2)
@@ -314,33 +315,39 @@ subroutine hradf4(mp, ido, l1, cc, mdimcc, ch, mdimch, wa1, wa2, wa3)
     do k = 1, l1
         do i = 3, ido, 2
             ic = idp2 - i
+            wa1r = wa1(i-2)
+            wa1i = wa1(i-1)
+            wa2r = wa2(i-2)
+            wa2i = wa2(i-1)
+            wa3r = wa3(i-2)
+            wa3i = wa3(i-1)
 
             !$omp simd
             do m = 1, mp
-                ch(m,i-1,1,k) = ((wa1(i-2)*cc(m,i-1,k,2)+wa1(i-1)*cc(m,i,k,2)) &
-                               +(wa3(i-2)*cc(m,i-1,k,4)+wa3(i-1)*cc(m,i,k,4))) &
-                               + (cc(m,i-1,k,1)+(wa2(i-2)*cc(m,i-1,k,3)+wa2(i-1)*cc(m,i,k,3)))
-                ch(m,ic-1,4,k) = (cc(m,i-1,k,1)+(wa2(i-2)*cc(m,i-1,k,3)+wa2(i-1)*cc(m,i,k,3))) &
-                               - ((wa1(i-2)*cc(m,i-1,k,2)+wa1(i-1)*cc(m,i,k,2)) &
-                               +(wa3(i-2)*cc(m,i-1,k,4)+wa3(i-1)*cc(m,i,k,4)))
-                ch(m,i,1,k)   = ((wa1(i-2)*cc(m,i,k,2)-wa1(i-1)*cc(m,i-1,k,2)) &
-                               +(wa3(i-2)*cc(m,i,k,4)-wa3(i-1)*cc(m,i-1,k,4))) &
-                               + (cc(m,i,k,1)+(wa2(i-2)*cc(m,i,k,3)-wa2(i-1)*cc(m,i-1,k,3)))
-                ch(m,ic,4,k) = ((wa1(i-2)*cc(m,i,k,2)-wa1(i-1)*cc(m,i-1,k,2)) &
-                               +(wa3(i-2)*cc(m,i,k,4)-wa3(i-1)*cc(m,i-1,k,4))) &
-                               - (cc(m,i,k,1)+(wa2(i-2)*cc(m,i,k,3)-wa2(i-1)*cc(m,i-1,k,3)))
-                ch(m,i-1,3,k) = ((wa1(i-2)*cc(m,i,k,2)-wa1(i-1)*cc(m,i-1,k,2)) &
-                               -(wa3(i-2)*cc(m,i,k,4)-wa3(i-1)*cc(m,i-1,k,4))) &
-                               + (cc(m,i-1,k,1)-(wa2(i-2)*cc(m,i-1,k,3)+wa2(i-1)*cc(m,i,k,3)))
-                ch(m,ic-1,2,k) = (cc(m,i-1,k,1)-(wa2(i-2)*cc(m,i-1,k,3)+wa2(i-1)*cc(m,i,k,3))) &
-                               - ((wa1(i-2)*cc(m,i,k,2)-wa1(i-1)*cc(m,i-1,k,2)) &
-                               -(wa3(i-2)*cc(m,i,k,4)-wa3(i-1)*cc(m,i-1,k,4)))
-                ch(m,i,3,k)   = ((wa3(i-2)*cc(m,i-1,k,4)+wa3(i-1)*cc(m,i,k,4)) &
-                               -(wa1(i-2)*cc(m,i-1,k,2)+wa1(i-1)*cc(m,i,k,2))) &
-                               + (cc(m,i,k,1)-(wa2(i-2)*cc(m,i,k,3)-wa2(i-1)*cc(m,i-1,k,3)))
-                ch(m,ic,2,k) = ((wa3(i-2)*cc(m,i-1,k,4)+wa3(i-1)*cc(m,i,k,4)) &
-                               -(wa1(i-2)*cc(m,i-1,k,2)+wa1(i-1)*cc(m,i,k,2))) &
-                               - (cc(m,i,k,1)-(wa2(i-2)*cc(m,i,k,3)-wa2(i-1)*cc(m,i-1,k,3)))
+                ch(m,i-1,1,k) = ((wa1r*cc(m,i-1,k,2)+wa1i*cc(m,i,k,2)) &
+                               +(wa3r*cc(m,i-1,k,4)+wa3i*cc(m,i,k,4))) &
+                               + (cc(m,i-1,k,1)+(wa2r*cc(m,i-1,k,3)+wa2i*cc(m,i,k,3)))
+                ch(m,ic-1,4,k) = (cc(m,i-1,k,1)+(wa2r*cc(m,i-1,k,3)+wa2i*cc(m,i,k,3))) &
+                               - ((wa1r*cc(m,i-1,k,2)+wa1i*cc(m,i,k,2)) &
+                               +(wa3r*cc(m,i-1,k,4)+wa3i*cc(m,i,k,4)))
+                ch(m,i,1,k)   = ((wa1r*cc(m,i,k,2)-wa1i*cc(m,i-1,k,2)) &
+                               +(wa3r*cc(m,i,k,4)-wa3i*cc(m,i-1,k,4))) &
+                               + (cc(m,i,k,1)+(wa2r*cc(m,i,k,3)-wa2i*cc(m,i-1,k,3)))
+                ch(m,ic,4,k) = ((wa1r*cc(m,i,k,2)-wa1i*cc(m,i-1,k,2)) &
+                               +(wa3r*cc(m,i,k,4)-wa3i*cc(m,i-1,k,4))) &
+                               - (cc(m,i,k,1)+(wa2r*cc(m,i,k,3)-wa2i*cc(m,i-1,k,3)))
+                ch(m,i-1,3,k) = ((wa1r*cc(m,i,k,2)-wa1i*cc(m,i-1,k,2)) &
+                               -(wa3r*cc(m,i,k,4)-wa3i*cc(m,i-1,k,4))) &
+                               + (cc(m,i-1,k,1)-(wa2r*cc(m,i-1,k,3)+wa2i*cc(m,i,k,3)))
+                ch(m,ic-1,2,k) = (cc(m,i-1,k,1)-(wa2r*cc(m,i-1,k,3)+wa2i*cc(m,i,k,3))) &
+                               - ((wa1r*cc(m,i,k,2)-wa1i*cc(m,i-1,k,2)) &
+                               -(wa3r*cc(m,i,k,4)-wa3i*cc(m,i-1,k,4)))
+                ch(m,i,3,k)   = ((wa3r*cc(m,i-1,k,4)+wa3i*cc(m,i,k,4)) &
+                               -(wa1r*cc(m,i-1,k,2)+wa1i*cc(m,i,k,2))) &
+                               + (cc(m,i,k,1)-(wa2r*cc(m,i,k,3)-wa2i*cc(m,i-1,k,3)))
+                ch(m,ic,2,k) = ((wa3r*cc(m,i-1,k,4)+wa3i*cc(m,i,k,4)) &
+                               -(wa1r*cc(m,i-1,k,2)+wa1i*cc(m,i,k,2))) &
+                               - (cc(m,i,k,1)-(wa2r*cc(m,i,k,3)-wa2i*cc(m,i-1,k,3)))
             end do
         end do
     end do
@@ -1357,6 +1364,7 @@ subroutine hradb4(mp, ido, l1, cc, mdimcc, ch, mdimch, wa1, wa2, wa3)
     real, dimension(ido), intent(in) :: wa1, wa2, wa3
     real, parameter :: SQRT2 = 1.4142135623730951   ! sqrt(2)
     integer :: k, i, ic, idp2, m
+    real :: wa1r, wa1i, wa2r, wa2i, wa3r, wa3i
     ! Use precomputed constant
     ! (sqrt2 removed - using SQRT2 constant)
 
@@ -1389,34 +1397,40 @@ subroutine hradb4(mp, ido, l1, cc, mdimcc, ch, mdimch, wa1, wa2, wa3)
     do k = 1, l1
         do i = 3, ido, 2
             ic = idp2 - i
+            wa1r = wa1(i-2)
+            wa1i = wa1(i-1)
+            wa2r = wa2(i-2)
+            wa2i = wa2(i-1)
+            wa3r = wa3(i-2)
+            wa3i = wa3(i-1)
 
             !$omp simd
             do m = 1, mp
                 ch(m,i-1,k,1) = (cc(m,i-1,1,k)+cc(m,ic-1,4,k)) + (cc(m,i-1,3,k)+cc(m,ic-1,2,k))
                 ch(m,i,k,1)   = (cc(m,i,1,k)-cc(m,ic,4,k))     + (cc(m,i,3,k)-cc(m,ic,2,k))
-                ch(m,i-1,k,2) = wa1(i-2)*((cc(m,i-1,1,k)-cc(m,ic-1,4,k)) &
+                ch(m,i-1,k,2) = wa1r*((cc(m,i-1,1,k)-cc(m,ic-1,4,k)) &
                                -(cc(m,i,3,k)+cc(m,ic,2,k))) &
-                               - wa1(i-1)*((cc(m,i,1,k)+cc(m,ic,4,k)) &
+                               - wa1i*((cc(m,i,1,k)+cc(m,ic,4,k)) &
                                +(cc(m,i-1,3,k)-cc(m,ic-1,2,k)))
-                ch(m,i,k,2)   = wa1(i-2)*((cc(m,i,1,k)+cc(m,ic,4,k)) &
+                ch(m,i,k,2)   = wa1r*((cc(m,i,1,k)+cc(m,ic,4,k)) &
                                +(cc(m,i-1,3,k)-cc(m,ic-1,2,k))) &
-                               + wa1(i-1)*((cc(m,i-1,1,k)-cc(m,ic-1,4,k)) &
+                               + wa1i*((cc(m,i-1,1,k)-cc(m,ic-1,4,k)) &
                                -(cc(m,i,3,k)+cc(m,ic,2,k)))
-                ch(m,i-1,k,3) = wa2(i-2)*((cc(m,i-1,1,k)+cc(m,ic-1,4,k)) &
+                ch(m,i-1,k,3) = wa2r*((cc(m,i-1,1,k)+cc(m,ic-1,4,k)) &
                                -(cc(m,i-1,3,k)+cc(m,ic-1,2,k))) &
-                               - wa2(i-1)*((cc(m,i,1,k)-cc(m,ic,4,k)) &
+                               - wa2i*((cc(m,i,1,k)-cc(m,ic,4,k)) &
                                -(cc(m,i,3,k)-cc(m,ic,2,k)))
-                ch(m,i,k,3)   = wa2(i-2)*((cc(m,i,1,k)-cc(m,ic,4,k)) &
+                ch(m,i,k,3)   = wa2r*((cc(m,i,1,k)-cc(m,ic,4,k)) &
                                -(cc(m,i,3,k)-cc(m,ic,2,k))) &
-                               + wa2(i-1)*((cc(m,i-1,1,k)+cc(m,ic-1,4,k)) &
+                               + wa2i*((cc(m,i-1,1,k)+cc(m,ic-1,4,k)) &
                                -(cc(m,i-1,3,k)+cc(m,ic-1,2,k)))
-                ch(m,i-1,k,4) = wa3(i-2)*((cc(m,i-1,1,k)-cc(m,ic-1,4,k)) &
+                ch(m,i-1,k,4) = wa3r*((cc(m,i-1,1,k)-cc(m,ic-1,4,k)) &
                                +(cc(m,i,3,k)+cc(m,ic,2,k))) &
-                               - wa3(i-1)*((cc(m,i,1,k)+cc(m,ic,4,k)) &
+                               - wa3i*((cc(m,i,1,k)+cc(m,ic,4,k)) &
                                -(cc(m,i-1,3,k)-cc(m,ic-1,2,k)))
-                ch(m,i,k,4)   = wa3(i-2)*((cc(m,i,1,k)+cc(m,ic,4,k)) &
+                ch(m,i,k,4)   = wa3r*((cc(m,i,1,k)+cc(m,ic,4,k)) &
                                -(cc(m,i-1,3,k)-cc(m,ic-1,2,k))) &
-                               + wa3(i-1)*((cc(m,i-1,1,k)-cc(m,ic-1,4,k)) &
+                               + wa3i*((cc(m,i-1,1,k)-cc(m,ic-1,4,k)) &
                                +(cc(m,i,3,k)+cc(m,ic,2,k)))
             end do
         end do
