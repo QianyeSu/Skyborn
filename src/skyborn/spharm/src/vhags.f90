@@ -102,18 +102,27 @@ subroutine vhags1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     ! Argument definitions
     integer, intent(in) :: nlat, nlon, ityp, nt, imid, idvw, jdvw, mdab, ndab, idv, idz
-    real, intent(in) :: v(idvw, jdvw, *), w(idvw, jdvw, *)
-    real, intent(out) :: br(mdab, ndab, *), bi(mdab, ndab, *), cr(mdab, ndab, *), ci(mdab, ndab, *)
-    real, intent(inout) :: ve(idv, nlon, *), vo(idv, nlon, *), we(idv, nlon, *), wo(idv, nlon, *)
-    real, intent(inout) :: work(*)
-    real, intent(in) :: vb(imid, *), wb(imid, *), wrfft(*)
+    ! Original modernized declarations kept these workers as assumed-size:
+    ! real, intent(in) :: v(idvw, jdvw, *), w(idvw, jdvw, *)
+    ! real, intent(out) :: br(mdab, ndab, *), bi(mdab, ndab, *), cr(mdab, ndab, *), ci(mdab, ndab, *)
+    ! real, intent(inout) :: ve(idv, nlon, *), vo(idv, nlon, *), we(idv, nlon, *), wo(idv, nlon, *)
+    ! real, intent(inout) :: work(*)
+    ! real, intent(in) :: vb(imid, *), wb(imid, *), wrfft(*)
+    ! Performance note (2026-03-29): use explicit-shape worker arguments so gfortran
+    ! can see tighter bounds/strides without changing the algorithm.
+    real, intent(in) :: v(idvw, jdvw, nt), w(idvw, jdvw, nt)
+    real, intent(out) :: br(mdab, ndab, nt), bi(mdab, ndab, nt), cr(mdab, ndab, nt), ci(mdab, ndab, nt)
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt), we(idv, nlon, nt), wo(idv, nlon, nt)
+    real, intent(inout) :: work(idv * nlon)
+    real, intent(in) :: vb(imid, idz), wb(imid, idz), wrfft(nlon + 15)
 
     ! Local variables
     integer :: nlp1, mlat, mmax, imm1, ndo1, ndo2, itypp
-    integer :: k, i, j, mp1, np1, m, mb, mp2
+    integer :: k, i, j, mp1, np1, m, mb, mp2, mn, mr, mi
     real :: tsn, fsn
     real :: br_val_0, cr_val_0
     real :: br_val_m, bi_val_m, cr_val_m, ci_val_m
+    real :: vb_val, wb_val
 
     ! --- Precompute constants ---
     nlp1 = nlat + 1
@@ -201,19 +210,21 @@ subroutine vhags1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         do k = 1, nt
             do np1 = 2, ndo2, 2
                 br_val_0 = br(1, np1, k); cr_val_0 = cr(1, np1, k)
-                !$OMP SIMD REDUCTION(+:br_val_0, cr_val_0)
+                !$OMP SIMD REDUCTION(+:br_val_0, cr_val_0) PRIVATE(vb_val)
                 do i = 1, imid
-                    br_val_0 = br_val_0 + vb(i, np1) * ve(i, 1, k)
-                    cr_val_0 = cr_val_0 - vb(i, np1) * we(i, 1, k)
+                    vb_val = vb(i, np1)
+                    br_val_0 = br_val_0 + vb_val * ve(i, 1, k)
+                    cr_val_0 = cr_val_0 - vb_val * we(i, 1, k)
                 end do
                 br(1, np1, k) = br_val_0; cr(1, np1, k) = cr_val_0
             end do
             do np1 = 3, ndo1, 2
                 br_val_0 = br(1, np1, k); cr_val_0 = cr(1, np1, k)
-                !$OMP SIMD REDUCTION(+:br_val_0, cr_val_0)
+                !$OMP SIMD REDUCTION(+:br_val_0, cr_val_0) PRIVATE(vb_val)
                 do i = 1, imm1
-                    br_val_0 = br_val_0 + vb(i, np1) * vo(i, 1, k)
-                    cr_val_0 = cr_val_0 - vb(i, np1) * wo(i, 1, k)
+                    vb_val = vb(i, np1)
+                    br_val_0 = br_val_0 + vb_val * vo(i, 1, k)
+                    cr_val_0 = cr_val_0 - vb_val * wo(i, 1, k)
                 end do
                 br(1, np1, k) = br_val_0; cr(1, np1, k) = cr_val_0
             end do
@@ -222,27 +233,32 @@ subroutine vhags1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         if (mmax >= 2) then
             do mp1 = 2, mmax
                 m = mp1 - 1; mp2 = mp1 + 1
+                mr = 2 * mp1 - 2; mi = mr + 1
                 mb = m * nlat - (m * (m + 1)) / 2
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
+                            mn = np1 + mb
                             br_val_m = br(mp1, np1, k); bi_val_m = bi(mp1, np1, k)
                             cr_val_m = cr(mp1, np1, k); ci_val_m = ci(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m, cr_val_m, ci_val_m)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m, cr_val_m, ci_val_m) PRIVATE(vb_val, wb_val)
                             do i = 1, imm1
-                                br_val_m = br_val_m + vb(i, np1+mb) * vo(i, 2*mp1-2, k) + wb(i, np1+mb) * we(i, 2*mp1-1, k)
-                                bi_val_m = bi_val_m + vb(i, np1+mb) * vo(i, 2*mp1-1, k) - wb(i, np1+mb) * we(i, 2*mp1-2, k)
-                                cr_val_m = cr_val_m - vb(i, np1+mb) * wo(i, 2*mp1-2, k) + wb(i, np1+mb) * ve(i, 2*mp1-1, k)
-                                ci_val_m = ci_val_m - vb(i, np1+mb) * wo(i, 2*mp1-1, k) - wb(i, np1+mb) * ve(i, 2*mp1-2, k)
+                                vb_val = vb(i, mn)
+                                wb_val = wb(i, mn)
+                                br_val_m = br_val_m + vb_val * vo(i, mr, k) + wb_val * we(i, mi, k)
+                                bi_val_m = bi_val_m + vb_val * vo(i, mi, k) - wb_val * we(i, mr, k)
+                                cr_val_m = cr_val_m - vb_val * wo(i, mr, k) + wb_val * ve(i, mi, k)
+                                ci_val_m = ci_val_m - vb_val * wo(i, mi, k) - wb_val * ve(i, mr, k)
                             end do
                             br(mp1, np1, k) = br_val_m; bi(mp1, np1, k) = bi_val_m
                             cr(mp1, np1, k) = cr_val_m; ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
                                 i = imid
-                                br(mp1, np1, k) = br(mp1, np1, k) + wb(i, np1+mb) * we(i, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) - wb(i, np1+mb) * we(i, 2*mp1-2, k)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) + wb(i, np1+mb) * ve(i, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - wb(i, np1+mb) * ve(i, 2*mp1-2, k)
+                                wb_val = wb(i, mn)
+                                br(mp1, np1, k) = br(mp1, np1, k) + wb_val * we(i, mi, k)
+                                bi(mp1, np1, k) = bi(mp1, np1, k) - wb_val * we(i, mr, k)
+                                cr(mp1, np1, k) = cr(mp1, np1, k) + wb_val * ve(i, mi, k)
+                                ci(mp1, np1, k) = ci(mp1, np1, k) - wb_val * ve(i, mr, k)
                             end if
                         end do
                     end do
@@ -250,23 +266,27 @@ subroutine vhags1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
+                            mn = np1 + mb
                             br_val_m = br(mp1, np1, k); bi_val_m = bi(mp1, np1, k)
                             cr_val_m = cr(mp1, np1, k); ci_val_m = ci(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m, cr_val_m, ci_val_m)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m, cr_val_m, ci_val_m) PRIVATE(vb_val, wb_val)
                             do i = 1, imm1
-                                br_val_m = br_val_m + vb(i, np1+mb) * ve(i, 2*mp1-2, k) + wb(i, np1+mb) * wo(i, 2*mp1-1, k)
-                                bi_val_m = bi_val_m + vb(i, np1+mb) * ve(i, 2*mp1-1, k) - wb(i, np1+mb) * wo(i, 2*mp1-2, k)
-                                cr_val_m = cr_val_m - vb(i, np1+mb) * we(i, 2*mp1-2, k) + wb(i, np1+mb) * vo(i, 2*mp1-1, k)
-                                ci_val_m = ci_val_m - vb(i, np1+mb) * we(i, 2*mp1-1, k) - wb(i, np1+mb) * vo(i, 2*mp1-2, k)
+                                vb_val = vb(i, mn)
+                                wb_val = wb(i, mn)
+                                br_val_m = br_val_m + vb_val * ve(i, mr, k) + wb_val * wo(i, mi, k)
+                                bi_val_m = bi_val_m + vb_val * ve(i, mi, k) - wb_val * wo(i, mr, k)
+                                cr_val_m = cr_val_m - vb_val * we(i, mr, k) + wb_val * vo(i, mi, k)
+                                ci_val_m = ci_val_m - vb_val * we(i, mi, k) - wb_val * vo(i, mr, k)
                             end do
                             br(mp1, np1, k) = br_val_m; bi(mp1, np1, k) = bi_val_m
                             cr(mp1, np1, k) = cr_val_m; ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
                                 i = imid
-                                br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1+mb) * ve(i, 2*mp1-2, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb(i, np1+mb) * ve(i, 2*mp1-1, k)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1+mb) * we(i, 2*mp1-2, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb(i, np1+mb) * we(i, 2*mp1-1, k)
+                                vb_val = vb(i, mn)
+                                br(mp1, np1, k) = br(mp1, np1, k) + vb_val * ve(i, mr, k)
+                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb_val * ve(i, mi, k)
+                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb_val * we(i, mr, k)
+                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb_val * we(i, mi, k)
                             end if
                         end do
                     end do
@@ -298,21 +318,26 @@ subroutine vhags1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         if (mmax >= 2) then
             do mp1 = 2, mmax
                 m = mp1 - 1; mp2 = mp1 + 1
+                mr = 2 * mp1 - 2; mi = mr + 1
                 mb = m * nlat - (m * (m + 1)) / 2
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
+                            mn = np1 + mb
                             br_val_m = br(mp1, np1, k); bi_val_m = bi(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m) PRIVATE(vb_val, wb_val)
                             do i = 1, imm1
-                                br_val_m = br_val_m + vb(i, np1+mb) * vo(i, 2*mp1-2, k) + wb(i, np1+mb) * we(i, 2*mp1-1, k)
-                                bi_val_m = bi_val_m + vb(i, np1+mb) * vo(i, 2*mp1-1, k) - wb(i, np1+mb) * we(i, 2*mp1-2, k)
+                                vb_val = vb(i, mn)
+                                wb_val = wb(i, mn)
+                                br_val_m = br_val_m + vb_val * vo(i, mr, k) + wb_val * we(i, mi, k)
+                                bi_val_m = bi_val_m + vb_val * vo(i, mi, k) - wb_val * we(i, mr, k)
                             end do
                             br(mp1, np1, k) = br_val_m; bi(mp1, np1, k) = bi_val_m
                             if (mlat /= 0) then
                                 i = imid
-                                br(mp1, np1, k) = br(mp1, np1, k) + wb(i, np1+mb) * we(i, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) - wb(i, np1+mb) * we(i, 2*mp1-2, k)
+                                wb_val = wb(i, mn)
+                                br(mp1, np1, k) = br(mp1, np1, k) + wb_val * we(i, mi, k)
+                                bi(mp1, np1, k) = bi(mp1, np1, k) - wb_val * we(i, mr, k)
                             end if
                         end do
                     end do
@@ -320,17 +345,21 @@ subroutine vhags1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
+                            mn = np1 + mb
                             br_val_m = br(mp1, np1, k); bi_val_m = bi(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m) PRIVATE(vb_val, wb_val)
                             do i = 1, imm1
-                                br_val_m = br_val_m + vb(i, np1+mb) * ve(i, 2*mp1-2, k) + wb(i, np1+mb) * wo(i, 2*mp1-1, k)
-                                bi_val_m = bi_val_m + vb(i, np1+mb) * ve(i, 2*mp1-1, k) - wb(i, np1+mb) * wo(i, 2*mp1-2, k)
+                                vb_val = vb(i, mn)
+                                wb_val = wb(i, mn)
+                                br_val_m = br_val_m + vb_val * ve(i, mr, k) + wb_val * wo(i, mi, k)
+                                bi_val_m = bi_val_m + vb_val * ve(i, mi, k) - wb_val * wo(i, mr, k)
                             end do
                             br(mp1, np1, k) = br_val_m; bi(mp1, np1, k) = bi_val_m
                             if (mlat /= 0) then
                                 i = imid
-                                br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1+mb) * ve(i, 2*mp1-2, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb(i, np1+mb) * ve(i, 2*mp1-1, k)
+                                vb_val = vb(i, mn)
+                                br(mp1, np1, k) = br(mp1, np1, k) + vb_val * ve(i, mr, k)
+                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb_val * ve(i, mi, k)
                             end if
                         end do
                     end do
@@ -362,21 +391,26 @@ subroutine vhags1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         if (mmax >= 2) then
             do mp1 = 2, mmax
                 m = mp1 - 1; mp2 = mp1 + 1
+                mr = 2 * mp1 - 2; mi = mr + 1
                 mb = m * nlat - (m * (m + 1)) / 2
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
+                            mn = np1 + mb
                             cr_val_m = cr(mp1, np1, k); ci_val_m = ci(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:cr_val_m, ci_val_m)
+                            !$OMP SIMD REDUCTION(+:cr_val_m, ci_val_m) PRIVATE(vb_val, wb_val)
                             do i = 1, imm1
-                                cr_val_m = cr_val_m - vb(i, np1+mb) * wo(i, 2*mp1-2, k) + wb(i, np1+mb) * ve(i, 2*mp1-1, k)
-                                ci_val_m = ci_val_m - vb(i, np1+mb) * wo(i, 2*mp1-1, k) - wb(i, np1+mb) * ve(i, 2*mp1-2, k)
+                                vb_val = vb(i, mn)
+                                wb_val = wb(i, mn)
+                                cr_val_m = cr_val_m - vb_val * wo(i, mr, k) + wb_val * ve(i, mi, k)
+                                ci_val_m = ci_val_m - vb_val * wo(i, mi, k) - wb_val * ve(i, mr, k)
                             end do
                             cr(mp1, np1, k) = cr_val_m; ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
                                 i = imid
-                                cr(mp1, np1, k) = cr(mp1, np1, k) + wb(i, np1+mb) * ve(i, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - wb(i, np1+mb) * ve(i, 2*mp1-2, k)
+                                wb_val = wb(i, mn)
+                                cr(mp1, np1, k) = cr(mp1, np1, k) + wb_val * ve(i, mi, k)
+                                ci(mp1, np1, k) = ci(mp1, np1, k) - wb_val * ve(i, mr, k)
                             end if
                         end do
                     end do
@@ -384,17 +418,21 @@ subroutine vhags1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
+                            mn = np1 + mb
                             cr_val_m = cr(mp1, np1, k); ci_val_m = ci(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:cr_val_m, ci_val_m)
+                            !$OMP SIMD REDUCTION(+:cr_val_m, ci_val_m) PRIVATE(vb_val, wb_val)
                             do i = 1, imm1
-                                cr_val_m = cr_val_m - vb(i, np1+mb) * we(i, 2*mp1-2, k) + wb(i, np1+mb) * vo(i, 2*mp1-1, k)
-                                ci_val_m = ci_val_m - vb(i, np1+mb) * we(i, 2*mp1-1, k) - wb(i, np1+mb) * vo(i, 2*mp1-2, k)
+                                vb_val = vb(i, mn)
+                                wb_val = wb(i, mn)
+                                cr_val_m = cr_val_m - vb_val * we(i, mr, k) + wb_val * vo(i, mi, k)
+                                ci_val_m = ci_val_m - vb_val * we(i, mi, k) - wb_val * vo(i, mr, k)
                             end do
                             cr(mp1, np1, k) = cr_val_m; ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
                                 i = imid
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1+mb) * we(i, 2*mp1-2, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb(i, np1+mb) * we(i, 2*mp1-1, k)
+                                vb_val = vb(i, mn)
+                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb_val * we(i, mr, k)
+                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb_val * we(i, mi, k)
                             end if
                         end do
                     end do

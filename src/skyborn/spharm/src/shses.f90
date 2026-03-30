@@ -149,14 +149,22 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
     integer, intent(in) :: idg, jdg
     real, intent(out) :: g(idgs, jdgs, nt)
     real, intent(in) :: a(mdab, ndab, nt), b(mdab, ndab, nt)
-    real, intent(in) :: p(imid, *)
+    ! Original modernized declarations kept these workers as assumed-size:
+    ! real, intent(in) :: p(imid, *)
+    ! real, intent(inout) :: ge(idg, jdg, nt), go(idg, jdg, nt)
+    ! real, intent(inout) :: work(*)
+    ! real, intent(in) :: whrfft(*)
+    ! Performance note (2026-03-29): use explicit-shape worker arguments so gfortran
+    ! can see tighter bounds/strides without changing the algorithm.
+    real, intent(in) :: p(imid, (min(nlat, jdg / 2 + 1) * (2 * nlat - min(nlat, jdg / 2 + 1) + 1)) / 2)
     real, intent(inout) :: ge(idg, jdg, nt), go(idg, jdg, nt)
-    real, intent(inout) :: work(*)
-    real, intent(in) :: whrfft(*)
+    real, intent(inout) :: work(idg * jdg)
+    real, intent(in) :: whrfft(jdg + 15)
 
     ! Local variables
     integer :: ls, nlon, mmax, mdo, nlp1, modl, imm1, ndo
     integer :: k, i, j, mp1, np1, m, mb, mn, mp2
+    real :: a_val, b_val, p_val
 
     ! External function interface
     external :: hrfftb
@@ -193,8 +201,11 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
         !DIR$ VECTOR ALWAYS
         do k = 1, nt
             do np1 = 1, nlat, 2
+                a_val = a(1, np1, k)
+                !$OMP SIMD
                 do i = 1, imid
-                    ge(i, 1, k) = ge(i, 1, k) + a(1, np1, k) * p(i, np1)
+                    p_val = p(i, np1)
+                    ge(i, 1, k) = ge(i, 1, k) + a_val * p_val
                 end do
             end do
         end do
@@ -212,10 +223,14 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
             !DIR$ VECTOR ALWAYS
             do k = 1, nt
                 do np1 = mp1, ndo, 2
+                    a_val = a(mp1, np1, k)
+                    b_val = b(mp1, np1, k)
+                    mn = mb + np1
+                    !$OMP SIMD
                     do i = 1, imid
-                        mn = mb + np1
-                        ge(i, 2*mp1-2, k) = ge(i, 2*mp1-2, k) + a(mp1, np1, k) * p(i, mn)
-                        ge(i, 2*mp1-1, k) = ge(i, 2*mp1-1, k) + b(mp1, np1, k) * p(i, mn)
+                        p_val = p(i, mn)
+                        ge(i, 2*mp1-2, k) = ge(i, 2*mp1-2, k) + a_val * p_val
+                        ge(i, 2*mp1-1, k) = ge(i, 2*mp1-1, k) + b_val * p_val
                     end do
                 end do
             end do
@@ -230,9 +245,12 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
             !DIR$ VECTOR ALWAYS
             do k = 1, nt
                 do np1 = mmax, ndo, 2
+                    a_val = a(mmax, np1, k)
+                    mn = mb + np1
+                    !$OMP SIMD
                     do i = 1, imid
-                        mn = mb + np1
-                        ge(i, 2*mmax-2, k) = ge(i, 2*mmax-2, k) + a(mmax, np1, k) * p(i, mn)
+                        p_val = p(i, mn)
+                        ge(i, 2*mmax-2, k) = ge(i, 2*mmax-2, k) + a_val * p_val
                     end do
                 end do
             end do
@@ -253,8 +271,11 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
         !DIR$ VECTOR ALWAYS
         do k = 1, nt
             do np1 = 2, nlat, 2
+                a_val = a(1, np1, k)
+                !$OMP SIMD
                 do i = 1, imm1
-                    go(i, 1, k) = go(i, 1, k) + a(1, np1, k) * p(i, np1)
+                    p_val = p(i, np1)
+                    go(i, 1, k) = go(i, 1, k) + a_val * p_val
                 end do
             end do
         end do
@@ -273,10 +294,14 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
             !DIR$ VECTOR ALWAYS
             do k = 1, nt
                 do np1 = mp2, ndo, 2
+                    a_val = a(mp1, np1, k)
+                    b_val = b(mp1, np1, k)
+                    mn = mb + np1
+                    !$OMP SIMD
                     do i = 1, imm1
-                        mn = mb + np1
-                        go(i, 2*mp1-2, k) = go(i, 2*mp1-2, k) + a(mp1, np1, k) * p(i, mn)
-                        go(i, 2*mp1-1, k) = go(i, 2*mp1-1, k) + b(mp1, np1, k) * p(i, mn)
+                        p_val = p(i, mn)
+                        go(i, 2*mp1-2, k) = go(i, 2*mp1-2, k) + a_val * p_val
+                        go(i, 2*mp1-1, k) = go(i, 2*mp1-1, k) + b_val * p_val
                     end do
                 end do
             end do
@@ -292,9 +317,12 @@ subroutine shses1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, p, imid, &
             !DIR$ VECTOR ALWAYS
             do k = 1, nt
                 do np1 = mp2, ndo, 2
+                    a_val = a(mmax, np1, k)
+                    mn = mb + np1
+                    !$OMP SIMD
                     do i = 1, imm1
-                        mn = mb + np1
-                        go(i, 2*mmax-2, k) = go(i, 2*mmax-2, k) + a(mmax, np1, k) * p(i, mn)
+                        p_val = p(i, mn)
+                        go(i, 2*mmax-2, k) = go(i, 2*mmax-2, k) + a_val * p_val
                     end do
                 end do
             end do
