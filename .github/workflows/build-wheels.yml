@@ -263,7 +263,7 @@ jobs:
       #     CIBW_BUILD_VERBOSITY: 1
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheel-${{ matrix.python }}-${{ matrix.buildplat[1] }}
           path: ./wheelhouse/*.whl
@@ -288,7 +288,7 @@ jobs:
           python -m build --sdist
 
       - name: Upload sdist
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sdist
           path: dist/*.tar.gz
