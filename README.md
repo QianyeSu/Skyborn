@@ -49,7 +49,7 @@ pip install -U --index-url https://pypi.org/simple/ skyborn
 
 Skyborn provides ultra-fast spatial trend calculation and climate index regression analysis for atmospheric data:
 
-![Precipitation Trends Comparison](docs/source/images/precipitation_trends_comparison_1979_2014.png)
+![Precipitation Trends Comparison](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/precipitation_trends_comparison_1979_2014.png)
 
 **Key Capabilities:**
 - **High-Speed Spatial Trends**: Calculate long-term climate trends across global grids
@@ -72,7 +72,7 @@ Skyborn provides ultra-fast spatial trend calculation and climate index regressi
 
 The Skyborn `windspharm` submodule provides powerful tools for analyzing global wind patterns through **streamfunction** and **velocity potential** calculations:
 
-![Streamfunction and Velocity Potential](docs/source/images/windspharm_sfvp_analysis.png)
+![Streamfunction and Velocity Potential](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/windspharm_sfvp_analysis.png)
 
 **Key Capabilities:**
 - **Streamfunction Analysis**: Identifies rotational (non-divergent) wind components
@@ -95,7 +95,7 @@ The Skyborn `windspharm` submodule provides powerful tools for analyzing global 
 
 The Skyborn `gridfill` submodule provides advanced interpolation techniques for filling missing data in atmospheric and climate datasets:
 
-![Gridfill Missing Data Interpolation](docs/source/images/gridfill_demo_result_readme.png)
+![Gridfill Missing Data Interpolation](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/gridfill_demo_result_readme.png)
 
 **Key Features:**
 - **Poisson-based Interpolation**: Physically consistent gap filling
@@ -120,7 +120,7 @@ The example above demonstrates filling gaps in global precipitation data, where 
 
 The Skyborn `windspharm` submodule delivers **~25% performance improvement** over standard implementations through modernized Fortran code and optimized algorithms:
 
-![Windspharm Performance Comparison](docs/source/images/windspharm_performance_comparison.png)
+![Windspharm Performance Comparison](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/windspharm_performance_comparison.png)
 
 **Key Performance Metrics:**
 - **Vorticity Calculation**: ~25% faster
@@ -132,20 +132,20 @@ The Skyborn `windspharm` submodule delivers **~25% performance improvement** ove
 
 The Genesis Potential Index (GPI) module achieves **dramatic speedups** through vectorized Fortran implementation and native 3D processing:
 
-![GPI Speed Comparison](docs/source/images/gpi_speed_comparison.png)
+![GPI Speed Comparison](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/gpi_speed_comparison.png)
 
 **Performance Highlights:**
 - **19-25x faster** than point-by-point implementations
 - Processes entire atmospheric grids in seconds
 - Native multi-dimensional support (3D/4D data)
 
-![GPI Global Distribution](docs/source/images/gpi_global_distribution.png)
+![GPI Global Distribution](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/gpi_global_distribution.png)
 
 **Accuracy Validation:**
 - Correlation coefficient > 0.99 with reference implementations
 - RMSE < 1% for both VMAX and PMIN calculations
 
-![GPI Scatter Comparison](docs/source/images/gpi_scatter_comparison.png)
+![GPI Scatter Comparison](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/gpi_scatter_comparison.png)
 
 ## 📖 Citation
 
