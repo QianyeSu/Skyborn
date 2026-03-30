@@ -1,0 +1,1 @@
+skyborn-cdo>=2.6.0.2; (platform_system == "Windows" and platform_machine == "AMD64") or (platform_system == "Linux" and platform_machine == "x86_64") or (platform_system == "Darwin" and platform_machine == "arm64")

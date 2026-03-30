@@ -6,6 +6,13 @@ Version 0.3.17 (Current)
 
 **🚀 New Features**
 
+* **Optional CDO Integration Through ``skyborn.cdo``**: Added a compatibility namespace so users can access the standalone ``skyborn-cdo`` package from the main Skyborn API
+
+  - Import path: ``from skyborn.cdo import Cdo``
+  - Install path on supported platforms: ``pip install "skyborn[cdo]"``
+  - Keeps ``skyborn-cdo`` as a separate binary-distribution package instead of forcing bundled CDO dependencies onto every Skyborn install
+  - Targets the currently supported ``skyborn-cdo`` wheel platforms: Windows x86_64, Linux x86_64, and macOS arm64
+
 * **Python 3.14 Support**: Added official support for Python 3.14 across all platforms (Linux, macOS, Windows)
 
 * **manylinux2014 Wheels**: Added ``manylinux2014`` (glibc 2.17) wheel builds for compatibility with older Linux servers
