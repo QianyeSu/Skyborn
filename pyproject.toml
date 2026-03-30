@@ -63,10 +63,11 @@ where = ["src"]
 
 [tool.setuptools.dynamic]
 version = { attr = "skyborn.__version__" }
-dependencies = { file = ["requirements.txt"] }
-optional-dependencies.cdo = { file = ["requirements-cdo.txt"] }
-optional-dependencies.dev = { file = ["requirements-dev.txt"] }
-optional-dependencies.docs = { file = ["requirements-docs.txt"] }
+dependencies = { file = ["requirements/base.txt"] }
+optional-dependencies.cdo = { file = ["requirements/cdo.txt"] }
+optional-dependencies.grib = { file = ["requirements/grib.txt"] }
+optional-dependencies.dev = { file = ["requirements/dev.txt"] }
+optional-dependencies.docs = { file = ["requirements/docs.txt"] }
 
 # Tool configurations for code quality
 
@@ -153,7 +154,7 @@ python_functions = ["test_*"]
 
 [tool.coverage.run]
 source = ["src"]
-omit = ["*/tests/*", "*/test_*", "setup.py"]
+omit = ["*/tests/*", "*/test_*", "setup.py", "*/skyborn/cdo/*"]
 
 [tool.coverage.report]
 exclude_lines = [

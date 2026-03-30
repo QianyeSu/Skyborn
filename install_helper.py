@@ -2,6 +2,7 @@
 """
 Intelligent Installation Helper - Provides optimal installation experience for different platforms and scenarios
 """
+
 import platform
 import shutil
 import subprocess
