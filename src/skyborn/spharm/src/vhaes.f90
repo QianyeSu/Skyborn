@@ -109,16 +109,26 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     ! Argument definitions
     integer, intent(in) :: nlat, nlon, ityp, nt, imid, idvw, jdvw, mdab, ndab, idv, idz
-    real, intent(in) :: v(idvw, jdvw, *), w(idvw, jdvw, *)
-    real, intent(out) :: br(mdab, ndab, *), bi(mdab, ndab, *), cr(mdab, ndab, *), ci(mdab, ndab, *)
-    real, intent(inout) :: ve(idv, nlon, *), vo(idv, nlon, *), we(idv, nlon, *), wo(idv, nlon, *)
-    real, intent(inout) :: work(*)
-    real, intent(in) :: zv(idz, *), zw(idz, *), wrfft(*)
+    ! Original modernized declarations kept these workers as assumed-size:
+    ! real, intent(in) :: v(idvw, jdvw, *), w(idvw, jdvw, *)
+    ! real, intent(out) :: br(mdab, ndab, *), bi(mdab, ndab, *), cr(mdab, ndab, *), ci(mdab, ndab, *)
+    ! real, intent(inout) :: ve(idv, nlon, *), vo(idv, nlon, *), we(idv, nlon, *), wo(idv, nlon, *)
+    ! real, intent(inout) :: work(*)
+    ! real, intent(in) :: zv(idz, *), zw(idz, *), wrfft(*)
+    ! Performance note (2026-03-29): use explicit-shape worker arguments so gfortran
+    ! can see tighter bounds/strides without changing the algorithm.
+    real, intent(in) :: v(idvw, jdvw, nt), w(idvw, jdvw, nt)
+    real, intent(out) :: br(mdab, ndab, nt), bi(mdab, ndab, nt), cr(mdab, ndab, nt), ci(mdab, ndab, nt)
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt), we(idv, nlon, nt), wo(idv, nlon, nt)
+    real, intent(inout) :: work(idv * nlon)
+    real, intent(in) :: zv(idz, imid), zw(idz, imid), wrfft(nlon + 15)
 
     ! Local variables
     integer :: nlp1, mlat, mmax, imm1, ndo1, ndo2, itypp
     integer :: k, i, j, mp1, np1, m, mb, mp2
     real :: tsn, fsn
+    real :: br_val_0, cr_val_0
+    real :: br_val_m, bi_val_m, cr_val_m, ci_val_m
 
     ! --- Precompute constants ---
     nlp1 = nlat + 1
@@ -211,18 +221,26 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                br_val_0 = br(1, np1, k)
+                cr_val_0 = cr(1, np1, k)
+                !$OMP SIMD REDUCTION(+:br_val_0, cr_val_0)
                 do i = 1, imid
-                    br(1, np1, k) = br(1, np1, k) + zv(np1, i) * ve(i, 1, k)
-                    cr(1, np1, k) = cr(1, np1, k) - zv(np1, i) * we(i, 1, k)
+                    br_val_0 = br_val_0 + zv(np1, i) * ve(i, 1, k)
+                    cr_val_0 = cr_val_0 - zv(np1, i) * we(i, 1, k)
                 end do
+                br(1, np1, k) = br_val_0
+                cr(1, np1, k) = cr_val_0
             end do
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                br_val_0 = br(1, np1, k)
+                cr_val_0 = cr(1, np1, k)
+                !$OMP SIMD REDUCTION(+:br_val_0, cr_val_0)
                 do i = 1, imm1
-                    br(1, np1, k) = br(1, np1, k) + zv(np1, i) * vo(i, 1, k)
-                    cr(1, np1, k) = cr(1, np1, k) - zv(np1, i) * wo(i, 1, k)
+                    br_val_0 = br_val_0 + zv(np1, i) * vo(i, 1, k)
+                    cr_val_0 = cr_val_0 - zv(np1, i) * wo(i, 1, k)
                 end do
+                br(1, np1, k) = br_val_0
+                cr(1, np1, k) = cr_val_0
             end do
         end do
         ! m>0
@@ -234,13 +252,21 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            br_val_m = br(mp1, np1, k)
+                            bi_val_m = bi(mp1, np1, k)
+                            cr_val_m = cr(mp1, np1, k)
+                            ci_val_m = ci(mp1, np1, k)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m, cr_val_m, ci_val_m)
                             do i = 1, imm1
-                                br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
+                                br_val_m = br_val_m + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
+                                bi_val_m = bi_val_m + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
+                                cr_val_m = cr_val_m - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
+                                ci_val_m = ci_val_m - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
                             end do
+                            br(mp1, np1, k) = br_val_m
+                            bi(mp1, np1, k) = bi_val_m
+                            cr(mp1, np1, k) = cr_val_m
+                            ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
                                 br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid) * we(imid, 2*mp1-1, k)
                                 bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid) * we(imid, 2*mp1-2, k)
@@ -253,13 +279,21 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            br_val_m = br(mp1, np1, k)
+                            bi_val_m = bi(mp1, np1, k)
+                            cr_val_m = cr(mp1, np1, k)
+                            ci_val_m = ci(mp1, np1, k)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m, cr_val_m, ci_val_m)
                             do i = 1, imm1
-                                br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-2, k) + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-1, k) - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
+                                br_val_m = br_val_m + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
+                                bi_val_m = bi_val_m + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
+                                cr_val_m = cr_val_m - zv(np1 + mb, i) * we(i, 2*mp1-2, k) + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
+                                ci_val_m = ci_val_m - zv(np1 + mb, i) * we(i, 2*mp1-1, k) - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
                             end do
+                            br(mp1, np1, k) = br_val_m
+                            bi(mp1, np1, k) = bi_val_m
+                            cr(mp1, np1, k) = cr_val_m
+                            ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
                                 br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
                                 bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
@@ -276,16 +310,20 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                br_val_0 = br(1, np1, k)
+                !$OMP SIMD REDUCTION(+:br_val_0)
                 do i = 1, imid
-                    br(1, np1, k) = br(1, np1, k) + zv(np1, i) * ve(i, 1, k)
+                    br_val_0 = br_val_0 + zv(np1, i) * ve(i, 1, k)
                 end do
+                br(1, np1, k) = br_val_0
             end do
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                br_val_0 = br(1, np1, k)
+                !$OMP SIMD REDUCTION(+:br_val_0)
                 do i = 1, imm1
-                    br(1, np1, k) = br(1, np1, k) + zv(np1, i) * vo(i, 1, k)
+                    br_val_0 = br_val_0 + zv(np1, i) * vo(i, 1, k)
                 end do
+                br(1, np1, k) = br_val_0
             end do
         end do
         ! m>0
@@ -297,11 +335,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            br_val_m = br(mp1, np1, k)
+                            bi_val_m = bi(mp1, np1, k)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m)
                             do i = 1, imm1
-                                br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
+                                br_val_m = br_val_m + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
+                                bi_val_m = bi_val_m + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
                             end do
+                            br(mp1, np1, k) = br_val_m
+                            bi(mp1, np1, k) = bi_val_m
                             if (mlat /= 0) then
                                 br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid) * we(imid, 2*mp1-1, k)
                                 bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid) * we(imid, 2*mp1-2, k)
@@ -312,11 +354,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            br_val_m = br(mp1, np1, k)
+                            bi_val_m = bi(mp1, np1, k)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m)
                             do i = 1, imm1
-                                br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
+                                br_val_m = br_val_m + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
+                                bi_val_m = bi_val_m + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
                             end do
+                            br(mp1, np1, k) = br_val_m
+                            bi(mp1, np1, k) = bi_val_m
                             if (mlat /= 0) then
                                 br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
                                 bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
@@ -331,16 +377,20 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                cr_val_0 = cr(1, np1, k)
+                !$OMP SIMD REDUCTION(+:cr_val_0)
                 do i = 1, imid
-                    cr(1, np1, k) = cr(1, np1, k) - zv(np1, i) * we(i, 1, k)
+                    cr_val_0 = cr_val_0 - zv(np1, i) * we(i, 1, k)
                 end do
+                cr(1, np1, k) = cr_val_0
             end do
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                cr_val_0 = cr(1, np1, k)
+                !$OMP SIMD REDUCTION(+:cr_val_0)
                 do i = 1, imm1
-                    cr(1, np1, k) = cr(1, np1, k) - zv(np1, i) * wo(i, 1, k)
+                    cr_val_0 = cr_val_0 - zv(np1, i) * wo(i, 1, k)
                 end do
+                cr(1, np1, k) = cr_val_0
             end do
         end do
         ! m>0
@@ -352,11 +402,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            cr_val_m = cr(mp1, np1, k)
+                            ci_val_m = ci(mp1, np1, k)
+                            !$OMP SIMD REDUCTION(+:cr_val_m, ci_val_m)
                             do i = 1, imm1
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
+                                cr_val_m = cr_val_m - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
+                                ci_val_m = ci_val_m - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
                             end do
+                            cr(mp1, np1, k) = cr_val_m
+                            ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
                                 cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
                                 ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
@@ -367,11 +421,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            cr_val_m = cr(mp1, np1, k)
+                            ci_val_m = ci(mp1, np1, k)
+                            !$OMP SIMD REDUCTION(+:cr_val_m, ci_val_m)
                             do i = 1, imm1
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-2, k) + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-1, k) - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
+                                cr_val_m = cr_val_m - zv(np1 + mb, i) * we(i, 2*mp1-2, k) + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
+                                ci_val_m = ci_val_m - zv(np1 + mb, i) * we(i, 2*mp1-1, k) - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
                             end do
+                            cr(mp1, np1, k) = cr_val_m
+                            ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
                                 cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, imid) * we(imid, 2*mp1-2, k)
                                 ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, imid) * we(imid, 2*mp1-1, k)

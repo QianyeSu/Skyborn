@@ -317,16 +317,25 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     ! Argument definitions
     integer, intent(in) :: nlat, nlon, ityp, nt, imid, idvw, jdvw, mdab, ndab, idv, idz
-    real, intent(out) :: v(idvw, jdvw, *), w(idvw, jdvw, *)
-    real, intent(in) :: br(mdab, ndab, *), bi(mdab, ndab, *), cr(mdab, ndab, *), ci(mdab, ndab, *)
-    real, intent(inout) :: ve(idv, nlon, *), vo(idv, nlon, *), we(idv, nlon, *), wo(idv, nlon, *)
-    real, intent(inout) :: work(*)
-    real, intent(in) :: vb(imid, *), wb(imid, *), wrfft(*)
+    ! Original modernized declarations kept these workers as assumed-size:
+    ! real, intent(out) :: v(idvw, jdvw, *), w(idvw, jdvw, *)
+    ! real, intent(in) :: br(mdab, ndab, *), bi(mdab, ndab, *), cr(mdab, ndab, *), ci(mdab, ndab, *)
+    ! real, intent(inout) :: ve(idv, nlon, *), vo(idv, nlon, *), we(idv, nlon, *), wo(idv, nlon, *)
+    ! real, intent(inout) :: work(*)
+    ! real, intent(in) :: vb(imid, *), wb(imid, *), wrfft(*)
+    ! Performance note (2026-03-29): use explicit-shape worker arguments so gfortran
+    ! can see tighter bounds/strides without changing the algorithm.
+    real, intent(out) :: v(idvw, jdvw, nt), w(idvw, jdvw, nt)
+    real, intent(in) :: br(mdab, ndab, nt), bi(mdab, ndab, nt), cr(mdab, ndab, nt), ci(mdab, ndab, nt)
+    real, intent(inout) :: ve(idv, nlon, nt), vo(idv, nlon, nt), we(idv, nlon, nt), wo(idv, nlon, nt)
+    real, intent(inout) :: work(idv * nlon)
+    real, intent(in) :: vb(imid, idz), wb(imid, idz), wrfft(nlon + 15)
 
     ! Local variables
     integer :: nlp1, mlat, mmax, imm1, ndo1, ndo2, itypp
     integer :: k, i, j, mp1, np1, m, mb, mp2, mn
-    real :: br_val, bi_val, cr_val, ci_val
+    real :: br_val, bi_val, cr_val, ci_val, vb_val, wb_val
+    real :: ve_val, vo_val, we_val, wo_val
 
     ! --- Precompute constants ---
     nlp1 = nlat + 1
@@ -335,7 +344,10 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     imm1 = imid
     if (mlat /= 0) imm1 = imid - 1
 
-    ! --- CRITICAL: Initialize workspace arrays to zero ---
+    ! --- Initialize workspace arrays to zero ---
+    ! Keep the explicit vo/wo clear for safety. The overlap-based legacy layout
+    ! can make this look redundant for some cases, but the explicit initialization
+    ! is easier to reason about and reduces the risk of future maintenance bugs.
     do k = 1, nt
         do j = 1, nlon
             do i = 1, idv
@@ -372,16 +384,18 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 br_val = br(1, np1, k); cr_val = cr(1, np1, k)
                 !$OMP SIMD
                 do i = 1, imid
-                    ve(i, 1, k) = ve(i, 1, k) + br_val * vb(i, np1)
-                    we(i, 1, k) = we(i, 1, k) - cr_val * vb(i, np1)
+                    vb_val = vb(i, np1)
+                    ve(i, 1, k) = ve(i, 1, k) + br_val * vb_val
+                    we(i, 1, k) = we(i, 1, k) - cr_val * vb_val
                 end do
             end do
             do np1 = 3, ndo1, 2
                 br_val = br(1, np1, k); cr_val = cr(1, np1, k)
                 !$OMP SIMD
                 do i = 1, imm1
-                    vo(i, 1, k) = vo(i, 1, k) + br_val * vb(i, np1)
-                    wo(i, 1, k) = wo(i, 1, k) - cr_val * vb(i, np1)
+                    vb_val = vb(i, np1)
+                    vo(i, 1, k) = vo(i, 1, k) + br_val * vb_val
+                    wo(i, 1, k) = wo(i, 1, k) - cr_val * vb_val
                 end do
             end do
         end do
@@ -398,21 +412,24 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             cr_val = cr(mp1, np1, k); ci_val = ci(mp1, np1, k)
                             !$OMP SIMD
                             do i = 1, imm1
-                                vo(i, 2*mp1-2, k) = vo(i, 2*mp1-2, k) + br_val * vb(i, mn)
-                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) - ci_val * wb(i, mn)
-                                vo(i, 2*mp1-1, k) = vo(i, 2*mp1-1, k) + bi_val * vb(i, mn)
-                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + cr_val * wb(i, mn)
-                                wo(i, 2*mp1-2, k) = wo(i, 2*mp1-2, k) - cr_val * vb(i, mn)
-                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - bi_val * wb(i, mn)
-                                wo(i, 2*mp1-1, k) = wo(i, 2*mp1-1, k) - ci_val * vb(i, mn)
-                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) + br_val * wb(i, mn)
+                                vb_val = vb(i, mn)
+                                wb_val = wb(i, mn)
+                                vo(i, 2*mp1-2, k) = vo(i, 2*mp1-2, k) + br_val * vb_val
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) - ci_val * wb_val
+                                vo(i, 2*mp1-1, k) = vo(i, 2*mp1-1, k) + bi_val * vb_val
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + cr_val * wb_val
+                                wo(i, 2*mp1-2, k) = wo(i, 2*mp1-2, k) - cr_val * vb_val
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - bi_val * wb_val
+                                wo(i, 2*mp1-1, k) = wo(i, 2*mp1-1, k) - ci_val * vb_val
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) + br_val * wb_val
                             end do
                             if (mlat /= 0) then
                                 i = imid
-                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) - ci_val * wb(i, mn)
-                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + cr_val * wb(i, mn)
-                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - bi_val * wb(i, mn)
-                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) + br_val * wb(i, mn)
+                                wb_val = wb(i, mn)
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) - ci_val * wb_val
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + cr_val * wb_val
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - bi_val * wb_val
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) + br_val * wb_val
                             end if
                         end do
                     end do
@@ -425,21 +442,24 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             cr_val = cr(mp1, np1, k); ci_val = ci(mp1, np1, k)
                             !$OMP SIMD
                             do i = 1, imm1
-                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) + br_val * vb(i, mn)
-                                vo(i, 2*mp1-2, k) = vo(i, 2*mp1-2, k) - ci_val * wb(i, mn)
-                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + bi_val * vb(i, mn)
-                                vo(i, 2*mp1-1, k) = vo(i, 2*mp1-1, k) + cr_val * wb(i, mn)
-                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - cr_val * vb(i, mn)
-                                wo(i, 2*mp1-2, k) = wo(i, 2*mp1-2, k) - bi_val * wb(i, mn)
-                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) - ci_val * vb(i, mn)
-                                wo(i, 2*mp1-1, k) = wo(i, 2*mp1-1, k) + br_val * wb(i, mn)
+                                vb_val = vb(i, mn)
+                                wb_val = wb(i, mn)
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) + br_val * vb_val
+                                vo(i, 2*mp1-2, k) = vo(i, 2*mp1-2, k) - ci_val * wb_val
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + bi_val * vb_val
+                                vo(i, 2*mp1-1, k) = vo(i, 2*mp1-1, k) + cr_val * wb_val
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - cr_val * vb_val
+                                wo(i, 2*mp1-2, k) = wo(i, 2*mp1-2, k) - bi_val * wb_val
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) - ci_val * vb_val
+                                wo(i, 2*mp1-1, k) = wo(i, 2*mp1-1, k) + br_val * wb_val
                             end do
                             if (mlat /= 0) then
                                 i = imid
-                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) + br_val * vb(i, mn)
-                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + bi_val * vb(i, mn)
-                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - cr_val * vb(i, mn)
-                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) - ci_val * vb(i, mn)
+                                vb_val = vb(i, mn)
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) + br_val * vb_val
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + bi_val * vb_val
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - cr_val * vb_val
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) - ci_val * vb_val
                             end if
                         end do
                     end do
@@ -890,10 +910,14 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
             do j = 1, nlon
                 !$OMP SIMD
                 do i = 1, imm1
-                    v(i, j, k) = 0.5 * (ve(i, j, k) + vo(i, j, k))
-                    w(i, j, k) = 0.5 * (we(i, j, k) + wo(i, j, k))
-                    v(nlp1 - i, j, k) = 0.5 * (ve(i, j, k) - vo(i, j, k))
-                    w(nlp1 - i, j, k) = 0.5 * (we(i, j, k) - wo(i, j, k))
+                    ve_val = ve(i, j, k)
+                    vo_val = vo(i, j, k)
+                    we_val = we(i, j, k)
+                    wo_val = wo(i, j, k)
+                    v(i, j, k) = 0.5 * (ve_val + vo_val)
+                    w(i, j, k) = 0.5 * (we_val + wo_val)
+                    v(nlp1 - i, j, k) = 0.5 * (ve_val - vo_val)
+                    w(nlp1 - i, j, k) = 0.5 * (we_val - wo_val)
                 end do
             end do
         end do
