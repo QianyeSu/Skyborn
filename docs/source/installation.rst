@@ -4,7 +4,7 @@ Installation
 System Requirements
 -------------------
 
-* Python 3.8 or higher
+* Python 3.9 or higher
 * Windows, macOS, or Linux
 
 Installation Methods
@@ -43,24 +43,21 @@ Install directly from GitHub:
 With Optional Dependencies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Install with all optional dependencies for full functionality:
+Install specific dependency groups:
 
 .. code-block:: bash
 
-   pip install skyborn[all]
+   # Optional CDO bridge on supported wheel platforms
+   pip install "skyborn[cdo]"
 
-Or install specific dependency groups:
-
-.. code-block:: bash
-
-   # For visualization
-   pip install skyborn[plotting]
+   # Optional GRIB backends
+   pip install "skyborn[grib]"
 
    # For development
-   pip install skyborn[dev]
+   pip install "skyborn[dev]"
 
    # For documentation building
-   pip install skyborn[docs]
+   pip install "skyborn[docs]"
 
 Conda Installation
 ~~~~~~~~~~~~~~~~~~
@@ -96,12 +93,18 @@ Core dependencies:
 * xarray
 * matplotlib
 * scipy
+* netCDF4
+* metpy
+* scikit-learn
+* dask
+* statsmodels
+* tqdm
 
 Optional dependencies:
 * seaborn (for enhanced plotting)
 * cartopy (for geographic plotting)
-* eccodes (for GRIB file handling)
-* netCDF4 (for NetCDF file operations)
+* cfgrib and eccodes (for GRIB file handling)
+* skyborn-cdo (via ``skyborn[cdo]`` on supported platforms)
 
 Troubleshooting
 ---------------
@@ -109,7 +112,7 @@ Troubleshooting
 If you encounter issues:
 
 1. **Import errors**: Make sure all dependencies are installed
-2. **GRIB support**: Install eccodes for GRIB file handling
+2. **GRIB support**: Install ``skyborn[grib]`` or install ``cfgrib`` and ``eccodes`` manually
 3. **Plotting issues**: Install cartopy and seaborn for full plotting functionality
 
 For support, please visit our GitHub repository.

@@ -86,7 +86,6 @@ def check_dependencies():
         'sphinx',
         'sphinx-book-theme',
         'myst-nb',
-        'sphinx-autodoc-typehints',
         'sphinx-copybutton',
         'toml'
     ]

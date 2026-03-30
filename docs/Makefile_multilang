@@ -21,7 +21,7 @@ clean:
 
 # Install required dependencies
 install:
-	pip install sphinx sphinx-rtd-theme myst-parser sphinx-autodoc-typehints
+	pip install sphinx sphinx-book-theme myst-nb sphinx-copybutton toml
 
 # Build English documentation
 html-en:
