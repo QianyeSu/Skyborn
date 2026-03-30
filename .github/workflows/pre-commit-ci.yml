@@ -11,7 +11,7 @@ on:
       - "tests/**"
       - ".pre-commit-config.yaml"
       - "pyproject.toml"
-      - "requirements*.txt"
+      - "requirements/**"
 
 jobs:
   code-quality:
