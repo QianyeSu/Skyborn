@@ -34,6 +34,7 @@ jobs:
           - [ubuntu-latest, manylinux_x86_64]
           - [ubuntu-latest, manylinux2014_x86_64] # manylinux2014 (glibc 2.17) for older servers
           # - [ubuntu-22.04, manylinux_aarch64]  # ARM64 Linux support - disabled due to Python version availability
+          - [macos-15-intel, macosx_x86_64] # macOS Intel
           - [macos-14, macosx_arm64] # macOS Apple Silicon
           - [windows-2022, win_amd64]
         python: ["cp39", "cp310", "cp311", "cp312", "cp313", "cp314"]
@@ -68,30 +69,41 @@ jobs:
       #   with:
       #     platforms: arm64
 
-      # Setup for macOS (following NumPy's approach) + OpenMP support
+      # Setup for macOS with a dynamically discovered Homebrew GCC toolchain
       - name: Setup macOS
         if: startsWith(matrix.buildplat[0], 'macos')
+        shell: bash
         run: |
-          # Install OpenMP support via Homebrew
-          brew install gcc libomp
+          set -euxo pipefail
+          export HOMEBREW_NO_AUTO_UPDATE=1
 
-          # Use gfortran-13 like NumPy, plus OpenMP-capable GCC
-          echo "FC=gfortran-13" >> "$GITHUB_ENV"
-          echo "F77=gfortran-13" >> "$GITHUB_ENV"
-          echo "F90=gfortran-13" >> "$GITHUB_ENV"
-          echo "CC=gcc-13" >> "$GITHUB_ENV"
-          echo "CXX=g++-13" >> "$GITHUB_ENV"
+          brew list gcc >/dev/null 2>&1 || brew install gcc
+          brew list libomp >/dev/null 2>&1 || brew install libomp
 
-          # Set OpenMP library paths
-          echo "LDFLAGS=-L$(brew --prefix libomp)/lib" >> "$GITHUB_ENV"
-          echo "CPPFLAGS=-I$(brew --prefix libomp)/include" >> "$GITHUB_ENV"
-          echo "OpenMP_C_FLAGS=-Xpreprocessor -fopenmp" >> "$GITHUB_ENV"
-          echo "OpenMP_C_LIB_NAMES=omp" >> "$GITHUB_ENV"
-          echo "OpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp" >> "$GITHUB_ENV"
-          echo "OpenMP_CXX_LIB_NAMES=omp" >> "$GITHUB_ENV"
-          echo "OpenMP_omp_LIBRARY=$(brew --prefix libomp)/lib/libomp.dylib" >> "$GITHUB_ENV"
-          # Set macOS deployment target for Apple Silicon (macos-14)
-          echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "$GITHUB_ENV"
+          GCC_PREFIX="$(brew --prefix gcc)"
+          GCC_BIN_DIR="${GCC_PREFIX}/bin"
+          C_BIN="$(compgen -G "${GCC_BIN_DIR}/gcc-[0-9]*" | sort -V | tail -1)"
+          CXX_BIN="$(compgen -G "${GCC_BIN_DIR}/g++-[0-9]*" | sort -V | tail -1)"
+          F_BIN="$(compgen -G "${GCC_BIN_DIR}/gfortran-[0-9]*" | sort -V | tail -1)"
+
+          test -n "${C_BIN}"
+          test -n "${CXX_BIN}"
+          test -n "${F_BIN}"
+
+          echo "${GCC_BIN_DIR}" >> "$GITHUB_PATH"
+          echo "MACOS_CC=${C_BIN}" >> "$GITHUB_ENV"
+          echo "MACOS_CXX=${CXX_BIN}" >> "$GITHUB_ENV"
+          echo "MACOS_FC=${F_BIN}" >> "$GITHUB_ENV"
+          echo "MACOS_F77=${F_BIN}" >> "$GITHUB_ENV"
+          echo "MACOS_F90=${F_BIN}" >> "$GITHUB_ENV"
+          echo "MACOS_CPPFLAGS=-I$(brew --prefix libomp)/include" >> "$GITHUB_ENV"
+          echo "MACOS_LDFLAGS=-L$(brew --prefix libomp)/lib" >> "$GITHUB_ENV"
+
+          if [[ "${{ matrix.buildplat[1] }}" == "macosx_x86_64" ]]; then
+            echo "MACOSX_DEPLOYMENT_TARGET=15.0" >> "$GITHUB_ENV"
+          else
+            echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "$GITHUB_ENV"
+          fi
 
       # Setup for Linux (install gfortran in container)
       - name: Setup Linux environment
@@ -164,20 +176,19 @@ jobs:
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
-      # Build wheels for macOS Intel (x86_64) - Currently disabled
-      # - name: Build wheels (macOS x86_64)
-      #   if: matrix.buildplat[1] == 'macosx_x86_64'
-      #   uses: pypa/cibuildwheel@v3.4.0
-      #   with:
-      #     output-dir: wheelhouse
-      #   env:
-      #     CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-      #     CIBW_SKIP: "*-win32 *-musllinux*"
-      #     # x86_64 on macos-13: target 13.0
-      #     CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc-13 CXX=g++-13 MACOSX_DEPLOYMENT_TARGET=13.0
-      #     MACOSX_DEPLOYMENT_TARGET: "13.0"
-      #     CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
-      #     CIBW_BUILD_VERBOSITY: 1
+      - name: Build wheels (macOS x86_64)
+        if: matrix.buildplat[1] == 'macosx_x86_64'
+        uses: pypa/cibuildwheel@v3.4.0
+        with:
+          output-dir: wheelhouse
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
+          CIBW_SKIP: "*-win32 *-musllinux*"
+          CIBW_BEFORE_BUILD: python -m pip install meson ninja
+          CIBW_ENVIRONMENT_MACOS: FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} CPPFLAGS=${{ env.MACOS_CPPFLAGS }} LDFLAGS=${{ env.MACOS_LDFLAGS }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
+          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
+          CIBW_BUILD_VERBOSITY: 1
 
       - name: Build wheels (macOS arm64)
         if: matrix.buildplat[1] == 'macosx_arm64'
@@ -187,9 +198,9 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
-          # arm64 on macos-14: set deployment target to 14.0 to match libgomp/libomp minima
-          CIBW_ENVIRONMENT_MACOS: FC=gfortran-13 CC=gcc-13 CXX=g++-13 MACOSX_DEPLOYMENT_TARGET=14.0
-          MACOSX_DEPLOYMENT_TARGET: "14.0"
+          CIBW_BEFORE_BUILD: python -m pip install meson ninja
+          CIBW_ENVIRONMENT_MACOS: FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} CPPFLAGS=${{ env.MACOS_CPPFLAGS }} LDFLAGS=${{ env.MACOS_LDFLAGS }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
@@ -328,7 +339,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-14] # macos-13 removed
+        os: [ubuntu-latest, windows-latest, macos-14, macos-15-intel]
         python: ["cp39", "cp310", "cp311", "cp312", "cp313", "cp314"]
     steps:
       - name: Map abi tag to python version
@@ -373,16 +384,17 @@ jobs:
             # Install only minimal deps required for importing skyborn.
             pip install numpy xarray matplotlib scipy dask statsmodels tqdm metpy scikit-learn
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            # Only macos-14 (Apple Silicon) is currently supported
-            # if [[ "${{ matrix.os }}" == "macos-13" ]]; then
-            #   pip install wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl
-            # el
             if [[ "${{ matrix.os }}" == "macos-14" ]]; then
               WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-macosx*_arm64.whl | head -n 1)
-              echo "Selected wheel: $WHEEL"
-              pip install --no-deps "$WHEEL"
-              pip install numpy xarray matplotlib scipy dask statsmodels tqdm metpy scikit-learn
+            elif [[ "${{ matrix.os }}" == "macos-15-intel" ]]; then
+              WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl | head -n 1)
+            else
+              echo "Unsupported macOS runner: ${{ matrix.os }}"
+              exit 1
             fi
+            echo "Selected wheel: $WHEEL"
+            pip install --no-deps "$WHEEL"
+            pip install numpy xarray matplotlib scipy dask statsmodels tqdm metpy scikit-learn
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-win_amd64*.whl | head -n 1)
             echo "Selected wheel: $WHEEL"
