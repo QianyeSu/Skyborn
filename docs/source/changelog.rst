@@ -27,6 +27,8 @@ Version 0.3.17 (Current)
   - **Regression Coverage**: Added a dedicated ``spharm`` regression test to verify Gaussian stored vector analysis/synthesis matches ``legfunc='computed'``
   - **Integration Validation**: Rebuilt both modern ``.f90`` and legacy ``.f`` ``_spherepack`` extensions and verified ``spharm`` and ``windspharm`` workflows on synthetic cases and bundled example wind datasets
 
+* **windspharm Performance Improvement**: Improved the modern ``spharm`` backend used by ``windspharm`` so common tested workflows are now roughly **15-55% faster** than the legacy SPHEREPACK-backed path while keeping engineering-equivalent results.
+
 Version 0.3.16
 --------------
 
