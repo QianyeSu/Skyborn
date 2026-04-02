@@ -57,6 +57,21 @@ def _get_plot_dataarray(ds: xr.Dataset, value, *, isel=None, role: str) -> xr.Da
     return da
 
 
+def _transpose_2d_dataarray_to_dims(
+    da: xr.DataArray, dims: tuple[Hashable, Hashable], *, role: str
+) -> xr.DataArray:
+    if da.ndim != 2:
+        raise ValueError(f"{role} must resolve to a 2D array before plotting")
+    if da.dims == dims:
+        return da
+    if set(da.dims) != set(dims):
+        raise ValueError(
+            f"{role} dims {da.dims} do not match the target vector dims {dims}; "
+            "2D vector inputs must already live on the same physical grid"
+        )
+    return da.transpose(*dims)
+
+
 def _extract_curly_vector_dataset_source(ds, x, y, u, v, *, isel=None):
     x_da = _get_plot_dataarray(ds, x, isel=isel, role="x")
     y_da = _get_plot_dataarray(ds, y, isel=isel, role="y")
@@ -65,6 +80,7 @@ def _extract_curly_vector_dataset_source(ds, x, y, u, v, *, isel=None):
 
     if u_da.ndim != 2 or v_da.ndim != 2:
         raise ValueError("u and v must each resolve to 2D arrays before plotting")
+    v_da = _transpose_2d_dataarray_to_dims(v_da, u_da.dims, role="v")
     if u_da.shape != v_da.shape:
         raise ValueError(
             "u and v must share the same 2D shape. If your vector components live on "
@@ -96,6 +112,8 @@ def _extract_curly_vector_dataset_source(ds, x, y, u, v, *, isel=None):
 
         return x_values, y_values, u_values, v_values
     elif x_da.ndim == 2 and y_da.ndim == 2:
+        x_da = _transpose_2d_dataarray_to_dims(x_da, u_da.dims, role="x")
+        y_da = _transpose_2d_dataarray_to_dims(y_da, u_da.dims, role="y")
         if x_da.shape != y_da.shape:
             raise ValueError("2D x and y coordinates must have the same shape")
         if x_da.shape != u_da.shape:
@@ -288,6 +306,33 @@ def _rcm2rgrid_2d(lat2d, lon2d, field, lat1d, lon1d):
     return regridded
 
 
+def _rcm2rgrid_fields(lat2d, lon2d, fields, lat1d, lon1d):
+    try:
+        from skyborn.interp import rcm2rgrid
+    except ImportError as err:
+        raise ImportError(
+            "Curvilinear vector support requires skyborn.interp.rcm2rgrid to be available."
+        ) from err
+
+    field_stack = np.asarray(
+        [np.asarray(field, dtype=float) for field in fields],
+        dtype=float,
+    )
+    regridded = rcm2rgrid(
+        np.asarray(lat2d, dtype=float),
+        np.asarray(lon2d, dtype=float),
+        field_stack,
+        np.asarray(lat1d, dtype=float),
+        np.asarray(lon1d, dtype=float),
+        msg=np.nan,
+        meta=False,
+    )
+    regridded = np.asarray(regridded, dtype=float)
+    if regridded.ndim == 2:
+        regridded = regridded[np.newaxis, :, :]
+    return [regridded[idx] for idx in range(regridded.shape[0])]
+
+
 def _maybe_as_scalar_field(value, expected_shape):
     if value is None or isinstance(value, str) or np.isscalar(value):
         return None
@@ -299,9 +344,8 @@ def _maybe_as_scalar_field(value, expected_shape):
 
 def _regrid_curvilinear_vectors(x, y, u, v, *scalars, target_shape):
     lon1d, lat1d = _build_curvilinear_target_grid(x, y, target_shape)
-    u_reg = _rcm2rgrid_2d(y, x, u, lat1d, lon1d)
-    v_reg = _rcm2rgrid_2d(y, x, v, lat1d, lon1d)
-    scalar_regs = [_rcm2rgrid_2d(y, x, scalar, lat1d, lon1d) for scalar in scalars]
+    regridded_fields = _rcm2rgrid_fields(y, x, (u, v, *scalars), lat1d, lon1d)
+    u_reg, v_reg, *scalar_regs = regridded_fields
     return (lon1d, lat1d, u_reg, v_reg, *scalar_regs)
 
 
@@ -365,6 +409,17 @@ def _grid_spans_full_longitude(x):
     return np.isfinite(span) and 300.0 <= span <= 370.0
 
 
+def _has_cyclic_longitude_endpoint(x, period=360.0):
+    x = np.asarray(x, dtype=float)
+    if len(x) < 2:
+        return False
+
+    spacing = float(np.nanmedian(np.diff(x)))
+    tolerance = max(1e-6, abs(spacing) * 1e-3)
+    span = float(x[-1] - x[0])
+    return np.isfinite(span) and abs(span - float(period)) <= tolerance
+
+
 def _append_cyclic_column(x, field, period=360.0):
     x = np.asarray(x, dtype=float)
     field = np.asarray(field, dtype=float)
@@ -376,13 +431,18 @@ def _append_cyclic_column(x, field, period=360.0):
 def _wrap_periodic_grid_queries(x_query, x_1d, period=360.0):
     x_query = np.asarray(x_query, dtype=float)
     x_1d = np.asarray(x_1d, dtype=float)
-    if len(x_1d) < 2 or not _grid_spans_full_longitude(x_1d):
+    if len(x_1d) < 2:
+        return x_query
+
+    has_cyclic_endpoint = _has_cyclic_longitude_endpoint(x_1d, period=period)
+    if not has_cyclic_endpoint and not _grid_spans_full_longitude(x_1d):
         return x_query
 
     x_min = float(x_1d[0])
     x_max = float(x_1d[-1])
     wrapped = ((x_query - x_min) % float(period)) + x_min
-    wrapped = np.where(wrapped > x_max, wrapped - float(period), wrapped)
+    if not has_cyclic_endpoint:
+        wrapped = np.where(wrapped > x_max, wrapped - float(period), wrapped)
     return wrapped
 
 
@@ -432,12 +492,16 @@ def _prepare_curly_vector_dataset_inputs(
     density,
 ):
     src_crs = transform if _is_cartopy_crs_like(transform) else None
+    color_field = _maybe_as_scalar_field(color, np.shape(u))
+    linewidth_field = _maybe_as_scalar_field(linewidth, np.shape(u))
+    if color_field is not None:
+        color = color_field
+    if linewidth_field is not None:
+        linewidth = linewidth_field
 
     if _is_curvilinear_grid(x, y):
         scalar_fields = []
         scalar_keys = []
-        color_field = _maybe_as_scalar_field(color, np.shape(u))
-        linewidth_field = _maybe_as_scalar_field(linewidth, np.shape(u))
         if color_field is not None:
             scalar_fields.append(color_field)
             scalar_keys.append("color")
@@ -477,11 +541,13 @@ def _prepare_curly_vector_dataset_inputs(
 
     scalar_fields = []
     scalar_keys = []
-    if isinstance(color, np.ndarray):
-        scalar_fields.append(color)
+    color_field = _maybe_as_scalar_field(color, np.shape(u))
+    linewidth_field = _maybe_as_scalar_field(linewidth, np.shape(u))
+    if color_field is not None:
+        scalar_fields.append(color_field)
         scalar_keys.append("color")
-    if isinstance(linewidth, np.ndarray):
-        scalar_fields.append(linewidth)
+    if linewidth_field is not None:
+        scalar_fields.append(linewidth_field)
         scalar_keys.append("linewidth")
 
     regrid_result = _regrid_cartopy_vectors(
