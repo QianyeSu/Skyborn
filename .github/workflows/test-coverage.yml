@@ -8,6 +8,8 @@ on:
       - "tests/**"
       - "requirements/**"
       - "pyproject.toml"
+      - ".github/workflows/test-coverage.yml"
+      - ".gitattributes"
   pull_request:
     branches: [main, dev]
   workflow_dispatch:
@@ -68,7 +70,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           # Install build dependencies first, including meson for f2py
-          pip install build cython>=3.0.0 numpy meson ninja
+          pip install build "cython>=3.0.0" numpy meson ninja
 
           # Try to install package in development mode, but continue if it fails
           echo "=== Attempting to install package ==="
@@ -299,15 +301,22 @@ jobs:
           ls -la src/skyborn/gridfill/ || echo "gridfill directory not found"
 
           echo "=== Running tests with coverage ==="
-          # Run all tests, allowing for some failures due to optional Fortran extensions
+          # Run all tests, but preserve the exit code so later steps can still inspect coverage files.
+          set +e
           pytest tests/ \
             --cov=src/skyborn \
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing \
             --cov-fail-under=15 \
-            -v --tb=short \
-            || echo "Some tests failed but continuing (likely due to optional Fortran extensions)"
+            -v --tb=short
+          pytest_exit=$?
+          set -e
+
+          echo "pytest exit code: $pytest_exit"
+          if [ "$pytest_exit" -ne 0 ]; then
+            echo "Pytest reported failures. Coverage upload will continue if coverage.xml exists."
+          fi
 
           echo "=== Test execution completed ==="
 
@@ -320,11 +329,24 @@ jobs:
       - name: Generate coverage report even if tests failed
         if: always()
         run: |
-          # If coverage.xml doesn't exist, try to generate it manually
+          # If coverage.xml doesn't exist, try to generate it from raw coverage data.
           if [ ! -f coverage.xml ]; then
-            echo "Attempting to generate coverage report manually..."
-            coverage xml --fail-under=0 || echo "Failed to generate coverage.xml"
+            if [ -f .coverage ]; then
+              echo "Attempting to generate coverage report manually from .coverage ..."
+              coverage xml --fail-under=0
+            else
+              echo "Raw .coverage data not found."
+            fi
           fi
+
+      - name: Validate coverage report presence
+        if: always()
+        run: |
+          if [ ! -f coverage.xml ]; then
+            echo "::error::coverage.xml was not generated, so Codecov would show 0% or no data."
+            exit 1
+          fi
+          echo "coverage.xml is present and ready for Codecov upload."
 
       - name: Upload coverage to Codecov
         if: always()
