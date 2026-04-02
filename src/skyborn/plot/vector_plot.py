@@ -7,6 +7,7 @@ Created: 2026-03-01 14:58:56
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import matplotlib as mpl
@@ -19,6 +20,8 @@ from matplotlib import cm, patches
 __all__ = ["curly_vector", "CurlyVectorPlotSet"]
 
 _SUPPORTED_CURLY_ARROWSTYLES = ("->", "-|>")
+_ISSUED_NATIVE_WARNINGS: set[str] = set()
+_NATIVE_IMPORT_ERROR: Exception | None = None
 
 try:
     from .nclcurly_native import sample_grid_field as _sample_grid_field_native
@@ -29,11 +32,41 @@ try:
         thin_mapped_candidates as _thin_ncl_mapped_candidates_native,
     )
     from .nclcurly_native import trace_ncl_direction as _trace_ncl_direction_native
-except Exception:
+except Exception as err:
+    _NATIVE_IMPORT_ERROR = err
     _sample_grid_field_native = None
     _sample_grid_field_array_native = None
     _thin_ncl_mapped_candidates_native = None
     _trace_ncl_direction_native = None
+
+
+def _warn_native_once(key: str, message: str) -> None:
+    if key in _ISSUED_NATIVE_WARNINGS:
+        return
+    _ISSUED_NATIVE_WARNINGS.add(key)
+    warnings.warn(message, RuntimeWarning, stacklevel=3)
+
+
+def _warn_if_native_backend_unavailable() -> None:
+    if _NATIVE_IMPORT_ERROR is None:
+        return
+    detail = f"{type(_NATIVE_IMPORT_ERROR).__name__}: {_NATIVE_IMPORT_ERROR}"
+    _warn_native_once(
+        "native_backend_unavailable",
+        "skyborn.plot curly_vector native backend is unavailable "
+        f"({detail}); falling back to the Python implementation.",
+    )
+
+
+def _disable_native_helper(global_name: str, helper_label: str, err: Exception) -> None:
+    globals()[global_name] = None
+    detail = f"{type(err).__name__}: {err}"
+    _warn_native_once(
+        f"{global_name}_failed",
+        "skyborn.plot curly_vector native "
+        f"{helper_label} failed ({detail}); disabling that accelerated path "
+        "for the rest of this session and falling back to Python.",
+    )
 
 
 def _normalize_ncl_preset(ncl_preset):
@@ -77,9 +110,6 @@ def _resolve_default_ncl_preset(x, y, allow_non_uniform_grid, ncl_preset):
     preset = _normalize_ncl_preset(ncl_preset)
     if preset is not None:
         return True if preset == "profile" else allow_non_uniform_grid, preset
-
-    if allow_non_uniform_grid:
-        return True, "profile"
 
     x_axis = _axis_coordinate_1d(x, "x")
     y_axis = _axis_coordinate_1d(y, "y")
@@ -144,6 +174,20 @@ def _filled_float_array(values: Any) -> np.ndarray:
     if np.ma.isMaskedArray(array):
         return np.asarray(array.filled(np.nan), dtype=float)
     return np.asarray(array, dtype=float)
+
+
+def _coerce_matching_plot_field(
+    values: Any,
+    expected_shape: tuple[int, ...],
+) -> tuple[np.ndarray | None, bool]:
+    """Return a 2D scalar field when the input matches the vector-grid shape."""
+    if values is None or isinstance(values, str) or np.isscalar(values):
+        return None, False
+
+    array = np.asarray(values)
+    if array.shape == expected_shape:
+        return _filled_float_array(array), True
+    return None, array.ndim >= 2
 
 
 def _extract_meshgrid_axes(x: Any, y: Any) -> tuple[np.ndarray, np.ndarray]:
@@ -405,22 +449,18 @@ def curly_vector(
     # Handle non-uniform grids by creating a uniform interpolation grid
     if allow_non_uniform_grid:
         expected_shape = np.shape(u)
-        color_field = None
-        linewidth_field = None
-        if not (color is None or isinstance(color, str) or np.isscalar(color)):
-            color_field = _filled_float_array(color)
-            if color_field.shape != expected_shape:
-                raise ValueError(
-                    "If 'color' is given, it must match the shape of the (x, y) grid"
-                )
-        if not (
-            linewidth is None or isinstance(linewidth, str) or np.isscalar(linewidth)
-        ):
-            linewidth_field = _filled_float_array(linewidth)
-            if linewidth_field.shape != expected_shape:
-                raise ValueError(
-                    "If 'linewidth' is given, it must match the shape of the (x, y) grid"
-                )
+        color_field, color_is_field = _coerce_matching_plot_field(color, expected_shape)
+        linewidth_field, linewidth_is_field = _coerce_matching_plot_field(
+            linewidth, expected_shape
+        )
+        if color_field is None and color_is_field:
+            raise ValueError(
+                "If 'color' is given, it must match the shape of the (x, y) grid"
+            )
+        if linewidth_field is None and linewidth_is_field:
+            raise ValueError(
+                "If 'linewidth' is given, it must match the shape of the (x, y) grid"
+            )
 
         regridded = _regrid_non_uniform_vectors_to_uniform(
             x,
@@ -628,11 +668,6 @@ class CurlyVectorPlotSet:
         )
 
 
-def _coerce_plot_field_array(values):
-    """Convert masked/invalid plot fields to float arrays with NaNs."""
-    return np.asarray(np.ma.masked_invalid(values).filled(np.nan), dtype=float)
-
-
 def _finite_plot_field_values(field, field_name):
     """Return finite values from a style field or fail fast with a clear error."""
     finite_values = np.asarray(field, dtype=float)
@@ -691,6 +726,7 @@ def _curly_vector_ncl(
     allow_non_uniform_grid=False,
     ncl_preset=None,
 ):
+    _warn_if_native_backend_unavailable()
     grid = Grid(x, y, allow_non_uniform=allow_non_uniform_grid)
 
     if zorder is None:
@@ -756,22 +792,20 @@ def _curly_vector_ncl(
             length_scale=None,
         )
 
-    use_multicolor_lines = isinstance(color, np.ndarray)
-    if use_multicolor_lines and color.shape != grid.shape:
+    color_field, color_is_field = _coerce_matching_plot_field(color, grid.shape)
+    if color_field is None and color_is_field:
         raise ValueError(
             "If 'color' is given, it must match the shape of the (x, y) grid"
         )
-    if isinstance(linewidth, np.ndarray) and linewidth.shape != grid.shape:
+    line_width_field, linewidth_is_field = _coerce_matching_plot_field(
+        linewidth, grid.shape
+    )
+    if line_width_field is None and linewidth_is_field:
         raise ValueError(
             "If 'linewidth' is given, it must match the shape of the (x, y) grid"
         )
 
-    color_field = _coerce_plot_field_array(color) if use_multicolor_lines else None
-    line_width_field = (
-        _coerce_plot_field_array(linewidth)
-        if isinstance(linewidth, np.ndarray)
-        else None
-    )
+    use_multicolor_lines = color_field is not None
     color_default = None
     line_width_default = linewidth
     if use_multicolor_lines:
@@ -1259,7 +1293,12 @@ def _prepare_ncl_native_trace_context(grid, u, v, viewport, display_sampler):
             viewport=viewport,
             display_sampler=display_sampler,
         )
-    except Exception:
+    except Exception as err:
+        _warn_native_once(
+            "native_trace_context_failed",
+            "skyborn.plot curly_vector native trace context setup failed "
+            f"({type(err).__name__}: {err}); falling back to Python tracing.",
+        )
         return None
 
 
@@ -1399,7 +1438,12 @@ def _thin_ncl_mapped_candidates(mapped_points, spacing_frac):
                 mapped_points=mapped_points,
                 spacing_frac=spacing_frac,
             )
-        except Exception:
+        except Exception as err:
+            _disable_native_helper(
+                "_thin_ncl_mapped_candidates_native",
+                "candidate thinning",
+                err,
+            )
             selected = None
         if selected is not None:
             return np.asarray(selected, dtype=int).tolist()
@@ -1757,7 +1801,8 @@ def _trace_ncl_direction_via_native(
             viewport_y1=native_trace_context.viewport_y1,
             max_steps=512,
         )
-    except Exception:
+    except Exception as err:
+        _disable_native_helper("_trace_ncl_direction_native", "trace", err)
         return None
 
     if curve is None:
@@ -2267,7 +2312,8 @@ def _sample_grid_field(grid, field, xd, yd):
                 x=float(xd),
                 y=float(yd),
             )
-        except Exception:
+        except Exception as err:
+            _disable_native_helper("_sample_grid_field_native", "scalar sampling", err)
             value = None
         if value is not None:
             value = float(value)
@@ -2324,7 +2370,12 @@ def _sample_grid_field_array(grid, field, points):
                 dy=float(grid.dy),
                 points=points,
             )
-        except Exception:
+        except Exception as err:
+            _disable_native_helper(
+                "_sample_grid_field_array_native",
+                "vectorized sampling",
+                err,
+            )
             sampled_native = None
         if sampled_native is not None:
             sampled_native = np.asarray(sampled_native, dtype=float)
