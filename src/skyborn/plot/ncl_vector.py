@@ -652,7 +652,7 @@ def _curly_vector_from_dataset(
         description.
     arrowsize : float
         Scaling factor for the arrow size.
-    arrowstyle : {"->", "-|>"}
+    arrowstyle : str
         Supported arrow-head style. Use ``"->"`` for the open NCL-like line
         head or ``"-|>"`` for a filled triangular head.
     start_points : (N, 2) array
@@ -885,7 +885,7 @@ def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
         field.
     arrowsize : float, default: 1
         Scales the arrow-head size.
-    arrowstyle : {"->", "-|>"}, default: ``"->"``
+    arrowstyle : str, default: ``"->"``
         Supported arrow-head style. Use ``"->"`` for the open NCL-like line
         head or ``"-|>"`` for a filled triangular head.
     transform : optional
