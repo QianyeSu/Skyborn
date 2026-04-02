@@ -1006,6 +1006,27 @@ class TestCurlyVectorKey:
 
         plt.close(fig)
 
+    def test_curly_vector_legend_supports_explicit_xy_axes_position(
+        self, mock_curly_vector_set
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        legend = CurlyVectorKey(
+            ax=ax,
+            curly_vector_set=mock_curly_vector_set,
+            U=8.0,
+            x=0.8,
+            y=1.05,
+            labelpos="E",
+        )
+        fig.canvas.draw()
+
+        assert legend._calculate_position() == pytest.approx((0.8, 1.05))
+        assert legend.patch.get_x() == pytest.approx(0.8)
+        assert legend.patch.get_y() == pytest.approx(1.05)
+
+        plt.close(fig)
+
     def test_curly_vector_legend_explicit_label_and_description(
         self, mock_curly_vector_set
     ):
@@ -1066,6 +1087,14 @@ class TestCurlyVectorKeyInternals:
             CurlyVectorKey(
                 ax=ax, curly_vector_set=mock_curly_vector_set, U=2.0, labelpos="Q"
             )
+
+        plt.close(fig)
+
+    def test_curly_vector_key_requires_x_and_y_together(self, mock_curly_vector_set):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        with pytest.raises(ValueError, match="x and y must both be provided together"):
+            CurlyVectorKey(ax=ax, curly_vector_set=mock_curly_vector_set, U=2.0, x=0.8)
 
         plt.close(fig)
 
@@ -1337,6 +1366,26 @@ class TestCurlyVectorKeyHelper:
         assert result.patch.get_visible() is False
         assert result.text.get_text() == "4 m/s"
         assert result.text2.get_visible() is False
+
+        plt.close(fig)
+
+    def test_curly_vector_key_accepts_explicit_xy_kwargs(self, mock_curly_vector_set):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        result = curly_vector_key(
+            mock_curly_vector_set,
+            U=4.0,
+            ax=ax,
+            x=0.8,
+            y=1.05,
+            labelpos="E",
+        )
+        fig.canvas.draw()
+
+        assert result.x == pytest.approx(0.8)
+        assert result.y == pytest.approx(1.05)
+        assert result.patch.get_x() == pytest.approx(0.8)
+        assert result.patch.get_y() == pytest.approx(1.05)
 
         plt.close(fig)
 

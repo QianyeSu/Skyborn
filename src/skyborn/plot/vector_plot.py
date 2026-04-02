@@ -128,6 +128,109 @@ def _apply_ncl_preset_defaults(
     return allow_non_uniform_grid, ref_magnitude, ref_length, min_distance, preset
 
 
+def _filled_float_array(values: Any) -> np.ndarray:
+    array = np.ma.asarray(values, dtype=float)
+    if np.ma.isMaskedArray(array):
+        return np.asarray(array.filled(np.nan), dtype=float)
+    return np.asarray(array, dtype=float)
+
+
+def _extract_meshgrid_axes(x: Any, y: Any) -> tuple[np.ndarray, np.ndarray]:
+    x_values = np.asarray(x, dtype=float)
+    y_values = np.asarray(y, dtype=float)
+
+    if x_values.ndim == 1 and y_values.ndim == 1:
+        return x_values, y_values
+
+    if x_values.ndim != 2 or y_values.ndim != 2:
+        raise ValueError(
+            "allow_non_uniform_grid requires 1D axes or meshgrid-like 2D x/y coordinates"
+        )
+    if x_values.shape != y_values.shape:
+        raise ValueError("2D x and y coordinates must have the same shape")
+
+    x_axis = np.asarray(x_values[0, :], dtype=float)
+    y_axis = np.asarray(y_values[:, 0], dtype=float)
+    if not np.allclose(x_values, x_axis[np.newaxis, :], equal_nan=True):
+        raise ValueError(
+            "2D x coordinates must be meshgrid-like when allow_non_uniform_grid=True"
+        )
+    if not np.allclose(y_values, y_axis[:, np.newaxis], equal_nan=True):
+        raise ValueError(
+            "2D y coordinates must be meshgrid-like when allow_non_uniform_grid=True"
+        )
+    return x_axis, y_axis
+
+
+def _regrid_non_uniform_vectors_to_uniform(
+    x: Any, y: Any, u: Any, v: Any
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    try:
+        from scipy.interpolate import RegularGridInterpolator
+    except ImportError as err:
+        raise ImportError(
+            "scipy is required for non-uniform grid support. Please install scipy."
+        ) from err
+
+    x_axis, y_axis = _extract_meshgrid_axes(x, y)
+    u_values = _filled_float_array(u)
+    v_values = _filled_float_array(v)
+    expected_shape = (y_axis.size, x_axis.size)
+    if u_values.shape != expected_shape or v_values.shape != expected_shape:
+        raise ValueError(
+            f"u and v must match the non-uniform grid shape {expected_shape}"
+        )
+
+    x_sorted = x_axis.copy()
+    y_sorted = y_axis.copy()
+    u_sorted = u_values.copy()
+    v_sorted = v_values.copy()
+
+    if x_sorted.size > 1 and np.any(np.diff(x_sorted) <= 0):
+        x_idx = np.argsort(x_sorted)
+        x_sorted = x_sorted[x_idx]
+        u_sorted = u_sorted[:, x_idx]
+        v_sorted = v_sorted[:, x_idx]
+    if y_sorted.size > 1 and np.any(np.diff(y_sorted) <= 0):
+        y_idx = np.argsort(y_sorted)
+        y_sorted = y_sorted[y_idx]
+        u_sorted = u_sorted[y_idx, :]
+        v_sorted = v_sorted[y_idx, :]
+
+    if x_sorted.size > 1 and np.any(np.diff(x_sorted) <= 0):
+        raise ValueError("x coordinates must be strictly monotonic after sorting")
+    if y_sorted.size > 1 and np.any(np.diff(y_sorted) <= 0):
+        raise ValueError("y coordinates must be strictly monotonic after sorting")
+
+    x_uniform = np.linspace(
+        float(np.nanmin(x_sorted)), float(np.nanmax(x_sorted)), x_sorted.size
+    )
+    y_uniform = np.linspace(
+        float(np.nanmin(y_sorted)), float(np.nanmax(y_sorted)), y_sorted.size
+    )
+    X_uniform, Y_uniform = np.meshgrid(x_uniform, y_uniform, indexing="xy")
+    points = np.column_stack([Y_uniform.ravel(), X_uniform.ravel()])
+
+    u_interp = RegularGridInterpolator(
+        (y_sorted, x_sorted),
+        u_sorted,
+        method="linear",
+        bounds_error=False,
+        fill_value=np.nan,
+    )
+    v_interp = RegularGridInterpolator(
+        (y_sorted, x_sorted),
+        v_sorted,
+        method="linear",
+        bounds_error=False,
+        fill_value=np.nan,
+    )
+
+    u_uniform = u_interp(points).reshape(Y_uniform.shape)
+    v_uniform = v_interp(points).reshape(Y_uniform.shape)
+    return x_uniform, y_uniform, u_uniform, v_uniform
+
+
 def curly_vector(
     axes: Any,
     x: Any,
@@ -271,81 +374,7 @@ def curly_vector(
 
     # Handle non-uniform grids by creating a uniform interpolation grid
     if allow_non_uniform_grid:
-        # Create uniform grid for streamline calculation
-        x_uniform = np.linspace(x.min(), x.max(), len(x))
-        y_uniform = np.linspace(y.min(), y.max(), len(y))
-
-        # Create meshgrids for interpolation
-        if np.ndim(x) == 1 and np.ndim(y) == 1:
-            X_uniform, Y_uniform = np.meshgrid(x_uniform, y_uniform, indexing="xy")
-        else:
-            X_uniform, Y_uniform = np.meshgrid(x_uniform, y_uniform, indexing="xy")
-
-        # Interpolate u and v to uniform grid
-        try:
-            from scipy.interpolate import RegularGridInterpolator
-        except ImportError:
-            raise ImportError(
-                "scipy is required for non-uniform grid support. Please install scipy."
-            )
-
-        # For RegularGridInterpolator, we need 1D coordinate arrays
-        # Extract 1D coordinates if we have 2D grids
-        if np.ndim(x) == 1 and np.ndim(y) == 1:
-            x_1d = x
-            y_1d = y
-        else:
-            # Extract 1D arrays from 2D coordinates
-            x_1d = x[0, :]  # First row for x coordinates
-            y_1d = y[:, 0]  # First column for y coordinates
-
-        # Ensure coordinates are strictly ascending for RegularGridInterpolator
-        x_sorted = x_1d.copy()
-        y_sorted = y_1d.copy()
-        u_sorted = u.copy()
-        v_sorted = v.copy()
-
-        # Sort x coordinates and corresponding data
-        if len(x_1d) > 1:
-            x_diff = np.diff(x_1d)
-            if np.any(x_diff <= 0) or not np.all(x_diff > 0):  # Not strictly ascending
-                x_idx = np.argsort(x_1d)
-                x_sorted = x_1d[x_idx]
-                u_sorted = u_sorted[:, x_idx]
-                v_sorted = v_sorted[:, x_idx]
-
-        # Sort y coordinates and corresponding data
-        if len(y_1d) > 1:
-            y_diff = np.diff(y_1d)
-            if np.any(y_diff <= 0) or not np.all(y_diff > 0):  # Not strictly ascending
-                y_idx = np.argsort(y_1d)
-                y_sorted = y_1d[y_idx]
-                u_sorted = u_sorted[y_idx, :]
-                v_sorted = v_sorted[y_idx, :]
-
-        # Create interpolators
-        u_interp = RegularGridInterpolator(
-            (y_sorted, x_sorted),
-            u_sorted,
-            method="linear",
-            bounds_error=False,
-            fill_value=0,
-        )
-        v_interp = RegularGridInterpolator(
-            (y_sorted, x_sorted),
-            v_sorted,
-            method="linear",
-            bounds_error=False,
-            fill_value=0,
-        )
-
-        # Interpolate to uniform grid
-        points = np.column_stack([Y_uniform.ravel(), X_uniform.ravel()])
-        u_uniform = u_interp(points).reshape(X_uniform.shape)
-        v_uniform = v_interp(points).reshape(X_uniform.shape)
-
-        # Use uniform grid for streamline calculation
-        x, y, u, v = x_uniform, y_uniform, u_uniform, v_uniform
+        x, y, u, v = _regrid_non_uniform_vectors_to_uniform(x, y, u, v)
 
     return _curly_vector_ncl(
         axes,
@@ -516,6 +545,26 @@ def _coerce_plot_field_array(values):
     return np.asarray(np.ma.masked_invalid(values).filled(np.nan), dtype=float)
 
 
+def _resolve_artist_coordinate_context(axes, transform):
+    """Choose the final artist transform for the rendered curly-vector geometry."""
+    artist_transform = transform
+    artist_inverse_transform = None
+    bake_display_geometry = bool(
+        hasattr(axes, "projection")
+        and transform is not None
+        and transform is not axes.transData
+    )
+    if not bake_display_geometry:
+        return artist_transform, artist_inverse_transform, False
+
+    try:
+        artist_inverse_transform = axes.transData.inverted()
+    except Exception:
+        return transform, None, False
+
+    return axes.transData, artist_inverse_transform, True
+
+
 def _curly_vector_ncl(
     axes,
     x,
@@ -554,6 +603,10 @@ def _curly_vector_ncl(
     if linewidth is None:
         linewidth = mpl.rcParams["lines.linewidth"]
 
+    artist_transform, artist_inverse_transform, bake_display_geometry = (
+        _resolve_artist_coordinate_context(axes, transform)
+    )
+
     # The NCL-like branch sizes glyphs in display space. Ensure the data limits
     # are initialized before sampling ``transData``; otherwise the default
     # 0..1 axes limits can shrink global lon/lat glyphs into near-invisible
@@ -579,7 +632,7 @@ def _curly_vector_ncl(
     resolved_anchor = _resolve_curly_anchor(anchor, integration_direction)
 
     if valid_magnitude.size == 0:
-        lc = mcollections.LineCollection([], transform=transform, zorder=zorder)
+        lc = mcollections.LineCollection([], transform=artist_transform, zorder=zorder)
         axes.add_collection(lc, autolim=False)
         ac = mcollections.PatchCollection([])
         return CurlyVectorPlotSet(
@@ -588,7 +641,7 @@ def _curly_vector_ncl(
             0.0,
             magnitude,
             zorder,
-            transform,
+            artist_transform,
             axes,
             linewidth,
             color,
@@ -657,6 +710,13 @@ def _curly_vector_ncl(
         axes.bbox.width * 0.012 * max(float(arrowsize), 0.1), arrow_min_edge_px
     )
     display_sampler = _prepare_ncl_display_sampler(grid, transform)
+    native_trace_context = _prepare_ncl_native_trace_context(
+        grid=grid,
+        u=u,
+        v=v,
+        viewport=axes.bbox,
+        display_sampler=display_sampler,
+    )
     try:
         inverse_transform = transform.inverted()
     except Exception:
@@ -678,6 +738,11 @@ def _curly_vector_ncl(
     line_colors = []
     line_widths = []
     arrows = []
+    line_width_default = (
+        float(np.nanmean(line_width_field))
+        if line_width_field is not None
+        else linewidth
+    )
 
     for center, center_mag in selected_centers:
         target_length_px = _curve_length_from_magnitude(center_mag, length_scale)
@@ -693,6 +758,7 @@ def _curly_vector_ncl(
             speed_scale=max_mag,
             viewport=axes.bbox,
             display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
         )
         if curve_result is None:
             continue
@@ -707,7 +773,7 @@ def _curly_vector_ncl(
             current_linewidth = (
                 float(sampled_width)
                 if sampled_width is not None
-                else float(np.nanmean(line_width_field))
+                else line_width_default
             )
         else:
             current_linewidth = linewidth
@@ -728,16 +794,26 @@ def _curly_vector_ncl(
                 max_edge_px=arrow_max_edge_px,
             )
         )
-        streamlines.append(curve)
+        artist_curve = curve
+        if bake_display_geometry:
+            baked_curve = _display_points_to_data(
+                artist_transform,
+                display_curve,
+                inverse_transform=artist_inverse_transform,
+            )
+            if baked_curve is not None and len(baked_curve) >= 2:
+                artist_curve = baked_curve
+
+        streamlines.append(artist_curve)
         if use_multicolor_lines:
             line_colors.append(curve_color)
         if line_width_field is not None:
             line_widths.append(current_linewidth)
 
         head_segments, arrow = _build_ncl_arrow_artists(
-            curve=curve,
+            curve=artist_curve,
             grid=grid,
-            transform=transform,
+            transform=artist_transform,
             arrowstyle=arrowstyle,
             head_length_px=head_length_px,
             head_width_px=head_width_px,
@@ -745,7 +821,7 @@ def _curly_vector_ncl(
             edgecolor=curve_color,
             linewidth=current_linewidth,
             zorder=zorder,
-            inverse_transform=inverse_transform,
+            inverse_transform=artist_inverse_transform,
             display_curve=display_curve,
         )
         if head_segments:
@@ -768,7 +844,7 @@ def _curly_vector_ncl(
     else:
         line_kw["linewidth"] = linewidth
 
-    lc = mcollections.LineCollection(streamlines, transform=transform, **line_kw)
+    lc = mcollections.LineCollection(streamlines, transform=artist_transform, **line_kw)
     # The axes limits were already seeded from the full grid extent above, so
     # avoid Cartopy reprojecting every segment again just to recompute datalim.
     axes.add_collection(lc, autolim=False)
@@ -784,7 +860,7 @@ def _curly_vector_ncl(
         ref_length_frac,
         magnitude,
         zorder,
-        transform,
+        artist_transform,
         axes,
         linewidth,
         color,
@@ -804,6 +880,9 @@ def _curly_vector_ncl(
 
 
 def _resolve_curly_anchor(anchor, integration_direction):
+    mpl._api.check_in_list(
+        ["forward", "backward", "both"], integration_direction=integration_direction
+    )
     if anchor is None:
         anchor = {
             "forward": "tail",
@@ -843,9 +922,46 @@ class _NCLDisplaySampler:
         self.dy_safe = max(float(grid.dy), 1e-12)
         self.display_grid = np.asarray(display_grid, dtype=float)
         finite = np.isfinite(self.display_grid).all(axis=2)
-        self.cell_valid = (
+        self.cell_valid = self._compute_cell_valid(finite)
+
+    def _compute_cell_valid(self, finite):
+        cell_valid = (
             finite[:-1, :-1] & finite[:-1, 1:] & finite[1:, :-1] & finite[1:, 1:]
         )
+        if not np.any(cell_valid):
+            return cell_valid
+
+        horizontal_edges = np.hypot(
+            np.diff(self.display_grid[:, :, 0], axis=1),
+            np.diff(self.display_grid[:, :, 1], axis=1),
+        )
+        vertical_edges = np.hypot(
+            np.diff(self.display_grid[:, :, 0], axis=0),
+            np.diff(self.display_grid[:, :, 1], axis=0),
+        )
+        jump_limit = _display_jump_threshold(
+            np.concatenate([horizontal_edges.ravel(), vertical_edges.ravel()])
+        )
+        if jump_limit is None:
+            return cell_valid
+
+        p00 = self.display_grid[:-1, :-1]
+        p01 = self.display_grid[:-1, 1:]
+        p10 = self.display_grid[1:, :-1]
+        p11 = self.display_grid[1:, 1:]
+
+        top_edges = np.hypot(p01[:, :, 0] - p00[:, :, 0], p01[:, :, 1] - p00[:, :, 1])
+        bottom_edges = np.hypot(
+            p11[:, :, 0] - p10[:, :, 0],
+            p11[:, :, 1] - p10[:, :, 1],
+        )
+        left_edges = np.hypot(p10[:, :, 0] - p00[:, :, 0], p10[:, :, 1] - p00[:, :, 1])
+        right_edges = np.hypot(
+            p11[:, :, 0] - p01[:, :, 0],
+            p11[:, :, 1] - p01[:, :, 1],
+        )
+        max_edge = np.maximum.reduce([top_edges, bottom_edges, left_edges, right_edges])
+        return cell_valid & (max_edge <= jump_limit)
 
     def sample(self, point):
         point = np.asarray(point, dtype=float)
@@ -977,6 +1093,24 @@ class _NCLDisplaySampler:
         return display_points, jacobians, valid
 
 
+class _NCLNativeTraceContext:
+    """Prepacked native tracing inputs reused across many glyph traces."""
+
+    def __init__(self, grid, u, v, viewport, display_sampler):
+        self.u = np.asarray(u, dtype=float)
+        self.v = np.asarray(v, dtype=float)
+        self.display_grid = display_sampler.display_grid
+        self.cell_valid = display_sampler.cell_valid
+        self.x_origin = float(grid.x_origin)
+        self.y_origin = float(grid.y_origin)
+        self.dx = float(grid.dx)
+        self.dy = float(grid.dy)
+        self.viewport_x0 = float(viewport.x0)
+        self.viewport_y0 = float(viewport.y0)
+        self.viewport_x1 = float(viewport.x1)
+        self.viewport_y1 = float(viewport.y1)
+
+
 def _prepare_ncl_display_sampler(grid, transform):
     if grid.nx < 2 or grid.ny < 2:
         return None
@@ -996,6 +1130,33 @@ def _prepare_ncl_display_sampler(grid, transform):
     if not np.isfinite(display_grid).any():
         return None
     return _NCLDisplaySampler(grid, display_grid)
+
+
+def _display_jump_threshold(lengths):
+    lengths = np.asarray(lengths, dtype=float)
+    finite = lengths[np.isfinite(lengths) & (lengths > 1e-9)]
+    if finite.size == 0:
+        return None
+
+    sorted_lengths = np.sort(finite)
+    lower_half = sorted_lengths[: max(sorted_lengths.size // 2, 1)]
+    baseline = float(np.nanmedian(lower_half))
+    return max(baseline * 12.0, 1e-6)
+
+
+def _prepare_ncl_native_trace_context(grid, u, v, viewport, display_sampler):
+    if _trace_ncl_direction_native is None or display_sampler is None:
+        return None
+    try:
+        return _NCLNativeTraceContext(
+            grid=grid,
+            u=u,
+            v=v,
+            viewport=viewport,
+            display_sampler=display_sampler,
+        )
+    except Exception:
+        return None
 
 
 def _select_ncl_centers(
@@ -1333,6 +1494,7 @@ def _trace_ncl_curve(
     speed_scale,
     viewport,
     display_sampler=None,
+    native_trace_context=None,
 ):
     if total_length_px <= 0:
         return None
@@ -1350,6 +1512,7 @@ def _trace_ncl_curve(
             speed_scale,
             viewport,
             display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
         )
         forward = _trace_ncl_direction(
             start_point,
@@ -1363,6 +1526,7 @@ def _trace_ncl_curve(
             speed_scale,
             viewport,
             display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
         )
         if backward is None and forward is None:
             return None
@@ -1385,6 +1549,7 @@ def _trace_ncl_curve(
             speed_scale,
             viewport,
             display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
         )
 
     backward = _trace_ncl_direction(
@@ -1399,6 +1564,7 @@ def _trace_ncl_curve(
         speed_scale,
         viewport,
         display_sampler=display_sampler,
+        native_trace_context=native_trace_context,
     )
     if backward is None:
         return None
@@ -1417,6 +1583,7 @@ def _build_ncl_curve(
     speed_scale,
     viewport,
     display_sampler=None,
+    native_trace_context=None,
 ):
     current_length_px = float(total_length_px)
 
@@ -1433,12 +1600,17 @@ def _build_ncl_curve(
             speed_scale=speed_scale,
             viewport=viewport,
             display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
         )
         if curve is not None and len(curve) >= 2:
-            display_curve = _acceptable_ncl_display_curve(curve, transform)
+            display_curve, transform_failed = _evaluate_ncl_display_curve(
+                curve,
+                transform,
+                viewport=viewport,
+            )
             if display_curve is not None:
                 return curve, display_curve
-            if _curve_shape_is_acceptable(curve, transform):
+            if transform_failed:
                 return curve, None
 
         current_length_px *= 0.78
@@ -1452,37 +1624,33 @@ def _trace_ncl_direction_via_native(
     start_point,
     max_length_px,
     direction_sign,
-    grid,
-    u,
-    v,
     step_px,
     speed_scale,
-    viewport,
-    display_sampler=None,
+    native_trace_context=None,
 ):
-    if _trace_ncl_direction_native is None or display_sampler is None:
+    if native_trace_context is None:
         return None
 
     try:
         curve = _trace_ncl_direction_native(
-            u=np.asarray(u, dtype=float),
-            v=np.asarray(v, dtype=float),
-            display_grid=display_sampler.display_grid,
-            cell_valid=display_sampler.cell_valid,
-            x_origin=float(grid.x_origin),
-            y_origin=float(grid.y_origin),
-            dx=float(grid.dx),
-            dy=float(grid.dy),
+            u=native_trace_context.u,
+            v=native_trace_context.v,
+            display_grid=native_trace_context.display_grid,
+            cell_valid=native_trace_context.cell_valid,
+            x_origin=native_trace_context.x_origin,
+            y_origin=native_trace_context.y_origin,
+            dx=native_trace_context.dx,
+            dy=native_trace_context.dy,
             start_x=float(start_point[0]),
             start_y=float(start_point[1]),
             max_length_px=float(max_length_px),
             direction_sign=float(direction_sign),
             step_px=float(step_px),
             speed_scale=float(speed_scale),
-            viewport_x0=float(viewport.x0),
-            viewport_y0=float(viewport.y0),
-            viewport_x1=float(viewport.x1),
-            viewport_y1=float(viewport.y1),
+            viewport_x0=native_trace_context.viewport_x0,
+            viewport_y0=native_trace_context.viewport_y0,
+            viewport_x1=native_trace_context.viewport_x1,
+            viewport_y1=native_trace_context.viewport_y1,
             max_steps=512,
         )
     except Exception:
@@ -1510,19 +1678,24 @@ def _trace_ncl_direction(
     speed_scale,
     viewport,
     display_sampler=None,
+    native_trace_context=None,
 ):
     start_point = np.asarray(start_point, dtype=float)
+    if native_trace_context is None and display_sampler is not None:
+        native_trace_context = _prepare_ncl_native_trace_context(
+            grid=grid,
+            u=u,
+            v=v,
+            viewport=viewport,
+            display_sampler=display_sampler,
+        )
     native_curve = _trace_ncl_direction_via_native(
         start_point=start_point,
         max_length_px=max_length_px,
         direction_sign=direction_sign,
-        grid=grid,
-        u=u,
-        v=v,
         step_px=step_px,
         speed_scale=speed_scale,
-        viewport=viewport,
-        display_sampler=display_sampler,
+        native_trace_context=native_trace_context,
     )
     if native_curve is not None:
         return native_curve
@@ -1872,31 +2045,38 @@ def _point_at_arc_fraction(curve, fraction):
     return curve[idx] + local_frac * segment_vectors[idx]
 
 
-def _acceptable_ncl_display_curve(curve, transform):
+def _evaluate_ncl_display_curve(curve, transform, viewport=None):
     try:
         display_curve = transform.transform(np.asarray(curve, dtype=float))
     except Exception:
-        return None
+        return None, True
 
     if not np.all(np.isfinite(display_curve)) or len(display_curve) < 2:
-        return None
+        return None, False
 
     segments = np.diff(display_curve, axis=0)
     seg_lengths = np.hypot(segments[:, 0], segments[:, 1])
     valid = seg_lengths > 1e-6
     if np.count_nonzero(valid) < 1:
-        return None
+        return None, False
+
+    if viewport is not None:
+        viewport_diag = float(np.hypot(viewport.width, viewport.height))
+        if np.isfinite(viewport_diag) and viewport_diag > 0.0:
+            jump_limit = max(viewport_diag * 0.35, 1e-6)
+            if np.any(seg_lengths > jump_limit):
+                return None, False
 
     segments = segments[valid]
     seg_lengths = seg_lengths[valid]
     arc_length = float(np.sum(seg_lengths))
     chord_length = float(np.hypot(*(display_curve[-1] - display_curve[0])))
     if arc_length <= 1e-6 or chord_length <= 1e-6:
-        return None
+        return None, False
 
     directions = segments / seg_lengths[:, None]
     if len(directions) < 2:
-        return display_curve
+        return display_curve, False
 
     turn_cos = np.clip(np.sum(directions[:-1] * directions[1:], axis=1), -1.0, 1.0)
     turn_angles = np.degrees(np.arccos(turn_cos))
@@ -1915,26 +2095,26 @@ def _acceptable_ncl_display_curve(curve, transform):
     )
 
     if tortuosity > 1.28:
-        return None
+        return None, False
     if max_turn > 52.0:
-        return None
+        return None, False
     if total_turn > 120.0:
-        return None
+        return None, False
     if sign_changes > 0 and total_turn > 70.0:
-        return None
+        return None, False
+    return display_curve, False
+
+
+def _acceptable_ncl_display_curve(curve, transform):
+    display_curve, _ = _evaluate_ncl_display_curve(curve, transform)
     return display_curve
 
 
 def _curve_shape_is_acceptable(curve, transform, display_sampler=None):
-    display_curve = _acceptable_ncl_display_curve(curve, transform)
+    display_curve, transform_failed = _evaluate_ncl_display_curve(curve, transform)
     if display_curve is not None:
         return True
-
-    try:
-        transform.transform(np.asarray(curve, dtype=float))
-    except Exception:
-        return True
-    return False
+    return transform_failed
 
 
 def _sample_local_vector_state(grid, u, v, transform, point, display_sampler=None):
@@ -2560,6 +2740,9 @@ class Grid:
         self.nx = len(x)
         self.ny = len(y)
 
+        if self.nx < 2 or self.ny < 2:
+            raise ValueError("'x' and 'y' must each contain at least 2 points")
+
         self.dx = x[1] - x[0]
         self.dy = y[1] - y[0]
 
@@ -2860,14 +3043,14 @@ def interpgrid(a, xi, yi):
 
     Ny, Nx = np.shape(a)
     if isinstance(xi, np.ndarray):
-        x = xi.astype(int)
-        y = yi.astype(int)
+        x = np.clip(np.asarray(xi, dtype=int), 0, Nx - 1)
+        y = np.clip(np.asarray(yi, dtype=int), 0, Ny - 1)
         # Check that xn, yn don't exceed max index
         xn = np.clip(x + 1, 0, Nx - 1)
         yn = np.clip(y + 1, 0, Ny - 1)
     else:
-        x = int(xi)
-        y = int(yi)
+        x = int(np.clip(int(xi), 0, Nx - 1))
+        y = int(np.clip(int(yi), 0, Ny - 1))
         # conditional is faster than clipping for integers
         if x == (Nx - 1):
             xn = x

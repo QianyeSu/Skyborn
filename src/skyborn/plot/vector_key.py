@@ -44,6 +44,8 @@ class CurlyVectorKey(Artist):
         loc: Literal[
             "lower left", "lower right", "upper left", "upper right"
         ] = "lower right",
+        x: float | None = None,
+        y: float | None = None,
         labelpos: Literal["N", "S", "E", "W"] = "N",
         max_arrow_length: float = 0.08,
         arrow_props: dict[str, Any] | None = None,
@@ -65,6 +67,8 @@ class CurlyVectorKey(Artist):
             )
         if labelpos not in ["N", "S", "E", "W"]:
             raise ValueError("labelpos must be one of ['N', 'S', 'E', 'W']")
+        if (x is None) != (y is None):
+            raise ValueError("x and y must both be provided together")
 
         self.ax = ax
         self.curly_vector_set = curly_vector_set
@@ -78,11 +82,19 @@ class CurlyVectorKey(Artist):
         self.loc = loc
         self.width = float(width)
         self.height = float(height)
+        self.x = None if x is None else float(x)
+        self.y = None if y is None else float(y)
         self.max_arrow_length = float(max_arrow_length)
         self.padding = float(padding)
         self.frameon = bool(frameon)
         self.show_description = bool(show_description)
         self.show_units = units != ""
+        if (
+            self.x is not None
+            and self.y is not None
+            and (not np.isfinite(self.x) or not np.isfinite(self.y))
+        ):
+            raise ValueError("x and y must be finite axes coordinates")
 
         if center_label is None:
             self.center_label = bool(label is not None and description is None)
@@ -421,6 +433,8 @@ class CurlyVectorKey(Artist):
     ) -> tuple[float, float]:
         width = self.width if width is None else float(width)
         height = self.height if height is None else float(height)
+        if self.x is not None and self.y is not None:
+            return self.x, self.y
         margin = getattr(self, "margin", 0.02)
         if self.loc == "lower left":
             return margin, margin
