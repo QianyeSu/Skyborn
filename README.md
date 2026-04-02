@@ -124,7 +124,12 @@ Skyborn provides an NCL-like `curly_vector` renderer for atmospheric wind fields
 - **NCL-like Curved Vectors**: Curved tails and lighter arrow heads for cleaner large-scale flow visualization
 - **Matplotlib-Compatible API**: Works with standard axes and Cartopy projections without switching to a separate plotting stack
 - **Flexible Inputs**: Supports regular lat-lon grids, xarray datasets, and curvilinear grids such as WRF mass-grid wind fields
+- **Vertical Cross-Section Support**: Supports latitude-pressure and similar vertical profile plots through the same `curly_vector` API
 - **Projection-Aware Rendering**: Supports global rendering with different `central_longitude` settings and Cartopy projections
+
+Skyborn `curly_vector` also supports vertical cross-section rendering, for example latitude-pressure plots using meridional wind and scaled omega:
+
+![Curly Vector Vertical Profile Example](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/hadley_msf_v_omega_ncl_curly.png)
 
 **Minimal Example:**
 ```python
