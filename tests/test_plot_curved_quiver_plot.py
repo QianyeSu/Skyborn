@@ -157,6 +157,21 @@ class TestDatasetCurlyVector:
 
         plt.close(fig)
 
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_wrapper_default_arrowstyle_matches_core(
+        self, mock_curly_vector, sample_data
+    ):
+        """Dataset wrapper should use the same default arrowstyle as the core API."""
+        fig, ax = plt.subplots(figsize=(8, 6))
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        curly_vector(sample_data, x="x", y="y", u="u", v="v", ax=ax)
+
+        assert mock_curly_vector.call_args.kwargs["arrowstyle"] == "->"
+
+        plt.close(fig)
+
     def test_curly_vector_integration_directions(self, sample_data):
         """Test different integration directions."""
         directions = ["forward", "backward", "both"]
@@ -1095,6 +1110,34 @@ class TestCurlyVectorKeyInternals:
 
         with pytest.raises(ValueError, match="x and y must both be provided together"):
             CurlyVectorKey(ax=ax, curly_vector_set=mock_curly_vector_set, U=2.0, x=0.8)
+
+        plt.close(fig)
+
+    @pytest.mark.parametrize("bad_u", [np.nan, np.inf, -1.0, 0.0])
+    def test_curly_vector_key_rejects_non_positive_or_non_finite_u(
+        self, mock_curly_vector_set, bad_u
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        with pytest.raises(
+            ValueError, match="U must be a finite positive reference magnitude"
+        ):
+            CurlyVectorKey(ax=ax, curly_vector_set=mock_curly_vector_set, U=bad_u)
+
+        plt.close(fig)
+
+    def test_curly_vector_key_rejects_unsupported_arrowstyle(
+        self, mock_curly_vector_set
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        with pytest.raises(ValueError, match="arrowstyle must be one of"):
+            CurlyVectorKey(
+                ax=ax,
+                curly_vector_set=mock_curly_vector_set,
+                U=4.0,
+                arrow_props={"arrowstyle": "fancy"},
+            )
 
         plt.close(fig)
 
