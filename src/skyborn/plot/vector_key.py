@@ -29,7 +29,12 @@ def _looks_like_axes(value: Any) -> bool:
 
 
 class CurlyVectorKey(Artist):
-    """NCL-like boxed reference-vector annotation for curly-vector plots."""
+    """NCL-like boxed reference-vector annotation for curly-vector plots.
+
+    The annotation prefers the active :class:`CurlyVectorPlotSet` glyph scaling.
+    ``reference_speed`` and ``max_arrow_length`` are only used as fallback
+    controls when the plot set cannot provide a usable reference-length mapping.
+    """
 
     def __init__(
         self,
@@ -574,6 +579,10 @@ def curly_vector_key(
         Label layout relative to the vector symbol.
     width, height : float, optional
         Box size in axes-fraction units.
+    reference_speed, max_arrow_length : float, optional
+        Fallback scaling controls used only when ``curly_vector_set`` cannot
+        provide a valid glyph-length mapping for the requested reference
+        magnitude.
     frameon : bool, default: True
         Whether to draw the surrounding box.
     show_description : bool, default: True
