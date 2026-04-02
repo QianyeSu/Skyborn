@@ -18,6 +18,8 @@ from matplotlib import cm, patches
 
 __all__ = ["curly_vector", "CurlyVectorPlotSet"]
 
+_SUPPORTED_CURLY_ARROWSTYLES = ("->", "-|>")
+
 try:
     from .nclcurly_native import sample_grid_field as _sample_grid_field_native
     from .nclcurly_native import (
@@ -128,6 +130,15 @@ def _apply_ncl_preset_defaults(
     return allow_non_uniform_grid, ref_magnitude, ref_length, min_distance, preset
 
 
+def _normalize_supported_arrowstyle(arrowstyle: Any) -> str:
+    """Validate and normalize the supported curly-vector arrow styles."""
+    normalized = str(arrowstyle).strip()
+    if normalized not in _SUPPORTED_CURLY_ARROWSTYLES:
+        supported = ", ".join(repr(value) for value in _SUPPORTED_CURLY_ARROWSTYLES)
+        raise ValueError(f"arrowstyle must be one of {supported}; got {arrowstyle!r}")
+    return normalized
+
+
 def _filled_float_array(values: Any) -> np.ndarray:
     array = np.ma.asarray(values, dtype=float)
     if np.ma.isMaskedArray(array):
@@ -163,8 +174,8 @@ def _extract_meshgrid_axes(x: Any, y: Any) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _regrid_non_uniform_vectors_to_uniform(
-    x: Any, y: Any, u: Any, v: Any
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    x: Any, y: Any, u: Any, v: Any, *scalars: Any
+) -> tuple[np.ndarray, ...]:
     try:
         from scipy.interpolate import RegularGridInterpolator
     except ImportError as err:
@@ -175,27 +186,37 @@ def _regrid_non_uniform_vectors_to_uniform(
     x_axis, y_axis = _extract_meshgrid_axes(x, y)
     u_values = _filled_float_array(u)
     v_values = _filled_float_array(v)
+    scalar_values = [_filled_float_array(field) for field in scalars]
     expected_shape = (y_axis.size, x_axis.size)
     if u_values.shape != expected_shape or v_values.shape != expected_shape:
         raise ValueError(
             f"u and v must match the non-uniform grid shape {expected_shape}"
         )
+    for scalar_field in scalar_values:
+        if scalar_field.shape != expected_shape:
+            raise ValueError(
+                "Non-uniform scalar style fields must match the source vector-grid "
+                f"shape {expected_shape}"
+            )
 
     x_sorted = x_axis.copy()
     y_sorted = y_axis.copy()
     u_sorted = u_values.copy()
     v_sorted = v_values.copy()
+    scalar_sorted = [field.copy() for field in scalar_values]
 
     if x_sorted.size > 1 and np.any(np.diff(x_sorted) <= 0):
         x_idx = np.argsort(x_sorted)
         x_sorted = x_sorted[x_idx]
         u_sorted = u_sorted[:, x_idx]
         v_sorted = v_sorted[:, x_idx]
+        scalar_sorted = [field[:, x_idx] for field in scalar_sorted]
     if y_sorted.size > 1 and np.any(np.diff(y_sorted) <= 0):
         y_idx = np.argsort(y_sorted)
         y_sorted = y_sorted[y_idx]
         u_sorted = u_sorted[y_idx, :]
         v_sorted = v_sorted[y_idx, :]
+        scalar_sorted = [field[y_idx, :] for field in scalar_sorted]
 
     if x_sorted.size > 1 and np.any(np.diff(x_sorted) <= 0):
         raise ValueError("x coordinates must be strictly monotonic after sorting")
@@ -225,10 +246,23 @@ def _regrid_non_uniform_vectors_to_uniform(
         bounds_error=False,
         fill_value=np.nan,
     )
+    scalar_interps = [
+        RegularGridInterpolator(
+            (y_sorted, x_sorted),
+            field,
+            method="linear",
+            bounds_error=False,
+            fill_value=np.nan,
+        )
+        for field in scalar_sorted
+    ]
 
     u_uniform = u_interp(points).reshape(Y_uniform.shape)
     v_uniform = v_interp(points).reshape(Y_uniform.shape)
-    return x_uniform, y_uniform, u_uniform, v_uniform
+    scalar_uniform = [
+        interp(points).reshape(Y_uniform.shape) for interp in scalar_interps
+    ]
+    return (x_uniform, y_uniform, u_uniform, v_uniform, *scalar_uniform)
 
 
 def curly_vector(
@@ -292,10 +326,8 @@ def curly_vector(
     arrowsize : float
         Scaling factor for the arrow size.
     arrowstyle : str
-        Arrow style specification.
-        See `~matplotlib.patches.FancyArrowPatch`.
-        ``'->'`` uses an open line arrowhead while other styles fall back to a
-        filled polygon head.
+        Supported arrow-head style. Use ``"->"`` for the open NCL-like line
+        head or ``"-|>"`` for a filled triangular head.
     transform : Transform, optional
         Coordinate transformation for the plot. Defaults to axes.transData.
     zorder : float
@@ -346,12 +378,9 @@ def curly_vector(
 
         - ``lines``: `.LineCollection` of streamlines
 
-        - ``arrows``: `.PatchCollection` containing `.FancyArrowPatch`
-          objects representing the arrows half-way along streamlines.
-
-            This container will probably change in the future to allow changes
-            to the colormap, alpha, etc. for both lines and arrows, but these
-            changes should be backward compatible.
+        - ``arrows``: tuple of the actual filled arrow-head patches added to
+          the axes. Open arrow styles use line segments only and therefore
+          return an empty tuple.
     """
     allow_non_uniform_grid, ncl_preset = _resolve_default_ncl_preset(
         x=x,
@@ -371,10 +400,41 @@ def curly_vector(
             v=v,
         )
     )
+    arrowstyle = _normalize_supported_arrowstyle(arrowstyle)
 
     # Handle non-uniform grids by creating a uniform interpolation grid
     if allow_non_uniform_grid:
-        x, y, u, v = _regrid_non_uniform_vectors_to_uniform(x, y, u, v)
+        expected_shape = np.shape(u)
+        color_field = None
+        linewidth_field = None
+        if not (color is None or isinstance(color, str) or np.isscalar(color)):
+            color_field = _filled_float_array(color)
+            if color_field.shape != expected_shape:
+                raise ValueError(
+                    "If 'color' is given, it must match the shape of the (x, y) grid"
+                )
+        if not (
+            linewidth is None or isinstance(linewidth, str) or np.isscalar(linewidth)
+        ):
+            linewidth_field = _filled_float_array(linewidth)
+            if linewidth_field.shape != expected_shape:
+                raise ValueError(
+                    "If 'linewidth' is given, it must match the shape of the (x, y) grid"
+                )
+
+        regridded = _regrid_non_uniform_vectors_to_uniform(
+            x,
+            y,
+            u,
+            v,
+            *([field for field in (color_field, linewidth_field) if field is not None]),
+        )
+        x, y, u, v, *scalar_fields = regridded
+        scalar_iter = iter(scalar_fields)
+        if color_field is not None:
+            color = next(scalar_iter)
+        if linewidth_field is not None:
+            linewidth = next(scalar_iter)
 
     return _curly_vector_ncl(
         axes,
@@ -413,9 +473,10 @@ class CurlyVectorPlotSet:
     lines : matplotlib.collections.LineCollection
         Line collection containing the rendered curly-vector shafts and any
         open-arrow head segments.
-    arrows : matplotlib.collections.PatchCollection
-        Patch collection containing filled arrow-head patches when a filled
-        arrow style is requested.
+    arrows : tuple
+        Tuple containing the actual filled arrow-head patches added to the
+        axes. Open arrow styles use line segments only and therefore store an
+        empty tuple here.
     resolution : float
         Reference glyph length expressed as a fraction of the axes width.
     magnitude : array-like
@@ -458,7 +519,7 @@ class CurlyVectorPlotSet:
         length_scale: Any = None,
     ) -> None:
         self.lines = lines
-        self.arrows = arrows
+        self.arrows = tuple(arrows) if arrows is not None else ()
         self.resolution = resolution
         self.magnitude = magnitude
         self.zorder = zorder
@@ -572,6 +633,17 @@ def _coerce_plot_field_array(values):
     return np.asarray(np.ma.masked_invalid(values).filled(np.nan), dtype=float)
 
 
+def _finite_plot_field_values(field, field_name):
+    """Return finite values from a style field or fail fast with a clear error."""
+    finite_values = np.asarray(field, dtype=float)
+    finite_values = finite_values[np.isfinite(finite_values)]
+    if finite_values.size == 0:
+        raise ValueError(
+            f"{field_name} field must contain at least one finite value after masking"
+        )
+    return finite_values
+
+
 def _resolve_artist_coordinate_context(axes, transform):
     """Choose the final artist transform for the rendered curly-vector geometry."""
     artist_transform = transform
@@ -661,10 +733,9 @@ def _curly_vector_ncl(
     if valid_magnitude.size == 0:
         lc = mcollections.LineCollection([], transform=artist_transform, zorder=zorder)
         axes.add_collection(lc, autolim=False)
-        ac = mcollections.PatchCollection([])
         return CurlyVectorPlotSet(
             lc,
-            ac,
+            (),
             0.0,
             magnitude,
             zorder,
@@ -701,10 +772,22 @@ def _curly_vector_ncl(
         if isinstance(linewidth, np.ndarray)
         else None
     )
+    color_default = None
+    line_width_default = linewidth
     if use_multicolor_lines:
+        finite_color_values = _finite_plot_field_values(color_field, "color")
+        color_default = float(np.mean(finite_color_values))
         if norm is None:
-            norm = mcolors.Normalize(np.nanmin(color_field), np.nanmax(color_field))
+            norm = mcolors.Normalize(
+                float(np.min(finite_color_values)),
+                float(np.max(finite_color_values)),
+            )
         cmap = cm._ensure_cmap(cmap)
+    if line_width_field is not None:
+        finite_line_width_values = _finite_plot_field_values(
+            line_width_field, "linewidth"
+        )
+        line_width_default = float(np.mean(finite_line_width_values))
 
     default_max_length_px = _default_ncl_max_length_px(axes.bbox, density)
     requested_ref_length_px = (
@@ -765,11 +848,6 @@ def _curly_vector_ncl(
     line_colors = []
     line_widths = []
     arrows = []
-    line_width_default = (
-        float(np.nanmean(line_width_field))
-        if line_width_field is not None
-        else linewidth
-    )
 
     for center, center_mag in selected_centers:
         target_length_px = _curve_length_from_magnitude(center_mag, length_scale)
@@ -808,7 +886,7 @@ def _curly_vector_ncl(
         if use_multicolor_lines:
             sampled_color = _sample_grid_field(grid, color_field, center[0], center[1])
             if sampled_color is None:
-                sampled_color = float(center_mag)
+                sampled_color = color_default
             curve_color = cmap(norm(sampled_color))
         else:
             curve_color = color
@@ -876,14 +954,13 @@ def _curly_vector_ncl(
     # avoid Cartopy reprojecting every segment again just to recompute datalim.
     axes.add_collection(lc, autolim=False)
 
-    ac = mcollections.PatchCollection(arrows, match_original=True)
     for patch in arrows:
         axes.add_patch(patch)
 
     axes.autoscale_view()
     return CurlyVectorPlotSet(
         lc,
-        ac,
+        tuple(arrows),
         ref_length_frac,
         magnitude,
         zorder,
