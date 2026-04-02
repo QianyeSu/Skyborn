@@ -7,7 +7,24 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from skyborn.plot.ncl_vector import curly_vector
+from skyborn.plot.ncl_vector import (
+    _append_cyclic_column,
+    _apply_dataset_isel,
+    _build_curvilinear_target_grid,
+    _default_cartopy_target_extent,
+    _default_curvilinear_regrid_shape,
+    _extract_curly_vector_dataset_source,
+    _extract_regular_grid_from_regridded_vectors,
+    _get_plot_dataarray,
+    _grid_spans_full_longitude,
+    _is_curvilinear_grid,
+    _maybe_as_scalar_field,
+    _normalize_density_pair,
+    _normalize_regrid_shape,
+    _prepare_source_vector_grid,
+    _wrap_periodic_grid_queries,
+    curly_vector,
+)
 from skyborn.plot.vector_key import CurlyVectorKey, curly_vector_key
 from skyborn.plot.vector_plot import CurlyVectorPlotSet
 
@@ -236,6 +253,41 @@ class TestDatasetCurlyVector:
         assert isinstance(result, CurlyVectorPlotSet)
         plt.close(fig)
 
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_coerces_arraylike_color_and_linewidth(
+        self, mock_curly_vector, sample_data
+    ):
+        """Array-like color/linewidth inputs should be normalized to ndarrays."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        color = sample_data["u"]
+        linewidth = xr.DataArray(
+            np.full(sample_data["u"].shape, 0.75),
+            dims=sample_data["u"].dims,
+            coords=sample_data["u"].coords,
+        )
+
+        curly_vector(
+            sample_data,
+            x="x",
+            y="y",
+            u="u",
+            v="v",
+            ax=ax,
+            color=color,
+            linewidth=linewidth,
+        )
+
+        call_args = mock_curly_vector.call_args
+        assert isinstance(call_args[1]["color"], np.ndarray)
+        assert isinstance(call_args[1]["linewidth"], np.ndarray)
+        np.testing.assert_allclose(call_args[1]["color"], color.data)
+        np.testing.assert_allclose(call_args[1]["linewidth"], linewidth.data)
+
+        plt.close(fig)
+
     @patch("skyborn.plot.ncl_vector._regrid_cartopy_vectors")
     @patch("skyborn.plot.ncl_vector._array_curly_vector")
     def test_curly_vector_regrids_cartopy_vectors(
@@ -274,8 +326,12 @@ class TestDatasetCurlyVector:
             ax=ax,
             transform=DummyCRS(),
             regrid_shape=(4, 3),
-            color=sample_data["u"].data.copy(),
-            linewidth=np.ones_like(sample_data["u"].data),
+            color=sample_data["u"],
+            linewidth=xr.DataArray(
+                np.ones_like(sample_data["u"].data),
+                dims=sample_data["u"].dims,
+                coords=sample_data["u"].coords,
+            ),
         )
 
         mock_regrid_vectors.assert_called_once()
@@ -555,6 +611,296 @@ class TestDatasetCurlyVector:
         plt.close(fig)
 
 
+class TestDatasetCurlyVectorHelpers:
+    """Unit tests for dataset/cartopy helper branches."""
+
+    def test_apply_dataset_isel_filters_only_matching_dims(self):
+        da = xr.DataArray(
+            np.arange(2 * 3 * 4).reshape(2, 3, 4),
+            dims=("time", "level", "x"),
+        )
+
+        selected = _apply_dataset_isel(da, {"time": 1, "lat": 0})
+
+        assert selected.dims == ("level", "x")
+        np.testing.assert_array_equal(selected.data, da.isel(time=1).data)
+
+    def test_get_plot_dataarray_rejects_scalar_after_selection(self):
+        ds = xr.Dataset({"x": (["time"], np.array([1.0]))})
+
+        with pytest.raises(
+            ValueError, match="x must resolve to at least one dimension"
+        ):
+            _get_plot_dataarray(ds, "x", isel={"time": 0}, role="x")
+
+    def test_get_plot_dataarray_rejects_more_than_2d_after_selection(self):
+        data = np.arange(2 * 3 * 4 * 5, dtype=float).reshape(2, 3, 4, 5)
+        ds = xr.Dataset({"u": (["time", "level", "y", "x"], data)})
+
+        with pytest.raises(
+            ValueError,
+            match=r"u must resolve to 1D or 2D data after selection; remaining dims",
+        ):
+            _get_plot_dataarray(ds, "u", isel={"time": 0}, role="u")
+
+    def test_extract_curly_vector_dataset_source_rejects_non_2d_vectors(self):
+        ds = xr.Dataset(
+            {
+                "x": (["x"], np.linspace(0.0, 2.0, 3)),
+                "y": (["y"], np.linspace(0.0, 1.0, 2)),
+                "u": (["x"], np.linspace(1.0, 3.0, 3)),
+                "v": (["y", "x"], np.ones((2, 3))),
+            }
+        )
+
+        with pytest.raises(ValueError, match="u and v must each resolve to 2D arrays"):
+            _extract_curly_vector_dataset_source(ds, "x", "y", "u", "v")
+
+    def test_extract_curly_vector_dataset_source_rejects_mixed_coordinate_dims(self):
+        x = xr.DataArray(np.linspace(0.0, 2.0, 3), dims=("x",))
+        y = xr.DataArray(np.ones((2, 3)), dims=("y", "x"))
+        ds = xr.Dataset(
+            {
+                "x": x,
+                "y2d": y,
+                "u": (["y", "x"], np.ones((2, 3))),
+                "v": (["y", "x"], np.ones((2, 3))),
+            }
+        )
+
+        with pytest.raises(ValueError, match="x and y must both be 1D or both be 2D"):
+            _extract_curly_vector_dataset_source(ds, "x", "y2d", "u", "v")
+
+    def test_default_cartopy_target_extent_uses_axes_when_available(self):
+        ax = Mock()
+        ax.projection = object()
+        ax.get_extent.return_value = (-10.0, 10.0, -5.0, 5.0)
+
+        assert _default_cartopy_target_extent(ax, None) == (-10.0, 10.0, -5.0, 5.0)
+        assert _default_cartopy_target_extent(ax, (1.0, 2.0, 3.0, 4.0)) == (
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+        )
+
+    def test_default_cartopy_target_extent_handles_axes_errors(self):
+        ax = Mock()
+        ax.projection = object()
+        ax.get_extent.side_effect = RuntimeError("boom")
+
+        assert _default_cartopy_target_extent(ax, None) is None
+        assert _default_cartopy_target_extent(object(), None) is None
+
+    def test_normalize_regrid_shape_and_density_pair_helpers(self):
+        assert _normalize_regrid_shape(1) == (2, 2)
+        assert _normalize_regrid_shape((7.9, 3.1)) == (7, 3)
+        assert _normalize_density_pair(0.8) == (0.8, 0.8)
+        assert _normalize_density_pair((0.6, 1.4)) == (0.6, 1.4)
+
+        with pytest.raises(ValueError, match="density must be a scalar"):
+            _normalize_density_pair((1.0, 2.0, 3.0))
+
+    def test_is_curvilinear_grid_distinguishes_rectilinear_and_warped_meshes(self):
+        x1d = np.linspace(100.0, 106.0, 4)
+        y1d = np.linspace(20.0, 24.0, 3)
+        x_rect, y_rect = np.meshgrid(x1d, y1d)
+
+        assert bool(_is_curvilinear_grid(x_rect, y_rect)) is False
+
+        x_warped = x_rect + np.array(
+            [
+                [0.0, 0.0, 0.0, 0.0],
+                [0.2, 0.2, 0.2, 0.2],
+                [0.4, 0.4, 0.4, 0.4],
+            ]
+        )
+        assert bool(_is_curvilinear_grid(x_warped, y_rect)) is True
+
+        with pytest.raises(ValueError, match="matching shapes"):
+            _is_curvilinear_grid(np.ones((2, 3)), np.ones((3, 2)))
+
+    def test_default_curvilinear_regrid_shape_respects_density_and_source_size(self):
+        x = np.zeros((12, 20))
+
+        assert _default_curvilinear_regrid_shape(x, density=0.4) == (20, 12)
+        assert _default_curvilinear_regrid_shape(x, density=(2.0, 3.0)) == (20, 12)
+
+    def test_build_curvilinear_target_grid_unwraps_longitude_and_rejects_all_nan(self):
+        lon = np.array([[170.0, 175.0, -179.0], [170.0, 175.0, -179.0]])
+        lat = np.array([[10.0, 10.0, 10.0], [20.0, 20.0, 20.0]])
+
+        lon1d, lat1d = _build_curvilinear_target_grid(lon, lat, (4, 3))
+
+        assert lon1d[0] == pytest.approx(170.0)
+        assert lon1d[-1] == pytest.approx(181.0)
+        assert lat1d[0] == pytest.approx(10.0)
+        assert lat1d[-1] == pytest.approx(20.0)
+
+        with pytest.raises(ValueError, match="contain no finite points"):
+            _build_curvilinear_target_grid(
+                np.full((2, 2), np.nan),
+                np.full((2, 2), np.nan),
+                (3, 3),
+            )
+
+    def test_maybe_as_scalar_field_accepts_only_matching_arrays(self):
+        expected_shape = (2, 3)
+
+        assert _maybe_as_scalar_field(None, expected_shape) is None
+        assert _maybe_as_scalar_field("k", expected_shape) is None
+        assert _maybe_as_scalar_field(2.0, expected_shape) is None
+        assert _maybe_as_scalar_field(np.ones((3, 2)), expected_shape) is None
+        np.testing.assert_allclose(
+            _maybe_as_scalar_field([[1, 2, 3], [4, 5, 6]], expected_shape),
+            np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+        )
+
+    def test_prepare_source_vector_grid_sorts_descending_coordinates(self):
+        x = np.array([30.0, 20.0, 10.0])
+        y = np.array([50.0, 40.0])
+        u = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+        v = -u
+        scalar = u + 100.0
+
+        x_out, y_out, u_out, v_out, scalars_out = _prepare_source_vector_grid(
+            x, y, u, v, scalars=(scalar,)
+        )
+
+        np.testing.assert_allclose(x_out, np.array([10.0, 20.0, 30.0]))
+        np.testing.assert_allclose(y_out, np.array([40.0, 50.0]))
+        np.testing.assert_allclose(u_out, np.array([[6.0, 5.0, 4.0], [3.0, 2.0, 1.0]]))
+        np.testing.assert_allclose(v_out, -u_out)
+        np.testing.assert_allclose(scalars_out[0], u_out + 100.0)
+
+    def test_prepare_source_vector_grid_appends_cyclic_column_for_global_longitude(
+        self,
+    ):
+        x = np.array([0.0, 90.0, 180.0, 270.0])
+        y = np.array([-30.0, 30.0])
+        u = np.arange(8.0).reshape(2, 4)
+        v = -u
+        scalar = np.full((2, 4), 7.0)
+
+        x_out, y_out, u_out, v_out, scalars_out = _prepare_source_vector_grid(
+            x, y, u, v, scalars=(scalar,)
+        )
+
+        np.testing.assert_allclose(x_out, np.array([0.0, 90.0, 180.0, 270.0, 360.0]))
+        np.testing.assert_allclose(y_out, y)
+        np.testing.assert_allclose(u_out[:, -1], u[:, 0])
+        np.testing.assert_allclose(v_out[:, -1], v[:, 0])
+        np.testing.assert_allclose(scalars_out[0][:, -1], scalar[:, 0])
+
+    def test_prepare_source_vector_grid_rejects_non_rectilinear_axes(self):
+        with pytest.raises(ValueError, match="requires 1D or meshgrid"):
+            _prepare_source_vector_grid(
+                np.ones((2, 2, 2)),
+                np.ones((2, 2)),
+                np.ones((2, 2)),
+                np.ones((2, 2)),
+            )
+
+    def test_periodic_grid_helpers_wrap_queries_and_append_cyclic_data(self):
+        x = np.array([0.0, 120.0, 240.0])
+        field = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+
+        assert bool(_grid_spans_full_longitude(x)) is True
+        x_cyclic, field_cyclic = _append_cyclic_column(x, field)
+        np.testing.assert_allclose(x_cyclic, np.array([0.0, 120.0, 240.0, 360.0]))
+        np.testing.assert_allclose(field_cyclic[:, -1], field[:, 0])
+        np.testing.assert_allclose(
+            _wrap_periodic_grid_queries(np.array([-10.0, 361.0]), x),
+            np.array([-10.0, 1.0]),
+        )
+        np.testing.assert_allclose(
+            _wrap_periodic_grid_queries(np.array([-10.0, 361.0]), np.array([0.0, 1.0])),
+            np.array([-10.0, 361.0]),
+        )
+
+    def test_periodic_grid_helpers_wrap_queries_after_cyclic_append(self):
+        x = np.array([0.0, 120.0, 240.0])
+        field = np.array([[1.0, 2.0, 3.0]])
+
+        x_cyclic, _ = _append_cyclic_column(x, field)
+
+        np.testing.assert_allclose(
+            _wrap_periodic_grid_queries(np.array([-10.0, 361.0]), x_cyclic),
+            np.array([350.0, 1.0]),
+        )
+
+    def test_extract_curly_vector_dataset_source_transposes_2d_coords_to_match_uv_dims(
+        self,
+    ):
+        x_values = np.array([[10.0, 20.0], [30.0, 40.0]])
+        y_values = np.array([[50.0, 60.0], [70.0, 80.0]])
+        u_values = np.array([[1.0, 2.0], [3.0, 4.0]])
+        v_values = -u_values
+
+        ds = xr.Dataset(
+            {
+                "u": (("y", "x"), u_values),
+                "v": (("y", "x"), v_values),
+                "lon": (("x", "y"), x_values),
+                "lat": (("x", "y"), y_values),
+            }
+        )
+
+        x_out, y_out, u_out, v_out = _extract_curly_vector_dataset_source(
+            ds, "lon", "lat", "u", "v"
+        )
+
+        np.testing.assert_allclose(x_out, x_values.transpose())
+        np.testing.assert_allclose(y_out, y_values.transpose())
+        np.testing.assert_allclose(u_out, u_values)
+        np.testing.assert_allclose(v_out, v_values)
+
+    def test_extract_curly_vector_dataset_source_rejects_unmatched_2d_coord_dims(
+        self,
+    ):
+        ds = xr.Dataset(
+            {
+                "u": (("y", "x"), np.ones((2, 3))),
+                "v": (("y", "x"), np.ones((2, 3))),
+                "lon": (("row", "col"), np.ones((2, 3))),
+                "lat": (("row", "col"), np.ones((2, 3))),
+            }
+        )
+
+        with pytest.raises(ValueError, match="dims"):
+            _extract_curly_vector_dataset_source(ds, "lon", "lat", "u", "v")
+
+    def test_extract_regular_grid_from_regridded_vectors_sorts_descending_axes(self):
+        x_grid = np.array([[30.0, 20.0, 10.0], [30.0, 20.0, 10.0]])
+        y_grid = np.array([[60.0, 60.0, 60.0], [50.0, 50.0, 50.0]])
+        u_grid = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+        v_grid = -u_grid
+        scalar_grid = u_grid + 10.0
+
+        x_1d, y_1d, u_out, v_out, scalar_grids = (
+            _extract_regular_grid_from_regridded_vectors(
+                x_grid,
+                y_grid,
+                u_grid,
+                v_grid,
+                [scalar_grid],
+            )
+        )
+
+        np.testing.assert_allclose(x_1d, np.array([10.0, 20.0, 30.0]))
+        np.testing.assert_allclose(y_1d, np.array([50.0, 60.0]))
+        np.testing.assert_allclose(u_out, np.array([[6.0, 5.0, 4.0], [3.0, 2.0, 1.0]]))
+        np.testing.assert_allclose(v_out, -u_out)
+        np.testing.assert_allclose(scalar_grids[0], u_out + 10.0)
+
+    def test_curly_vector_dispatch_rejects_missing_and_unsupported_arguments(self):
+        with pytest.raises(TypeError, match="expects either"):
+            curly_vector()
+
+        with pytest.raises(TypeError, match="Unsupported arguments"):
+            curly_vector(np.array([1.0]), np.array([2.0]), np.array([3.0]))
+
+
 class TestCurlyVectorKey:
     """Focused tests for the NCL-like reference annotation."""
 
@@ -691,6 +1037,209 @@ class TestCurlyVectorKey:
                 units="m/s",
                 loc="invalid_location",
             )
+
+        plt.close(fig)
+
+
+class TestCurlyVectorKeyInternals:
+    """Focused unit tests for reference-key helper branches."""
+
+    @pytest.fixture
+    def mock_curly_vector_set(self):
+        mock_set = Mock(spec=CurlyVectorPlotSet)
+        mock_set.resolution = 0.5
+        mock_set.magnitude = np.array([[0.5, 1.0], [1.5, 2.0]])
+        mock_set.max_magnitude = 20.0
+        mock_set.ref_length_fraction = 0.12
+        mock_set.arrowstyle = "->"
+        mock_set.arrowsize = 1.0
+        mock_set.glyph_length_axes_fraction.side_effect = (
+            lambda value: float(value) / 100.0
+        )
+        mock_set.glyph_head_axes_dimensions.return_value = (0.02, 0.03)
+        return mock_set
+
+    def test_curly_vector_key_rejects_invalid_labelpos(self, mock_curly_vector_set):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        with pytest.raises(ValueError, match="labelpos must be one of"):
+            CurlyVectorKey(
+                ax=ax, curly_vector_set=mock_curly_vector_set, U=2.0, labelpos="Q"
+            )
+
+        plt.close(fig)
+
+    def test_curly_vector_key_center_label_hides_description(
+        self, mock_curly_vector_set
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        legend = CurlyVectorKey(
+            ax=ax,
+            curly_vector_set=mock_curly_vector_set,
+            U=6.0,
+            label="6 m/s",
+            description="Reference Vector",
+            center_label=True,
+        )
+        fig.canvas.draw()
+
+        assert legend.text.get_text() == "6 m/s"
+        assert legend.text2.get_visible() is False
+
+        plt.close(fig)
+
+    def test_calculate_head_geometry_falls_back_when_plotset_returns_invalid_values(
+        self, mock_curly_vector_set
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        mock_curly_vector_set.glyph_head_axes_dimensions.return_value = (np.nan, np.nan)
+
+        legend = CurlyVectorKey(ax=ax, curly_vector_set=mock_curly_vector_set, U=10.0)
+        head_length, head_width = legend._calculate_head_geometry()
+
+        assert 0.0 < head_length <= legend.arrow_length * 0.5
+        assert head_width > 0.0
+
+        plt.close(fig)
+
+    def test_calculate_arrow_length_uses_ref_length_fraction_fallback(
+        self, mock_curly_vector_set
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        mock_curly_vector_set.glyph_length_axes_fraction.side_effect = ValueError("bad")
+
+        legend = CurlyVectorKey(ax=ax, curly_vector_set=mock_curly_vector_set, U=10.0)
+
+        assert legend._calculate_arrow_length() == pytest.approx(0.06)
+
+        plt.close(fig)
+
+    def test_calculate_arrow_length_uses_reference_speed_fallback(
+        self, mock_curly_vector_set
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        mock_curly_vector_set.glyph_length_axes_fraction.side_effect = TypeError("bad")
+        mock_curly_vector_set.max_magnitude = None
+        mock_curly_vector_set.ref_length_fraction = None
+
+        legend = CurlyVectorKey(
+            ax=ax,
+            curly_vector_set=mock_curly_vector_set,
+            U=4.0,
+            reference_speed=2.0,
+            max_arrow_length=0.08,
+        )
+
+        assert legend._calculate_arrow_length() == pytest.approx(0.16)
+
+        plt.close(fig)
+
+    def test_calculate_arrow_length_handles_unexpected_exception(
+        self, mock_curly_vector_set
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        legend = CurlyVectorKey(
+            ax=ax,
+            curly_vector_set=mock_curly_vector_set,
+            U=4.0,
+            max_arrow_length=0.08,
+        )
+        legend.curly_vector_set = object()
+        legend.reference_speed = object()
+
+        assert legend._calculate_arrow_length() == pytest.approx(0.048)
+
+        plt.close(fig)
+
+    def test_calculate_position_supports_all_corner_locations(
+        self, mock_curly_vector_set
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        legend = CurlyVectorKey(ax=ax, curly_vector_set=mock_curly_vector_set, U=4.0)
+
+        legend.loc = "lower left"
+        assert legend._calculate_position() == pytest.approx(
+            (legend.margin, legend.margin)
+        )
+
+        legend.loc = "upper left"
+        assert legend._calculate_position() == pytest.approx(
+            (legend.margin, 1.0 - legend.height - legend.margin)
+        )
+
+        legend.loc = "upper right"
+        assert legend._calculate_position() == pytest.approx(
+            (1.0 - legend.width - legend.margin, 1.0 - legend.height - legend.margin)
+        )
+
+        plt.close(fig)
+
+    def test_setup_prop_helpers_merge_user_overrides(self, mock_curly_vector_set):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        legend = CurlyVectorKey(
+            ax=ax,
+            curly_vector_set=mock_curly_vector_set,
+            U=4.0,
+            arrow_props={
+                "color": "green",
+                "linewidth": 4.0,
+                "alpha": 0.3,
+                "facecolor": "yellow",
+                "edgecolor": "red",
+            },
+        )
+
+        merged = legend._setup_props({"alpha": 0.5}, {"linewidth": 1.0, "alpha": 1.0})
+        assert merged == {"linewidth": 1.0, "alpha": 0.5}
+        assert legend._setup_line_props()["color"] == "green"
+        assert legend._setup_line_props()["linewidth"] == 4.0
+        assert legend._setup_head_fill_props()["facecolor"] == "yellow"
+        assert legend._setup_head_fill_props()["edgecolor"] == "red"
+
+        plt.close(fig)
+
+    def test_set_figure_propagates_to_child_artists(self, mock_curly_vector_set):
+        fig1, ax1 = plt.subplots(figsize=(8, 6))
+        legend = CurlyVectorKey(ax=ax1, curly_vector_set=mock_curly_vector_set, U=4.0)
+        legend.set_figure(fig1)
+
+        assert legend.figure is fig1
+        assert legend.patch.figure is fig1
+        assert legend.arrow.figure is fig1
+        assert legend.text.figure is fig1
+
+        plt.close(fig1)
+
+    def test_draw_returns_early_when_invisible(
+        self, mock_curly_vector_set, monkeypatch
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        legend = CurlyVectorKey(ax=ax, curly_vector_set=mock_curly_vector_set, U=4.0)
+        legend.set_visible(False)
+        monkeypatch.setattr(
+            legend,
+            "_update_layout",
+            lambda renderer: (_ for _ in ()).throw(AssertionError("should not run")),
+        )
+
+        legend.draw(fig.canvas.get_renderer())
+
+        plt.close(fig)
+
+    def test_curly_vector_key_rejects_missing_args_and_extra_positionals(
+        self, mock_curly_vector_set
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        with pytest.raises(TypeError, match="expects either"):
+            curly_vector_key()
+
+        with pytest.raises(TypeError, match="missing required curly_vector_set"):
+            curly_vector_key(ax)
+
+        with pytest.raises(TypeError, match="too many positional arguments"):
+            curly_vector_key(ax, mock_curly_vector_set, 2.0, "m/s", "extra")
 
         plt.close(fig)
 

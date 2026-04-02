@@ -18,23 +18,37 @@ from skyborn.plot.vector_plot import (
     StreamMask,
     TerminateTrajectory,
     _apply_ncl_preset_defaults,
+    _axis_coordinate_1d,
+    _axis_is_uniform,
     _candidate_data_from_display_step,
     _curve_shape_is_acceptable,
     _default_ncl_box_center_candidates,
     _default_ncl_candidate_shape,
+    _density_scalar,
+    _density_xy,
+    _display_step_to_data,
+    _finite_difference_step,
     _fit_single_bend_display_curve,
     _gen_starting_points,
     _infer_profile_ncl_ref_magnitude,
     _local_display_jacobian,
     _map_ncl_display_points_to_viewport,
     _ncl_step_length_px,
+    _NCLDisplaySampler,
+    _normalize_ncl_preset,
+    _open_arrow_geometry,
     _point_at_arc_distance_from_end,
+    _point_within_grid_data,
     _prepare_ncl_display_sampler,
+    _prepare_ncl_native_trace_context,
+    _resolve_default_ncl_preset,
     _resolve_ncl_min_distance_fraction,
     _sample_grid_field,
     _sample_grid_field_array,
     _select_ncl_centers,
     _thin_ncl_mapped_candidates,
+    _tip_display_geometry_from_display_curve,
+    _trim_curve_for_open_head,
     _trim_display_curve_from_end,
     curly_vector,
     interpgrid,
@@ -207,6 +221,50 @@ class TestCurlyVector:
 
         plt.close(fig)
 
+    def test_curly_vector_filled_arrowstyle_creates_arrow_paths(
+        self, sample_vector_field
+    ):
+        """Filled arrow styles should populate the PatchCollection."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        result = curly_vector(
+            ax,
+            x,
+            y,
+            u,
+            v,
+            arrowstyle="-|>",
+            density=0.8,
+        )
+
+        assert isinstance(result, CurlyVectorPlotSet)
+        assert len(result.lines.get_segments()) > 0
+        assert len(result.arrows.get_paths()) > 0
+
+        plt.close(fig)
+
+    def test_curly_vector_all_nan_field_returns_empty_artists(
+        self, sample_vector_field
+    ):
+        """All-NaN vector fields should return empty artists without crashing."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        result = curly_vector(
+            ax,
+            x,
+            y,
+            np.full_like(u, np.nan),
+            np.full_like(v, np.nan),
+        )
+
+        assert isinstance(result, CurlyVectorPlotSet)
+        assert len(result.lines.get_segments()) == 0
+        assert len(result.arrows.get_paths()) == 0
+
+        plt.close(fig)
+
     def test_curly_vector_no_longer_accepts_render_mode_argument(
         self, sample_vector_field
     ):
@@ -360,6 +418,55 @@ class TestCurlyVector:
         assert call_kwargs["ref_length"] == pytest.approx(0.06)
         assert call_kwargs["min_distance"] is None
         assert call_kwargs["ref_magnitude"] == pytest.approx(expected_ref)
+
+        plt.close(fig)
+
+    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    def test_curly_vector_non_uniform_2d_meshgrid_preserves_original_resolution(
+        self, mock_ncl_curly
+    ):
+        """2D meshgrid profile input should keep its native (ny, nx) resolution."""
+        x_1d = np.linspace(-60.0, 60.0, 5)
+        y_1d = np.array([1000.0, 700.0, 400.0])
+        x_2d, y_2d = np.meshgrid(x_1d, y_1d, indexing="xy")
+        u = np.arange(15.0).reshape(3, 5)
+        v = -u
+        mock_ncl_curly.return_value = Mock(spec=CurlyVectorPlotSet)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        curly_vector(ax, x_2d, y_2d, u, v, allow_non_uniform_grid=True)
+
+        call_args = mock_ncl_curly.call_args.args
+        assert np.asarray(call_args[1]).shape == (5,)
+        assert np.asarray(call_args[2]).shape == (3,)
+        assert np.asarray(call_args[3]).shape == (3, 5)
+        assert np.asarray(call_args[4]).shape == (3, 5)
+
+        plt.close(fig)
+
+    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    def test_curly_vector_non_uniform_masked_values_stay_nan_after_regridding(
+        self, mock_ncl_curly
+    ):
+        """Masked profile data should not be converted into synthetic vectors."""
+        x = np.array([-30.0, -10.0, 10.0, 30.0])
+        y = np.array([1000.0, 700.0, 400.0])
+        base = np.arange(12.0).reshape(3, 4)
+        u = np.ma.array(base, mask=np.zeros((3, 4), dtype=bool))
+        v = np.ma.array(-base, mask=np.zeros((3, 4), dtype=bool))
+        u.mask[1, 2] = True
+        v.mask[1, 2] = True
+        mock_ncl_curly.return_value = Mock(spec=CurlyVectorPlotSet)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        curly_vector(ax, x, y, u, v, allow_non_uniform_grid=True)
+
+        u_grid = np.asarray(mock_ncl_curly.call_args.args[3], dtype=float)
+        v_grid = np.asarray(mock_ncl_curly.call_args.args[4], dtype=float)
+        assert np.isnan(u_grid[1, 2])
+        assert np.isnan(v_grid[1, 2])
 
         plt.close(fig)
 
@@ -995,6 +1102,194 @@ class TestCurlyVector:
         plt.close(fig)
 
 
+class TestInternalHelperFunctions:
+    """Focused unit tests for helper branches in the low-level renderer."""
+
+    def test_normalize_ncl_preset_accepts_aliases_and_rejects_unknown_values(self):
+        assert _normalize_ncl_preset(None) is None
+        assert _normalize_ncl_preset("profile") == "profile"
+        assert _normalize_ncl_preset("vertical_profile") == "profile"
+        assert _normalize_ncl_preset("vertical-profile") == "profile"
+        assert _normalize_ncl_preset("lat_pressure") == "profile"
+
+        with pytest.raises(ValueError, match="Unsupported ncl_preset"):
+            _normalize_ncl_preset("bad")
+
+    def test_axis_coordinate_1d_extracts_expected_axis_and_validates_name(self):
+        x2d, y2d = np.meshgrid(np.array([1.0, 2.0, 3.0]), np.array([4.0, 5.0]))
+
+        np.testing.assert_allclose(
+            _axis_coordinate_1d(np.array([1.0, 2.0]), "x"), [1.0, 2.0]
+        )
+        np.testing.assert_allclose(_axis_coordinate_1d(x2d, "x"), [1.0, 2.0, 3.0])
+        np.testing.assert_allclose(_axis_coordinate_1d(y2d, "y"), [4.0, 5.0])
+        assert _axis_coordinate_1d(np.ones((2, 2, 2)), "x") is None
+
+        with pytest.raises(ValueError, match="Unsupported axis_name"):
+            _axis_coordinate_1d(x2d, "z")
+
+    def test_axis_is_uniform_and_default_preset_resolution(self):
+        assert bool(_axis_is_uniform(np.array([0.0, 1.0, 2.0, 3.0]))) is True
+        assert bool(_axis_is_uniform(np.array([0.0, 1.0, 2.2, 3.0]))) is False
+        assert bool(_axis_is_uniform(np.array([0.0, np.nan, 2.0]))) is False
+
+        assert _resolve_default_ncl_preset(
+            x=np.array([0.0, 1.0, 2.0]),
+            y=np.array([1000.0, 900.0, 700.0]),
+            allow_non_uniform_grid=False,
+            ncl_preset=None,
+        ) == (True, "profile")
+        assert _resolve_default_ncl_preset(
+            x=np.array([0.0, 1.0]),
+            y=np.array([0.0, 1.0]),
+            allow_non_uniform_grid=False,
+            ncl_preset="profile",
+        ) == (True, "profile")
+
+    def test_density_helpers_clip_small_values(self):
+        np.testing.assert_allclose(_density_xy((0.0, 0.05)), np.array([0.1, 0.1]))
+        assert _density_scalar(0.0) == pytest.approx(0.1)
+        assert _density_scalar((0.2, 0.4)) == pytest.approx(0.3)
+
+    def test_finite_difference_step_chooses_valid_direction_or_span_fraction(self):
+        assert _finite_difference_step(5.0, 0.0, 10.0, 2.0) == pytest.approx(2.0)
+        assert _finite_difference_step(9.5, 0.0, 10.0, 1.0) == pytest.approx(-1.0)
+        assert _finite_difference_step(0.4, 0.0, 1.0, 0.8) == pytest.approx(0.25)
+        assert _finite_difference_step(0.0, 0.0, 0.0, 1.0) == pytest.approx(0.0)
+
+    def test_display_step_to_data_handles_regular_and_singular_jacobians(self):
+        jacobian = np.array([[2.0, 0.0], [0.0, 4.0]])
+        display_step = np.array([4.0, 8.0])
+
+        np.testing.assert_allclose(
+            _display_step_to_data(jacobian, display_step),
+            np.array([2.0, 2.0]),
+        )
+        assert (
+            _display_step_to_data(np.array([[1.0, 2.0], [2.0, 4.0]]), display_step)
+            is None
+        )
+
+    def test_point_within_grid_data_uses_data_space_bounds(self):
+        grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([10.0, 20.0, 30.0]))
+
+        assert bool(_point_within_grid_data(grid, np.array([1.5, 25.0]))) is True
+        assert bool(_point_within_grid_data(grid, np.array([-0.1, 25.0]))) is False
+        assert bool(_point_within_grid_data(grid, np.array([1.5, 35.0]))) is False
+
+    def test_point_at_arc_distance_from_end_rejects_empty_curve(self):
+        with pytest.raises(ValueError, match="at least one point"):
+            _point_at_arc_distance_from_end(np.empty((0, 2)), 1.0)
+
+    def test_tip_display_geometry_from_display_curve_rejects_degenerate_tip(self):
+        display_curve = np.array([[1.0, 1.0], [1.0, 1.0]])
+
+        assert _tip_display_geometry_from_display_curve(display_curve, 2.0) is None
+
+    def test_open_arrow_geometry_rejects_nonfinite_display_curve(self):
+        curve = np.array([[0.0, 0.0], [1.0, 0.0]])
+
+        assert (
+            _open_arrow_geometry(
+                curve,
+                transform=Mock(),
+                head_length_px=5.0,
+                display_curve=np.array([[0.0, 0.0], [np.nan, 1.0]]),
+            )
+            is None
+        )
+
+    def test_trim_curve_for_open_head_returns_original_when_inverse_transform_fails(
+        self, monkeypatch
+    ):
+        curve = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]])
+        transform = Mock()
+        transform.inverted.return_value.transform.side_effect = RuntimeError("boom")
+        monkeypatch.setattr(
+            vector_plot_module,
+            "_open_arrow_geometry",
+            lambda *args, **kwargs: {
+                "display_curve": np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]),
+                "base_center_display": np.array([1.5, 0.0]),
+            },
+        )
+
+        trimmed = _trim_curve_for_open_head(curve, transform, 0.4)
+
+        np.testing.assert_allclose(trimmed, curve)
+
+    def test_ncl_display_sampler_invalid_points_and_empty_batches(self):
+        grid = Grid(np.array([0.0, 1.0]), np.array([0.0, 1.0]))
+        sampler = _NCLDisplaySampler(
+            grid,
+            np.array(
+                [
+                    [[0.0, 0.0], [1.0, 0.0]],
+                    [[0.0, 1.0], [1.0, 1.0]],
+                ]
+            ),
+        )
+
+        assert sampler.sample(np.array([5.0, 5.0])) is None
+        display_points, jacobians, valid = sampler.sample_points(
+            np.empty((0, 2)),
+            include_jacobian=True,
+        )
+        assert display_points.shape == (0, 2)
+        assert jacobians.shape == (0, 2, 2)
+        assert valid.shape == (0,)
+
+    def test_prepare_ncl_display_sampler_handles_transform_failures(self):
+        grid = Grid(np.array([0.0, 1.0]), np.array([0.0, 1.0]))
+
+        class BadTransform:
+            def transform(self, points):
+                raise RuntimeError("boom")
+
+        class NaNTransform:
+            def transform(self, points):
+                return np.full((len(points), 2), np.nan)
+
+        assert _prepare_ncl_display_sampler(grid, BadTransform()) is None
+        assert _prepare_ncl_display_sampler(grid, NaNTransform()) is None
+
+    def test_prepare_ncl_native_trace_context_requires_native_backend_and_sampler(
+        self, monkeypatch
+    ):
+        grid = Grid(np.array([0.0, 1.0]), np.array([0.0, 1.0]))
+        viewport = Bbox.from_extents(0.0, 0.0, 10.0, 10.0)
+
+        monkeypatch.setattr(vector_plot_module, "_trace_ncl_direction_native", None)
+        assert (
+            _prepare_ncl_native_trace_context(
+                grid,
+                np.ones((2, 2)),
+                np.ones((2, 2)),
+                viewport,
+                display_sampler=Mock(),
+            )
+            is None
+        )
+        assert (
+            _prepare_ncl_native_trace_context(
+                grid,
+                np.ones((2, 2)),
+                np.ones((2, 2)),
+                viewport,
+                display_sampler=None,
+            )
+            is None
+        )
+
+    def test_sample_grid_field_array_returns_empty_array_for_empty_input(self):
+        grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0, 2.0]))
+        field = np.arange(9.0).reshape(3, 3)
+
+        sampled = _sample_grid_field_array(grid, field, np.empty((0, 2)))
+
+        assert sampled.shape == (0,)
+
+
 class TestCurlyVectorPlotSet:
     """Test the CurlyVectorPlotSet class."""
 
@@ -1201,6 +1496,14 @@ class TestGrid:
         with pytest.raises(ValueError, match="rows of 'x' must be equal"):
             Grid(x, y)
 
+    def test_grid_requires_at_least_two_points_per_axis(self):
+        """A grid with fewer than 2 points per axis should fail clearly."""
+        with pytest.raises(ValueError, match="at least 2 points"):
+            Grid(np.array([0.0]), np.array([0.0, 1.0]))
+
+        with pytest.raises(ValueError, match="at least 2 points"):
+            Grid(np.array([0.0, 1.0]), np.array([0.0]))
+
 
 class TestStreamMask:
     """Test the StreamMask class."""
@@ -1257,8 +1560,9 @@ class TestStreamMask:
 
         # Start trajectory
         mask._start_trajectory(5, 5)
+        mask._update_trajectory(6, 5, broken_streamlines=True)
 
-        # Try to update to already occupied cell
+        # Try to re-enter an already occupied cell from a new position
         with pytest.raises(InvalidIndexError):
             mask._update_trajectory(5, 5, broken_streamlines=True)
 
@@ -1368,6 +1672,16 @@ class TestUtilityFunctions:
 
         # Test beyond boundaries (should clip)
         assert interpgrid(a, 2, 2) == 4
+
+    def test_interpgrid_array_input_clips_to_domain(self):
+        """Array inputs beyond the grid should clip instead of indexing out."""
+        a = np.array([[1, 2], [3, 4]], dtype=float)
+        xi = np.array([0, 2, 3])
+        yi = np.array([0, 2, 3])
+
+        result = interpgrid(a, xi, yi)
+
+        np.testing.assert_allclose(result, np.array([1.0, 4.0, 4.0]))
 
     def test_interpgrid_array_input(self):
         """Test interpgrid with array inputs."""
@@ -1494,7 +1808,10 @@ class TestIntegration:
 
         # Check that collections were added to axes
         assert len(ax.collections) > 0
-        assert len(ax.patches) > 0
+        assert result.lines in ax.collections
+        assert len(result.lines.get_segments()) > 0
+        assert len(result.arrows.get_paths()) == 0
+        assert len(ax.patches) == 0
 
         # Set plot properties
         ax.set_xlabel("X")
