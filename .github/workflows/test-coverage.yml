@@ -177,19 +177,22 @@ jobs:
             echo "=== Validating extension locations ==="
 
             # Meson inplace builds already place modules in the correct package
-            # directories. Do not guess-copy .so/.pyd files, because that can
-            # shadow Python wrapper modules such as interp/rcm2points.py.
-            for unexpected in \
-              src/skyborn/interp/rcm2points.* \
-              src/skyborn/interp/rcm2rgrid.* \
-              src/skyborn/interp/triple2grid.* \
-              src/skyborn/interp/grid2triple.*; do
-              if ls "$unexpected" >/dev/null 2>&1; then
+            # directories. Do not guess-copy compiled modules into
+            # src/skyborn/interp/, because that would shadow Python wrapper
+            # modules such as interp/rcm2points.py.
+            unexpected_interp_extensions=$(find src/skyborn/interp -maxdepth 1 -type f \( \
+              -name 'rcm2points*.so' -o -name 'rcm2points*.pyd' -o -name 'rcm2points*.dylib' -o \
+              -name 'rcm2rgrid*.so' -o -name 'rcm2rgrid*.pyd' -o -name 'rcm2rgrid*.dylib' -o \
+              -name 'triple2grid*.so' -o -name 'triple2grid*.pyd' -o -name 'triple2grid*.dylib' -o \
+              -name 'grid2triple*.so' -o -name 'grid2triple*.pyd' -o -name 'grid2triple*.dylib' \
+            \))
+            if [ -n "$unexpected_interp_extensions" ]; then
+              echo "$unexpected_interp_extensions" | while IFS= read -r unexpected; do
                 echo "::error::Unexpected compiled interp module at package root: $unexpected"
-                echo "These files shadow the Python wrapper modules in src/skyborn/interp/."
-                exit 1
-              fi
-            done
+              done
+              echo "These files shadow the Python wrapper modules in src/skyborn/interp/."
+              exit 1
+            fi
 
             echo "=== Final extension locations ==="
             find src/skyborn/ -name "*.so" -o -name "*.pyd" -exec ls -la {} \;
@@ -261,6 +264,7 @@ jobs:
           "
 
       - name: Run tests with coverage (focus on working modules)
+        id: run_tests_with_coverage
         run: |
           echo "=== Setting up test environment ==="
           export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
@@ -333,7 +337,7 @@ jobs:
           ls -la pytest-coverage.log || echo "pytest-coverage.log not found"
 
       - name: Generate coverage report even if tests failed
-        if: always()
+        if: always() && steps.run_tests_with_coverage.outcome != 'skipped'
         run: |
           # If coverage.xml doesn't exist, try to generate it from raw coverage data.
           if [ ! -f coverage.xml ]; then
@@ -346,7 +350,7 @@ jobs:
           fi
 
       - name: Validate coverage report presence
-        if: always()
+        if: always() && steps.run_tests_with_coverage.outcome != 'skipped'
         run: |
           if [ ! -f coverage.xml ]; then
             echo "::error::coverage.xml was not generated, so Codecov would show 0% or no data."
@@ -359,7 +363,7 @@ jobs:
           echo "coverage.xml is present and ready for Codecov upload."
 
       - name: Upload coverage to Codecov
-        if: always()
+        if: always() && steps.run_tests_with_coverage.outcome != 'skipped'
         uses: codecov/codecov-action@v6
         with:
           files: ./coverage.xml
