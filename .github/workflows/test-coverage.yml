@@ -83,6 +83,7 @@ jobs:
             echo "Set PYTHONPATH to include src directory"
           fi
 
+          pip install -r requirements/base.txt
           pip install -r requirements/dev.txt
           pip install pytest-xdist coverage[toml]
           # Try to install eccodes, but don't fail if it doesn't work
