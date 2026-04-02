@@ -148,9 +148,15 @@ curly_vector(
     v="v",
     ax=ax,
     transform=ccrs.PlateCarree(),
-    density=0.8,
+    density=0.9,
     color="black",
     arrowstyle="->",
+    linewidth=1.2,
+    arrowsize=1.2,
+    zorder=3,
+    integration_direction='both',
+    ref_magnitude=30.0,
+    ref_length=0.1,
 )
 ax.coastlines()
 ax.set_global()
