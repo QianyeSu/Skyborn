@@ -1,10 +1,12 @@
 """Tests for the low-level curly-vector rendering engine."""
 
+import warnings
 from unittest.mock import Mock, patch
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+import xarray as xr
 from matplotlib.collections import LineCollection
 from matplotlib.transforms import Bbox
 
@@ -417,6 +419,30 @@ class TestCurlyVector:
 
         plt.close(fig)
 
+    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    def test_curly_vector_accepts_array_like_style_fields_on_regular_grid(
+        self, mock_ncl_curly, sample_vector_field
+    ):
+        """Regular-grid style fields should accept 2D array-like inputs beyond ndarray."""
+        x, y, u, v = sample_vector_field
+        color = xr.DataArray(100.0 + u, dims=("y", "x"))
+        linewidth = (200.0 + u).tolist()
+        mock_ncl_curly.return_value = Mock(spec=CurlyVectorPlotSet)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        curly_vector(ax, x, y, u, v, color=color, linewidth=linewidth)
+
+        call_kwargs = mock_ncl_curly.call_args.kwargs
+        np.testing.assert_allclose(
+            np.asarray(call_kwargs["color"], dtype=float), 100.0 + u
+        )
+        np.testing.assert_allclose(
+            np.asarray(call_kwargs["linewidth"], dtype=float), 200.0 + u
+        )
+
+        plt.close(fig)
+
     def test_profile_ref_magnitude_uses_robust_percentile(self):
         """Profile reference magnitude should ignore a single strong outlier."""
         u = np.ones((3, 4))
@@ -473,10 +499,10 @@ class TestCurlyVector:
         plt.close(fig)
 
     @patch("skyborn.plot.vector_plot._curly_vector_ncl")
-    def test_curly_vector_allow_non_uniform_grid_auto_uses_profile_defaults(
+    def test_curly_vector_allow_non_uniform_grid_keeps_uniform_axes_on_default_preset(
         self, mock_ncl_curly, sample_vector_field
     ):
-        """Explicit non-uniform mode should opt into profile defaults by default."""
+        """Compatibility mode should not silently switch uniform axes to the profile preset."""
         x, y, u, v = sample_vector_field
         mock_ncl_curly.return_value = Mock(spec=CurlyVectorPlotSet)
 
@@ -485,13 +511,11 @@ class TestCurlyVector:
         curly_vector(ax, x, y, u, v, allow_non_uniform_grid=True)
 
         call_kwargs = mock_ncl_curly.call_args.kwargs
-        expected_ref = np.nanpercentile(np.hypot(u, v), 97.0)
-
         assert call_kwargs["allow_non_uniform_grid"] is True
-        assert call_kwargs["ncl_preset"] == "profile"
-        assert call_kwargs["ref_length"] == pytest.approx(0.06)
+        assert call_kwargs["ncl_preset"] is None
+        assert call_kwargs["ref_length"] is None
         assert call_kwargs["min_distance"] is None
-        assert call_kwargs["ref_magnitude"] == pytest.approx(expected_ref)
+        assert call_kwargs["ref_magnitude"] is None
 
         plt.close(fig)
 
@@ -701,6 +725,40 @@ class TestCurlyVector:
 
         np.testing.assert_allclose(curve, expected)
 
+    def test_curly_vector_warns_once_when_native_backend_is_unavailable(
+        self, sample_vector_field, monkeypatch
+    ):
+        """Missing native extension should be visible to the user but not alter rendering."""
+        x, y, u, v = sample_vector_field
+        vector_plot_module._ISSUED_NATIVE_WARNINGS.clear()
+        monkeypatch.setattr(
+            vector_plot_module,
+            "_NATIVE_IMPORT_ERROR",
+            ImportError("native backend missing"),
+        )
+        monkeypatch.setattr(vector_plot_module, "_sample_grid_field_native", None)
+        monkeypatch.setattr(vector_plot_module, "_sample_grid_field_array_native", None)
+        monkeypatch.setattr(
+            vector_plot_module, "_thin_ncl_mapped_candidates_native", None
+        )
+        monkeypatch.setattr(vector_plot_module, "_trace_ncl_direction_native", None)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            curly_vector(ax, x, y, u, v, density=0.6, color="k")
+            curly_vector(ax, x, y, u, v, density=0.6, color="k")
+
+        messages = [
+            str(item.message)
+            for item in caught
+            if "native backend is unavailable" in str(item.message)
+        ]
+        assert len(messages) == 1
+
+        plt.close(fig)
+
     def test_sample_grid_field_prefers_native_when_available(self, monkeypatch):
         """Scalar sampling should use the native helper when it returns a value."""
         grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0, 2.0]))
@@ -713,6 +771,36 @@ class TestCurlyVector:
         value = vector_plot_module._sample_grid_field(grid, field, 0.5, 0.5)
 
         assert value == pytest.approx(4.25)
+
+    def test_sample_grid_field_warns_once_and_disables_native_helper_on_failure(
+        self, monkeypatch
+    ):
+        """A failing native sampler should warn once, disable itself, and keep Python output."""
+        grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0, 2.0]))
+        field = np.arange(9.0).reshape(3, 3)
+        vector_plot_module._ISSUED_NATIVE_WARNINGS.clear()
+
+        def _broken_native(**kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(
+            vector_plot_module, "_sample_grid_field_native", _broken_native
+        )
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            value1 = vector_plot_module._sample_grid_field(grid, field, 0.5, 0.5)
+            value2 = vector_plot_module._sample_grid_field(grid, field, 0.5, 0.5)
+
+        assert value1 == pytest.approx(2.0)
+        assert value2 == pytest.approx(2.0)
+        assert vector_plot_module._sample_grid_field_native is None
+        messages = [
+            str(item.message)
+            for item in caught
+            if "native scalar sampling failed" in str(item.message)
+        ]
+        assert len(messages) == 1
 
     def test_sample_grid_field_array_prefers_native_when_available(self, monkeypatch):
         """Vectorized scalar sampling should use the native helper when available."""
@@ -1390,6 +1478,12 @@ class TestInternalHelperFunctions:
             allow_non_uniform_grid=False,
             ncl_preset=None,
         ) == (True, "profile")
+        assert _resolve_default_ncl_preset(
+            x=np.array([0.0, 1.0, 2.0]),
+            y=np.array([0.0, 1.0, 2.0]),
+            allow_non_uniform_grid=True,
+            ncl_preset=None,
+        ) == (True, None)
         assert _resolve_default_ncl_preset(
             x=np.array([0.0, 1.0]),
             y=np.array([0.0, 1.0]),
