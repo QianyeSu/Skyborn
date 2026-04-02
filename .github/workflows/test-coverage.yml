@@ -174,36 +174,21 @@ jobs:
           else
             echo "=== Build succeeded, checking compiled modules ==="
             find . -name "*.so" -o -name "*.pyd" | head -10
-            echo "=== Copying extensions to correct locations ==="
+            echo "=== Validating extension locations ==="
 
-            # Copy all .so/.pyd files to their target directories
-            # This handles any Fortran extension automatically
-            find . -name "*.so" -o -name "*.pyd" | while read ext; do
-              basename_ext=$(basename "$ext")
-              echo "Processing: $basename_ext"
-
-              # Skip if already in src/skyborn/ hierarchy
-              if echo "$ext" | grep -q "^src/skyborn/"; then
-                echo "  Already in correct location: $ext"
-                continue
+            # Meson inplace builds already place modules in the correct package
+            # directories. Do not guess-copy .so/.pyd files, because that can
+            # shadow Python wrapper modules such as interp/rcm2points.py.
+            for unexpected in \
+              src/skyborn/interp/rcm2points.* \
+              src/skyborn/interp/rcm2rgrid.* \
+              src/skyborn/interp/triple2grid.* \
+              src/skyborn/interp/grid2triple.*; do
+              if ls "$unexpected" >/dev/null 2>&1; then
+                echo "::error::Unexpected compiled interp module at package root: $unexpected"
+                echo "These files shadow the Python wrapper modules in src/skyborn/interp/."
+                exit 1
               fi
-
-              # Find target subdirectory in src/skyborn/
-              for subdir in src/skyborn/*/; do
-                if [ -d "$subdir" ] && [ -f "${subdir}__init__.py" ]; then
-                  subdir_name=$(basename "$subdir")
-                  target_file="${subdir}${basename_ext}"
-
-                  # Check if this extension belongs to this subdir and doesn't already exist
-                  if (echo "$basename_ext" | grep -q "$subdir_name" || \
-                     grep -q "$(echo "$basename_ext" | cut -d. -f1)" "${subdir}"*.py 2>/dev/null) && \
-                     [ ! -f "$target_file" ]; then
-                    cp -v "$ext" "$subdir"
-                    echo "  ✓ Copied to $subdir"
-                    break
-                  fi
-                fi
-              done
             done
 
             echo "=== Final extension locations ==="
@@ -230,6 +215,17 @@ jobs:
               print('✓ skyborn imported successfully')
           except Exception as e:
               print('✗ skyborn import failed:', e)
+          "
+          python -c "
+          try:
+              import skyborn.interp.rcm2points as rcm2points_module
+              from skyborn.interp import rcm2points
+              print('✓ interp wrapper imported successfully:', rcm2points_module.__file__)
+              print('✓ skyborn.interp.rcm2points callable imported successfully:', callable(rcm2points))
+          except Exception as e:
+              print('✗ interp wrapper import failed:', e)
+              import traceback
+              traceback.print_exc()
           "
           python -c "
           try:
