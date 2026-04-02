@@ -342,7 +342,7 @@ def triple_to_grid(
 
         import numpy as np
         import xarray as xr
-    from skyborn.interp import triple_to_grid
+        from skyborn.interp import triple_to_grid
 
         # Open a netCDF data file using xarray default engine and load the data stream
         ds = xr.open_dataset("./ruc.nc")
@@ -359,7 +359,7 @@ def triple_to_grid(
         newlat1D_points=np.linspace(lat2D_curv.min(), lat2D_curv.max(), 100)
         newlon1D_points=np.linspace(lon2D_curv.min(), lon2D_curv.max(), 100)
 
-    output = triple_to_grid(data, x_in, y_in, x_out, y_out)
+        output = triple_to_grid(data, x_in, y_in, x_out, y_out)
     """
 
     if (x_in is None) | (y_in is None):
