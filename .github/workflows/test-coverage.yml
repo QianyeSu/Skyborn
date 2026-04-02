@@ -83,9 +83,16 @@ jobs:
             echo "Set PYTHONPATH to include src directory"
           fi
 
-          pip install pytest pytest-cov pytest-xdist coverage[toml]
+          pip install -r requirements/dev.txt
+          pip install pytest-xdist coverage[toml]
           # Try to install eccodes, but don't fail if it doesn't work
           pip install eccodes || echo "eccodes installation failed, continuing without it"
+
+      - name: Verify coverage tooling
+        run: |
+          python -m pip show pytest pytest-cov coverage
+          pytest --version
+          pytest --help | grep -- --cov
 
       - name: Verify compiler environment
         run: |
@@ -309,8 +316,8 @@ jobs:
             --cov-report=html \
             --cov-report=term-missing \
             --cov-fail-under=15 \
-            -v --tb=short
-          pytest_exit=$?
+            -v --tb=short 2>&1 | tee pytest-coverage.log
+          pytest_exit=${PIPESTATUS[0]}
           set -e
 
           echo "pytest exit code: $pytest_exit"
@@ -323,8 +330,10 @@ jobs:
       - name: Check if coverage files exist
         run: |
           echo "Checking for coverage files..."
+          ls -la .coverage* || echo ".coverage data not found"
           ls -la coverage.xml || echo "coverage.xml not found"
           ls -la htmlcov/ || echo "htmlcov directory not found"
+          ls -la pytest-coverage.log || echo "pytest-coverage.log not found"
 
       - name: Generate coverage report even if tests failed
         if: always()
@@ -344,6 +353,10 @@ jobs:
         run: |
           if [ ! -f coverage.xml ]; then
             echo "::error::coverage.xml was not generated, so Codecov would show 0% or no data."
+            if [ -f pytest-coverage.log ]; then
+              echo "=== Last 120 lines of pytest-coverage.log ==="
+              tail -120 pytest-coverage.log
+            fi
             exit 1
           fi
           echo "coverage.xml is present and ready for Codecov upload."
@@ -365,7 +378,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
-          path: htmlcov/
+          path: |
+            htmlcov/
+            pytest-coverage.log
         continue-on-error: true
 
   # Performance benchmarks
