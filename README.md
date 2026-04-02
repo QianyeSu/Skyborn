@@ -114,6 +114,43 @@ The Skyborn `gridfill` submodule provides advanced interpolation techniques for 
 
 The example above demonstrates filling gaps in global precipitation data, where the algorithm successfully reconstructs missing values while preserving the underlying meteorological patterns.
 
+### Curly Vector Plotting
+
+Skyborn provides an NCL-like `curly_vector` renderer for atmospheric wind fields while keeping a Matplotlib and Cartopy compatible API.
+
+![Curly Vector WRF Example](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/wrf_curly_vector_integration_direction_density08_ref10.png)
+
+**Key Capabilities:**
+- **NCL-like Curved Vectors**: Curved tails and lighter arrow heads for cleaner large-scale flow visualization
+- **Matplotlib-Compatible API**: Works with standard axes and Cartopy projections without switching to a separate plotting stack
+- **Flexible Inputs**: Supports regular lat-lon grids, xarray datasets, and curvilinear grids such as WRF mass-grid wind fields
+- **Projection-Aware Rendering**: Supports global rendering with different `central_longitude` settings and Cartopy projections
+
+**Minimal Example:**
+```python
+import cartopy.crs as ccrs
+import matplotlib.pyplot as plt
+from skyborn.plot import curly_vector
+
+fig = plt.figure(figsize=(12, 6))
+ax = plt.axes(projection=ccrs.Robinson(central_longitude=180))
+
+curly_vector(
+    ds,
+    x="longitude",
+    y="latitude",
+    u="u",
+    v="v",
+    ax=ax,
+    transform=ccrs.PlateCarree(),
+    density=0.8,
+    color="black",
+    arrowstyle="->",
+)
+ax.coastlines()
+ax.set_global()
+```
+
 ## Performance Benchmarks
 
 ### 🚀 Windspharm Performance
