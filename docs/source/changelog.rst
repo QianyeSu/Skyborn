@@ -1,7 +1,39 @@
 Changelog
 =========
 
-Version 0.3.17 (Current)
+Version 0.3.18 (Current)
+------------------------
+
+Plotting API Cleanup
+
+* Renamed the NCL-like vector plotting public API to the new names:
+
+  - ``skyborn.plot.curly_vector`` (unified arrays + xarray entry point)
+  - ``skyborn.plot.curly_vector_key``
+  - ``skyborn.plot.CurlyVectorPlotSet``
+  - ``skyborn.plot.CurlyVectorKey``
+
+* Removed the legacy plotting API names from the public surface:
+
+  - ``velovect``
+  - ``velovect_vertical_profile``
+  - ``dataset_curly_vector``
+  - ``curved_quiver``
+  - ``add_curved_quiverkey``
+  - ``CurvedQuiverplotSet``
+  - ``CurvedQuiverLegend``
+
+* Split the plotting implementation into clearer modules:
+
+  - ``skyborn.plot.vector_plot`` for the core curly-vector renderer
+  - ``skyborn.plot.ncl_vector`` for the xarray / Cartopy dataset wrapper
+  - ``skyborn.plot.vector_key`` for the reference-vector annotation artist
+
+* Replaced wildcard plotting exports with an explicit ``skyborn.plot`` public API.
+* Added type annotations to the renamed public plotting entry points and key artist class.
+* Updated plotting tests, examples, and documentation to the new curly-vector API only.
+
+Version 0.3.17
 ------------------------
 
 **🚀 New Features**
@@ -230,7 +262,7 @@ Version 0.3.12.post1
   - **Solution**: Set ``MACOSX_DEPLOYMENT_TARGET=14.0`` in GitHub Actions workflow
   - **Note**: macOS 13 users can still install from source using ``pip install --no-binary=skyborn skyborn``
 
-**🛠️ Technical Improvements**
+**🛠�?Technical Improvements**
 
 * **Enhanced Meson Configuration**:
 
@@ -244,7 +276,7 @@ Version 0.3.12.post1
   - Ensures compatibility with modern macOS development environments
   - Improved build reliability and error reporting
 
-**✅ Validation**
+**�?Validation**
 
 * Successfully tested wheel building and installation across all supported platforms
 * Confirmed ``_spherepack*.pyd`` files are correctly included in wheel distributions
@@ -323,7 +355,7 @@ Version 0.3.11
 * **Simplified Import Structure**: Removed conditional/backup import logic in favor of direct scipy.stats imports for improved maintainability
 * **Code Quality Enhancements**: Eliminated unused backup functions (`_mk_score_backup`, `_theil_sen_backup`) that were reducing test coverage
 * **Consolidated Test Suite**: Merged supplementary test files into main test suite for better organization and reduced maintenance overhead
-* **Documentation Fixes**: Corrected parameter names in API documentation examples (time_axis → axis)
+* **Documentation Fixes**: Corrected parameter names in API documentation examples (time_axis �?axis)
 * **Advanced Vectorization**: New `_vectorized_mk_score()` function using upper triangular indices for O(n²) to O(1) complexity reduction
 * **Smart Memory Management**: Automatic chunk size estimation based on available memory and data dimensions
 * **Robust Error Handling**: Graceful handling of edge cases and problematic time series
@@ -348,9 +380,9 @@ Version 0.3.11
 
 For typical climate data analysis scenarios:
 
-* **Small datasets** (50×20×30): 6.3x speedup (251 → 1,578 points/sec)
-* **Medium datasets** (100×30×40): 14.8x speedup (74 → 1,093 points/sec)
-* **Large datasets** (200×40×50): 31.3x speedup (19 → 595 points/sec)
+* **Small datasets** (50×20×30): 6.3x speedup (251 �?1,578 points/sec)
+* **Medium datasets** (100×30×40): 14.8x speedup (74 �?1,093 points/sec)
+* **Large datasets** (200×40×50): 31.3x speedup (19 �?595 points/sec)
 * **Climate grids** (40×192×288): ~30 seconds total processing time
 
 Version 0.3.10
@@ -475,7 +507,7 @@ Version 0.3.8
 Version 0.3.7
 --------------
 
-**✨ New Features**
+**�?New Features**
 
 * **Emergent Constraints Method**: Added new emergent constraints analysis method for climate data analysis
 * **Enhanced Documentation**: Interactive particle effects entrance page

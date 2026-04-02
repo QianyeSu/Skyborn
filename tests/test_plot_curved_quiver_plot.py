@@ -1,30 +1,19 @@
-"""
-Tests for skyborn.plot.curved_quiver_plot module.
+"""Tests for the dataset-level curly-vector plotting modules."""
 
-This module tests the curved quiver plotting functionality,
-including the curved_quiver function and CurvedQuiverLegend class.
-"""
+from unittest.mock import Mock, patch
 
-from unittest.mock import MagicMock, Mock, patch
-
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import xarray as xr
-from matplotlib.patches import FancyArrowPatch
-from matplotlib.text import Text
 
-from skyborn.plot.curved_quiver_plot import (
-    CurvedQuiverLegend,
-    add_curved_quiverkey,
-    curved_quiver,
-)
-from skyborn.plot.modplot import CurvedQuiverplotSet
+from skyborn.plot.ncl_vector import curly_vector
+from skyborn.plot.vector_key import CurlyVectorKey, curly_vector_key
+from skyborn.plot.vector_plot import CurlyVectorPlotSet
 
 
-class TestCurvedQuiver:
-    """Test the curved_quiver function."""
+class TestDatasetCurlyVector:
+    """Test the curly_vector function."""
 
     @pytest.fixture
     def sample_data(self):
@@ -51,17 +40,15 @@ class TestCurvedQuiver:
 
         return ds
 
-    def test_curved_quiver_basic(self, sample_data):
-        """Test basic curved_quiver functionality."""
+    def test_curly_vector_basic(self, sample_data):
+        """Test basic curly_vector functionality."""
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        # Create curved quiver plot
-        result = curved_quiver(
-            sample_data, x="x", y="y", u="u", v="v", ax=ax, density=1
-        )
+        # Create dataset curly-vector plot
+        result = curly_vector(sample_data, x="x", y="y", u="u", v="v", ax=ax, density=1)
 
         # Check return type
-        assert isinstance(result, CurvedQuiverplotSet)
+        assert isinstance(result, CurlyVectorPlotSet)
 
         # Check that result has required attributes
         assert hasattr(result, "lines")
@@ -71,11 +58,11 @@ class TestCurvedQuiver:
 
         plt.close(fig)
 
-    def test_curved_quiver_with_parameters(self, sample_data):
-        """Test curved_quiver with various parameters."""
+    def test_curly_vector_with_parameters(self, sample_data):
+        """Test curly_vector with various parameters."""
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        result = curved_quiver(
+        result = curly_vector(
             sample_data,
             x="x",
             y="y",
@@ -89,7 +76,7 @@ class TestCurvedQuiver:
             arrowstyle="->",
         )
 
-        assert isinstance(result, CurvedQuiverplotSet)
+        assert isinstance(result, CurlyVectorPlotSet)
         assert result.linewidth == 2.0
         assert result.color == "red"
         assert result.arrowsize == 1.5
@@ -97,24 +84,70 @@ class TestCurvedQuiver:
 
         plt.close(fig)
 
-    def test_curved_quiver_no_axes(self, sample_data):
-        """Test curved_quiver without providing axes."""
+    def test_curly_vector_no_axes(self, sample_data):
+        """Test curly_vector without providing axes."""
         # This should use current axes
         plt.figure(figsize=(8, 6))
 
-        result = curved_quiver(sample_data, x="x", y="y", u="u", v="v", density=1)
+        result = curly_vector(sample_data, x="x", y="y", u="u", v="v", density=1)
 
-        assert isinstance(result, CurvedQuiverplotSet)
+        assert isinstance(result, CurlyVectorPlotSet)
         plt.close()
 
-    def test_curved_quiver_integration_directions(self, sample_data):
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_array_input_uses_current_axes(self, mock_curly_vector):
+        """Array input should default to the current axes when ax is omitted."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        x = np.linspace(-10.0, 10.0, 6)
+        y = np.linspace(-5.0, 5.0, 5)
+        u = np.ones((5, 6))
+        v = np.ones((5, 6)) * 2.0
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        result = curly_vector(x, y, u, v, density=0.8)
+
+        call_args = mock_curly_vector.call_args
+        assert call_args[0][0] is ax
+        np.testing.assert_allclose(call_args[0][1], x)
+        np.testing.assert_allclose(call_args[0][2], y)
+        np.testing.assert_allclose(call_args[0][3], u)
+        np.testing.assert_allclose(call_args[0][4], v)
+        assert call_args[1]["density"] == 0.8
+        assert result is mock_result
+
+        plt.close(fig)
+
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_array_input_accepts_ax_keyword(self, mock_curly_vector):
+        """Array input should also accept ax=... like pyplot.quiver()."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        x = np.linspace(100.0, 110.0, 4)
+        y = np.linspace(20.0, 26.0, 3)
+        u = np.ones((3, 4)) * 3.0
+        v = np.ones((3, 4)) * -1.5
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        result = curly_vector(x, y, u, v, ax=ax, color="k")
+
+        call_args = mock_curly_vector.call_args
+        assert call_args[0][0] is ax
+        assert call_args[1]["color"] == "k"
+        assert result is mock_result
+
+        plt.close(fig)
+
+    def test_curly_vector_integration_directions(self, sample_data):
         """Test different integration directions."""
         directions = ["forward", "backward", "both"]
 
         for direction in directions:
             fig, ax = plt.subplots(figsize=(6, 4))
 
-            result = curved_quiver(
+            result = curly_vector(
                 sample_data,
                 x="x",
                 y="y",
@@ -124,53 +157,71 @@ class TestCurvedQuiver:
                 integration_direction=direction,
             )
 
-            assert isinstance(result, CurvedQuiverplotSet)
+            assert isinstance(result, CurlyVectorPlotSet)
             assert result.integration_direction == direction
 
             plt.close(fig)
 
-    def test_curved_quiver_with_start_points(self, sample_data):
-        """Test curved_quiver with custom start points."""
+    def test_curly_vector_with_start_points(self, sample_data):
+        """Test curly_vector with custom start points."""
         fig, ax = plt.subplots(figsize=(8, 6))
 
         # Define custom start points
         start_points = np.array([[-5, -2], [0, 0], [5, 2]])
 
-        result = curved_quiver(
+        result = curly_vector(
             sample_data, x="x", y="y", u="u", v="v", ax=ax, start_points=start_points
         )
 
-        assert isinstance(result, CurvedQuiverplotSet)
+        assert isinstance(result, CurlyVectorPlotSet)
         np.testing.assert_array_equal(result.start_points, start_points)
 
         plt.close(fig)
 
-    def test_curved_quiver_with_transform(self, sample_data):
-        """Test curved_quiver with transform parameter."""
+    def test_curly_vector_with_transform(self, sample_data):
+        """Test curly_vector with transform parameter."""
         fig, ax = plt.subplots(figsize=(8, 6))
 
         # Skip this test due to complex mock transform requirements
         plt.close(fig)
         pytest.skip("Transform test requires complex matplotlib transform mocking")
 
-    def test_curved_quiver_with_platecarree_transform(self, sample_data):
-        """Test curved_quiver with PlateCarree transform."""
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_converts_crs_like_transform(
+        self, mock_curly_vector, sample_data
+    ):
+        """Test CRS-like objects are converted through _as_mpl_transform."""
         fig, ax = plt.subplots(figsize=(8, 6))
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+        converted_transform = Mock()
 
-        # Skip this test due to complex mock transform requirements
-        plt.close(fig)
-        pytest.skip(
-            "PlateCarree transform test requires complex matplotlib transform mocking"
+        class DummyCRS:
+            def _as_mpl_transform(self, target_ax):
+                assert target_ax is ax
+                return converted_transform
+
+        curly_vector(
+            sample_data,
+            x="x",
+            y="y",
+            u="u",
+            v="v",
+            ax=ax,
+            transform=DummyCRS(),
         )
 
-    def test_curved_quiver_with_colormap(self, sample_data):
-        """Test curved_quiver with colormap settings."""
+        assert mock_curly_vector.call_args[1]["transform"] is converted_transform
+        plt.close(fig)
+
+    def test_curly_vector_with_colormap(self, sample_data):
+        """Test curly_vector with colormap settings."""
         fig, ax = plt.subplots(figsize=(8, 6))
 
         # Create color data
         color_data = np.random.randn(10, 15)
 
-        result = curved_quiver(
+        result = curly_vector(
             sample_data,
             x="x",
             y="y",
@@ -182,25 +233,238 @@ class TestCurvedQuiver:
             norm=plt.Normalize(vmin=0, vmax=1),
         )
 
-        assert isinstance(result, CurvedQuiverplotSet)
+        assert isinstance(result, CurlyVectorPlotSet)
         plt.close(fig)
 
-    def test_curved_quiver_with_zorder(self, sample_data):
-        """Test curved_quiver with zorder parameter."""
+    @patch("skyborn.plot.ncl_vector._regrid_cartopy_vectors")
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_regrids_cartopy_vectors(
+        self, mock_curly_vector, mock_regrid_vectors, sample_data
+    ):
+        """Test projection-aware vector regridding before calling curly_vector."""
         fig, ax = plt.subplots(figsize=(8, 6))
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
 
-        result = curved_quiver(
-            sample_data, x="x", y="y", u="u", v="v", ax=ax, zorder=10
+        x_grid, y_grid = np.meshgrid(np.linspace(-2, 2, 4), np.linspace(-1, 1, 3))
+        u_grid = np.full_like(x_grid, 5.0)
+        v_grid = np.full_like(y_grid, 1.5)
+        color_grid = np.full_like(x_grid, 7.0)
+        linewidth_grid = np.full_like(x_grid, 0.8)
+        mock_regrid_vectors.return_value = (
+            x_grid,
+            y_grid,
+            u_grid,
+            v_grid,
+            color_grid,
+            linewidth_grid,
         )
 
-        assert isinstance(result, CurvedQuiverplotSet)
+        class DummyCRS:
+            def _as_mpl_transform(self, target_ax):
+                return Mock()
+
+        ax.projection = Mock()
+        curly_vector(
+            sample_data,
+            x="x",
+            y="y",
+            u="u",
+            v="v",
+            ax=ax,
+            transform=DummyCRS(),
+            regrid_shape=(4, 3),
+            color=sample_data["u"].data.copy(),
+            linewidth=np.ones_like(sample_data["u"].data),
+        )
+
+        mock_regrid_vectors.assert_called_once()
+        call_args = mock_curly_vector.call_args
+        np.testing.assert_allclose(call_args[0][1], x_grid[0, :])
+        np.testing.assert_allclose(call_args[0][2], y_grid[:, 0])
+        np.testing.assert_allclose(call_args[0][3], u_grid)
+        np.testing.assert_allclose(call_args[0][4], v_grid)
+        np.testing.assert_allclose(call_args[1]["color"], color_grid)
+        np.testing.assert_allclose(call_args[1]["linewidth"], linewidth_grid)
+        assert call_args[1]["transform"] is None
+
         plt.close(fig)
 
-    def test_curved_quiver_grains_parameter(self, sample_data):
-        """Test curved_quiver with different grains settings."""
+    def test_curly_vector_regrid_requires_cartopy_crs(self, sample_data):
+        """Test that regrid_shape requires a CRS-like transform."""
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        result = curved_quiver(
+        with pytest.raises(ValueError, match="regrid_shape requires a Cartopy CRS"):
+            curly_vector(
+                sample_data,
+                x="x",
+                y="y",
+                u="u",
+                v="v",
+                ax=ax,
+                regrid_shape=20,
+            )
+
+        plt.close(fig)
+
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_supports_isel_for_multidimensional_inputs(
+        self, mock_curly_vector
+    ):
+        """Test that curly_vector can select a 2D slice via isel."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        x = np.linspace(100.0, 110.0, 6)
+        y = np.linspace(20.0, 28.0, 5)
+        u = np.arange(2 * 3 * 5 * 6, dtype=float).reshape(2, 3, 5, 6)
+        v = -u
+        ds = xr.Dataset(
+            {
+                "u": (["time", "level", "y", "x"], u),
+                "v": (["time", "level", "y", "x"], v),
+            },
+            coords={"x": x, "y": y},
+        )
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        curly_vector(
+            ds,
+            x="x",
+            y="y",
+            u="u",
+            v="v",
+            ax=ax,
+            isel={"time": 1, "level": 2},
+        )
+
+        call_args = mock_curly_vector.call_args
+        np.testing.assert_allclose(call_args[0][1], x)
+        np.testing.assert_allclose(call_args[0][2], y)
+        np.testing.assert_allclose(call_args[0][3], u[1, 2])
+        np.testing.assert_allclose(call_args[0][4], v[1, 2])
+
+        plt.close(fig)
+
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_sorts_descending_rectilinear_coordinates(
+        self, mock_curly_vector
+    ):
+        """Descending 1D x/y coordinates should be normalized for plotting."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        x = np.array([110.0, 108.0, 106.0, 104.0])
+        y = np.array([30.0, 25.0, 20.0])
+        u = np.arange(12, dtype=float).reshape(3, 4)
+        v = -u
+        ds = xr.Dataset(
+            {"u": (["y", "x"], u), "v": (["y", "x"], v)},
+            coords={"x": x, "y": y},
+        )
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        curly_vector(ds, x="x", y="y", u="u", v="v", ax=ax)
+
+        call_args = mock_curly_vector.call_args
+        np.testing.assert_allclose(call_args[0][1], x[::-1])
+        np.testing.assert_allclose(call_args[0][2], y[::-1])
+        np.testing.assert_allclose(call_args[0][3], u[::-1, ::-1])
+        np.testing.assert_allclose(call_args[0][4], v[::-1, ::-1])
+
+        plt.close(fig)
+
+    @patch("skyborn.plot.ncl_vector._regrid_curvilinear_vectors")
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_regularizes_curvilinear_coordinates(
+        self, mock_curly_vector, mock_regrid_curvilinear
+    ):
+        """Test that 2D curvilinear coordinates are regularized before plotting."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        x = np.array(
+            [
+                [100.0, 102.0, 104.0, 106.0],
+                [100.4, 102.4, 104.4, 106.4],
+                [100.8, 102.8, 104.8, 106.8],
+            ]
+        )
+        y = np.array(
+            [
+                [20.0, 20.2, 20.4, 20.6],
+                [22.0, 22.2, 22.4, 22.6],
+                [24.0, 24.2, 24.4, 24.6],
+            ]
+        )
+        u = np.ones_like(x)
+        v = np.ones_like(x) * 2.0
+        ds = xr.Dataset(
+            {
+                "x2d": (["y", "x"], x),
+                "y2d": (["y", "x"], y),
+                "u": (["y", "x"], u),
+                "v": (["y", "x"], v),
+            }
+        )
+
+        lon1d = np.linspace(100.0, 107.0, 5)
+        lat1d = np.linspace(20.0, 24.5, 4)
+        u_reg = np.full((4, 5), 3.0)
+        v_reg = np.full((4, 5), 1.0)
+        mock_regrid_curvilinear.return_value = (lon1d, lat1d, u_reg, v_reg)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        curly_vector(
+            ds,
+            x="x2d",
+            y="y2d",
+            u="u",
+            v="v",
+            ax=ax,
+            curvilinear_regrid_shape=(5, 4),
+        )
+
+        mock_regrid_curvilinear.assert_called_once()
+        call_args = mock_curly_vector.call_args
+        np.testing.assert_allclose(call_args[0][1], lon1d)
+        np.testing.assert_allclose(call_args[0][2], lat1d)
+        np.testing.assert_allclose(call_args[0][3], u_reg)
+        np.testing.assert_allclose(call_args[0][4], v_reg)
+
+        plt.close(fig)
+
+    def test_curly_vector_rejects_unaligned_vector_components(self):
+        """Vector components must already live on the same physical grid."""
+        x = np.linspace(100.0, 110.0, 6)
+        y = np.linspace(20.0, 28.0, 5)
+        ds = xr.Dataset(
+            {
+                "u": (["y", "x_u"], np.ones((5, 7))),
+                "v": (["y_v", "x"], np.ones((6, 6))),
+            },
+            coords={"x": x, "y": y},
+        )
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        with pytest.raises(ValueError, match="same physical grid"):
+            curly_vector(ds, x="x", y="y", u="u", v="v", ax=ax)
+        plt.close(fig)
+
+    def test_curly_vector_with_zorder(self, sample_data):
+        """Test curly_vector with zorder parameter."""
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        result = curly_vector(sample_data, x="x", y="y", u="u", v="v", ax=ax, zorder=10)
+
+        assert isinstance(result, CurlyVectorPlotSet)
+        plt.close(fig)
+
+    def test_curly_vector_grains_parameter(self, sample_data):
+        """Test curly_vector with different grains settings."""
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        result = curly_vector(
             sample_data,
             x="x",
             y="y",
@@ -211,401 +475,325 @@ class TestCurvedQuiver:
             broken_streamlines=False,
         )
 
-        assert isinstance(result, CurvedQuiverplotSet)
+        assert isinstance(result, CurlyVectorPlotSet)
         plt.close(fig)
 
-    @patch("skyborn.plot.modplot.velovect")
-    def test_curved_quiver_calls_velovect(self, mock_velovect, sample_data):
-        """Test that curved_quiver properly calls velovect."""
-        mock_result = Mock(spec=CurvedQuiverplotSet)
-        mock_velovect.return_value = mock_result
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_calls_curly_vector(self, mock_curly_vector, sample_data):
+        """Test that curly_vector properly calls curly_vector."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
 
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        result = curved_quiver(
+        result = curly_vector(
             sample_data, x="x", y="y", u="u", v="v", ax=ax, density=2, linewidth=1.5
         )
 
-        # Check that velovect was called
-        mock_velovect.assert_called_once()
+        # Check that curly_vector was called
+        mock_curly_vector.assert_called_once()
 
-        # Check some of the arguments passed to velovect
-        call_args = mock_velovect.call_args
+        # Check some of the arguments passed to curly_vector
+        call_args = mock_curly_vector.call_args
         assert call_args[0][0] == ax  # First argument should be axes
         assert call_args[1]["density"] == 2
         assert call_args[1]["linewidth"] == 1.5
+        assert "render_mode" not in call_args[1]
 
         assert result == mock_result
         plt.close(fig)
 
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_forwards_ncl_options(self, mock_curly_vector, sample_data):
+        """Test forwarding of the NCL-like rendering options."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
 
-class TestCurvedQuiverLegend:
-    """Test the CurvedQuiverLegend class."""
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        curly_vector(
+            sample_data,
+            x="x",
+            y="y",
+            u="u",
+            v="v",
+            ax=ax,
+            anchor="tail",
+            ref_magnitude=12.0,
+            ref_length=0.05,
+            min_frac_length=0.6,
+            min_distance=0.02,
+            ncl_preset="profile",
+        )
+
+        call_args = mock_curly_vector.call_args
+        assert "render_mode" not in call_args[1]
+        assert call_args[1]["anchor"] == "tail"
+        assert call_args[1]["ref_magnitude"] == 12.0
+        assert call_args[1]["ref_length"] == 0.05
+        assert call_args[1]["min_frac_length"] == 0.6
+        assert call_args[1]["min_distance"] == 0.02
+        assert call_args[1]["ncl_preset"] == "profile"
+
+        plt.close(fig)
+
+    def test_curly_vector_no_longer_accepts_render_mode_argument(self, sample_data):
+        """The wrapper should expose only the NCL-like path."""
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        with pytest.raises(TypeError):
+            curly_vector(
+                sample_data,
+                x="x",
+                y="y",
+                u="u",
+                v="v",
+                ax=ax,
+                render_mode="ncl_curly",
+            )
+
+        plt.close(fig)
+
+
+class TestCurlyVectorKey:
+    """Focused tests for the NCL-like reference annotation."""
 
     @pytest.fixture
-    def mock_curved_quiver_set(self):
-        """Create a mock CurvedQuiverplotSet for testing."""
-        mock_set = Mock(spec=CurvedQuiverplotSet)
+    def mock_curly_vector_set(self):
+        mock_set = Mock(spec=CurlyVectorPlotSet)
         mock_set.resolution = 0.5
         mock_set.magnitude = np.array([[0.5, 1.0], [1.5, 2.0]])
+        mock_set.max_magnitude = 20.0
+        mock_set.ref_length_fraction = 0.12
+        mock_set.arrowstyle = "->"
+        mock_set.arrowsize = 1.0
+        mock_set.glyph_length_axes_fraction.side_effect = (
+            lambda value: float(value) / 100.0
+        )
+        mock_set.glyph_head_axes_dimensions.return_value = (0.018, 0.026)
         return mock_set
 
-    @pytest.fixture
-    def sample_axes(self):
-        """Create sample matplotlib axes."""
+    def test_curly_vector_legend_default_ncl_layout(self, mock_curly_vector_set):
         fig, ax = plt.subplots(figsize=(8, 6))
-        return ax, fig
 
-    def test_curved_quiver_legend_basic(self, sample_axes, mock_curved_quiver_set):
-        """Test basic CurvedQuiverLegend creation."""
-        ax, fig = sample_axes
+        legend = CurlyVectorKey(
+            ax=ax, curly_vector_set=mock_curly_vector_set, U=10.0, units="m/s"
+        )
+        fig.canvas.draw()
 
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_curved_quiver_set, U=2.0, units="m/s"
+        assert legend in ax.artists
+        assert legend.labelpos == "N"
+        assert legend.text.get_text() == "10 m/s"
+        assert legend.text2.get_text() == "Reference Vector"
+        assert legend.patch.get_width() > 0.0
+        assert legend.patch.get_height() > 0.0
+        assert len(legend.arrow.get_xdata()) == 2
+        assert legend.head_left.get_visible() is True
+        assert legend.head_right.get_visible() is True
+
+        plt.close(fig)
+
+    def test_curly_vector_legend_uses_plot_glyph_length(self, mock_curly_vector_set):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        legend = CurlyVectorKey(
+            ax=ax, curly_vector_set=mock_curly_vector_set, U=12.0, units="m/s"
         )
 
-        # Check basic attributes
-        assert legend.ax == ax
-        assert legend.curved_quiver_set == mock_curved_quiver_set
-        assert legend.U == 2.0
-        assert legend.units == "m/s"
-        assert legend.show_units == True
-
-        # Check that components were created
-        assert hasattr(legend, "patch")
-        assert hasattr(legend, "arrow")
-        assert hasattr(legend, "text")
+        assert legend._calculate_arrow_length() == pytest.approx(0.12)
 
         plt.close(fig)
 
-    def test_curved_quiver_legend_different_locations(
-        self, sample_axes, mock_curved_quiver_set
+    def test_curly_vector_legend_supports_horizontal_layout(
+        self, mock_curly_vector_set
     ):
-        """Test CurvedQuiverLegend with different locations."""
-        ax, fig = sample_axes
+        fig, ax = plt.subplots(figsize=(8, 6))
 
-        locations = ["lower left", "lower right", "upper left", "upper right"]
-
-        for loc in locations:
-            legend = CurvedQuiverLegend(
-                ax=ax,
-                curved_quiver_set=mock_curved_quiver_set,
-                U=1.5,
-                units="m/s",
-                loc=loc,
-            )
-
-            assert legend.loc == loc
-            assert hasattr(legend, "patch")
-            assert hasattr(legend, "arrow")
-            assert hasattr(legend, "text")
-
-        plt.close(fig)
-
-    def test_curved_quiver_legend_label_positions(
-        self, sample_axes, mock_curved_quiver_set
-    ):
-        """Test CurvedQuiverLegend with different label positions."""
-        ax, fig = sample_axes
-
-        label_positions = ["N", "S", "E", "W"]
-
-        for labelpos in label_positions:
-            legend = CurvedQuiverLegend(
-                ax=ax,
-                curved_quiver_set=mock_curved_quiver_set,
-                U=2.0,
-                units="km/h",
-                labelpos=labelpos,
-            )
-
-            assert legend.labelpos == labelpos
-            assert hasattr(legend, "text")
-
-        plt.close(fig)
-
-    def test_curved_quiver_legend_custom_properties(
-        self, sample_axes, mock_curved_quiver_set
-    ):
-        """Test CurvedQuiverLegend with custom properties."""
-        ax, fig = sample_axes
-
-        arrow_props = {"color": "red", "linewidth": 2}
-        patch_props = {"facecolor": "lightblue", "alpha": 0.8}
-        text_props = {"fontsize": 12, "color": "darkblue"}
-
-        legend = CurvedQuiverLegend(
+        legend = CurlyVectorKey(
             ax=ax,
-            curved_quiver_set=mock_curved_quiver_set,
-            U=3.0,
-            units="kt",
-            width=0.2,
-            height=0.1,
-            max_arrow_length=0.06,
-            arrow_props=arrow_props,
-            patch_props=patch_props,
-            text_props=text_props,
-            padding=0.02,
-            margin=0.03,
-        )
-
-        assert legend.width == 0.2
-        assert legend.height == 0.1
-        assert legend.max_arrow_length == 0.06
-        assert legend.arrow_props == arrow_props
-        assert legend.patch_props == patch_props
-        assert legend.text_props == text_props
-        assert legend.padding == 0.02
-        assert legend.margin == 0.03
-
-        plt.close(fig)
-
-    def test_curved_quiver_legend_positions(self, sample_axes, mock_curved_quiver_set):
-        """Test different legend positions."""
-        ax, fig = sample_axes
-        positions = ["lower left", "lower right", "upper left", "upper right"]
-
-        for pos in positions:
-            legend = CurvedQuiverLegend(
-                ax=ax,
-                curved_quiver_set=mock_curved_quiver_set,
-                U=2.0,
-                units="m/s",
-                loc=pos,
-            )
-
-            assert legend.loc == pos
-            # Position should be calculated
-            assert hasattr(legend, "x")
-            assert hasattr(legend, "y")
-
-        plt.close(fig)
-
-    def test_curved_quiver_legend_label_positions(
-        self, sample_axes, mock_curved_quiver_set
-    ):
-        """Test different label positions."""
-        ax, fig = sample_axes
-        label_positions = ["N", "S", "E", "W"]
-
-        for labelpos in label_positions:
-            legend = CurvedQuiverLegend(
-                ax=ax,
-                curved_quiver_set=mock_curved_quiver_set,
-                U=2.0,
-                units="m/s",
-                labelpos=labelpos,
-            )
-
-            assert legend.labelpos == labelpos
-
-        plt.close(fig)
-
-    def test_curved_quiver_legend_no_units(self, sample_axes, mock_curved_quiver_set):
-        """Test legend with no units (auto-centering)."""
-        ax, fig = sample_axes
-
-        legend = CurvedQuiverLegend(
-            ax=ax,
-            curved_quiver_set=mock_curved_quiver_set,
-            U=5.0,
-            units="",  # Empty units
-        )
-
-        assert legend.units == ""
-        assert legend.show_units == False
-        assert legend.center_label == True  # Should auto-center
-        assert legend.text_content == "5.0"  # Should not include units
-
-        plt.close(fig)
-
-    def test_curved_quiver_legend_with_units(self, sample_axes, mock_curved_quiver_set):
-        """Test legend with units."""
-        ax, fig = sample_axes
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_curved_quiver_set, U=3.5, units="m/s"
-        )
-
-        assert legend.units == "m/s"
-        assert legend.show_units == True
-        assert legend.center_label == False
-
-        plt.close(fig)
-
-    def test_curved_quiver_legend_custom_properties(
-        self, sample_axes, mock_curved_quiver_set
-    ):
-        """Test legend with custom properties."""
-        ax, fig = sample_axes
-
-        arrow_props = {"color": "blue", "linewidth": 2}
-        patch_props = {"facecolor": "yellow", "alpha": 0.8}
-        text_props = {"fontsize": 12, "color": "red"}
-
-        legend = CurvedQuiverLegend(
-            ax=ax,
-            curved_quiver_set=mock_curved_quiver_set,
-            U=2.0,
+            curly_vector_set=mock_curly_vector_set,
+            U=8.0,
             units="m/s",
-            arrow_props=arrow_props,
-            patch_props=patch_props,
-            text_props=text_props,
+            labelpos="E",
         )
+        fig.canvas.draw()
 
-        # Check that properties were applied
-        assert legend.arrow_props["color"] == "blue"
-        assert legend.arrow_props["linewidth"] == 2
-        assert legend.patch_props["facecolor"] == "yellow"
-        assert legend.patch_props["alpha"] == 0.8
-        assert legend.text_props["fontsize"] == 12
-        assert legend.text_props["color"] == "red"
+        assert legend.text.get_text() == "8 m/s\nReference Vector"
+        assert legend.text2.get_visible() is False
+        assert legend.patch.get_width() > legend.patch.get_height()
 
         plt.close(fig)
 
-    def test_curved_quiver_legend_arrow_length_calculation(
-        self, sample_axes, mock_curved_quiver_set
-    ):
-        """Test arrow length calculation."""
-        ax, fig = sample_axes
-
-        # Test with different wind speeds
-        wind_speeds = [1.0, 2.0, 5.0, 10.0]
-
-        for U in wind_speeds:
-            legend = CurvedQuiverLegend(
-                ax=ax,
-                curved_quiver_set=mock_curved_quiver_set,
-                U=U,
-                reference_speed=2.0,
-                max_arrow_length=0.08,
-            )
-
-            # Arrow length should be proportional to wind speed
-            expected_scale = U / 2.0  # reference_speed = 2.0
-            assert hasattr(legend, "arrow_length")
-            assert legend.arrow_length > 0
-
-        plt.close(fig)
-
-    def test_curved_quiver_legend_size_adjustment(
-        self, sample_axes, mock_curved_quiver_set
-    ):
-        """Test that legend box size adjusts for content."""
-        ax, fig = sample_axes
-
-        # Create legend with long text
-        legend = CurvedQuiverLegend(
-            ax=ax,
-            curved_quiver_set=mock_curved_quiver_set,
-            U=15.5,
-            units="very_long_unit_string",
-            width=0.1,  # Initial small width
-            height=0.05,  # Initial small height
-        )
-
-        # Box should have been resized to fit content
-        assert legend.width >= 0.1  # Should be at least the initial width
-        assert legend.height >= 0.05  # Should be at least the initial height
-
-        plt.close(fig)
-
-    def test_curved_quiver_legend_invalid_position(
-        self, sample_axes, mock_curved_quiver_set
-    ):
-        """Test invalid legend position raises error."""
-        ax, fig = sample_axes
-
-        with pytest.raises(ValueError, match="loc must be one of"):
-            CurvedQuiverLegend(
-                ax=ax,
-                curved_quiver_set=mock_curved_quiver_set,
-                U=2.0,
-                units="m/s",
-                loc="invalid_position",
-            )
-
-        plt.close(fig)
-
-
-class TestAddCurvedQuiverkey:
-    """Test the add_curved_quiverkey convenience function."""
-
-    @pytest.fixture
-    def mock_curved_quiver_set(self):
-        """Create a mock CurvedQuiverplotSet for testing."""
-        mock_set = Mock(spec=CurvedQuiverplotSet)
-        mock_set.resolution = 0.5
-        mock_set.magnitude = np.array([[0.5, 1.0], [1.5, 2.0]])
-        return mock_set
-
-    def test_add_curved_quiverkey_basic(self, mock_curved_quiver_set):
-        """Test basic add_curved_quiverkey functionality."""
+    def test_curly_vector_legend_can_hide_frame(self, mock_curly_vector_set):
+        """frameon=False should suppress the annotation box."""
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        result = add_curved_quiverkey(
-            ax=ax, curved_quiver_set=mock_curved_quiver_set, U=2.0, units="m/s"
+        legend = CurlyVectorKey(
+            ax=ax,
+            curly_vector_set=mock_curly_vector_set,
+            U=8.0,
+            units="m/s",
+            frameon=False,
+        )
+        fig.canvas.draw()
+
+        assert legend.patch.get_visible() is False
+
+        plt.close(fig)
+
+    def test_curly_vector_legend_can_hide_description(self, mock_curly_vector_set):
+        """show_description=False should suppress the default Reference Vector text."""
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        legend = CurlyVectorKey(
+            ax=ax,
+            curly_vector_set=mock_curly_vector_set,
+            U=8.0,
+            units="m/s",
+            show_description=False,
+        )
+        fig.canvas.draw()
+
+        assert legend.text.get_text() == "8 m/s"
+        assert legend.text2.get_visible() is False
+        assert legend.text2.get_text() == ""
+
+        plt.close(fig)
+
+    def test_curly_vector_legend_explicit_label_and_description(
+        self, mock_curly_vector_set
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        legend = CurlyVectorKey(
+            ax=ax,
+            curly_vector_set=mock_curly_vector_set,
+            U=5.0,
+            units="m/s",
+            label="20 m/s",
+            description="Jet Core",
+        )
+        fig.canvas.draw()
+
+        assert legend.text.get_text() == "20 m/s"
+        assert legend.text2.get_text() == "Jet Core"
+
+        plt.close(fig)
+
+    def test_curly_vector_legend_invalid_location(self, mock_curly_vector_set):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        with pytest.raises(ValueError):
+            CurlyVectorKey(
+                ax=ax,
+                curly_vector_set=mock_curly_vector_set,
+                U=2.0,
+                units="m/s",
+                loc="invalid_location",
+            )
+
+        plt.close(fig)
+
+
+class TestCurlyVectorKeyHelper:
+    """Test the curly_vector_key convenience function."""
+
+    @pytest.fixture
+    def mock_curly_vector_set(self):
+        mock_set = Mock(spec=CurlyVectorPlotSet)
+        mock_set.resolution = 0.5
+        mock_set.magnitude = np.array([[0.5, 1.0], [1.5, 2.0]])
+        mock_set.max_magnitude = 20.0
+        mock_set.ref_length_fraction = 0.1
+        mock_set.arrowstyle = "->"
+        mock_set.arrowsize = 1.0
+        mock_set.glyph_length_axes_fraction.return_value = 0.1
+        mock_set.glyph_head_axes_dimensions.return_value = (0.016, 0.024)
+        return mock_set
+
+    def test_curly_vector_key_basic(self, mock_curly_vector_set):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        result = curly_vector_key(
+            ax=ax, curly_vector_set=mock_curly_vector_set, U=2.0, units="m/s"
         )
 
-        # Should return a CurvedQuiverLegend instance
-        assert isinstance(result, CurvedQuiverLegend)
+        assert isinstance(result, CurlyVectorKey)
         assert result.U == 2.0
         assert result.units == "m/s"
-        assert result.loc == "lower right"  # default
-        assert result.labelpos == "E"  # default
+        assert result.loc == "lower right"
+        assert result.labelpos == "N"
 
         plt.close(fig)
 
-    def test_add_curved_quiverkey_with_parameters(self, mock_curved_quiver_set):
-        """Test add_curved_quiverkey with custom parameters."""
+    def test_curly_vector_key_uses_current_axes_when_ax_is_omitted(
+        self, mock_curly_vector_set
+    ):
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        result = add_curved_quiverkey(
-            ax=ax,
-            curved_quiver_set=mock_curved_quiver_set,
-            U=5.0,
-            units="knots",
-            loc="upper left",
-            labelpos="W",
-            width=0.2,
-            height=0.1,
-        )
+        result = curly_vector_key(mock_curly_vector_set, U=2.0, units="m/s")
 
-        assert isinstance(result, CurvedQuiverLegend)
-        assert result.U == 5.0
-        assert result.units == "knots"
-        assert result.loc == "upper left"
-        assert result.labelpos == "W"
-        # Width might be adjusted during initialization, so just check it's reasonable
-        assert 0.1 < result.width < 0.5
-        assert result.height == 0.1
+        assert isinstance(result, CurlyVectorKey)
+        assert result.ax is ax
 
         plt.close(fig)
 
-    def test_add_curved_quiverkey_kwargs_passed(self, mock_curved_quiver_set):
-        """Test that additional kwargs are passed to CurvedQuiverLegend."""
+    def test_curly_vector_key_accepts_positional_plotset_and_ax_keyword(
+        self, mock_curly_vector_set
+    ):
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        custom_arrow_props = {"color": "green", "linewidth": 3}
+        result = curly_vector_key(mock_curly_vector_set, 3.0, ax=ax, labelpos="E")
 
-        result = add_curved_quiverkey(
+        assert isinstance(result, CurlyVectorKey)
+        assert result.ax is ax
+        assert result.U == 3.0
+        assert result.labelpos == "E"
+
+        plt.close(fig)
+
+    def test_curly_vector_key_kwargs_passed(self, mock_curly_vector_set):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        result = curly_vector_key(
             ax=ax,
-            curved_quiver_set=mock_curved_quiver_set,
+            curly_vector_set=mock_curly_vector_set,
             U=3.0,
-            arrow_props=custom_arrow_props,
+            arrow_props={"color": "green", "linewidth": 3},
             margin=0.05,
+            description="Reference Vector",
         )
 
-        assert isinstance(result, CurvedQuiverLegend)
+        assert isinstance(result, CurlyVectorKey)
         assert result.arrow_props["color"] == "green"
         assert result.arrow_props["linewidth"] == 3
         assert result.margin == 0.05
 
         plt.close(fig)
 
+    def test_curly_vector_key_frame_and_description_options(
+        self, mock_curly_vector_set
+    ):
+        fig, ax = plt.subplots(figsize=(8, 6))
 
-class TestCurvedQuiverIntegration:
-    """Integration tests for curved quiver plotting."""
+        result = curly_vector_key(
+            mock_curly_vector_set,
+            U=4.0,
+            ax=ax,
+            frameon=False,
+            show_description=False,
+        )
+        fig.canvas.draw()
+
+        assert result.patch.get_visible() is False
+        assert result.text.get_text() == "4 m/s"
+        assert result.text2.get_visible() is False
+
+        plt.close(fig)
+
+
+class TestDatasetCurlyVectorIntegration:
+    """Integration tests for dataset curly-vector plotting."""
 
     @pytest.fixture
     def wind_data(self):
@@ -637,12 +825,12 @@ class TestCurvedQuiverIntegration:
 
         return ds
 
-    def test_curved_quiver_with_legend_integration(self, wind_data):
-        """Test full integration of curved quiver with legend."""
+    def test_curly_vector_with_legend_integration(self, wind_data):
+        """Test full integration of dataset curly vectors with the key."""
         fig, ax = plt.subplots(figsize=(10, 8))
 
-        # Create curved quiver plot
-        quiver_set = curved_quiver(
+        # Create dataset curly-vector plot
+        quiver_set = curly_vector(
             wind_data,
             x="lon",
             y="lat",
@@ -656,29 +844,25 @@ class TestCurvedQuiverIntegration:
         )
 
         # Add legend
-        legend = add_curved_quiverkey(
+        legend = curly_vector_key(
             ax=ax,
-            curved_quiver_set=quiver_set,
+            curly_vector_set=quiver_set,
             U=10.0,
             units="m/s",
             loc="upper right",
-            labelpos="E",
         )
 
         # Verify everything was created properly
-        assert isinstance(quiver_set, CurvedQuiverplotSet)
-        assert isinstance(legend, CurvedQuiverLegend)
+        assert isinstance(quiver_set, CurlyVectorPlotSet)
+        assert isinstance(legend, CurlyVectorKey)
 
-        # Check that axes has the expected artists
-        # Lines and patches should be added to the axes
         assert len(ax.collections) > 0  # Should have LineCollection
-        # Should have arrow patches and legend patch
-        assert len(ax.patches) > 0
+        assert legend in ax.artists
 
         # Set some basic plot properties
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
-        ax.set_title("Curved Quiver Plot with Legend")
+        ax.set_title("Dataset Curly Vector Plot with Key")
         ax.grid(True, alpha=0.3)
 
         plt.close(fig)
@@ -687,8 +871,8 @@ class TestCurvedQuiverIntegration:
         """Test multiple legends in different positions."""
         fig, ax = plt.subplots(figsize=(12, 8))
 
-        # Create curved quiver plot
-        quiver_set = curved_quiver(
+        # Create dataset curly-vector plot
+        quiver_set = curly_vector(
             wind_data, x="lon", y="lat", u="u", v="v", ax=ax, density=1
         )
 
@@ -698,307 +882,31 @@ class TestCurvedQuiverIntegration:
 
         legends = []
         for pos, speed in zip(positions, speeds):
-            legend = add_curved_quiverkey(
+            legend = curly_vector_key(
                 ax=ax,
-                curved_quiver_set=quiver_set,
+                curly_vector_set=quiver_set,
                 U=speed,
                 units="m/s",
                 loc=pos,
                 width=0.15,
-                height=0.08,
+                height=0.10,
             )
             legends.append(legend)
 
         # All legends should be created
         assert len(legends) == 3
         for legend in legends:
-            assert isinstance(legend, CurvedQuiverLegend)
+            assert isinstance(legend, CurlyVectorKey)
 
         plt.close(fig)
 
 
-class TestCurvedQuiverLegendUntestedMethods:
-    """Test previously untested methods in CurvedQuiverLegend."""
-
-    @pytest.fixture
-    def sample_axes_and_set(self):
-        """Create sample axes and mock quiver set."""
-        fig, ax = plt.subplots(figsize=(8, 6))
-        mock_set = Mock(spec=CurvedQuiverplotSet)
-        mock_set.resolution = 0.5
-        mock_set.magnitude = np.array([[0.5, 1.0], [1.5, 2.0]])
-        return ax, fig, mock_set
-
-    def test_create_arrow_method(self, sample_axes_and_set):
-        """Test _create_arrow method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-        )
-
-        # Test arrow creation
-        arrow = legend._create_arrow(0.1, 0.1, 0.2, 0.2)
-        assert isinstance(arrow, FancyArrowPatch)
-
-        plt.close(fig)
-
-    def test_create_text_method(self, sample_axes_and_set):
-        """Test _create_text method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-        )
-
-        # Test text creation
-        text = legend._create_text(0.5, 0.5, h_align="left", v_align="top")
-        assert isinstance(text, Text)
-
-        plt.close(fig)
-
-    def test_calculate_box_center(self, sample_axes_and_set):
-        """Test _calculate_box_center method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-        )
-
-        # Test box center calculation
-        center_x, center_y = legend._calculate_box_center()
-        assert isinstance(center_x, (int, float))
-        assert isinstance(center_y, (int, float))
-
-        plt.close(fig)
-
-    def test_calculate_horizontal_arrow_positions(self, sample_axes_and_set):
-        """Test _calculate_horizontal_arrow_positions method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-        )
-
-        # Test horizontal arrow position calculation
-        center_x, center_y = legend._calculate_box_center()
-        start_x, end_x = legend._calculate_horizontal_arrow_positions(
-            center_x, center_y, False, True  # label_left=True
-        )
-
-        assert isinstance(start_x, (int, float))
-        assert isinstance(end_x, (int, float))
-        assert start_x < end_x  # start should be left of end
-
-        plt.close(fig)
-
-    def test_calculate_vertical_arrow_positions(self, sample_axes_and_set):
-        """Test _calculate_vertical_arrow_positions method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-        )
-
-        # Test vertical arrow position calculation
-        center_x = 0.5
-        start_x, end_x = legend._calculate_vertical_arrow_positions(center_x, False)
-
-        assert isinstance(start_x, (int, float))
-        assert isinstance(end_x, (int, float))
-        assert start_x < end_x  # start should be left of end
-
-        plt.close(fig)
-
-    def test_calculate_text_position_horizontal(self, sample_axes_and_set):
-        """Test _calculate_text_position_horizontal method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-        )
-
-        # Test horizontal text position calculation
-        for labelpos in ["N", "S", "E", "W"]:
-            legend.labelpos = labelpos
-            text_x, text_y, h_align, v_align = (
-                legend._calculate_text_position_horizontal(
-                    0.1, 0.1, 0.2, 0.2, 0.05, 0.02
-                )
-            )
-
-            assert isinstance(text_x, (int, float))
-            assert isinstance(text_y, (int, float))
-            assert h_align in ["left", "right", "center"]
-            assert v_align in ["top", "bottom", "center"]
-
-        plt.close(fig)
-
-    def test_calculate_text_position_vertical(self, sample_axes_and_set):
-        """Test _calculate_text_position_vertical method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-        )
-
-        # Test vertical text position calculation - only test valid cases
-        for labelpos in ["N", "S"]:
-            legend.labelpos = labelpos
-            text_x, text_y, h_align, v_align = legend._calculate_text_position_vertical(
-                0.1, 0.1, 0.02, False, labelpos == "N"  # label_above for N
-            )
-
-            assert isinstance(text_x, (int, float))
-            assert isinstance(text_y, (int, float))
-            assert h_align in ["left", "right", "center"]
-            assert v_align in ["top", "bottom", "center"]
-
-        plt.close(fig)
-
-    def test_position_arrow_and_text(self, sample_axes_and_set):
-        """Test _position_arrow_and_text method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-        )
-
-        # Test arrow and text positioning
-        legend._position_arrow_and_text(0.1, 0.05)  # text_width, text_height
-
-        # Should have created arrow and text objects
-        assert hasattr(legend, "arrow")
-        assert hasattr(legend, "text")
-
-        plt.close(fig)
-
-    def test_calculate_arrow_length(self, sample_axes_and_set):
-        """Test _calculate_arrow_length method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        # Test with different reference speeds
-        for ref_speed in [1.0, 5.0, 10.0]:
-            legend = CurvedQuiverLegend(
-                ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-            )
-            # Set reference speed after initialization if attribute exists
-            if hasattr(legend, "reference_speed"):
-                legend.reference_speed = ref_speed
-
-            arrow_length = legend._calculate_arrow_length()
-            assert arrow_length > 0
-            # Don't assert max length constraint since it depends on implementation
-            assert isinstance(arrow_length, (int, float))
-
-        plt.close(fig)
-
-    def test_calculate_position(self, sample_axes_and_set):
-        """Test _calculate_position method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        # Test with different locations
-        for loc in ["lower left", "lower right", "upper left", "upper right"]:
-            legend = CurvedQuiverLegend(
-                ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s", loc=loc
-            )
-
-            legend._calculate_position()
-
-            # Should set x and y coordinates
-            assert hasattr(legend, "x")
-            assert hasattr(legend, "y")
-            assert 0 <= legend.x <= 1
-            assert 0 <= legend.y <= 1
-
-        plt.close(fig)
-
-    def test_setup_props_methods(self, sample_axes_and_set):
-        """Test property setup methods."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-        )
-
-        # Test _setup_props method
-        defaults = {"color": "black", "linewidth": 1}
-        user_props = {"color": "red"}
-        result = legend._setup_props(user_props, defaults)
-
-        assert result["color"] == "red"
-        assert result["linewidth"] == 1
-
-        # Test individual setup methods
-        arrow_props = legend._setup_arrow_props({"color": "blue"})
-        assert arrow_props["color"] == "blue"
-
-        patch_props = legend._setup_patch_props({"facecolor": "yellow"})
-        assert patch_props["facecolor"] == "yellow"
-
-        text_props = legend._setup_text_props({"fontsize": 14})
-        assert text_props["fontsize"] == 14
-
-        plt.close(fig)
-
-    def test_set_figure_method(self, sample_axes_and_set):
-        """Test set_figure method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-        )
-
-        # Test that legend has figure reference
-        assert legend.figure is not None
-        assert legend.figure == fig
-
-        # Test that trying to change figure would raise an error
-        new_fig = plt.figure(figsize=(10, 8))
-        try:
-            legend.set_figure(new_fig)
-            # If it doesn't raise, that's also valid behavior
-            assert True
-        except RuntimeError:
-            # Expected behavior - can't change figure
-            assert True
-        finally:
-            plt.close(new_fig)
-
-        plt.close(fig)
-
-    def test_draw_method(self, sample_axes_and_set):
-        """Test draw method."""
-        ax, fig, mock_set = sample_axes_and_set
-
-        legend = CurvedQuiverLegend(
-            ax=ax, curved_quiver_set=mock_set, U=2.0, units="m/s"
-        )
-
-        # Mock renderer
-        from matplotlib.backend_bases import RendererBase
-
-        mock_renderer = Mock(spec=RendererBase)
-
-        # Test draw method (should not raise exceptions)
-        try:
-            legend.draw(mock_renderer)
-        except Exception as e:
-            # Some drawing operations might fail in test environment
-            # but method should exist and be callable
-            assert callable(legend.draw)
-
-        plt.close(fig)
-
-
-class TestCurvedQuiverErrorHandling:
-    """Test error handling in curved quiver plotting."""
-
-    def test_curved_quiver_with_invalid_data(self):
-        """Test curved_quiver with invalid data shapes."""
-        # Create compatible data with same shape for both u and v
+class TestDatasetCurlyVectorErrorHandling:
+    """Test error handling in dataset curly-vector plotting."""
+
+    def test_curly_vector_with_invalid_data(self):
+        """Test curly_vector with invalid data shapes."""
         u_data = np.random.randn(10, 15)
-        v_data = np.random.randn(10, 15)  # Same shape as u
 
         x = np.linspace(-10, 10, 15)
         y = np.linspace(-5, 5, 10)
@@ -1012,22 +920,22 @@ class TestCurvedQuiverErrorHandling:
 
         # Should handle gracefully or raise appropriate error
         with pytest.raises((ValueError, KeyError)):
-            curved_quiver(ds, x="x", y="y", u="u", v="v", ax=ax)
+            curly_vector(ds, x="x", y="y", u="u", v="v", ax=ax)
 
         plt.close(fig)
 
     def test_legend_with_invalid_location(self):
         """Test legend creation with invalid location."""
         fig, ax = plt.subplots()
-        mock_set = Mock(spec=CurvedQuiverplotSet)
+        mock_set = Mock(spec=CurlyVectorPlotSet)
         mock_set.resolution = 0.5
         mock_set.magnitude = np.array([[1.0, 2.0]])
 
         # Should raise error for invalid location
         with pytest.raises(ValueError):
-            CurvedQuiverLegend(
+            CurlyVectorKey(
                 ax=ax,
-                curved_quiver_set=mock_set,
+                curly_vector_set=mock_set,
                 U=2.0,
                 units="m/s",
                 loc="invalid_location",
