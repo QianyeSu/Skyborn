@@ -57,7 +57,7 @@ def get_version_from_init():
             if version_match:
                 return version_match.group(1)
 
-    return "0.3.17"  # fallback version
+    return "0.3.18"  # fallback version
 
 
 def run_command(cmd, cwd=None):
