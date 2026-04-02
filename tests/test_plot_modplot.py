@@ -27,6 +27,7 @@ from skyborn.plot.vector_plot import (
     _density_scalar,
     _density_xy,
     _display_step_to_data,
+    _evaluate_ncl_display_curve,
     _finite_difference_step,
     _fit_single_bend_display_curve,
     _gen_starting_points,
@@ -863,6 +864,23 @@ class TestCurlyVector:
         np.testing.assert_allclose(jacobian, expected_jacobian)
         plt.close(fig)
 
+    def test_prepare_ncl_display_sampler_marks_projection_seam_cells_invalid(self):
+        """Projection seam cells should not be sampled as contiguous display quads."""
+        ccrs = pytest.importorskip("cartopy.crs")
+
+        fig = plt.figure(figsize=(8, 4))
+        ax = plt.axes(projection=ccrs.Robinson())
+        fig.canvas.draw()
+
+        grid = Grid(np.array([179.0, 180.0, 181.0]), np.array([-13.0, -12.0, -11.0]))
+        transform = ccrs.PlateCarree()._as_mpl_transform(ax)
+        sampler = _prepare_ncl_display_sampler(grid, transform)
+
+        assert sampler is not None
+        assert sampler.cell_valid[:, 0].all()
+        assert not np.any(sampler.cell_valid[:, 1])
+        plt.close(fig)
+
     def test_candidate_data_from_display_step_uses_local_jacobian_inverse(self):
         """Display-space step inversion should stay consistent with the local transform."""
         fig, ax = plt.subplots(figsize=(6, 4))
@@ -960,6 +978,104 @@ class TestCurlyVector:
             ]
         )
         assert not _curve_shape_is_acceptable(curve, ax.transData)
+        plt.close(fig)
+
+    def test_evaluate_ncl_display_curve_rejects_projection_seam_jump(self):
+        """A dateline seam jump should be rejected instead of drawn as a straight line."""
+        ccrs = pytest.importorskip("cartopy.crs")
+
+        fig = plt.figure(figsize=(8, 4))
+        ax = plt.axes(projection=ccrs.Robinson())
+        fig.canvas.draw()
+
+        transform = ccrs.PlateCarree()._as_mpl_transform(ax)
+        curve = np.array([[179.0, -12.0], [180.0, -12.0], [181.0, -12.0]])
+
+        display_curve, transform_failed = _evaluate_ncl_display_curve(
+            curve,
+            transform,
+            viewport=ax.bbox,
+        )
+
+        assert display_curve is None
+        assert not transform_failed
+        plt.close(fig)
+
+    @pytest.mark.parametrize("central_longitude", [179.0, 90.0])
+    def test_curly_vector_geoaxes_bakes_segments_into_axes_data(
+        self, central_longitude
+    ):
+        """GeoAxes rendering should store final line geometry in projection data space."""
+        ccrs = pytest.importorskip("cartopy.crs")
+
+        fig = plt.figure(figsize=(8, 4))
+        ax = plt.axes(projection=ccrs.Robinson(central_longitude=central_longitude))
+        ax.set_global()
+        fig.canvas.draw()
+
+        lon = np.linspace(0.0, 360.0, 36, endpoint=False)
+        lat = np.linspace(-72.0, 72.0, 11)
+        lon2d, lat2d = np.meshgrid(lon, lat, indexing="xy")
+        u = np.cos(np.deg2rad(lat2d))
+        v = 0.35 * np.sin(np.deg2rad(lon2d))
+
+        result = curly_vector(
+            ax,
+            lon,
+            lat,
+            u,
+            v,
+            transform=ccrs.PlateCarree()._as_mpl_transform(ax),
+            density=0.55,
+            color="k",
+            arrowstyle="->",
+        )
+
+        assert result.lines.get_transform() is ax.transData
+        assert result.transform is ax.transData
+
+        max_jump = 0.0
+        for segment in result.lines.get_segments():
+            segment = np.asarray(segment, dtype=float)
+            if segment.ndim != 2 or len(segment) < 2:
+                continue
+            display = ax.transData.transform(segment)
+            jumps = np.hypot(np.diff(display[:, 0]), np.diff(display[:, 1]))
+            if jumps.size:
+                max_jump = max(max_jump, float(np.nanmax(jumps)))
+
+        assert max_jump < float(np.hypot(ax.bbox.width, ax.bbox.height) * 0.35)
+        plt.close(fig)
+
+    def test_curly_vector_geoaxes_bakes_filled_arrow_patches_into_axes_data(self):
+        """Filled arrowheads on GeoAxes should also use projection data coordinates."""
+        ccrs = pytest.importorskip("cartopy.crs")
+
+        fig = plt.figure(figsize=(8, 4))
+        ax = plt.axes(projection=ccrs.Robinson(central_longitude=179.0))
+        ax.set_global()
+        fig.canvas.draw()
+
+        lon = np.linspace(0.0, 360.0, 24, endpoint=False)
+        lat = np.linspace(-60.0, 60.0, 9)
+        lon2d, lat2d = np.meshgrid(lon, lat, indexing="xy")
+        u = np.cos(np.deg2rad(lat2d))
+        v = 0.25 * np.sin(np.deg2rad(lon2d))
+
+        curly_vector(
+            ax,
+            lon,
+            lat,
+            u,
+            v,
+            transform=ccrs.PlateCarree()._as_mpl_transform(ax),
+            density=0.45,
+            color="k",
+            arrowstyle="-|>",
+        )
+
+        assert ax.patches
+        assert all(patch.get_transform() is ax.transData for patch in ax.patches)
         plt.close(fig)
 
     def test_fit_single_bend_display_curve_removes_turn_sign_changes(self):
