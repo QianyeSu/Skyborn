@@ -850,6 +850,10 @@ def _curly_vector_from_arrays(
 def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
     """Plot NCL-like curly vectors from arrays or an xarray dataset.
 
+    This is the public plotting entry point exposed by ``skyborn.plot``.
+    It accepts either raw array inputs or an ``xarray.Dataset`` and routes
+    them to the same Matplotlib-compatible curly-vector renderer.
+
     Supported call styles
     ---------------------
     Array/Matplotlib style
@@ -859,6 +863,75 @@ def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
 
     xarray dataset style
         ``curly_vector(ds, x='lon', y='lat', u='u', v='v', ax=ax, ...)``
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes, optional
+        Target axes. If omitted, ``matplotlib.pyplot.gca()`` is used.
+    x, y : array-like or hashable
+        Coordinate specification. For array-style calls, pass the x/y
+        coordinates directly. For dataset-style calls, pass the variable or
+        coordinate names to read from ``ds``.
+    u, v : array-like or hashable
+        Vector components on the plotting grid. For dataset-style calls, pass
+        the variable names.
+    ds : xarray.Dataset, optional
+        Dataset source used by the dataset-style call form.
+    density : float or tuple of float, default: 1
+        Controls glyph density. Larger values produce more curly vectors.
+    linewidth : float or 2D array, optional
+        Line width for the vector shafts. A 2D field can be used for varying
+        line width on the source grid.
+    color : color-like or 2D array, optional
+        Shaft color. A 2D scalar field may also be supplied together with
+        ``cmap`` and ``norm``.
+    cmap, norm : optional
+        Matplotlib colormap and normalization used when ``color`` is a scalar
+        field.
+    arrowsize : float, default: 1
+        Scales the arrow-head size.
+    arrowstyle : str, default: ``"->"``
+        Arrow-head style. ``"->"`` uses the open NCL-like head.
+    transform : optional
+        Source coordinate transform. For Cartopy usage, this is typically
+        ``ccrs.PlateCarree()``.
+    zorder : float, optional
+        Matplotlib z-order of the generated artists.
+    integration_direction : {"forward", "backward", "both"}, default: ``"both"``
+        Controls whether each glyph grows forward, backward, or symmetrically
+        about its seed point.
+    broken_streamlines : bool, default: True
+        Whether glyph tracing may terminate early when the local geometry
+        becomes unsuitable.
+    anchor : {"tail", "center", "head"}, optional
+        Explicit glyph anchor override. If omitted, it is inferred from
+        ``integration_direction``.
+    ref_magnitude : float, optional
+        Reference vector magnitude used for NCL-like length scaling.
+    ref_length : float, optional
+        Reference glyph length as a fraction of axes width.
+    min_frac_length : float, default: 0.0
+        Minimum glyph length as a fraction of the reference length.
+    min_distance : float, optional
+        Minimum accepted spacing between glyph centers in axes-fraction units.
+    ncl_preset : {None, "profile"}, optional
+        Optional NCL-style preset. ``"profile"`` is intended for vertical
+        cross-sections such as latitude-pressure plots.
+    regrid_shape : int or tuple of int, optional
+        For Cartopy GeoAxes, first regrid vectors in the target projection
+        before rendering. This is especially useful for polar projections.
+    curvilinear_regrid_shape : int or tuple of int, optional
+        Optional rectification target shape for 2D curvilinear source grids.
+    target_extent : tuple, optional
+        Explicit Cartopy target-projection extent used by ``regrid_shape``.
+    isel : mapping, optional
+        Dataset-style positional indexers applied before plotting.
+
+    Returns
+    -------
+    CurlyVectorPlotSet
+        Container holding the generated line collection, arrow artists, and
+        the metadata needed by ``curly_vector_key``.
     """
     if not args:
         raise TypeError(
