@@ -19,7 +19,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon, Rectangle
 from matplotlib.text import Text
 
-from .vector_plot import CurlyVectorPlotSet
+from .vector_plot import CurlyVectorPlotSet, _normalize_supported_arrowstyle
 
 __all__ = ["CurlyVectorKey", "curly_vector_key"]
 
@@ -73,6 +73,8 @@ class CurlyVectorKey(Artist):
         self.ax = ax
         self.curly_vector_set = curly_vector_set
         self.U = float(U)
+        if not np.isfinite(self.U) or self.U <= 0.0:
+            raise ValueError("U must be a finite positive reference magnitude")
         self.units = units
         self.label = label
         self.description = description
@@ -104,7 +106,10 @@ class CurlyVectorKey(Artist):
         self.arrow_props = self._setup_arrow_props(arrow_props)
         self.patch_props = self._setup_patch_props(patch_props)
         self.text_props = self._setup_text_props(text_props)
-        self.arrowstyle = str(self.arrow_props.get("arrowstyle", "->")).strip()
+        self.arrowstyle = _normalize_supported_arrowstyle(
+            self.arrow_props.get("arrowstyle", "->")
+        )
+        self.arrow_props["arrowstyle"] = self.arrowstyle
 
         self.arrow_length = self._calculate_arrow_length()
         self.patch = Rectangle(
@@ -552,7 +557,7 @@ def curly_vector_key(
     curly_vector_set : CurlyVectorPlotSet
         The object returned by :func:`skyborn.plot.curly_vector`.
     U : float, default: 2.0
-        Reference magnitude represented by the annotation.
+        Finite positive reference magnitude represented by the annotation.
     units : str, default: ``"m/s"``
         Unit label appended to ``U``.
     label : str, optional
