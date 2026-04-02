@@ -712,12 +712,9 @@ def _curly_vector_from_dataset(
 
         - ``lines``: `.LineCollection` of streamlines
 
-        - ``arrows``: `.PatchCollection` containing `.FancyArrowPatch`
-          objects representing the arrows half-way along streamlines.
-
-            This container will probably change in the future to allow changes
-            to the colormap, alpha, etc. for both lines and arrows, but these
-            changes should be backward compatible.
+        - ``arrows``: tuple of the actual filled arrow-head patches added to
+          the axes. Open arrow styles use line segments only and therefore
+          return an empty tuple.
 
     .. seealso::
         - https://github.com/matplotlib/matplotlib/issues/20038
