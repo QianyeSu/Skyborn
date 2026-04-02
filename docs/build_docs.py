@@ -14,6 +14,15 @@ import shutil
 import re
 from pathlib import Path
 
+# Ensure the current process can print Unicode status lines on Windows too.
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 # Set proper encoding for Windows and Read the Docs
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 
