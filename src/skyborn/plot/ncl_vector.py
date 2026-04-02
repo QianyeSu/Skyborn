@@ -7,6 +7,7 @@ Created: 2026-03-01 14:58:56
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Hashable
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
 __all__ = ["curly_vector", "CurlyVectorKey", "curly_vector_key"]
+_ISSUED_PLOT_WARNINGS: set[str] = set()
 
 
 def _is_cartopy_crs_like(transform) -> bool:
@@ -32,10 +34,25 @@ def _looks_like_axes(value: Any) -> bool:
     return hasattr(value, "add_collection") and hasattr(value, "transData")
 
 
+def _warn_plot_once(key: str, message: str) -> None:
+    if key in _ISSUED_PLOT_WARNINGS:
+        return
+    _ISSUED_PLOT_WARNINGS.add(key)
+    warnings.warn(message, UserWarning, stacklevel=3)
+
+
 def _apply_dataset_isel(da: xr.DataArray, isel):
     if not isel:
         return da
-    indexers = {dim: value for dim, value in dict(isel).items() if dim in da.dims}
+    requested = dict(isel)
+    indexers = {dim: value for dim, value in requested.items() if dim in da.dims}
+    unused = tuple(sorted(dim for dim in requested if dim not in da.dims))
+    if unused:
+        _warn_plot_once(
+            f"unused_isel:{unused}",
+            f"Ignoring isel indexers {list(unused)} because they are not present "
+            f"in DataArray dims {tuple(da.dims)}.",
+        )
     return da.isel(indexers) if indexers else da
 
 
@@ -72,7 +89,16 @@ def _transpose_2d_dataarray_to_dims(
     return da.transpose(*dims)
 
 
-def _extract_curly_vector_dataset_source(ds, x, y, u, v, *, isel=None):
+def _filled_scalar_field_array(value: Any) -> np.ndarray:
+    array = np.ma.asarray(value, dtype=float)
+    if np.ma.isMaskedArray(array):
+        return np.asarray(array.filled(np.nan), dtype=float)
+    return np.asarray(array, dtype=float)
+
+
+def _extract_curly_vector_dataset_source(
+    ds, x, y, u, v, *, isel=None, return_metadata: bool = False
+):
     x_da = _get_plot_dataarray(ds, x, isel=isel, role="x")
     y_da = _get_plot_dataarray(ds, y, isel=isel, role="y")
     u_da = _get_plot_dataarray(ds, u, isel=isel, role="u")
@@ -87,6 +113,12 @@ def _extract_curly_vector_dataset_source(ds, x, y, u, v, *, isel=None):
             "different staggered or unmatched grids, align them onto the same physical "
             "grid before calling curly_vector()."
         )
+
+    metadata = {
+        "vector_dims": tuple(u_da.dims),
+        "x_descending": False,
+        "y_descending": False,
+    }
 
     if x_da.ndim == 1 and y_da.ndim == 1:
         x_values = np.asarray(x_da.data, dtype=float)
@@ -105,11 +137,15 @@ def _extract_curly_vector_dataset_source(ds, x, y, u, v, *, isel=None):
             x_values = x_values[::-1]
             u_values = u_values[:, ::-1]
             v_values = v_values[:, ::-1]
+            metadata["x_descending"] = True
         if y_values.size > 1 and y_values[0] > y_values[-1]:
             y_values = y_values[::-1]
             u_values = u_values[::-1, :]
             v_values = v_values[::-1, :]
+            metadata["y_descending"] = True
 
+        if return_metadata:
+            return x_values, y_values, u_values, v_values, metadata
         return x_values, y_values, u_values, v_values
     elif x_da.ndim == 2 and y_da.ndim == 2:
         x_da = _transpose_2d_dataarray_to_dims(x_da, u_da.dims, role="x")
@@ -123,12 +159,49 @@ def _extract_curly_vector_dataset_source(ds, x, y, u, v, *, isel=None):
     else:
         raise ValueError("x and y must both be 1D or both be 2D")
 
-    return (
+    values = (
         np.asarray(x_da.data, dtype=float),
         np.asarray(y_da.data, dtype=float),
         np.asarray(u_da.data, dtype=float),
         np.asarray(v_da.data, dtype=float),
     )
+    if return_metadata:
+        return (*values, metadata)
+    return values
+
+
+def _prepare_dataset_style_field(
+    value: Any,
+    *,
+    isel,
+    expected_shape: tuple[int, ...],
+    vector_dims: tuple[Hashable, Hashable],
+    x_descending: bool,
+    y_descending: bool,
+    role: str,
+) -> Any:
+    if value is None or isinstance(value, str) or np.isscalar(value):
+        return value
+
+    if isinstance(value, xr.DataArray):
+        da = _apply_dataset_isel(value, isel).squeeze(drop=True)
+        if da.ndim == 2:
+            da = _transpose_2d_dataarray_to_dims(da, vector_dims, role=role)
+            array = _filled_scalar_field_array(da.data)
+        else:
+            array = np.asarray(da)
+    else:
+        array = np.asarray(value)
+
+    if array.shape != expected_shape:
+        return value
+
+    field = _filled_scalar_field_array(array)
+    if y_descending:
+        field = field[::-1, :]
+    if x_descending:
+        field = field[:, ::-1]
+    return field
 
 
 def _default_cartopy_target_extent(ax, target_extent):
@@ -339,7 +412,7 @@ def _maybe_as_scalar_field(value, expected_shape):
     array = np.asarray(value)
     if array.shape != expected_shape:
         return None
-    return np.asarray(array, dtype=float)
+    return _filled_scalar_field_array(array)
 
 
 def _regrid_curvilinear_vectors(x, y, u, v, *scalars, target_shape):
@@ -631,7 +704,7 @@ def _curly_vector_from_dataset(
     v : Hashable or None, optional.
         Variable name for the v velocity (in `y` direction).
     ax : :py:class:`matplotlib.axes.Axes`, optional.
-        Axes on which to plot. By default, use the current axes. Mutually exclusive with `size` and `figsize`.
+        Axes on which to plot. By default, use the current axes.
     density : float or (float, float)
         Controls the closeness of streamlines. When ``density = 1``, the domain
         is divided into a 30x30 grid. *density* linearly scales this grid.
@@ -701,7 +774,8 @@ def _curly_vector_from_dataset(
         Optional positional indexers applied to ``x``, ``y``, ``u``, and ``v``
         before plotting. This is useful when the dataset stores extra
         dimensions and you want to select a 2D slice without pre-slicing the
-        dataset yourself.
+        dataset yourself. Indexer keys that do not match the selected
+        DataArray dimensions are ignored with a warning.
 
     Returns
     -------
@@ -721,7 +795,33 @@ def _curly_vector_from_dataset(
         - https://github.com/NCAR/geocat-viz/issues/4
         - https://docs.xarray.dev/en/stable/generated/xarray.Dataset.plot.streamplot.html#xarray.Dataset.plot.streamplot
     """
-    x, y, u, v = _extract_curly_vector_dataset_source(ds, x, y, u, v, isel=isel)
+    x, y, u, v, source_metadata = _extract_curly_vector_dataset_source(
+        ds,
+        x,
+        y,
+        u,
+        v,
+        isel=isel,
+        return_metadata=True,
+    )
+    color = _prepare_dataset_style_field(
+        color,
+        isel=isel,
+        expected_shape=np.shape(u),
+        vector_dims=source_metadata["vector_dims"],
+        x_descending=bool(source_metadata["x_descending"]),
+        y_descending=bool(source_metadata["y_descending"]),
+        role="color",
+    )
+    linewidth = _prepare_dataset_style_field(
+        linewidth,
+        isel=isel,
+        expected_shape=np.shape(u),
+        vector_dims=source_metadata["vector_dims"],
+        x_descending=bool(source_metadata["x_descending"]),
+        y_descending=bool(source_metadata["y_descending"]),
+        role="linewidth",
+    )
 
     if ax is None:
         ax = plt.gca()
@@ -921,7 +1021,8 @@ def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
     target_extent : tuple, optional
         Explicit Cartopy target-projection extent used by ``regrid_shape``.
     isel : mapping, optional
-        Dataset-style positional indexers applied before plotting.
+        Dataset-style positional indexers applied before plotting. Unused
+        indexer keys are ignored with a warning.
 
     Returns
     -------
