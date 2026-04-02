@@ -24,6 +24,7 @@ __pycache__/** linguist-generated=true
 
 # Exclude test files from language statistics
 tests/*.py linguist-documentation
+src/skyborn/plot/**/*.py linguist-generated=true
 
 # Exclude configuration files
 *.yml linguist-language=YAML
