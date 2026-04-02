@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from matplotlib.collections import LineCollection, PatchCollection
+from matplotlib.collections import LineCollection
 from matplotlib.transforms import Bbox
 
 import skyborn.plot.vector_plot as vector_plot_module
@@ -94,7 +94,7 @@ class TestCurlyVector:
 
         # Check types of components
         assert isinstance(result.lines, LineCollection)
-        assert isinstance(result.arrows, PatchCollection)
+        assert isinstance(result.arrows, tuple)
         assert result.render_mode == "ncl_curly"
 
         plt.close(fig)
@@ -171,7 +171,7 @@ class TestCurlyVector:
 
         assert isinstance(result, CurlyVectorPlotSet)
         assert isinstance(result.lines, LineCollection)
-        assert isinstance(result.arrows, PatchCollection)
+        assert isinstance(result.arrows, tuple)
         assert result.render_mode == "ncl_curly"
         assert result.density == 1.2
         assert result.anchor == "center"
@@ -218,14 +218,14 @@ class TestCurlyVector:
 
         assert isinstance(result, CurlyVectorPlotSet)
         assert len(result.lines.get_segments()) > 0
-        assert len(result.arrows.get_paths()) == 0
+        assert len(result.arrows) == 0
 
         plt.close(fig)
 
     def test_curly_vector_filled_arrowstyle_creates_arrow_paths(
         self, sample_vector_field
     ):
-        """Filled arrow styles should populate the PatchCollection."""
+        """Filled arrow styles should return the actual arrow-head patches."""
         x, y, u, v = sample_vector_field
         fig, ax = plt.subplots(figsize=(6, 4))
 
@@ -241,7 +241,8 @@ class TestCurlyVector:
 
         assert isinstance(result, CurlyVectorPlotSet)
         assert len(result.lines.get_segments()) > 0
-        assert len(result.arrows.get_paths()) > 0
+        assert len(result.arrows) > 0
+        assert all(patch in ax.patches for patch in result.arrows)
 
         plt.close(fig)
 
@@ -262,7 +263,79 @@ class TestCurlyVector:
 
         assert isinstance(result, CurlyVectorPlotSet)
         assert len(result.lines.get_segments()) == 0
-        assert len(result.arrows.get_paths()) == 0
+        assert len(result.arrows) == 0
+
+        plt.close(fig)
+
+    def test_curly_vector_all_nan_color_field_raises_clear_error(
+        self, sample_vector_field
+    ):
+        """All-NaN color fields should fail fast with a clear error."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        with pytest.raises(
+            ValueError,
+            match="color field must contain at least one finite value after masking",
+        ):
+            curly_vector(
+                ax,
+                x,
+                y,
+                u,
+                v,
+                color=np.full_like(u, np.nan),
+                cmap="viridis",
+            )
+
+        plt.close(fig)
+
+    def test_curly_vector_all_nan_linewidth_field_raises_clear_error(
+        self, sample_vector_field
+    ):
+        """All-NaN linewidth fields should fail fast with a clear error."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        with pytest.raises(
+            ValueError,
+            match="linewidth field must contain at least one finite value after masking",
+        ):
+            curly_vector(
+                ax,
+                x,
+                y,
+                u,
+                v,
+                linewidth=np.full_like(u, np.nan),
+            )
+
+        plt.close(fig)
+
+    def test_curly_vector_partial_nan_linewidth_field_falls_back_to_finite_mean(
+        self, sample_vector_field
+    ):
+        """NaN gaps in a linewidth field should not leak NaN into the artists."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        linewidth = np.full_like(u, np.nan, dtype=float)
+        linewidth[::2, ::2] = 2.5
+
+        result = curly_vector(
+            ax,
+            x,
+            y,
+            u,
+            v,
+            linewidth=linewidth,
+            density=0.8,
+        )
+
+        assert len(result.lines.get_segments()) > 0
+        assert not np.isnan(
+            np.asarray(result.lines.get_linewidths(), dtype=float)
+        ).any()
 
         plt.close(fig)
 
@@ -468,6 +541,68 @@ class TestCurlyVector:
         v_grid = np.asarray(mock_ncl_curly.call_args.args[4], dtype=float)
         assert np.isnan(u_grid[1, 2])
         assert np.isnan(v_grid[1, 2])
+
+        plt.close(fig)
+
+    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    def test_curly_vector_non_uniform_style_fields_follow_vector_regridding(
+        self, mock_ncl_curly
+    ):
+        """Non-uniform style fields must be reordered/regridded with the vectors."""
+        x = np.array([3.0, 2.0, 1.0, 0.0])
+        y = np.array([2.0, 1.0, 0.0])
+        u = np.arange(12.0).reshape(3, 4)
+        v = -u
+        color = 100.0 + u
+        linewidth = 200.0 + u
+        mock_ncl_curly.return_value = Mock(spec=CurlyVectorPlotSet)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        curly_vector(
+            ax,
+            x,
+            y,
+            u,
+            v,
+            color=color,
+            linewidth=linewidth,
+            allow_non_uniform_grid=True,
+        )
+
+        call_args = mock_ncl_curly.call_args
+        np.testing.assert_allclose(
+            np.asarray(call_args.args[1], dtype=float), [0, 1, 2, 3]
+        )
+        np.testing.assert_allclose(
+            np.asarray(call_args.args[2], dtype=float), [0, 1, 2]
+        )
+        np.testing.assert_allclose(
+            np.asarray(call_args.args[3], dtype=float),
+            u[::-1, ::-1],
+        )
+        np.testing.assert_allclose(
+            np.asarray(call_args.args[4], dtype=float),
+            v[::-1, ::-1],
+        )
+        np.testing.assert_allclose(
+            np.asarray(call_args.kwargs["color"], dtype=float),
+            color[::-1, ::-1],
+        )
+        np.testing.assert_allclose(
+            np.asarray(call_args.kwargs["linewidth"], dtype=float),
+            linewidth[::-1, ::-1],
+        )
+
+        plt.close(fig)
+
+    def test_curly_vector_rejects_unsupported_arrowstyle(self, sample_vector_field):
+        """Unsupported arrow styles should fail fast instead of silently degrading."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        with pytest.raises(ValueError, match="arrowstyle must be one of"):
+            curly_vector(ax, x, y, u, v, arrowstyle="fancy")
 
         plt.close(fig)
 
@@ -1413,7 +1548,7 @@ class TestCurlyVectorPlotSet:
     def mock_collections(self):
         """Create mock collections for testing."""
         lines = Mock(spec=LineCollection)
-        arrows = Mock(spec=PatchCollection)
+        arrows = (Mock(name="arrow_patch_1"), Mock(name="arrow_patch_2"))
         return lines, arrows
 
     def test_curly_vector_plot_set_creation(self, mock_collections):
@@ -1926,7 +2061,7 @@ class TestIntegration:
         assert len(ax.collections) > 0
         assert result.lines in ax.collections
         assert len(result.lines.get_segments()) > 0
-        assert len(result.arrows.get_paths()) == 0
+        assert len(result.arrows) == 0
         assert len(ax.patches) == 0
 
         # Set plot properties
