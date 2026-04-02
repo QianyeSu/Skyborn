@@ -406,6 +406,33 @@ def curly_vector(
 
 
 class CurlyVectorPlotSet:
+    """Container returned by :func:`skyborn.plot.curly_vector`.
+
+    Parameters
+    ----------
+    lines : matplotlib.collections.LineCollection
+        Line collection containing the rendered curly-vector shafts and any
+        open-arrow head segments.
+    arrows : matplotlib.collections.PatchCollection
+        Patch collection containing filled arrow-head patches when a filled
+        arrow style is requested.
+    resolution : float
+        Reference glyph length expressed as a fraction of the axes width.
+    magnitude : array-like
+        Source vector-magnitude field used by the renderer.
+    zorder : float or None
+        Matplotlib z-order applied to the generated artists.
+    transform : optional
+        Final artist transform used for the rendered geometry.
+    axes : matplotlib.axes.Axes
+        Axes on which the curly vectors were drawn.
+
+    Notes
+    -----
+    The returned object is also used by :func:`skyborn.plot.curly_vector_key`
+    to derive reference-vector length and head-size scaling.
+    """
+
     def __init__(
         self,
         lines: Any,
