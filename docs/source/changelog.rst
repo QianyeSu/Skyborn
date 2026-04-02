@@ -262,7 +262,7 @@ Version 0.3.12.post1
   - **Solution**: Set ``MACOSX_DEPLOYMENT_TARGET=14.0`` in GitHub Actions workflow
   - **Note**: macOS 13 users can still install from source using ``pip install --no-binary=skyborn skyborn``
 
-**ðŸ› ï¸?Technical Improvements**
+**Technical Improvements**
 
 * **Enhanced Meson Configuration**:
 
@@ -276,7 +276,7 @@ Version 0.3.12.post1
   - Ensures compatibility with modern macOS development environments
   - Improved build reliability and error reporting
 
-**âœ?Validation**
+**Validation**
 
 * Successfully tested wheel building and installation across all supported platforms
 * Confirmed ``_spherepack*.pyd`` files are correctly included in wheel distributions
@@ -355,7 +355,7 @@ Version 0.3.11
 * **Simplified Import Structure**: Removed conditional/backup import logic in favor of direct scipy.stats imports for improved maintainability
 * **Code Quality Enhancements**: Eliminated unused backup functions (`_mk_score_backup`, `_theil_sen_backup`) that were reducing test coverage
 * **Consolidated Test Suite**: Merged supplementary test files into main test suite for better organization and reduced maintenance overhead
-* **Documentation Fixes**: Corrected parameter names in API documentation examples (time_axis â†?axis)
+* **Documentation Fixes**: Corrected parameter names in API documentation examples (time_axis -> axis)
 * **Advanced Vectorization**: New `_vectorized_mk_score()` function using upper triangular indices for O(nÂ²) to O(1) complexity reduction
 * **Smart Memory Management**: Automatic chunk size estimation based on available memory and data dimensions
 * **Robust Error Handling**: Graceful handling of edge cases and problematic time series
@@ -380,9 +380,9 @@ Version 0.3.11
 
 For typical climate data analysis scenarios:
 
-* **Small datasets** (50Ã—20Ã—30): 6.3x speedup (251 â†?1,578 points/sec)
-* **Medium datasets** (100Ã—30Ã—40): 14.8x speedup (74 â†?1,093 points/sec)
-* **Large datasets** (200Ã—40Ã—50): 31.3x speedup (19 â†?595 points/sec)
+* **Small datasets** (50x20x30): 6.3x speedup (251 -> 1,578 points/sec)
+* **Medium datasets** (100x30x40): 14.8x speedup (74 -> 1,093 points/sec)
+* **Large datasets** (200x40x50): 31.3x speedup (19 -> 595 points/sec)
 * **Climate grids** (40Ã—192Ã—288): ~30 seconds total processing time
 
 Version 0.3.10
@@ -507,7 +507,7 @@ Version 0.3.8
 Version 0.3.7
 --------------
 
-**âœ?New Features**
+**New Features**
 
 * **Emergent Constraints Method**: Added new emergent constraints analysis method for climate data analysis
 * **Enhanced Documentation**: Interactive particle effects entrance page
