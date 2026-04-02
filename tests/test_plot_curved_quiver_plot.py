@@ -1,5 +1,6 @@
 """Tests for the dataset-level curly-vector plotting modules."""
 
+import warnings
 from unittest.mock import Mock, patch
 
 import matplotlib.pyplot as plt
@@ -7,6 +8,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
+import skyborn.plot.ncl_vector as ncl_vector_module
 from skyborn.plot.ncl_vector import (
     _append_cyclic_column,
     _apply_dataset_isel,
@@ -385,6 +387,7 @@ class TestDatasetCurlyVector:
         """Test that curly_vector can select a 2D slice via isel."""
         mock_result = Mock(spec=CurlyVectorPlotSet)
         mock_curly_vector.return_value = mock_result
+        ncl_vector_module._ISSUED_PLOT_WARNINGS.clear()
 
         x = np.linspace(100.0, 110.0, 6)
         y = np.linspace(20.0, 28.0, 5)
@@ -399,21 +402,29 @@ class TestDatasetCurlyVector:
         )
 
         fig, ax = plt.subplots(figsize=(8, 6))
-        curly_vector(
-            ds,
-            x="x",
-            y="y",
-            u="u",
-            v="v",
-            ax=ax,
-            isel={"time": 1, "level": 2},
-        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            curly_vector(
+                ds,
+                x="x",
+                y="y",
+                u="u",
+                v="v",
+                ax=ax,
+                isel={"time": 1, "level": 2},
+            )
 
         call_args = mock_curly_vector.call_args
         np.testing.assert_allclose(call_args[0][1], x)
         np.testing.assert_allclose(call_args[0][2], y)
         np.testing.assert_allclose(call_args[0][3], u[1, 2])
         np.testing.assert_allclose(call_args[0][4], v[1, 2])
+        messages = [
+            str(item.message)
+            for item in caught
+            if "Ignoring isel indexers" in str(item.message)
+        ]
+        assert len(messages) == 1
 
         plt.close(fig)
 
@@ -629,16 +640,27 @@ class TestDatasetCurlyVector:
 class TestDatasetCurlyVectorHelpers:
     """Unit tests for dataset/cartopy helper branches."""
 
-    def test_apply_dataset_isel_filters_only_matching_dims(self):
+    def test_apply_dataset_isel_warns_once_for_unused_indexers(self):
         da = xr.DataArray(
             np.arange(2 * 3 * 4).reshape(2, 3, 4),
             dims=("time", "level", "x"),
         )
+        ncl_vector_module._ISSUED_PLOT_WARNINGS.clear()
 
-        selected = _apply_dataset_isel(da, {"time": 1, "lat": 0})
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            selected = _apply_dataset_isel(da, {"time": 1, "lat": 0})
+            repeated = _apply_dataset_isel(da, {"time": 1, "lat": 0})
 
         assert selected.dims == ("level", "x")
         np.testing.assert_array_equal(selected.data, da.isel(time=1).data)
+        np.testing.assert_array_equal(repeated.data, da.isel(time=1).data)
+        messages = [
+            str(item.message)
+            for item in caught
+            if "Ignoring isel indexers" in str(item.message)
+        ]
+        assert len(messages) == 1
 
     def test_get_plot_dataarray_rejects_scalar_after_selection(self):
         ds = xr.Dataset({"x": (["time"], np.array([1.0]))})
@@ -869,6 +891,48 @@ class TestDatasetCurlyVectorHelpers:
         np.testing.assert_allclose(y_out, y_values.transpose())
         np.testing.assert_allclose(u_out, u_values)
         np.testing.assert_allclose(v_out, v_values)
+
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_dataset_flips_external_style_fields_with_descending_axes(
+        self, mock_curly_vector
+    ):
+        u_values = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+        v_values = -u_values
+        color = xr.DataArray(100.0 + u_values, dims=("y", "x"))
+        linewidth = xr.DataArray((200.0 + u_values).transpose(), dims=("x", "y"))
+        ds = xr.Dataset(
+            {
+                "u": (("y", "x"), u_values),
+                "v": (("y", "x"), v_values),
+            },
+            coords={
+                "x": ("x", np.array([2.0, 1.0, 0.0])),
+                "y": ("y", np.array([10.0, 0.0])),
+            },
+        )
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        curly_vector(
+            ds, x="x", y="y", u="u", v="v", ax=ax, color=color, linewidth=linewidth
+        )
+
+        call_args = mock_curly_vector.call_args
+        np.testing.assert_allclose(call_args.args[1], np.array([0.0, 1.0, 2.0]))
+        np.testing.assert_allclose(call_args.args[2], np.array([0.0, 10.0]))
+        expected = u_values[::-1, ::-1]
+        np.testing.assert_allclose(
+            np.asarray(call_args.kwargs["color"], dtype=float), 100.0 + expected
+        )
+        np.testing.assert_allclose(
+            np.asarray(call_args.kwargs["linewidth"], dtype=float), 200.0 + expected
+        )
+        assert call_args.args[0] is ax
+        assert mock_result is not None
+
+        plt.close(fig)
 
     def test_extract_curly_vector_dataset_source_rejects_unmatched_2d_coord_dims(
         self,
