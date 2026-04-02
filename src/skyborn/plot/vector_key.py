@@ -535,11 +535,49 @@ def curly_vector_key(
 ) -> CurlyVectorKey:
     """Add an NCL-like reference-vector annotation to axes.
 
+    This is the public companion to :func:`skyborn.plot.curly_vector`. It
+    creates a boxed reference-vector annotation that reuses the active
+    curly-vector length and head-size scaling.
+
     Supported call styles
     ---------------------
     - ``curly_vector_key(ax, curly_vector_set, U=..., ...)``
     - ``curly_vector_key(curly_vector_set, U=..., ax=ax, ...)``
     - ``curly_vector_key(curly_vector_set, U=..., ...)``
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes, optional
+        Target axes. If omitted, ``matplotlib.pyplot.gca()`` is used.
+    curly_vector_set : CurlyVectorPlotSet
+        The object returned by :func:`skyborn.plot.curly_vector`.
+    U : float, default: 2.0
+        Reference magnitude represented by the annotation.
+    units : str, default: ``"m/s"``
+        Unit label appended to ``U``.
+    label : str, optional
+        Optional explicit main label. If omitted, the label is derived from
+        ``U`` and ``units``.
+    description : str, optional
+        Secondary descriptive text shown with the reference vector.
+    loc : {"lower left", "lower right", "upper left", "upper right"}, default: ``"lower right"``
+        Corner placement used when ``x``/``y`` are not given.
+    x, y : float, optional
+        Explicit axes-fraction location of the annotation anchor. These behave
+        similarly to ``quiverkey`` positional arguments.
+    labelpos : {"N", "S", "E", "W"}, default: ``"N"``
+        Label layout relative to the vector symbol.
+    width, height : float, optional
+        Box size in axes-fraction units.
+    frameon : bool, default: True
+        Whether to draw the surrounding box.
+    show_description : bool, default: True
+        Whether to render the secondary description text.
+
+    Returns
+    -------
+    CurlyVectorKey
+        The annotation artist added to the axes.
     """
     if not args and "curly_vector_set" not in kwargs:
         raise TypeError(
