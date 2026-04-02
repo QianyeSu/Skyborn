@@ -593,7 +593,7 @@ def _curly_vector_from_dataset(
     cmap: Any = None,
     norm: Any = None,
     arrowsize=1,
-    arrowstyle="-|>",
+    arrowstyle="->",
     transform: Any = None,
     zorder: float | None = None,
     start_points: Any = None,
@@ -652,11 +652,9 @@ def _curly_vector_from_dataset(
         description.
     arrowsize : float
         Scaling factor for the arrow size.
-    arrowstyle : str
-        Arrow style specification.
-        See `~matplotlib.patches.FancyArrowPatch`.
-        ``'->'`` uses an open line arrowhead while other styles fall back to a
-        filled polygon head.
+    arrowstyle : {"->", "-|>"}
+        Supported arrow-head style. Use ``"->"`` for the open NCL-like line
+        head or ``"-|>"`` for a filled triangular head.
     start_points : (N, 2) array
         Coordinates of starting points for the streamlines in data coordinates
         (the same coordinates as the *x* and *y* arrays).
@@ -783,7 +781,7 @@ def _curly_vector_from_arrays(
     cmap: Any = None,
     norm: Any = None,
     arrowsize=1,
-    arrowstyle="-|>",
+    arrowstyle="->",
     transform: Any = None,
     zorder: float | None = None,
     start_points: Any = None,
@@ -887,8 +885,9 @@ def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
         field.
     arrowsize : float, default: 1
         Scales the arrow-head size.
-    arrowstyle : str, default: ``"->"``
-        Arrow-head style. ``"->"`` uses the open NCL-like head.
+    arrowstyle : {"->", "-|>"}, default: ``"->"``
+        Supported arrow-head style. Use ``"->"`` for the open NCL-like line
+        head or ``"-|>"`` for a filled triangular head.
     transform : optional
         Source coordinate transform. For Cartopy usage, this is typically
         ``ccrs.PlateCarree()``.
