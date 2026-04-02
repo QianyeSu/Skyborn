@@ -1,3 +1,11 @@
+/*
+ * Native C core for Skyborn NCL-like curly-vector tracing.
+ *
+ * Author: Qianye Su <suqianye2000@gmail.com>
+ * Copyright (c) 2025-2026 Qianye Su
+ * Created: 2026-03-01 14:58:56
+ */
+
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #define NPY_NO_DEPRECATED_API NPY_1_19_API_VERSION
@@ -23,6 +31,7 @@ typedef struct
     double max_cell_y;
 } GridInfo;
 
+/* Interpolated flow state and local data->display Jacobian at one sample point. */
 typedef struct
 {
     double display_x;
@@ -36,6 +45,7 @@ typedef struct
     double speed;
 } SampleState;
 
+/* Bucketed display-space candidate index used by the thinning pass. */
 typedef struct
 {
     long bx;
@@ -43,6 +53,13 @@ typedef struct
     npy_intp idx;
 } BucketEntry;
 
+/*
+ * Sample one vector state on the regular data grid.
+ *
+ * This performs bilinear interpolation of u/v in data space, then uses the
+ * local display-grid Jacobian to estimate the display-space tangent that drives
+ * the native NCL-like stepping loop.
+ */
 static int sample_state(
     const GridInfo *grid,
     const double *u_data,
@@ -176,6 +193,7 @@ static int sample_state(
     return isfinite(out->speed) ? 1 : 0;
 }
 
+/* Convert one display-space step back into a data-space increment. */
 static int display_step_to_data(
     double j00,
     double j01,
@@ -197,6 +215,7 @@ static int display_step_to_data(
     return isfinite(*data_x) && isfinite(*data_y);
 }
 
+/* Match the Python renderer's NCL-like speed-dependent pixel step law. */
 static double ncl_step_length_px(double base_step_px, double local_speed, double speed_scale)
 {
     double speed_fraction;
@@ -226,6 +245,7 @@ static int point_within_grid_data(const GridInfo *grid, double x, double y)
     return 0.0 <= xi && xi <= grid->max_x_index && 0.0 <= yi && yi <= grid->max_y_index;
 }
 
+/* Bilinear sampling helper for scalar fields on the same regular grid. */
 static int sample_scalar_field(
     const GridInfo *grid,
     const double *field_data,
@@ -345,6 +365,12 @@ static int viewport_contains(double x0, double y0, double x1, double y1, double 
     return isfinite(x) && isfinite(y) && x0 <= x && x <= x1 && y0 <= y && y <= y1;
 }
 
+/*
+ * Clip a candidate display-space segment against the active viewport.
+ *
+ * The tracer still records the shortened step, then terminates, which keeps the
+ * last arrow tail inside the map boundary instead of overshooting the panel.
+ */
 static int clip_display_step_to_viewport(
     double start_x,
     double start_y,
@@ -422,6 +448,14 @@ static int clip_display_step_to_viewport(
     return 1;
 }
 
+/*
+ * Trace a single forward or backward curly-vector branch.
+ *
+ * The caller supplies data-space u/v, a precomputed display grid, and the valid
+ * cell mask. The loop works in display space, applies the one-third backward
+ * correction used by the Python implementation, converts the chosen step back
+ * into data coordinates, and returns a compact (N, 2) curve.
+ */
 static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     PyObject *u_obj;
@@ -632,7 +666,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
 
     Py_BEGIN_ALLOW_THREADS
 
-        for (step_index = 0; step_index < max_steps; ++step_index)
+    for (step_index = 0; step_index < max_steps; ++step_index)
     {
         SampleState state;
         double remaining = max_length_px - travelled;
@@ -655,6 +689,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
             break;
         }
 
+        /* Re-sample the local state after the first accepted step. */
         if (step_index == 0)
         {
             state = initial_state;
@@ -672,6 +707,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
             break;
         }
 
+        /* Build the nominal NCL-like step length in display pixels. */
         current_display_x = state.display_x;
         current_display_y = state.display_y;
         step_length = ncl_step_length_px(step_px, state.speed, speed_scale);
@@ -684,6 +720,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
             break;
         }
 
+        /* Apply the one-third backward correction before stepping away again. */
         if (has_previous_display)
         {
             corrected_display_x = current_display_x - (current_display_x - previous_display_x) / 3.0;
@@ -695,6 +732,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
             corrected_display_y = current_display_y;
         }
 
+        /* First candidate uses the local tangent at the current sample point. */
         candidate_display_x = corrected_display_x + direction_sign * state.dir_x * step_length;
         candidate_display_y = corrected_display_y + direction_sign * state.dir_y * step_length;
         clipped = clip_display_step_to_viewport(
@@ -729,6 +767,11 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
             break;
         }
 
+        /*
+         * If the next sample is valid, blend the two local tangents and local
+         * speeds to reduce sharp kinks. This mirrors the smoother second-pass
+         * behavior used by the Python renderer.
+         */
         {
             SampleState next_state;
             if (sample_state(
@@ -797,6 +840,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
             }
         }
 
+        /* Ignore effectively zero-length steps after clipping or inversion. */
         actual_step = hypot(candidate_display_x - current_display_x, candidate_display_y - current_display_y);
         if (actual_step <= 0.2)
         {
@@ -822,7 +866,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
 
     Py_END_ALLOW_THREADS
 
-        if (point_count < 2)
+    if (point_count < 2)
     {
         Py_INCREF(Py_None);
         result = Py_None;
@@ -863,6 +907,7 @@ cleanup:
     return result;
 }
 
+/* Python wrapper for scalar sampling at one point. */
 static PyObject *sample_grid_field(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     PyObject *field_obj;
@@ -947,6 +992,7 @@ cleanup:
     return result;
 }
 
+/* Python wrapper for vectorized scalar sampling at many points. */
 static PyObject *sample_grid_field_array(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     PyObject *field_obj;
@@ -1074,6 +1120,12 @@ cleanup:
     return result;
 }
 
+/*
+ * Thin candidate centers in mapped/display space.
+ *
+ * Candidates are bucketed on a spacing-sized lattice so each accepted point
+ * only checks its own and neighboring buckets instead of scanning all N points.
+ */
 static PyObject *thin_mapped_candidates(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     PyObject *mapped_points_obj;
@@ -1248,6 +1300,7 @@ cleanup:
     return result;
 }
 
+/* Native methods exported to Python. */
 static PyMethodDef module_methods[] = {
     {
         "trace_ncl_direction",
@@ -1276,6 +1329,7 @@ static PyMethodDef module_methods[] = {
     {NULL, NULL, 0, NULL},
 };
 
+/* Standard CPython module definition. */
 static struct PyModuleDef moduledef = {
     PyModuleDef_HEAD_INIT,
     "_ncl_curly_core",
@@ -1288,6 +1342,7 @@ static struct PyModuleDef moduledef = {
     NULL,
 };
 
+/* Module init: import NumPy C-API and create the extension module. */
 PyMODINIT_FUNC PyInit__ncl_curly_core(void)
 {
     PyObject *module = PyModule_Create(&moduledef);

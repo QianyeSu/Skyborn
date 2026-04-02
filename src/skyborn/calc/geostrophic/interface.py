@@ -9,7 +9,10 @@ The interface handles automatic data reshaping, dimension reordering, and
 integration with the optimized Fortran backend.
 """
 
+import sys
 import warnings
+from importlib import import_module
+from types import ModuleType
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -17,8 +20,22 @@ import numpy as np
 # Import windspharm tools for data preparation
 from skyborn.windspharm.tools import prep_data, recover_data
 
-# Import the compiled Fortran functions (only 2D and 3D needed)
-from . import geostrophicwind as _geostrophic_module
+
+def _load_geostrophic_backend() -> ModuleType:
+    """Load the compiled backend without re-entering the package namespace."""
+    legacy_backend = sys.modules.get("geostrophicwind")
+    if legacy_backend is not None:
+        return legacy_backend
+
+    qualified_name = f"{__package__}.geostrophicwind"
+    backend = import_module(qualified_name)
+
+    # Preserve the legacy top-level alias used by existing tests and callers.
+    sys.modules.setdefault("geostrophicwind", backend)
+    return backend
+
+
+_geostrophic_module = _load_geostrophic_backend()
 
 z2geouv = _geostrophic_module.z2geouv  # For 2D data
 # For 3D data (handles combined dimensions)

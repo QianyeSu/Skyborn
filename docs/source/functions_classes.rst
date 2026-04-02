@@ -262,10 +262,10 @@ Specialized Plotting
 
    * - Function
      - Description
-   * - :func:`skyborn.plot.curved_quiver`
-     - Plot streamlines with curved quiver arrows
-   * - :func:`skyborn.plot.add_curved_quiverkey`
-     - Add proportionally scaled curved quiver legend to axes
+   * - :func:`skyborn.plot.curly_vector`
+     - Plot NCL-like curly vectors from either NumPy-style x/y/u/v arrays or xarray datasets
+   * - :func:`skyborn.plot.curly_vector_key`
+     - Add an NCL-like reference-vector annotation matched to curly-vector scaling
 
 Causality Analysis
 ------------------
