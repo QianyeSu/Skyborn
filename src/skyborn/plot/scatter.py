@@ -422,35 +422,24 @@ def scatter(*args: Any, **kwargs: Any):
     display-space thinning for gridded stippling use cases such as
     significance masks on maps or vertical cross-sections.
 
-    Parameters
-    ----------
-    ax : matplotlib Axes, optional
-        Target axes. May be passed positionally as the first argument or as
-        ``ax=...``. If omitted, ``plt.gca()`` is used.
-    x, y : array-like or xarray.DataArray
-        Either paired 1D points, 1D rectilinear grid axes, or 2D meshgrid-like
-        coordinates.
-    s, c : optional
-        Standard Matplotlib ``scatter`` size and color arguments.
-    where, mask : array-like, optional
-        Boolean or numeric selection mask for candidate points. Only one of the
-        two may be supplied.
-    density : float or tuple, optional
-        Spacing control for display-space thinning. Higher values retain more
-        points. If omitted, gridded inputs use the same default spacing idea as
-        the existing NCL-style vector thinning, while paired 1D points keep all
-        points by default.
-    distance, min_distance : float, optional
-        Explicit viewport-space thinning threshold. ``min_distance`` is kept as
-        a backward-compatible alias for ``distance``.
-    transform : optional
-        Standard Matplotlib transform. Cartopy CRS-like inputs are converted to
-        the matching Matplotlib transform automatically.
+    Supported call styles include ``scatter(ax, x, y, ...)``,
+    ``scatter(x, y, ..., ax=ax)``, ``scatter(x, y, ...)``, and
+    ``scatter(x, y, s, c, ...)``.
 
-    Supported call styles
-    ---------------------
-    ``scatter(ax, x, y, ...)``, ``scatter(x, y, ..., ax=ax)``,
-    ``scatter(x, y, ...)``, and ``scatter(x, y, s, c, ...)``.
+    Key arguments:
+
+    - ``x`` and ``y`` may be paired 1D points, 1D rectilinear grid axes, or
+      2D meshgrid-like coordinates.
+    - ``where`` or ``mask`` can select candidate stipple points from a gridded
+      field. Only one of them may be supplied.
+    - ``density`` controls display-space thinning. Higher values retain more
+      points. If it is omitted, gridded inputs use the default NCL-style
+      spacing rule while paired 1D points keep all points by default.
+    - ``distance`` is an explicit viewport-space thinning threshold.
+      ``min_distance`` remains available as a backward-compatible alias.
+    - ``transform`` accepts ordinary Matplotlib transforms and Cartopy CRS-like
+      objects, which are converted to the matching Matplotlib transform
+      automatically.
     """
 
     if not args:
