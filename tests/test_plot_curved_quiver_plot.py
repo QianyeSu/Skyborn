@@ -1085,6 +1085,27 @@ class TestCurlyVectorKey:
 
         plt.close(fig)
 
+    def test_curly_vector_legend_open_arrow_shaft_reaches_tip(
+        self, mock_curly_vector_set
+    ):
+        """Open key arrows should render as one connected glyph."""
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        legend = CurlyVectorKey(
+            ax=ax,
+            curly_vector_set=mock_curly_vector_set,
+            U=8.0,
+            units="m/s",
+            labelpos="E",
+        )
+        fig.canvas.draw()
+
+        arrow_tip = float(legend.head_left.get_xdata()[-1])
+        shaft_tip = float(legend.arrow.get_xdata()[-1])
+        assert shaft_tip == pytest.approx(arrow_tip)
+
+        plt.close(fig)
+
     def test_curly_vector_legend_supports_explicit_xy_axes_position(
         self, mock_curly_vector_set
     ):
