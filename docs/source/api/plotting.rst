@@ -10,6 +10,23 @@ Plotting Utilities
 
 .. autofunction:: skyborn.plot.createFigure
 
+Streamlines
+-----------
+
+.. autofunction:: skyborn.plot.streamline
+
+The same ``skyborn.plot.streamline`` entry point supports both call styles:
+
+- ``streamline(ax, x, y, u, v, ...)`` for direct NumPy / Matplotlib input
+- ``streamline(ds, x="lon", y="lat", u="u", v="v", ax=ax, ...)`` for xarray dataset input
+
+Unlike plain ``matplotlib`` ``streamplot``, Skyborn now keeps the streamline
+tracing and arrow placement under its own backend control. The public wrapper
+can still rectify non-uniform 1D profile axes, such as pressure levels in a
+latitude-pressure section, onto a uniform integration grid before plotting, and
+Cartopy map inputs can be regridded into the target projection automatically
+before tracing.
+
 Curly Vector Plots
 ------------------
 
@@ -27,6 +44,25 @@ The same ``skyborn.plot.curly_vector`` entry point supports both call styles:
 
 .. autoclass:: skyborn.plot.CurlyVectorKey
    :members:
+
+Scatter Stippling
+-----------------
+
+.. autofunction:: skyborn.plot.scatter
+
+The same ``skyborn.plot.scatter`` entry point supports the standard
+Matplotlib-style call forms:
+
+- ``scatter(ax, x, y, ...)``
+- ``scatter(x, y, ..., ax=ax)``
+- ``scatter(x, y, ...)``
+
+For gridded significance stippling, pass 1D grid axes together with a 2D
+``where`` or ``mask`` field. Skyborn expands the grid candidates and then
+applies NCL-style display-space thinning so dense lat-lon maps and
+latitude-pressure sections do not need manual ``[::step]`` tuning. In most
+cases, ``density`` is the only spacing control you need; ``distance`` is
+available when you want to override the retained-point spacing explicitly.
 
 Example Usage
 -------------
@@ -55,7 +91,23 @@ Example Usage
        {"u": (("lat", "lon"), u), "v": (("lat", "lon"), v)},
        coords={"lon": lon, "lat": lat},
    )
+   skb.plot.streamline(ax, lon, lat, u, v, density=1.0, color="k", linewidth=0.5)
    skb.plot.curly_vector(ds, x="lon", y="lat", u="u", v="v", ax=ax)
+
+   # Display-space-thinned stippling on a gridded significance mask
+   p = xr.DataArray(
+       np.random.random((25, 50)),
+       dims=("lat", "lon"),
+       coords={"lon": lon, "lat": lat},
+   )
+   skb.plot.scatter(ax, lon, lat, where=p < 0.05, density=2, s=4, c="0.3")
+
+   # Vertical-profile stippling uses the same API
+   level = np.linspace(1000, 100, 12)
+   profile_sig = np.random.random((12, 25)) < 0.08
+   fig2, ax2 = plt.subplots()
+   skb.plot.scatter(ax2, lat, level, where=profile_sig, density=2, s=4, c="0.2")
+   ax2.invert_yaxis()
 
 Visualization Examples
 ----------------------
@@ -71,7 +123,13 @@ The plotting module is designed for creating publication-quality atmospheric vis
    fig = skb.plot.createFigure(figsize=(12, 8), dpi=300)
    ax = fig.add_subplot(111)
 
+   # Plot black-and-white streamlines from arrays
+   stream = skb.plot.streamline(ax, lon, lat, u_wind, v_wind, color="k", linewidth=0.5)
+
    # Plot wind vectors from arrays
    curly = skb.plot.curly_vector(ax, lon, lat, u_wind, v_wind)
+
+   # Add significance stippling from a gridded mask
+   stipple = skb.plot.scatter(ax, lon, lat, where=p_values < 0.05, density=2)
 
 For complete visualization examples, see :doc:`../gallery`.
