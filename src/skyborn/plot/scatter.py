@@ -270,19 +270,23 @@ def _scatter_impl(
     zorder: float | None = None,
     **kwargs: Any,
 ):
-    """Scatter gridded or paired points with optional display-space thinning.
+    """Render scatter points after optional NCL-style display-space thinning.
 
-    The rendering pipeline is:
+    This is the core implementation behind the public :func:`scatter` wrapper.
+    Its job is not just to call ``Axes.scatter``. It also has to reconcile the
+    looser input conventions used by Skyborn plotting helpers:
 
-    1. Normalize coordinates into either paired points or an expanded grid.
-    2. Build the candidate mask from ``where`` / ``mask`` plus finite-point
-       checks on the coordinates themselves.
-    3. Transform candidates into display space so thinning is controlled by
-       what the viewer actually sees on the canvas, not by raw grid stride.
-    4. Reuse the existing NCL-style viewport thinning helper to keep only one
-       point inside each local spacing neighborhood.
-    5. Subset all array-like scatter style arguments so they still match the
-       retained coordinates exactly.
+    - ``x`` / ``y`` may describe paired 1D points,
+    - or they may describe a rectilinear grid that should be expanded first,
+    - while ``where`` / ``mask`` / ``s`` / ``c`` may arrive as NumPy arrays or
+      ``xarray.DataArray`` objects that still follow the original grid layout.
+
+    Once those inputs are normalized, the thinning itself is deliberately done
+    in display space rather than data space. That is the key design choice:
+    stipple density should follow what the viewer sees on the final axes or map
+    projection, not the raw array stride of the source field. This matches the
+    same idea used by the curly-vector implementation and avoids repeated manual
+    ``[::step]`` tuning when the projection, extent, or panel aspect changes.
     """
 
     if transform is None:
@@ -292,6 +296,9 @@ def _scatter_impl(
     if distance is None:
         distance = min_distance
 
+    # Normalize all supported coordinate styles into one common representation.
+    # After this step, paired points and grid-like inputs both flow through the
+    # same candidate-selection and thinning code path.
     x_values, y_values, candidate_shape, grid_like, target_dims = (
         _normalize_coordinates(
             x,
@@ -306,14 +313,18 @@ def _scatter_impl(
         target_dims=target_dims,
     )
 
-    # Candidate extraction always happens on flattened arrays so the same code
-    # path works for paired points, rectilinear grids, and 2D coordinates.
+    # Candidate extraction always happens on flattened arrays. This keeps the
+    # downstream logic identical for 1D paired points, 1D rectilinear axes that
+    # were expanded to a grid, and already-meshed 2D coordinates.
     x_flat = np.ravel(np.asarray(x_values, dtype=float))
     y_flat = np.ravel(np.asarray(y_values, dtype=float))
     valid = selection.ravel() & np.isfinite(x_flat) & np.isfinite(y_flat)
     candidate_indices = np.flatnonzero(valid)
 
     if candidate_indices.size == 0:
+        # Preserve Matplotlib behavior even when nothing survives selection:
+        # return a real PathCollection and keep array-like style arguments in
+        # the shape that an empty scatter call expects.
         empty_indices = np.empty(0, dtype=int)
         empty_s = _subset_scatter_value(
             s,
@@ -351,13 +362,23 @@ def _scatter_impl(
         [x_flat[candidate_indices], y_flat[candidate_indices]]
     )
     if transform is ax.transData:
+        # Ordinary Matplotlib scatter updates data limits automatically. Because
+        # Skyborn may thin points before the final scatter call, we update the
+        # limits from the full candidate cloud first so autoscaling still
+        # reflects the user's actual input domain rather than the retained subset.
         ax.update_datalim(candidate_points)
         ax.autoscale_view()
 
     # Thinning happens in display coordinates so the retained density follows
     # the current axes geometry and projection rather than array index spacing.
+    # This is what makes the result stable across different map projections,
+    # panel sizes, and vertical cross-section aspect ratios.
     display_points = np.asarray(transform.transform(candidate_points), dtype=float)
     display_valid = np.isfinite(display_points).all(axis=1)
+
+    # Projection transforms can legitimately map some candidate points outside
+    # the drawable region or to non-finite coordinates. Those points cannot
+    # participate in viewport thinning and would also fail in the final scatter.
     candidate_indices = candidate_indices[display_valid]
     candidate_points = candidate_points[display_valid]
     display_points = display_points[display_valid]
@@ -368,14 +389,23 @@ def _scatter_impl(
         grid_like=grid_like,
     )
     if spacing_fraction is None or candidate_indices.size <= 1:
+        # Paired point input keeps all points by default, and any explicit
+        # thinning request is irrelevant when there is at most one candidate.
         retained_indices = np.arange(candidate_indices.size, dtype=int)
     else:
+        # Convert from absolute display pixels into the normalized viewport
+        # coordinate system expected by the shared NCL-style thinning helper.
+        # The helper returns indices into the current candidate list, not the
+        # original flattened grid.
         mapped_points = _map_ncl_display_points_to_viewport(display_points, ax.bbox)
         retained_indices = np.asarray(
             _thin_ncl_mapped_candidates(mapped_points, spacing_fraction),
             dtype=int,
         )
 
+    # Any per-point style arrays must be subset with the same retained indices.
+    # Otherwise the final ``ax.scatter`` call would receive coordinates and
+    # style metadata with inconsistent lengths.
     s_selected = _subset_scatter_value(
         s,
         candidate_shape=candidate_shape,
@@ -400,6 +430,9 @@ def _scatter_impl(
     if zorder is not None:
         plot_kwargs["zorder"] = zorder
 
+    # The final drawing step is just plain Matplotlib scatter. All of the
+    # Skyborn-specific behavior lives in the normalization, thinning, and
+    # style-subsetting stages above.
     retained_points = candidate_points[retained_indices]
     return ax.scatter(
         retained_points[:, 0],
@@ -418,28 +451,71 @@ def scatter(*args: Any, **kwargs: Any):
     """Scatter points with optional NCL-style display-space thinning.
 
     This is the public plotting entry point exposed by ``skyborn.plot``.
-    It keeps a Matplotlib-compatible calling convention while adding
-    display-space thinning for gridded stippling use cases such as
-    significance masks on maps or vertical cross-sections.
+    It keeps a Matplotlib-compatible calling convention while adding the
+    display-space thinning workflow needed for gridded stippling use cases such
+    as significance masks on map projections and vertical cross-sections.
 
-    Supported call styles include ``scatter(ax, x, y, ...)``,
-    ``scatter(x, y, ..., ax=ax)``, ``scatter(x, y, ...)``, and
-    ``scatter(x, y, s, c, ...)``.
+    Unlike a simple ``x[::step], y[::step]`` subsampling strategy, Skyborn
+    first transforms candidate points into the current display geometry and then
+    thins them there. That means the visible stipple density responds to the
+    actual projection, axes aspect ratio, and panel extent seen by the user.
 
-    Key arguments:
+    Supported call styles
+    ---------------------
+    Matplotlib-style
+        ``scatter(ax, x, y, ...)``
+        ``scatter(x, y, ..., ax=ax)``
+        ``scatter(x, y, ...)``
+        ``scatter(x, y, s, c, ...)``
 
-    - ``x`` and ``y`` may be paired 1D points, 1D rectilinear grid axes, or
-      2D meshgrid-like coordinates.
-    - ``where`` or ``mask`` can select candidate stipple points from a gridded
-      field. Only one of them may be supplied.
-    - ``density`` controls display-space thinning. Higher values retain more
-      points. If it is omitted, gridded inputs use the default NCL-style
-      spacing rule while paired 1D points keep all points by default.
-    - ``distance`` is an explicit viewport-space thinning threshold.
-      ``min_distance`` remains available as a backward-compatible alias.
-    - ``transform`` accepts ordinary Matplotlib transforms and Cartopy CRS-like
-      objects, which are converted to the matching Matplotlib transform
-      automatically.
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes, optional
+        Target axes. If omitted, ``matplotlib.pyplot.gca()`` is used.
+    x, y : array-like
+        Coordinate specification for the points to draw. Supported forms are:
+
+        - paired 1D point coordinates, where ``x[i]`` and ``y[i]`` already
+          describe one point each,
+        - 1D rectilinear grid axes, which are expanded internally with
+          ``numpy.meshgrid`` when a gridded mask or style field is supplied,
+        - or 2D meshgrid-like coordinate arrays.
+    s : scalar or array-like, optional
+        Marker size passed through to ``matplotlib.axes.Axes.scatter``. If an
+        array is supplied, it may be defined on the full grid, on the masked
+        candidate set, or on the already flattened point list.
+    c : color-like or array-like, optional
+        Marker color argument passed through to ``Axes.scatter``. Array-like
+        color fields follow the same subsetting rules as ``s``.
+    where, mask : array-like, optional
+        Candidate-selection mask. Use only one of them. For gridded stippling,
+        these are typically 2D boolean or numeric fields aligned with the input
+        grid. Numeric masks follow NumPy truthiness, while NaN values are
+        treated as invalid rather than truthy.
+    density : float, optional
+        Relative stipple density. Larger values retain more points. When
+        omitted, gridded inputs use the default NCL-style spacing rule and
+        paired 1D points keep all points.
+    distance : float, optional
+        Explicit display-space thinning distance in normalized viewport units.
+        Use this when an exact spacing threshold is preferred over the relative
+        ``density`` control.
+    min_distance : float, optional
+        Backward-compatible alias for ``distance``.
+    transform : optional
+        Source coordinate transform. Standard Matplotlib transforms are passed
+        through directly. Cartopy CRS-like objects are converted to the
+        matching Matplotlib transform automatically.
+    zorder : float, optional
+        Matplotlib z-order of the generated scatter collection.
+    **kwargs
+        Additional keyword arguments forwarded to ``Axes.scatter`` after any
+        array-like values have been subset to the retained points.
+
+    Returns
+    -------
+    matplotlib.collections.PathCollection
+        The scatter collection returned by ``Axes.scatter``.
     """
 
     if not args:
