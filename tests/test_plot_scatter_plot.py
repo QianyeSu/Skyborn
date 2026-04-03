@@ -101,6 +101,83 @@ class TestScatterPlot:
 
         plt.close(fig)
 
+    def test_array_scatter_accepts_color_and_linewidth_aliases(self):
+        x = np.linspace(0.0, 4.0, 5)
+        y = np.linspace(10.0, 13.0, 4)
+        mask = np.array(
+            [
+                [True, False, True, False, True],
+                [False, True, False, True, False],
+                [True, True, False, False, True],
+                [False, False, True, True, False],
+            ],
+            dtype=bool,
+        )
+        colors = np.arange(mask.size, dtype=float).reshape(mask.shape)
+        linewidth = colors / 10.0 + 0.5
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        result = array_scatter(
+            ax,
+            x,
+            y,
+            where=mask,
+            color=colors,
+            linewidth=linewidth,
+            cmap="viridis",
+            vmin=0.0,
+            vmax=float(colors.max()),
+            distance=1e-6,
+        )
+
+        np.testing.assert_allclose(result.get_array(), colors[mask])
+        np.testing.assert_allclose(result.get_linewidths(), linewidth[mask])
+        assert result.norm.vmin == pytest.approx(0.0)
+        assert result.norm.vmax == pytest.approx(float(colors.max()))
+
+        plt.close(fig)
+
+    def test_array_scatter_accepts_facecolor_and_edgecolor_aliases(self):
+        x = np.linspace(0.0, 1.0, 5)
+        y = np.linspace(1.0, 2.0, 5)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        result = array_scatter(
+            ax,
+            x,
+            y,
+            s=25.0,
+            facecolor="gold",
+            edgecolor="face",
+        )
+
+        face = np.asarray(result.get_facecolors(), dtype=float)
+        edge = np.asarray(result.get_edgecolors(), dtype=float)
+        assert face.shape[0] > 0
+        np.testing.assert_allclose(edge, face)
+
+        plt.close(fig)
+
+    def test_array_scatter_rejects_conflicting_color_aliases(self):
+        x = np.linspace(0.0, 1.0, 5)
+        y = np.linspace(1.0, 2.0, 5)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        with pytest.raises(ValueError, match="Use only one of 'c' or 'color'"):
+            array_scatter(ax, x, y, c="tab:red", color="tab:blue")
+        plt.close(fig)
+
+    def test_array_scatter_rejects_conflicting_linewidth_aliases(self):
+        x = np.linspace(0.0, 1.0, 5)
+        y = np.linspace(1.0, 2.0, 5)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        with pytest.raises(
+            ValueError, match="Use only one of 'linewidth' or 'linewidths'"
+        ):
+            array_scatter(ax, x, y, linewidth=1.0, linewidths=2.0)
+        plt.close(fig)
+
     def test_array_scatter_transposes_dataarray_mask_to_xy_dims(self):
         lon = xr.DataArray(
             np.linspace(100.0, 110.0, 4),
