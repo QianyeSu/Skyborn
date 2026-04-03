@@ -34,8 +34,6 @@ Module Overview
 **plot**
    Specialized atmospheric data visualization with NCL-like curly vectors
    and display-space-thinned scatter stippling for maps and vertical profiles.
-   Also includes a plain streamline wrapper for black-and-white or colored
-   flow visualizations on regular axes and Cartopy maps.
 
 **gradients**
    Spatial and temporal gradient calculations for atmospheric fields
