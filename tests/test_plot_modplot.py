@@ -219,6 +219,40 @@ class TestCurlyVector:
 
         plt.close(fig)
 
+    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    def test_curly_vector_accepts_quiver_style_aliases(
+        self, mock_ncl_curly, sample_vector_field
+    ):
+        """Matplotlib-style aliases should resolve onto canonical kwargs."""
+        x, y, u, v = sample_vector_field
+        color_field = np.hypot(u, v)
+        mock_ncl_curly.return_value = Mock(spec=CurlyVectorPlotSet)
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        curly_vector(
+            ax,
+            x,
+            y,
+            u,
+            v,
+            c=color_field,
+            linewidths=2.5,
+            facecolors="gold",
+            edgecolors="navy",
+            vmin=0.1,
+            vmax=1.2,
+        )
+
+        kwargs = mock_ncl_curly.call_args.kwargs
+        np.testing.assert_allclose(kwargs["color"], color_field)
+        assert kwargs["linewidth"] == pytest.approx(2.5)
+        assert kwargs["facecolor"] == "gold"
+        assert kwargs["edgecolor"] == "navy"
+        assert kwargs["vmin"] == pytest.approx(0.1)
+        assert kwargs["vmax"] == pytest.approx(1.2)
+
+        plt.close(fig)
+
     def test_curly_vector_rejects_conflicting_anchor_and_pivot(
         self, sample_vector_field
     ):
@@ -228,6 +262,55 @@ class TestCurlyVector:
 
         with pytest.raises(ValueError, match="anchor and pivot refer to different"):
             curly_vector(ax, x, y, u, v, anchor="tail", pivot="tip")
+
+        plt.close(fig)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"color": "k", "c": "r"}, "Use only one of 'c' or 'color'"),
+            (
+                {"linewidth": 1.0, "linewidths": 2.0},
+                "Use only one of 'linewidth' or 'linewidths'",
+            ),
+            (
+                {"facecolor": "gold", "facecolors": "orange"},
+                "Use only one of 'facecolor' or 'facecolors'",
+            ),
+            (
+                {"edgecolor": "k", "edgecolors": "face"},
+                "Use only one of 'edgecolor' or 'edgecolors'",
+            ),
+        ],
+    )
+    def test_curly_vector_rejects_conflicting_style_aliases(
+        self, sample_vector_field, kwargs, message
+    ):
+        """Conflicting singular/plural style aliases should fail fast."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        with pytest.raises(ValueError, match=message):
+            curly_vector(ax, x, y, u, v, **kwargs)
+
+        plt.close(fig)
+
+    def test_curly_vector_rejects_norm_with_vmin_vmax(self, sample_vector_field):
+        """Matplotlib-style normalization inputs should not be ambiguous."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        with pytest.raises(ValueError, match="Use only one of 'norm' or 'vmin'/'vmax'"):
+            curly_vector(
+                ax,
+                x,
+                y,
+                u,
+                v,
+                c=np.hypot(u, v),
+                norm=mcolors.Normalize(0.0, 1.0),
+                vmin=0.0,
+            )
 
         plt.close(fig)
 
@@ -249,6 +332,30 @@ class TestCurlyVector:
         assert isinstance(result, CurlyVectorPlotSet)
         assert len(result.lines.get_segments()) > 0
         assert len(result.arrows) == 0
+
+        plt.close(fig)
+
+    def test_curly_vector_edgecolors_face_matches_facecolor(self, sample_vector_field):
+        """Filled heads should accept ``edgecolors='face'`` like Matplotlib."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        result = curly_vector(
+            ax,
+            x,
+            y,
+            u,
+            v,
+            arrowstyle="-|>",
+            density=0.8,
+            facecolors="gold",
+            edgecolors="face",
+        )
+
+        assert result.arrows
+        face_rgba = np.asarray(result.arrows[0].get_facecolor())
+        edge_rgba = np.asarray(result.arrows[0].get_edgecolor())
+        np.testing.assert_allclose(face_rgba, edge_rgba)
 
         plt.close(fig)
 
