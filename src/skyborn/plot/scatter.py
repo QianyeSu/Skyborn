@@ -449,10 +449,8 @@ def scatter(*args: Any, **kwargs: Any):
 
     Supported call styles
     ---------------------
-    ``scatter(ax, x, y, ...)``
-    ``scatter(x, y, ..., ax=ax)``
-    ``scatter(x, y, ...)``
-    ``scatter(x, y, s, c, ...)``
+    ``scatter(ax, x, y, ...)``, ``scatter(x, y, ..., ax=ax)``,
+    ``scatter(x, y, ...)``, and ``scatter(x, y, s, c, ...)``.
     """
 
     if not args:
