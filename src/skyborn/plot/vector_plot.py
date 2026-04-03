@@ -429,6 +429,7 @@ def curly_vector(
     alpha: float | None = None,
     facecolor: Any = None,
     edgecolor: Any = None,
+    rasterized: bool | None = None,
     arrowsize: float = 1,
     arrowstyle: str = "->",
     transform: Any = None,
@@ -486,6 +487,10 @@ def curly_vector(
         ``arrowstyle="-|>"`` head. When omitted, the resolved shaft color is
         reused. Open ``"->"`` heads remain line-based and therefore ignore
         ``facecolor``.
+    rasterized : bool, optional
+        Whether to rasterize the generated curly-vector artists when exporting
+        to vector formats such as PDF or SVG. This changes output rendering,
+        not the underlying curly-vector algorithm.
     arrowsize : float
         Scaling factor for the arrow size.
     arrowstyle : str
@@ -624,6 +629,7 @@ def curly_vector(
         alpha=alpha,
         facecolor=facecolor,
         edgecolor=edgecolor,
+        rasterized=rasterized,
         arrowsize=arrowsize,
         arrowstyle=arrowstyle,
         transform=transform,
@@ -694,6 +700,7 @@ class CurlyVectorPlotSet:
         anchor: str | None = None,
         ncl_preset: str | None = None,
         length_scale: Any = None,
+        rasterized: bool | None = None,
     ) -> None:
         self.lines = lines
         self.arrows = tuple(arrows) if arrows is not None else ()
@@ -718,6 +725,7 @@ class CurlyVectorPlotSet:
         self.ncl_preset = ncl_preset
         self.length_scale = length_scale
         self.ref_length_fraction = resolution
+        self.rasterized = rasterized
 
         # New attribute added for handling scaling
         self.max_magnitude = (
@@ -850,6 +858,7 @@ def _curly_vector_ncl(
     alpha=None,
     facecolor=None,
     edgecolor=None,
+    rasterized=None,
     arrowsize=1,
     arrowstyle="->",
     transform=None,
@@ -913,6 +922,8 @@ def _curly_vector_ncl(
             zorder=zorder,
             alpha=alpha,
         )
+        if rasterized is not None:
+            lc.set_rasterized(bool(rasterized))
         axes.add_collection(lc, autolim=False)
         return CurlyVectorPlotSet(
             lc,
@@ -935,6 +946,7 @@ def _curly_vector_ncl(
             density=density,
             anchor=resolved_anchor,
             length_scale=None,
+            rasterized=rasterized,
         )
 
     color_field, color_is_field = _coerce_matching_plot_field(color, grid.shape)
@@ -1135,11 +1147,15 @@ def _curly_vector_ncl(
         line_kw["alpha"] = alpha
 
     lc = mcollections.LineCollection(streamlines, transform=artist_transform, **line_kw)
+    if rasterized is not None:
+        lc.set_rasterized(bool(rasterized))
     # The axes limits were already seeded from the full grid extent above, so
     # avoid Cartopy reprojecting every segment again just to recompute datalim.
     axes.add_collection(lc, autolim=False)
 
     for patch in arrows:
+        if rasterized is not None:
+            patch.set_rasterized(bool(rasterized))
         axes.add_patch(patch)
 
     axes.autoscale_view()
@@ -1165,6 +1181,7 @@ def _curly_vector_ncl(
         anchor=resolved_anchor,
         ncl_preset=ncl_preset,
         length_scale=length_scale,
+        rasterized=rasterized,
     )
 
 
