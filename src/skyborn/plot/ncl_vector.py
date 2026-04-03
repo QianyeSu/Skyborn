@@ -665,6 +665,9 @@ def _curly_vector_from_dataset(
     color: Any = None,
     cmap: Any = None,
     norm: Any = None,
+    alpha: float | None = None,
+    facecolor: Any = None,
+    edgecolor: Any = None,
     arrowsize=1,
     arrowstyle="->",
     transform: Any = None,
@@ -674,6 +677,7 @@ def _curly_vector_from_dataset(
     grains=15,
     broken_streamlines=True,
     anchor: str | None = None,
+    pivot: str | None = None,
     ref_magnitude: float | None = None,
     ref_length: float | None = None,
     min_frac_length=0.0,
@@ -723,6 +727,12 @@ def _curly_vector_from_dataset(
         Data normalization and colormapping parameters for *color*; only used
         if *color* is an array of floats. See `~.Axes.imshow` for a detailed
         description.
+    alpha : float, optional
+        Matplotlib artist alpha applied to both shafts and arrow heads.
+    facecolor, edgecolor : color-like, optional
+        Explicit arrow-head fill and edge colors. These mainly affect the
+        filled ``arrowstyle="-|>"`` head. When omitted, the resolved shaft
+        color is reused.
     arrowsize : float
         Scaling factor for the arrow size.
     arrowstyle : str
@@ -743,6 +753,8 @@ def _curly_vector_from_dataset(
     anchor : {'tail', 'center', 'head'} or None, default: None
         Anchor point used by the NCL-like curved-glyph renderer. If omitted, the value
         is inferred from ``integration_direction``.
+    pivot : {'tail', 'mid', 'middle', 'tip'} or None, default: None
+        Matplotlib ``quiver``-style alias for ``anchor``.
     ref_magnitude : float or None, default: None
         Reference vector magnitude for mapping data magnitude to glyph length.
     ref_length : float or None, default: None
@@ -851,6 +863,9 @@ def _curly_vector_from_dataset(
         color=color,
         cmap=cmap,
         norm=norm,
+        alpha=alpha,
+        facecolor=facecolor,
+        edgecolor=edgecolor,
         arrowsize=arrowsize,
         arrowstyle=arrowstyle,
         transform=transform,
@@ -860,6 +875,7 @@ def _curly_vector_from_dataset(
         grains=grains,
         broken_streamlines=broken_streamlines,
         anchor=anchor,
+        pivot=pivot,
         ref_magnitude=ref_magnitude,
         ref_length=ref_length,
         min_frac_length=min_frac_length,
@@ -880,6 +896,9 @@ def _curly_vector_from_arrays(
     color: Any = None,
     cmap: Any = None,
     norm: Any = None,
+    alpha: float | None = None,
+    facecolor: Any = None,
+    edgecolor: Any = None,
     arrowsize=1,
     arrowstyle="->",
     transform: Any = None,
@@ -889,6 +908,7 @@ def _curly_vector_from_arrays(
     grains=15,
     broken_streamlines=True,
     anchor: str | None = None,
+    pivot: str | None = None,
     ref_magnitude: float | None = None,
     ref_length: float | None = None,
     min_frac_length=0.0,
@@ -925,6 +945,9 @@ def _curly_vector_from_arrays(
         color=color,
         cmap=cmap,
         norm=norm,
+        alpha=alpha,
+        facecolor=facecolor,
+        edgecolor=edgecolor,
         arrowsize=arrowsize,
         arrowstyle=arrowstyle,
         transform=transform,
@@ -934,6 +957,7 @@ def _curly_vector_from_arrays(
         grains=grains,
         broken_streamlines=broken_streamlines,
         anchor=anchor,
+        pivot=pivot,
         ref_magnitude=ref_magnitude,
         ref_length=ref_length,
         min_frac_length=min_frac_length,
@@ -983,6 +1007,11 @@ def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
     cmap, norm : optional
         Matplotlib colormap and normalization used when ``color`` is a scalar
         field.
+    alpha : float, optional
+        Matplotlib artist alpha applied to both shafts and arrow heads.
+    facecolor, edgecolor : color-like, optional
+        Arrow-head fill and edge colors, similar to ``plt.quiver``. These are
+        mainly relevant for the filled ``arrowstyle="-|>"`` head.
     arrowsize : float, default: 1
         Scales the arrow-head size.
     arrowstyle : str, default: ``"->"``
@@ -1002,6 +1031,8 @@ def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
     anchor : {"tail", "center", "head"}, optional
         Explicit glyph anchor override. If omitted, it is inferred from
         ``integration_direction``.
+    pivot : {"tail", "mid", "middle", "tip"}, optional
+        Matplotlib ``quiver``-style alias for ``anchor``.
     ref_magnitude : float, optional
         Reference vector magnitude used for NCL-like length scaling.
     ref_length : float, optional
