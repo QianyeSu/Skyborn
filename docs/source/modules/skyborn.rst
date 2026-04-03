@@ -32,7 +32,10 @@ Module Overview
    Interpolation and regridding functions with improved dimension handling
 
 **plot**
-   Specialized atmospheric data visualization with curved quiver plots
+   Specialized atmospheric data visualization with NCL-like curly vectors
+   and display-space-thinned scatter stippling for maps and vertical profiles.
+   Also includes a plain streamline wrapper for black-and-white or colored
+   flow visualizations on regular axes and Cartopy maps.
 
 **gradients**
    Spatial and temporal gradient calculations for atmospheric fields
@@ -74,6 +77,7 @@ To use any module, import Skyborn and access the module:
 
    # Create visualizations
    fig, ax = skb.plot.createFigure((10, 6), 1, 1)
+   stipple = skb.plot.scatter(ax, lon, lat, where=p_values < 0.05, density=2)
 
    # NEW: Use spherical harmonic analysis
    from skyborn.spharm import Spharmt
