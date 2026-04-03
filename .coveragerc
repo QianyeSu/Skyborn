@@ -3,6 +3,7 @@ source = src
 omit =
     */windspharm/iris.py
     */spharm/__init__.py
+    */skyborn/plot/*
     */tests/*
     */build/*
     */site-packages/*
