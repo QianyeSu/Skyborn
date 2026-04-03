@@ -22,6 +22,32 @@ __all__ = ["curly_vector", "CurlyVectorPlotSet"]
 _SUPPORTED_CURLY_ARROWSTYLES = ("->", "-|>")
 _ISSUED_NATIVE_WARNINGS: set[str] = set()
 _NATIVE_IMPORT_ERROR: Exception | None = None
+_CURLY_VECTOR_NCL_KWARG_NAMES = (
+    "density",
+    "linewidth",
+    "color",
+    "cmap",
+    "norm",
+    "alpha",
+    "facecolor",
+    "edgecolor",
+    "rasterized",
+    "arrowsize",
+    "arrowstyle",
+    "transform",
+    "zorder",
+    "start_points",
+    "integration_direction",
+    "grains",
+    "broken_streamlines",
+    "anchor",
+    "ref_magnitude",
+    "ref_length",
+    "min_frac_length",
+    "min_distance",
+    "allow_non_uniform_grid",
+    "ncl_preset",
+)
 
 try:
     from .nclcurly_native import sample_grid_field as _sample_grid_field_native
@@ -167,6 +193,13 @@ def _normalize_supported_arrowstyle(arrowstyle: Any) -> str:
         supported = ", ".join(repr(value) for value in _SUPPORTED_CURLY_ARROWSTYLES)
         raise ValueError(f"arrowstyle must be one of {supported}; got {arrowstyle!r}")
     return normalized
+
+
+def _collect_named_kwargs(
+    scope: dict[str, Any], names: tuple[str, ...]
+) -> dict[str, Any]:
+    """Collect a stable subset of keyword arguments from a local scope."""
+    return {name: scope[name] for name in names}
 
 
 def _normalize_artist_alpha(alpha: Any) -> float | None:
@@ -621,30 +654,7 @@ def curly_vector(
         y,
         u,
         v,
-        density=density,
-        linewidth=linewidth,
-        color=color,
-        cmap=cmap,
-        norm=norm,
-        alpha=alpha,
-        facecolor=facecolor,
-        edgecolor=edgecolor,
-        rasterized=rasterized,
-        arrowsize=arrowsize,
-        arrowstyle=arrowstyle,
-        transform=transform,
-        zorder=zorder,
-        start_points=start_points,
-        integration_direction=integration_direction,
-        grains=grains,
-        broken_streamlines=broken_streamlines,
-        anchor=anchor,
-        ref_magnitude=ref_magnitude,
-        ref_length=ref_length,
-        min_frac_length=min_frac_length,
-        min_distance=min_distance,
-        allow_non_uniform_grid=allow_non_uniform_grid,
-        ncl_preset=ncl_preset,
+        **_collect_named_kwargs(locals(), _CURLY_VECTOR_NCL_KWARG_NAMES),
     )
 
 
