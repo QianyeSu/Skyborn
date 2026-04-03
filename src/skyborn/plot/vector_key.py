@@ -247,6 +247,10 @@ class CurlyVectorKey(Artist):
     ) -> None:
         tip_x = max(float(tip_x), float(start_x))
         shaft_end_x = max(start_x, tip_x - max(head_length, 0.0))
+        if self.arrowstyle == "->":
+            # Keep the shaft running beneath the open head so the key arrow
+            # reads as one connected glyph instead of a detached line plus head.
+            shaft_end_x = tip_x
         self.arrow.set_data([start_x, shaft_end_x], [center_y, center_y])
         self.arrow.set_visible(True)
 
