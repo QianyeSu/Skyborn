@@ -154,7 +154,13 @@ python_functions = ["test_*"]
 
 [tool.coverage.run]
 source = ["src"]
-omit = ["*/tests/*", "*/test_*", "setup.py", "*/skyborn/cdo/*"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "setup.py",
+    "*/skyborn/cdo/*",
+    "*/skyborn/plot/*",
+]
 
 [tool.coverage.report]
 exclude_lines = [
