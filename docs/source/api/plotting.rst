@@ -10,23 +10,6 @@ Plotting Utilities
 
 .. autofunction:: skyborn.plot.createFigure
 
-Streamlines
------------
-
-.. autofunction:: skyborn.plot.streamline
-
-The same ``skyborn.plot.streamline`` entry point supports both call styles:
-
-- ``streamline(ax, x, y, u, v, ...)`` for direct NumPy / Matplotlib input
-- ``streamline(ds, x="lon", y="lat", u="u", v="v", ax=ax, ...)`` for xarray dataset input
-
-Unlike plain ``matplotlib`` ``streamplot``, Skyborn now keeps the streamline
-tracing and arrow placement under its own backend control. The public wrapper
-can still rectify non-uniform 1D profile axes, such as pressure levels in a
-latitude-pressure section, onto a uniform integration grid before plotting, and
-Cartopy map inputs can be regridded into the target projection automatically
-before tracing.
-
 Curly Vector Plots
 ------------------
 
@@ -91,7 +74,6 @@ Example Usage
        {"u": (("lat", "lon"), u), "v": (("lat", "lon"), v)},
        coords={"lon": lon, "lat": lat},
    )
-   skb.plot.streamline(ax, lon, lat, u, v, density=1.0, color="k", linewidth=0.5)
    skb.plot.curly_vector(ds, x="lon", y="lat", u="u", v="v", ax=ax)
 
    # Display-space-thinned stippling on a gridded significance mask
@@ -122,9 +104,6 @@ The plotting module is designed for creating publication-quality atmospheric vis
    # Create figure
    fig = skb.plot.createFigure(figsize=(12, 8), dpi=300)
    ax = fig.add_subplot(111)
-
-   # Plot black-and-white streamlines from arrays
-   stream = skb.plot.streamline(ax, lon, lat, u_wind, v_wind, color="k", linewidth=0.5)
 
    # Plot wind vectors from arrays
    curly = skb.plot.curly_vector(ax, lon, lat, u_wind, v_wind)
