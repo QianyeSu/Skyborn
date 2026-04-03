@@ -24,6 +24,32 @@ if TYPE_CHECKING:
 
 __all__ = ["curly_vector", "CurlyVectorKey", "curly_vector_key"]
 _ISSUED_PLOT_WARNINGS: set[str] = set()
+_ARRAY_CURLY_VECTOR_KWARG_NAMES = (
+    "density",
+    "linewidth",
+    "color",
+    "cmap",
+    "norm",
+    "alpha",
+    "facecolor",
+    "edgecolor",
+    "rasterized",
+    "arrowsize",
+    "arrowstyle",
+    "transform",
+    "zorder",
+    "start_points",
+    "integration_direction",
+    "grains",
+    "broken_streamlines",
+    "anchor",
+    "pivot",
+    "ref_magnitude",
+    "ref_length",
+    "min_frac_length",
+    "min_distance",
+    "ncl_preset",
+)
 
 
 def _is_cartopy_crs_like(transform) -> bool:
@@ -39,6 +65,13 @@ def _warn_plot_once(key: str, message: str) -> None:
         return
     _ISSUED_PLOT_WARNINGS.add(key)
     warnings.warn(message, UserWarning, stacklevel=3)
+
+
+def _collect_named_kwargs(
+    scope: dict[str, Any], names: tuple[str, ...]
+) -> dict[str, Any]:
+    """Collect a stable subset of keyword arguments from a local scope."""
+    return {name: scope[name] for name in names}
 
 
 def _apply_dataset_isel(da: xr.DataArray, isel):
@@ -862,30 +895,7 @@ def _curly_vector_from_dataset(
         y,
         u,
         v,
-        density=density,
-        linewidth=linewidth,
-        color=color,
-        cmap=cmap,
-        norm=norm,
-        alpha=alpha,
-        facecolor=facecolor,
-        edgecolor=edgecolor,
-        rasterized=rasterized,
-        arrowsize=arrowsize,
-        arrowstyle=arrowstyle,
-        transform=transform,
-        zorder=zorder,
-        start_points=start_points,
-        integration_direction=integration_direction,
-        grains=grains,
-        broken_streamlines=broken_streamlines,
-        anchor=anchor,
-        pivot=pivot,
-        ref_magnitude=ref_magnitude,
-        ref_length=ref_length,
-        min_frac_length=min_frac_length,
-        min_distance=min_distance,
-        ncl_preset=ncl_preset,
+        **_collect_named_kwargs(locals(), _ARRAY_CURLY_VECTOR_KWARG_NAMES),
     )
     return obj
 
@@ -946,30 +956,7 @@ def _curly_vector_from_arrays(
         y,
         u,
         v,
-        density=density,
-        linewidth=linewidth,
-        color=color,
-        cmap=cmap,
-        norm=norm,
-        alpha=alpha,
-        facecolor=facecolor,
-        edgecolor=edgecolor,
-        rasterized=rasterized,
-        arrowsize=arrowsize,
-        arrowstyle=arrowstyle,
-        transform=transform,
-        zorder=zorder,
-        start_points=start_points,
-        integration_direction=integration_direction,
-        grains=grains,
-        broken_streamlines=broken_streamlines,
-        anchor=anchor,
-        pivot=pivot,
-        ref_magnitude=ref_magnitude,
-        ref_length=ref_length,
-        min_frac_length=min_frac_length,
-        min_distance=min_distance,
-        ncl_preset=ncl_preset,
+        **_collect_named_kwargs(locals(), _ARRAY_CURLY_VECTOR_KWARG_NAMES),
     )
 
 
