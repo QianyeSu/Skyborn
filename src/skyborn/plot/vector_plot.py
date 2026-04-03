@@ -26,6 +26,8 @@ _CURLY_VECTOR_NCL_KWARG_NAMES = (
     "density",
     "linewidth",
     "color",
+    "vmin",
+    "vmax",
     "cmap",
     "norm",
     "alpha",
@@ -246,6 +248,51 @@ def _resolve_curly_anchor_alias(anchor: Any, pivot: Any) -> Any:
     return anchor
 
 
+def _resolve_curly_style_aliases(
+    *,
+    color: Any,
+    c: Any,
+    linewidth: Any,
+    linewidths: Any,
+    facecolor: Any,
+    facecolors: Any,
+    edgecolor: Any,
+    edgecolors: Any,
+    norm: Any,
+    vmin: Any,
+    vmax: Any,
+) -> tuple[Any, Any, Any, Any, float | None, float | None]:
+    """Resolve Matplotlib-style curly-vector aliases onto canonical names."""
+    if color is not None and c is not None:
+        raise ValueError("Use only one of 'c' or 'color'")
+    if linewidth is not None and linewidths is not None:
+        raise ValueError("Use only one of 'linewidth' or 'linewidths'")
+    if facecolor is not None and facecolors is not None:
+        raise ValueError("Use only one of 'facecolor' or 'facecolors'")
+    if edgecolor is not None and edgecolors is not None:
+        raise ValueError("Use only one of 'edgecolor' or 'edgecolors'")
+    if norm is not None and (vmin is not None or vmax is not None):
+        raise ValueError("Use only one of 'norm' or 'vmin'/'vmax'")
+
+    if color is None:
+        color = c
+    if linewidth is None:
+        linewidth = linewidths
+    if facecolor is None:
+        facecolor = facecolors
+    if edgecolor is None:
+        edgecolor = edgecolors
+
+    vmin_value = None if vmin is None else float(vmin)
+    vmax_value = None if vmax is None else float(vmax)
+    if vmin_value is not None and not np.isfinite(vmin_value):
+        raise ValueError("vmin must be finite")
+    if vmax_value is not None and not np.isfinite(vmax_value):
+        raise ValueError("vmax must be finite")
+
+    return color, linewidth, facecolor, edgecolor, vmin_value, vmax_value
+
+
 def _filled_float_array(values: Any) -> np.ndarray:
     array = np.ma.asarray(values, dtype=float)
     if np.ma.isMaskedArray(array):
@@ -456,12 +503,18 @@ def curly_vector(
     v: Any,
     density: Any = 1,
     linewidth: Any = None,
+    linewidths: Any = None,
     color: Any = None,
+    c: Any = None,
     cmap: Any = None,
     norm: Any = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
     alpha: float | None = None,
     facecolor: Any = None,
+    facecolors: Any = None,
     edgecolor: Any = None,
+    edgecolors: Any = None,
     rasterized: bool | None = None,
     arrowsize: float = 1,
     arrowstyle: str = "->",
@@ -503,14 +556,21 @@ def curly_vector(
         The width of the streamlines. With a 2D array the line width can be
         varied across the grid. The array must have the same shape as *u*
         and *v*.
+    linewidths : float or 2D array, optional
+        Matplotlib ``quiver``-style alias for ``linewidth``.
     color : color or 2D array
         The streamline color. If given an array, its values are converted to
         colors using *cmap* and *norm*.  The array must have the same shape
         as *u* and *v*.
+    c : color or 2D array, optional
+        Matplotlib-style alias for ``color``.
     cmap, norm
         Data normalization and colormapping parameters for *color*; only used
         if *color* is an array of floats. See `~.Axes.imshow` for a detailed
         description.
+    vmin, vmax : float, optional
+        Lower and upper normalization bounds used when ``color``/``c`` is a
+        scalar field and ``norm`` is omitted.
     alpha : float, optional
         Matplotlib artist alpha applied to both the curved shafts and the
         arrow heads.
@@ -520,6 +580,8 @@ def curly_vector(
         ``arrowstyle="-|>"`` head. When omitted, the resolved shaft color is
         reused. Open ``"->"`` heads remain line-based and therefore ignore
         ``facecolor``.
+    facecolors, edgecolors : color-like, optional
+        Matplotlib-style aliases for ``facecolor`` and ``edgecolor``.
     rasterized : bool, optional
         Whether to rasterize the generated curly-vector artists when exporting
         to vector formats such as PDF or SVG. This changes output rendering,
@@ -586,6 +648,20 @@ def curly_vector(
           the axes. Open arrow styles use line segments only and therefore
           return an empty tuple.
     """
+    color, linewidth, facecolor, edgecolor, vmin, vmax = _resolve_curly_style_aliases(
+        color=color,
+        c=c,
+        linewidth=linewidth,
+        linewidths=linewidths,
+        facecolor=facecolor,
+        facecolors=facecolors,
+        edgecolor=edgecolor,
+        edgecolors=edgecolors,
+        norm=norm,
+        vmin=vmin,
+        vmax=vmax,
+    )
+
     allow_non_uniform_grid, ncl_preset = _resolve_default_ncl_preset(
         x=x,
         y=y,
@@ -863,6 +939,8 @@ def _curly_vector_ncl(
     density=1,
     linewidth=None,
     color=None,
+    vmin=None,
+    vmax=None,
     cmap=None,
     norm=None,
     alpha=None,
@@ -980,8 +1058,8 @@ def _curly_vector_ncl(
         color_default = float(np.mean(finite_color_values))
         if norm is None:
             norm = mcolors.Normalize(
-                float(np.min(finite_color_values)),
-                float(np.max(finite_color_values)),
+                float(np.min(finite_color_values)) if vmin is None else float(vmin),
+                float(np.max(finite_color_values)) if vmax is None else float(vmax),
             )
         cmap = cm._ensure_cmap(cmap)
     if line_width_field is not None:
@@ -1093,7 +1171,12 @@ def _curly_vector_ncl(
             curve_color = color
 
         head_facecolor = curve_color if facecolor is None else facecolor
-        head_edgecolor = curve_color if edgecolor is None else edgecolor
+        if edgecolor is None:
+            head_edgecolor = curve_color
+        elif isinstance(edgecolor, str) and edgecolor.strip().lower() == "face":
+            head_edgecolor = head_facecolor
+        else:
+            head_edgecolor = edgecolor
 
         head_length_px, head_width_px = _resolve_open_arrow_size(
             _ncl_arrow_edge_size_px(
