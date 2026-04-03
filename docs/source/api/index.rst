@@ -36,8 +36,7 @@ Plotting
 ------------------
 
 Visualization and plotting utilities including NCL-like curly vectors and
-display-space-thinned scatter stippling, plus Matplotlib-compatible
-streamlines for map and profile flow visualization.
+display-space-thinned scatter stippling for map and profile visualization.
 
 Interpolation
 -----------------------
