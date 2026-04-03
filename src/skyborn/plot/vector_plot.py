@@ -169,6 +169,50 @@ def _normalize_supported_arrowstyle(arrowstyle: Any) -> str:
     return normalized
 
 
+def _normalize_artist_alpha(alpha: Any) -> float | None:
+    """Validate a Matplotlib-style artist alpha value."""
+    if alpha is None:
+        return None
+
+    alpha_value = float(alpha)
+    if not np.isfinite(alpha_value) or not 0.0 <= alpha_value <= 1.0:
+        raise ValueError("alpha must be a finite number between 0 and 1")
+    return alpha_value
+
+
+def _normalize_curly_pivot(pivot: Any) -> str | None:
+    """Map Matplotlib quiver-style pivots to curly-vector anchors."""
+    if pivot is None:
+        return None
+
+    normalized = str(pivot).strip().lower()
+    mapping = {
+        "tail": "tail",
+        "mid": "center",
+        "middle": "center",
+        "tip": "head",
+    }
+    if normalized not in mapping:
+        supported = ", ".join(repr(value) for value in mapping)
+        raise ValueError(f"pivot must be one of {supported}; got {pivot!r}")
+    return mapping[normalized]
+
+
+def _resolve_curly_anchor_alias(anchor: Any, pivot: Any) -> Any:
+    """Resolve Matplotlib-style ``pivot`` into the native ``anchor`` setting."""
+    pivot_anchor = _normalize_curly_pivot(pivot)
+    if anchor is None:
+        return pivot_anchor
+    if pivot_anchor is None:
+        return anchor
+    if str(anchor).strip().lower() != pivot_anchor:
+        raise ValueError(
+            "anchor and pivot refer to different glyph anchors; "
+            f"got anchor={anchor!r} and pivot={pivot!r}"
+        )
+    return anchor
+
+
 def _filled_float_array(values: Any) -> np.ndarray:
     array = np.ma.asarray(values, dtype=float)
     if np.ma.isMaskedArray(array):
@@ -382,6 +426,9 @@ def curly_vector(
     color: Any = None,
     cmap: Any = None,
     norm: Any = None,
+    alpha: float | None = None,
+    facecolor: Any = None,
+    edgecolor: Any = None,
     arrowsize: float = 1,
     arrowstyle: str = "->",
     transform: Any = None,
@@ -392,6 +439,7 @@ def curly_vector(
     broken_streamlines: bool = True,
     allow_non_uniform_grid: bool = False,
     anchor: str | None = None,
+    pivot: str | None = None,
     ref_magnitude: float | None = None,
     ref_length: float | None = None,
     min_frac_length: float = 0.0,
@@ -429,6 +477,15 @@ def curly_vector(
         Data normalization and colormapping parameters for *color*; only used
         if *color* is an array of floats. See `~.Axes.imshow` for a detailed
         description.
+    alpha : float, optional
+        Matplotlib artist alpha applied to both the curved shafts and the
+        arrow heads.
+    facecolor, edgecolor : color-like, optional
+        Explicit arrow-head fill and edge colors, similar to
+        ``matplotlib.pyplot.quiver``. These mainly affect the filled
+        ``arrowstyle="-|>"`` head. When omitted, the resolved shaft color is
+        reused. Open ``"->"`` heads remain line-based and therefore ignore
+        ``facecolor``.
     arrowsize : float
         Scaling factor for the arrow size.
     arrowstyle : str
@@ -457,6 +514,9 @@ def curly_vector(
         Anchor point for the NCL-like curved-glyph renderer. If omitted, the anchor is
         inferred from ``integration_direction``: ``'forward'`` -> ``'tail'``,
         ``'backward'`` -> ``'head'``, ``'both'`` -> ``'center'``.
+    pivot : {'tail', 'mid', 'middle', 'tip'} or None, default: None
+        Matplotlib ``quiver``-style alias for ``anchor``. ``'mid'`` and
+        ``'middle'`` map to ``'center'`` and ``'tip'`` maps to ``'head'``.
     ref_magnitude : float or None, default: None
         Reference magnitude used when mapping a
         physical vector magnitude to a display-space glyph length. If omitted,
@@ -507,6 +567,8 @@ def curly_vector(
         )
     )
     arrowstyle = _normalize_supported_arrowstyle(arrowstyle)
+    alpha = _normalize_artist_alpha(alpha)
+    anchor = _resolve_curly_anchor_alias(anchor, pivot)
 
     if not allow_non_uniform_grid:
         x, y, u, v, color, linewidth = _normalize_regular_grid_orientation(
@@ -559,6 +621,9 @@ def curly_vector(
         color=color,
         cmap=cmap,
         norm=norm,
+        alpha=alpha,
+        facecolor=facecolor,
+        edgecolor=edgecolor,
         arrowsize=arrowsize,
         arrowstyle=arrowstyle,
         transform=transform,
@@ -782,6 +847,9 @@ def _curly_vector_ncl(
     color=None,
     cmap=None,
     norm=None,
+    alpha=None,
+    facecolor=None,
+    edgecolor=None,
     arrowsize=1,
     arrowstyle="->",
     transform=None,
@@ -839,7 +907,12 @@ def _curly_vector_ncl(
     resolved_anchor = _resolve_curly_anchor(anchor, integration_direction)
 
     if valid_magnitude.size == 0:
-        lc = mcollections.LineCollection([], transform=artist_transform, zorder=zorder)
+        lc = mcollections.LineCollection(
+            [],
+            transform=artist_transform,
+            zorder=zorder,
+            alpha=alpha,
+        )
         axes.add_collection(lc, autolim=False)
         return CurlyVectorPlotSet(
             lc,
@@ -997,6 +1070,9 @@ def _curly_vector_ncl(
         else:
             curve_color = color
 
+        head_facecolor = curve_color if facecolor is None else facecolor
+        head_edgecolor = curve_color if edgecolor is None else edgecolor
+
         head_length_px, head_width_px = _resolve_open_arrow_size(
             _ncl_arrow_edge_size_px(
                 center_mag,
@@ -1028,9 +1104,10 @@ def _curly_vector_ncl(
             arrowstyle=arrowstyle,
             head_length_px=head_length_px,
             head_width_px=head_width_px,
-            facecolor=curve_color,
-            edgecolor=curve_color,
+            facecolor=head_facecolor,
+            edgecolor=head_edgecolor,
             linewidth=current_linewidth,
+            alpha=alpha,
             zorder=zorder,
             inverse_transform=artist_inverse_transform,
             display_curve=display_curve,
@@ -1054,6 +1131,8 @@ def _curly_vector_ncl(
         line_kw["linewidths"] = line_widths
     else:
         line_kw["linewidth"] = linewidth
+    if alpha is not None:
+        line_kw["alpha"] = alpha
 
     lc = mcollections.LineCollection(streamlines, transform=artist_transform, **line_kw)
     # The axes limits were already seeded from the full grid extent above, so
@@ -2551,6 +2630,7 @@ def _build_arrow_polygon(
     facecolor,
     edgecolor,
     linewidth,
+    alpha,
     zorder,
     display_curve=None,
     display_sampler=None,
@@ -2592,6 +2672,7 @@ def _build_arrow_polygon(
         facecolor=facecolor,
         edgecolor=edgecolor,
         linewidth=max(float(linewidth) * 0.5, 0.5),
+        alpha=alpha,
         zorder=zorder,
     )
 
@@ -2606,6 +2687,7 @@ def _build_ncl_arrow_artists(
     facecolor,
     edgecolor,
     linewidth,
+    alpha,
     zorder,
     display_curve=None,
     display_sampler=None,
@@ -2637,6 +2719,7 @@ def _build_ncl_arrow_artists(
             facecolor=facecolor,
             edgecolor=edgecolor,
             linewidth=linewidth,
+            alpha=alpha,
             zorder=zorder,
             display_curve=display_curve,
             display_sampler=display_sampler,
