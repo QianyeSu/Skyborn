@@ -24,6 +24,7 @@ __all__ = ["scatter"]
 
 
 def _filled_array(value: Any, *, dtype=float) -> np.ndarray:
+    """Return a plain ndarray with masked values replaced by NaN."""
     array = np.ma.asarray(value, dtype=dtype)
     if np.ma.isMaskedArray(array):
         return np.asarray(array.filled(np.nan), dtype=dtype)
@@ -31,6 +32,7 @@ def _filled_array(value: Any, *, dtype=float) -> np.ndarray:
 
 
 def _subset_ready_array(value: Any) -> np.ndarray:
+    """Normalize one style array so it can be subset safely by retained points."""
     array = np.ma.asarray(value)
     if np.ma.isMaskedArray(array):
         fill_value = np.nan if np.issubdtype(array.dtype, np.number) else None
@@ -39,6 +41,7 @@ def _subset_ready_array(value: Any) -> np.ndarray:
 
 
 def _maybe_squeezed_dataarray(value: Any) -> xr.DataArray | None:
+    """Return a squeezed DataArray or ``None`` for non-xarray inputs."""
     if not isinstance(value, xr.DataArray):
         return None
     return value.squeeze(drop=True)
@@ -47,6 +50,7 @@ def _maybe_squeezed_dataarray(value: Any) -> xr.DataArray | None:
 def _transpose_dataarray_if_possible(
     value: Any, target_dims: tuple[Any, ...] | None
 ) -> Any:
+    """Align a DataArray to the target plotting dimension order when possible."""
     da = _maybe_squeezed_dataarray(value)
     if da is None or target_dims is None or da.ndim != len(target_dims):
         return da if da is not None else value
@@ -58,6 +62,7 @@ def _transpose_dataarray_if_possible(
 def _normalized_field_array(
     value: Any, target_dims: tuple[Any, ...] | None = None
 ) -> np.ndarray:
+    """Return one style or mask field as an ndarray in plotting dimension order."""
     value = _transpose_dataarray_if_possible(value, target_dims)
     if isinstance(value, xr.DataArray):
         value = value.data
@@ -69,6 +74,7 @@ def _infer_grid_from_reference(
     grid_shape: tuple[int, int],
     target_dims: tuple[Any, ...] | None,
 ) -> bool:
+    """Infer whether 1D x/y should be expanded to a grid from companion fields."""
     if value is None:
         return False
     array = _normalized_field_array(value, target_dims=target_dims)
@@ -81,6 +87,21 @@ def _normalize_coordinates(
     *,
     reference_fields: tuple[Any, ...],
 ) -> tuple[np.ndarray, np.ndarray, tuple[int, ...], bool, tuple[Any, ...] | None]:
+    """Normalize paired points or grid coordinates into a consistent plotting form.
+
+    This helper supports three common inputs:
+
+    1. Paired 1D points: ``x[i], y[i]`` describe one point each.
+    2. 1D grid axes: ``x`` and ``y`` describe a rectilinear grid and must be
+       expanded with ``meshgrid`` before masking and thinning.
+    3. 2D meshgrid-like coordinates: already expanded and ready to use.
+
+    The ambiguous case is two 1D arrays. When their lengths differ, they are
+    necessarily grid axes. When their lengths match, we inspect companion
+    fields such as ``where`` / ``mask`` / ``s`` / ``c`` to see whether the user
+    is actually passing grid-shaped metadata, in which case the 1D coordinates
+    should also be interpreted as grid axes.
+    """
     x_obj = _maybe_squeezed_dataarray(x)
     y_obj = _maybe_squeezed_dataarray(y)
 
@@ -107,6 +128,8 @@ def _normalize_coordinates(
     grid_shape = (int(y_values.size), int(x_values.size))
     grid_like = x_values.size != y_values.size
     if not grid_like:
+        # Two equally long 1D arrays could be paired points or grid axes. Use
+        # the shapes of companion fields to disambiguate that case.
         grid_like = any(
             _infer_grid_from_reference(field, grid_shape, target_dims)
             for field in reference_fields
@@ -130,6 +153,7 @@ def _normalize_selection_mask(
     candidate_shape: tuple[int, ...],
     target_dims: tuple[Any, ...] | None,
 ) -> np.ndarray:
+    """Return the boolean candidate-selection mask in plotting coordinate order."""
     if where is not None and mask is not None:
         raise ValueError("Use only one of 'where' or 'mask'")
 
@@ -147,6 +171,8 @@ def _normalize_selection_mask(
     if np.issubdtype(selector_array.dtype, np.bool_):
         return np.asarray(selector_array, dtype=bool)
 
+    # Numeric masks follow NumPy truthiness, but NaN should never create a
+    # candidate point implicitly.
     finite = np.isfinite(selector_array)
     return finite & (selector_array != 0)
 
@@ -173,6 +199,17 @@ def _subset_scatter_value(
     retained_indices: np.ndarray,
     target_dims: tuple[Any, ...] | None,
 ) -> Any:
+    """Subset one scatter style argument to the points that survive thinning.
+
+    Matplotlib accepts many array-like scatter kwargs such as ``s``, ``c``,
+    ``linewidths``, and similar per-point arrays. This helper keeps those
+    arrays aligned with the retained coordinates regardless of whether the
+    original data was supplied:
+
+    - on the full 2D grid,
+    - already flattened to the full candidate count,
+    - or already pre-filtered to the masked candidate count.
+    """
     if value is None or isinstance(value, str) or np.isscalar(value):
         return value
 
@@ -204,6 +241,7 @@ def _subset_scatter_kwargs(
     retained_indices: np.ndarray,
     target_dims: tuple[Any, ...] | None,
 ) -> dict[str, Any]:
+    """Subset all array-like scatter kwargs together with the retained points."""
     return {
         key: _subset_scatter_value(
             value,
@@ -232,7 +270,20 @@ def _scatter_impl(
     zorder: float | None = None,
     **kwargs: Any,
 ):
-    """Scatter gridded or paired points with optional display-space thinning."""
+    """Scatter gridded or paired points with optional display-space thinning.
+
+    The rendering pipeline is:
+
+    1. Normalize coordinates into either paired points or an expanded grid.
+    2. Build the candidate mask from ``where`` / ``mask`` plus finite-point
+       checks on the coordinates themselves.
+    3. Transform candidates into display space so thinning is controlled by
+       what the viewer actually sees on the canvas, not by raw grid stride.
+    4. Reuse the existing NCL-style viewport thinning helper to keep only one
+       point inside each local spacing neighborhood.
+    5. Subset all array-like scatter style arguments so they still match the
+       retained coordinates exactly.
+    """
 
     if transform is None:
         transform = ax.transData
@@ -255,6 +306,8 @@ def _scatter_impl(
         target_dims=target_dims,
     )
 
+    # Candidate extraction always happens on flattened arrays so the same code
+    # path works for paired points, rectilinear grids, and 2D coordinates.
     x_flat = np.ravel(np.asarray(x_values, dtype=float))
     y_flat = np.ravel(np.asarray(y_values, dtype=float))
     valid = selection.ravel() & np.isfinite(x_flat) & np.isfinite(y_flat)
@@ -301,6 +354,8 @@ def _scatter_impl(
         ax.update_datalim(candidate_points)
         ax.autoscale_view()
 
+    # Thinning happens in display coordinates so the retained density follows
+    # the current axes geometry and projection rather than array index spacing.
     display_points = np.asarray(transform.transform(candidate_points), dtype=float)
     display_valid = np.isfinite(display_points).all(axis=1)
     candidate_indices = candidate_indices[display_valid]
@@ -367,6 +422,31 @@ def scatter(*args: Any, **kwargs: Any):
     display-space thinning for gridded stippling use cases such as
     significance masks on maps or vertical cross-sections.
 
+    Parameters
+    ----------
+    ax : matplotlib Axes, optional
+        Target axes. May be passed positionally as the first argument or as
+        ``ax=...``. If omitted, ``plt.gca()`` is used.
+    x, y : array-like or xarray.DataArray
+        Either paired 1D points, 1D rectilinear grid axes, or 2D meshgrid-like
+        coordinates.
+    s, c : optional
+        Standard Matplotlib ``scatter`` size and color arguments.
+    where, mask : array-like, optional
+        Boolean or numeric selection mask for candidate points. Only one of the
+        two may be supplied.
+    density : float or tuple, optional
+        Spacing control for display-space thinning. Higher values retain more
+        points. If omitted, gridded inputs use the same default spacing idea as
+        the existing NCL-style vector thinning, while paired 1D points keep all
+        points by default.
+    distance, min_distance : float, optional
+        Explicit viewport-space thinning threshold. ``min_distance`` is kept as
+        a backward-compatible alias for ``distance``.
+    transform : optional
+        Standard Matplotlib transform. Cartopy CRS-like inputs are converted to
+        the matching Matplotlib transform automatically.
+
     Supported call styles
     ---------------------
     ``scatter(ax, x, y, ...)``
@@ -401,6 +481,8 @@ def scatter(*args: Any, **kwargs: Any):
 
     transform = kwargs.pop("transform", None)
     if _is_cartopy_crs_like(transform):
+        # Keep the public API ergonomic for Cartopy users: they can pass a CRS
+        # object just like in ordinary Matplotlib/Cartopy plotting code.
         transform = transform._as_mpl_transform(ax)
 
     return _array_scatter(
