@@ -190,6 +190,68 @@ def _coerce_matching_plot_field(
     return None, array.ndim >= 2
 
 
+def _normalize_regular_grid_orientation(
+    x: Any,
+    y: Any,
+    u: Any,
+    v: Any,
+    color: Any = None,
+    linewidth: Any = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Any, Any]:
+    """Normalize descending rectilinear axes to ascending order.
+
+    This keeps the low-level ``Grid`` invariant intact while allowing public
+    ``curly_vector(x, y, u, v, ...)`` calls to accept meteorological latitude
+    axes such as ``90 .. -90``. Only meshgrid-like regular coordinates are
+    normalized here; irregular inputs continue to follow the existing
+    validation/regridding paths.
+    """
+
+    try:
+        x_axis, y_axis = _extract_meshgrid_axes(x, y)
+    except ValueError:
+        return x, y, u, v, color, linewidth
+
+    u_values = _filled_float_array(u)
+    v_values = _filled_float_array(v)
+    expected_shape = (y_axis.size, x_axis.size)
+    if u_values.shape != expected_shape or v_values.shape != expected_shape:
+        return x, y, u, v, color, linewidth
+
+    color_field, _ = _coerce_matching_plot_field(color, expected_shape)
+    linewidth_field, _ = _coerce_matching_plot_field(linewidth, expected_shape)
+
+    x_norm = np.asarray(x_axis, dtype=float)
+    y_norm = np.asarray(y_axis, dtype=float)
+    u_norm = u_values
+    v_norm = v_values
+
+    if x_norm.size > 1 and x_norm[0] > x_norm[-1]:
+        x_norm = x_norm[::-1]
+        u_norm = u_norm[:, ::-1]
+        v_norm = v_norm[:, ::-1]
+        if color_field is not None:
+            color_field = color_field[:, ::-1]
+        if linewidth_field is not None:
+            linewidth_field = linewidth_field[:, ::-1]
+
+    if y_norm.size > 1 and y_norm[0] > y_norm[-1]:
+        y_norm = y_norm[::-1]
+        u_norm = u_norm[::-1, :]
+        v_norm = v_norm[::-1, :]
+        if color_field is not None:
+            color_field = color_field[::-1, :]
+        if linewidth_field is not None:
+            linewidth_field = linewidth_field[::-1, :]
+
+    if color_field is not None:
+        color = color_field
+    if linewidth_field is not None:
+        linewidth = linewidth_field
+
+    return x_norm, y_norm, u_norm, v_norm, color, linewidth
+
+
 def _extract_meshgrid_axes(x: Any, y: Any) -> tuple[np.ndarray, np.ndarray]:
     x_values = np.asarray(x, dtype=float)
     y_values = np.asarray(y, dtype=float)
@@ -445,6 +507,16 @@ def curly_vector(
         )
     )
     arrowstyle = _normalize_supported_arrowstyle(arrowstyle)
+
+    if not allow_non_uniform_grid:
+        x, y, u, v, color, linewidth = _normalize_regular_grid_orientation(
+            x,
+            y,
+            u,
+            v,
+            color=color,
+            linewidth=linewidth,
+        )
 
     # Handle non-uniform grids by creating a uniform interpolation grid
     if allow_non_uniform_grid:
