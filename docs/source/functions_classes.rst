@@ -268,8 +268,6 @@ Specialized Plotting
      - Add an NCL-like reference-vector annotation matched to curly-vector scaling
    * - :func:`skyborn.plot.scatter`
      - Plot Matplotlib-compatible scatter points with optional NCL-style display-space thinning for gridded stippling masks
-   * - :func:`skyborn.plot.streamline`
-     - Plot Matplotlib-compatible streamlines from arrays or xarray datasets on regular axes or Cartopy maps
 
 Causality Analysis
 ------------------
