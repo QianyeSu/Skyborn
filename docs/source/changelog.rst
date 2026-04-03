@@ -1,6 +1,20 @@
 Changelog
 =========
 
+Version 0.3.19 (Planned)
+------------------------
+
+Scatter Stippling
+
+* Added ``skyborn.plot.scatter`` for gridded map and profile stippling with
+  NCL-style display-space thinning.
+* Added ``skyborn.plot.scatter`` to the explicit ``skyborn.plot`` public API.
+* Added focused plotting tests, examples, and documentation for the new
+  scatter-stippling workflow.
+* Implemented the public scatter entry point in its own
+  ``skyborn.plot.scatter`` module so the display-space thinning logic stays
+  isolated and easier to maintain.
+
 Version 0.3.18 (Current)
 ------------------------
 
@@ -28,15 +42,11 @@ Plotting API Cleanup
   - ``skyborn.plot.vector_plot`` for the core curly-vector renderer
   - ``skyborn.plot.ncl_vector`` for the xarray / Cartopy dataset wrapper
   - ``skyborn.plot.vector_key`` for the reference-vector annotation artist
-  - ``skyborn.plot.scatter`` for Matplotlib-compatible
-    display-space-thinned stippling
 
 * Replaced wildcard plotting exports with an explicit ``skyborn.plot`` public API.
 * Added type annotations to the renamed public plotting entry points and key artist class.
-* Added ``skyborn.plot.scatter`` for gridded map and profile stippling with
-  NCL-style display-space thinning.
-* Updated plotting tests, examples, and documentation to cover both
-  ``curly_vector`` and ``scatter``.
+* Updated plotting tests, examples, and documentation for the renamed
+  ``curly_vector`` public API.
 
 Version 0.3.17
 ------------------------
