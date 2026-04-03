@@ -198,6 +198,87 @@ class TestDatasetCurlyVector:
         plt.close(fig)
 
     @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_array_input_forwards_quiver_style_aliases(
+        self, mock_curly_vector
+    ):
+        """The public wrapper should resolve Matplotlib-style aliases."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        x = np.linspace(100.0, 110.0, 4)
+        y = np.linspace(20.0, 26.0, 3)
+        u = np.ones((3, 4)) * 3.0
+        v = np.ones((3, 4)) * -1.5
+        color_field = np.arange(12, dtype=float).reshape(3, 4)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        result = curly_vector(
+            x,
+            y,
+            u,
+            v,
+            ax=ax,
+            c=color_field,
+            linewidths=1.75,
+            facecolors="gold",
+            edgecolors="navy",
+            vmin=0.0,
+            vmax=10.0,
+        )
+
+        call_args = mock_curly_vector.call_args
+        np.testing.assert_allclose(call_args[1]["color"], color_field)
+        assert call_args[1]["linewidth"] == pytest.approx(1.75)
+        assert call_args[1]["facecolor"] == "gold"
+        assert call_args[1]["edgecolor"] == "navy"
+        assert call_args[1]["vmin"] == pytest.approx(0.0)
+        assert call_args[1]["vmax"] == pytest.approx(10.0)
+        assert result is mock_result
+
+        plt.close(fig)
+
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_dataset_input_resolves_quiver_style_aliases(
+        self, mock_curly_vector, sample_data
+    ):
+        """Dataset wrapper should apply aliases before style-field preparation."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        color_field = sample_data["u"] ** 2 + sample_data["v"] ** 2
+        linewidth_field = xr.full_like(sample_data["u"], 1.25)
+
+        result = curly_vector(
+            sample_data,
+            x="x",
+            y="y",
+            u="u",
+            v="v",
+            ax=ax,
+            c=color_field,
+            linewidths=linewidth_field,
+            facecolors="gold",
+            edgecolors="navy",
+            vmin=0.0,
+            vmax=50.0,
+        )
+
+        call_args = mock_curly_vector.call_args
+        assert call_args[0][0] is ax
+        np.testing.assert_allclose(call_args[0][1], sample_data["x"].values)
+        np.testing.assert_allclose(call_args[0][2], sample_data["y"].values)
+        np.testing.assert_allclose(call_args[1]["color"], color_field.values)
+        np.testing.assert_allclose(call_args[1]["linewidth"], linewidth_field.values)
+        assert call_args[1]["facecolor"] == "gold"
+        assert call_args[1]["edgecolor"] == "navy"
+        assert call_args[1]["vmin"] == pytest.approx(0.0)
+        assert call_args[1]["vmax"] == pytest.approx(50.0)
+        assert result is mock_result
+
+        plt.close(fig)
+
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
     def test_curly_vector_wrapper_default_arrowstyle_matches_core(
         self, mock_curly_vector, sample_data
     ):
