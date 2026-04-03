@@ -160,6 +160,42 @@ class TestDatasetCurlyVector:
         plt.close(fig)
 
     @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    def test_curly_vector_array_input_forwards_quiver_style_kwargs(
+        self, mock_curly_vector
+    ):
+        """The public wrapper should pass through supported quiver-like style kwargs."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        x = np.linspace(100.0, 110.0, 4)
+        y = np.linspace(20.0, 26.0, 3)
+        u = np.ones((3, 4)) * 3.0
+        v = np.ones((3, 4)) * -1.5
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        result = curly_vector(
+            x,
+            y,
+            u,
+            v,
+            ax=ax,
+            alpha=0.4,
+            facecolor="gold",
+            edgecolor="firebrick",
+            pivot="mid",
+        )
+
+        call_args = mock_curly_vector.call_args
+        assert call_args[0][0] is ax
+        assert call_args[1]["alpha"] == pytest.approx(0.4)
+        assert call_args[1]["facecolor"] == "gold"
+        assert call_args[1]["edgecolor"] == "firebrick"
+        assert call_args[1]["pivot"] == "mid"
+        assert result is mock_result
+
+        plt.close(fig)
+
+    @patch("skyborn.plot.ncl_vector._array_curly_vector")
     def test_curly_vector_wrapper_default_arrowstyle_matches_core(
         self, mock_curly_vector, sample_data
     ):
