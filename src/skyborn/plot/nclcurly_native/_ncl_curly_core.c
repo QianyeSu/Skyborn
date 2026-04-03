@@ -15,6 +15,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * Regular rectilinear data-grid metadata shared by the sampling helpers.
+ *
+ * The tracer works in "data coordinates" (the original x/y indexing space of
+ * the input arrays), but many hot loops need the same origin, spacing and
+ * bounds checks over and over. The *_safe values guard against a zero spacing
+ * input, while the reciprocals and precomputed maxima avoid repeating divisions
+ * and shape arithmetic inside the inner loops.
+ */
 typedef struct
 {
     npy_intp nx;
@@ -31,7 +40,19 @@ typedef struct
     double max_cell_y;
 } GridInfo;
 
-/* Interpolated flow state and local data->display Jacobian at one sample point. */
+/*
+ * Interpolated flow state at one sample position.
+ *
+ * display_x/display_y are the mapped panel coordinates of the sample.
+ * j00..j11 are the local Jacobian of the data->display mapping:
+ *
+ *     [dx_display/dx_data  dx_display/dy_data]
+ *     [dy_display/dx_data  dy_display/dy_data]
+ *
+ * dir_x/dir_y is the unit tangent used by the display-space stepping loop, and
+ * speed is the original vector magnitude in data space. Keeping both lets the
+ * tracer use NCL-like spacing rules while still following the mapped geometry.
+ */
 typedef struct
 {
     double display_x;
@@ -45,7 +66,13 @@ typedef struct
     double speed;
 } SampleState;
 
-/* Bucketed display-space candidate index used by the thinning pass. */
+/*
+ * One candidate point projected onto a spacing-sized bucket lattice.
+ *
+ * The thinning pass sorts these entries by bucket index so each accepted point
+ * only has to inspect nearby buckets instead of scanning the whole candidate
+ * cloud.
+ */
 typedef struct
 {
     long bx;
@@ -111,6 +138,7 @@ static int sample_state(
         return 0;
     }
 
+    /* Convert the requested sample position into fractional grid coordinates. */
     xi = (x - grid->x_origin) * grid->inv_dx;
     yi = (y - grid->y_origin) * grid->inv_dy;
     if (!(0.0 <= xi && xi <= grid->max_x_index && 0.0 <= yi && yi <= grid->max_y_index))
@@ -118,6 +146,11 @@ static int sample_state(
         return 0;
     }
 
+    /*
+     * Identify the enclosing cell. cell_valid is defined on cells rather than
+     * nodes, so rejecting the cell here guarantees that the full bilinear
+     * interpolation stencil is trustworthy.
+     */
     ix = (npy_intp)floor(fmin(fmax(xi, 0.0), grid->max_cell_x));
     iy = (npy_intp)floor(fmin(fmax(yi, 0.0), grid->max_cell_y));
     if (!cell_valid[iy * (grid->nx - 1) + ix])
@@ -136,6 +169,7 @@ static int sample_state(
     idx10 = (iy + 1) * nx + ix;
     idx11 = (iy + 1) * nx + (ix + 1);
 
+    /* Bilinearly interpolate the vector components in data space first. */
     u00 = u_data[idx00];
     u01 = u_data[idx01];
     u10 = u_data[idx10];
@@ -157,6 +191,12 @@ static int sample_state(
     idx10 *= 2;
     idx11 *= 2;
 
+    /*
+     * display_data stores the mapped x/y location of every grid node. We
+     * interpolate those mapped coordinates and differentiate the bilinear patch
+     * to obtain a local Jacobian for converting vectors and step increments
+     * between the data grid and the rendered panel.
+     */
     p00x = display_data[idx00];
     p00y = display_data[idx00 + 1];
     p01x = display_data[idx01];
@@ -173,12 +213,14 @@ static int sample_state(
     out->j01 = ((p10x - p00x) * one_minus_sx + (p11x - p01x) * sx) / grid->dy_safe;
     out->j11 = ((p10y - p00y) * one_minus_sx + (p11y - p01y) * sx) / grid->dy_safe;
 
+    /* Singular local mappings cannot define a reliable display-space tangent. */
     det = out->j00 * out->j11 - out->j01 * out->j10;
     if (!isfinite(out->display_x) || !isfinite(out->display_y) || !isfinite(det) || fabs(det) <= 1e-12)
     {
         return 0;
     }
 
+    /* Push the data-space vector through the local Jacobian into display space. */
     vec_x = out->j00 * u_value + out->j01 * v_value;
     vec_y = out->j10 * u_value + out->j11 * v_value;
     vec_norm = hypot(vec_x, vec_y);
@@ -193,7 +235,14 @@ static int sample_state(
     return isfinite(out->speed) ? 1 : 0;
 }
 
-/* Convert one display-space step back into a data-space increment. */
+/*
+ * Convert one display-space increment back into the data grid's coordinate
+ * system by inverting the local Jacobian.
+ *
+ * The tracer chooses its direction and step length in mapped/display space so
+ * the geometry matches the projection. To advance the integration state we then
+ * need the corresponding delta in the original rectilinear data grid.
+ */
 static int display_step_to_data(
     double j00,
     double j01,
@@ -215,7 +264,13 @@ static int display_step_to_data(
     return isfinite(*data_x) && isfinite(*data_y);
 }
 
-/* Match the Python renderer's NCL-like speed-dependent pixel step law. */
+/*
+ * Match the Python renderer's NCL-like speed-dependent pixel step law.
+ *
+ * Faster local wind gets longer steps, but the quadratic scaling keeps weak
+ * flow from producing overly long, noisy wiggles. The hard floor prevents the
+ * branch from stalling completely in very small but still valid flow regions.
+ */
 static double ncl_step_length_px(double base_step_px, double local_speed, double speed_scale)
 {
     double speed_fraction;
@@ -245,7 +300,13 @@ static int point_within_grid_data(const GridInfo *grid, double x, double y)
     return 0.0 <= xi && xi <= grid->max_x_index && 0.0 <= yi && yi <= grid->max_y_index;
 }
 
-/* Bilinear sampling helper for scalar fields on the same regular grid. */
+/*
+ * Bilinear sampling helper for scalar fields on the same regular grid.
+ *
+ * Unlike the vector tracer this can safely clamp to the last node on the outer
+ * edge, so ix_next/iy_next collapse to the edge index when the sample lands on
+ * the boundary.
+ */
 static int sample_scalar_field(
     const GridInfo *grid,
     const double *field_data,
@@ -399,6 +460,11 @@ static int clip_display_step_to_viewport(
         return 1;
     }
 
+    /*
+     * Find the earliest intersection between the proposed segment and the four
+     * viewport sides. Because the segment starts inside the panel, the smallest
+     * valid factor in [0, 1] is the amount we can keep.
+     */
     factor = 1.0;
     if (delta_x < -1e-12)
     {
@@ -555,6 +621,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
         return NULL;
     }
 
+    /* Clamp the Python-provided step budget so preallocation stays bounded. */
     if (max_steps < 1)
     {
         max_steps = 1;
@@ -575,6 +642,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
         goto cleanup;
     }
 
+    /* Validate the plain NumPy contract expected by the native kernel. */
     if (PyArray_NDIM(u_arr) != 2 || PyArray_NDIM(v_arr) != 2)
     {
         PyErr_SetString(PyExc_ValueError, "u and v must be 2D float64 arrays");
@@ -615,6 +683,11 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
         goto cleanup;
     }
 
+    /*
+     * Materialize a compact grid descriptor once so the stepping loop only
+     * passes around a pointer instead of recomputing shape- and spacing-derived
+     * constants every iteration.
+     */
     grid.nx = nx;
     grid.ny = ny;
     grid.x_origin = x_origin;
@@ -648,6 +721,10 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
         goto cleanup;
     }
 
+    /*
+     * Preallocate the worst-case polyline length. If the branch terminates
+     * early, the result is trimmed after tracing.
+     */
     output_dims[0] = max_steps + 1;
     output_dims[1] = 2;
     full_output = (PyArrayObject *)PyArray_SimpleNew(2, output_dims, NPY_DOUBLE);
@@ -664,6 +741,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
     current_display_x = initial_state.display_x;
     current_display_y = initial_state.display_y;
 
+    /* The numeric stepping loop is CPU-bound and does not need the GIL. */
     Py_BEGIN_ALLOW_THREADS
 
     for (step_index = 0; step_index < max_steps; ++step_index)
@@ -884,6 +962,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
         npy_intp trimmed_dims[2];
         PyArrayObject *trimmed_output;
 
+        /* Shrink the overallocated buffer to the exact accepted vertex count. */
         trimmed_dims[0] = point_count;
         trimmed_dims[1] = 2;
         trimmed_output = (PyArrayObject *)PyArray_SimpleNew(2, trimmed_dims, NPY_DOUBLE);
@@ -992,7 +1071,12 @@ cleanup:
     return result;
 }
 
-/* Python wrapper for vectorized scalar sampling at many points. */
+/*
+ * Python wrapper for vectorized scalar sampling at many points.
+ *
+ * Invalid or out-of-bounds points are left as NaN so the Python caller can
+ * preserve positional alignment with its original request array.
+ */
 static PyObject *sample_grid_field_array(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     PyObject *field_obj;
@@ -1216,6 +1300,11 @@ static PyObject *thin_mapped_candidates(PyObject *self, PyObject *args, PyObject
         entries[idx].idx = idx;
     }
 
+    /*
+     * Sorting by bucket lets lower_bound_bucket jump straight to the first
+     * entry in a bucket. The final keep/cull decision still follows the
+     * original candidate order because idx drives the outer loop below.
+     */
     qsort(entries, (size_t)point_count, sizeof(BucketEntry), compare_bucket_entries);
 
     for (idx = 0; idx < point_count; ++idx)
@@ -1238,6 +1327,11 @@ static PyObject *thin_mapped_candidates(PyObject *self, PyObject *args, PyObject
         bx = bucket_x[idx];
         by = bucket_y[idx];
 
+        /*
+         * A point closer than spacing_frac must fall in the same bucket or one
+         * of the eight neighbors because bucket width equals the target spacing.
+         * That is why a 3x3 neighborhood is sufficient here.
+         */
         for (search_x = bx - 1; search_x <= bx + 1; ++search_x)
         {
             long search_y;
@@ -1264,6 +1358,7 @@ static PyObject *thin_mapped_candidates(PyObject *self, PyObject *args, PyObject
 
                     dx_value = base_x - mapped_points_data[other_idx * 2];
                     dy_value = base_y - mapped_points_data[other_idx * 2 + 1];
+                    /* Cull any later candidate that violates the spacing rule. */
                     if (dx_value * dx_value + dy_value * dy_value < spacing_sq)
                     {
                         culled[other_idx] = 1;
