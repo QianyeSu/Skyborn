@@ -16,7 +16,7 @@ import numpy as np
 import xarray as xr
 
 from .vector_key import CurlyVectorKey, curly_vector_key
-from .vector_plot import CurlyVectorPlotSet
+from .vector_plot import CurlyVectorPlotSet, _resolve_curly_style_aliases
 from .vector_plot import curly_vector as _array_curly_vector
 
 if TYPE_CHECKING:
@@ -28,6 +28,8 @@ _ARRAY_CURLY_VECTOR_KWARG_NAMES = (
     "density",
     "linewidth",
     "color",
+    "vmin",
+    "vmax",
     "cmap",
     "norm",
     "alpha",
@@ -695,12 +697,18 @@ def _curly_vector_from_dataset(
     ax: Axes | None = None,
     density: Any = 1,
     linewidth: Any = None,
+    linewidths: Any = None,
     color: Any = None,
+    c: Any = None,
     cmap: Any = None,
     norm: Any = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
     alpha: float | None = None,
     facecolor: Any = None,
+    facecolors: Any = None,
     edgecolor: Any = None,
+    edgecolors: Any = None,
     rasterized: bool | None = None,
     arrowsize=1,
     arrowstyle="->",
@@ -753,20 +761,29 @@ def _curly_vector_from_dataset(
         The width of the streamlines. With a 2D array the line width can be
         varied across the grid. The array must have the same shape as *u*
         and *v*.
+    linewidths : float or 2D array, optional
+        Matplotlib ``quiver``-style alias for ``linewidth``.
     color : color or 2D array
         The streamline color. If given an array, its values are converted to
         colors using *cmap* and *norm*.  The array must have the same shape
         as *u* and *v*.
+    c : color or 2D array, optional
+        Matplotlib-style alias for ``color``.
     cmap, norm
         Data normalization and colormapping parameters for *color*; only used
         if *color* is an array of floats. See `~.Axes.imshow` for a detailed
         description.
+    vmin, vmax : float, optional
+        Lower and upper normalization bounds used when ``color``/``c`` is a
+        scalar field and ``norm`` is omitted.
     alpha : float, optional
         Matplotlib artist alpha applied to both shafts and arrow heads.
     facecolor, edgecolor : color-like, optional
         Explicit arrow-head fill and edge colors. These mainly affect the
         filled ``arrowstyle="-|>"`` head. When omitted, the resolved shaft
         color is reused.
+    facecolors, edgecolors : color-like, optional
+        Matplotlib-style aliases for ``facecolor`` and ``edgecolor``.
     rasterized : bool, optional
         Whether to rasterize the generated curly-vector artists when exporting
         to vector formats such as PDF or SVG.
@@ -844,6 +861,20 @@ def _curly_vector_from_dataset(
         - https://github.com/NCAR/geocat-viz/issues/4
         - https://docs.xarray.dev/en/stable/generated/xarray.Dataset.plot.streamplot.html#xarray.Dataset.plot.streamplot
     """
+    color, linewidth, facecolor, edgecolor, vmin, vmax = _resolve_curly_style_aliases(
+        color=color,
+        c=c,
+        linewidth=linewidth,
+        linewidths=linewidths,
+        facecolor=facecolor,
+        facecolors=facecolors,
+        edgecolor=edgecolor,
+        edgecolors=edgecolors,
+        norm=norm,
+        vmin=vmin,
+        vmax=vmax,
+    )
+
     x, y, u, v, source_metadata = _extract_curly_vector_dataset_source(
         ds,
         x,
@@ -908,12 +939,18 @@ def _curly_vector_from_arrays(
     v: Any,
     density: Any = 1,
     linewidth: Any = None,
+    linewidths: Any = None,
     color: Any = None,
+    c: Any = None,
     cmap: Any = None,
     norm: Any = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
     alpha: float | None = None,
     facecolor: Any = None,
+    facecolors: Any = None,
     edgecolor: Any = None,
+    edgecolors: Any = None,
     rasterized: bool | None = None,
     arrowsize=1,
     arrowstyle="->",
@@ -935,6 +972,20 @@ def _curly_vector_from_arrays(
     target_extent: Any = None,
 ) -> CurlyVectorPlotSet:
     """Array-input adapter that preserves Cartopy and curvilinear support."""
+    color, linewidth, facecolor, edgecolor, vmin, vmax = _resolve_curly_style_aliases(
+        color=color,
+        c=c,
+        linewidth=linewidth,
+        linewidths=linewidths,
+        facecolor=facecolor,
+        facecolors=facecolors,
+        edgecolor=edgecolor,
+        edgecolors=edgecolors,
+        norm=norm,
+        vmin=vmin,
+        vmax=vmax,
+    )
+
     x, y, u, v, color, linewidth, transform = _prepare_curly_vector_dataset_inputs(
         ax=ax,
         x=np.asarray(x),
