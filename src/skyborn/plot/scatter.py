@@ -23,6 +23,36 @@ from .vector_plot import (
 __all__ = ["scatter"]
 
 
+def _resolve_scatter_aliases(
+    c: Any,
+    kwargs: dict[str, Any],
+) -> tuple[Any, dict[str, Any]]:
+    """Resolve singular compatibility aliases onto Matplotlib scatter kwargs."""
+    resolved = dict(kwargs)
+
+    if "color" in resolved:
+        if c is not None:
+            raise ValueError("Use only one of 'c' or 'color'")
+        c = resolved.pop("color")
+
+    if "linewidth" in resolved:
+        if "linewidths" in resolved:
+            raise ValueError("Use only one of 'linewidth' or 'linewidths'")
+        resolved["linewidths"] = resolved.pop("linewidth")
+
+    if "facecolor" in resolved:
+        if "facecolors" in resolved:
+            raise ValueError("Use only one of 'facecolor' or 'facecolors'")
+        resolved["facecolors"] = resolved.pop("facecolor")
+
+    if "edgecolor" in resolved:
+        if "edgecolors" in resolved:
+            raise ValueError("Use only one of 'edgecolor' or 'edgecolors'")
+        resolved["edgecolors"] = resolved.pop("edgecolor")
+
+    return c, resolved
+
+
 def _filled_array(value: Any, *, dtype=float) -> np.ndarray:
     """Return a plain ndarray with masked values replaced by NaN."""
     array = np.ma.asarray(value, dtype=dtype)
@@ -289,6 +319,8 @@ def _scatter_impl(
     ``[::step]`` tuning when the projection, extent, or panel aspect changes.
     """
 
+    c, kwargs = _resolve_scatter_aliases(c, kwargs)
+
     if transform is None:
         transform = ax.transData
     if distance is not None and min_distance is not None:
@@ -487,6 +519,21 @@ def scatter(*args: Any, **kwargs: Any):
     c : color-like or array-like, optional
         Marker color argument passed through to ``Axes.scatter``. Array-like
         color fields follow the same subsetting rules as ``s``.
+    color : color-like or array-like, optional
+        Compatibility alias for ``c``. This is useful when matching plotting
+        helpers that prefer the ``color=`` spelling while still preserving
+        Matplotlib scatter semantics for numeric color fields.
+    linewidth : scalar or array-like, optional
+        Compatibility alias for ``linewidths``.
+    facecolor : color-like or array-like, optional
+        Compatibility alias for ``facecolors``.
+    edgecolor : color-like or array-like, optional
+        Compatibility alias for ``edgecolors``.
+    linewidths, facecolors, edgecolors
+        Native Matplotlib scatter styling arguments. Array-like values follow
+        the same retained-point subsetting rules as ``s`` and ``c``.
+    vmin, vmax : float, optional
+        Colormap range controls forwarded to ``Axes.scatter``.
     where, mask : array-like, optional
         Candidate-selection mask. Use only one of them. For gridded stippling,
         these are typically 2D boolean or numeric fields aligned with the input
