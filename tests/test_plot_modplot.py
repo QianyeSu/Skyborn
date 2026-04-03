@@ -308,6 +308,31 @@ class TestCurlyVector:
 
         plt.close(fig)
 
+    def test_curly_vector_rasterized_marks_lines_and_arrow_patches(
+        self, sample_vector_field
+    ):
+        """Rasterized output should propagate to the generated artists."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        result = curly_vector(
+            ax,
+            x,
+            y,
+            u,
+            v,
+            arrowstyle="-|>",
+            density=0.8,
+            rasterized=True,
+        )
+
+        assert result.rasterized is True
+        assert result.lines.get_rasterized() is True
+        assert len(result.arrows) > 0
+        assert all(patch.get_rasterized() is True for patch in result.arrows)
+
+        plt.close(fig)
+
     def test_curly_vector_all_nan_field_returns_empty_artists(
         self, sample_vector_field
     ):
