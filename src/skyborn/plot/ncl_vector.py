@@ -668,6 +668,7 @@ def _curly_vector_from_dataset(
     alpha: float | None = None,
     facecolor: Any = None,
     edgecolor: Any = None,
+    rasterized: bool | None = None,
     arrowsize=1,
     arrowstyle="->",
     transform: Any = None,
@@ -733,6 +734,9 @@ def _curly_vector_from_dataset(
         Explicit arrow-head fill and edge colors. These mainly affect the
         filled ``arrowstyle="-|>"`` head. When omitted, the resolved shaft
         color is reused.
+    rasterized : bool, optional
+        Whether to rasterize the generated curly-vector artists when exporting
+        to vector formats such as PDF or SVG.
     arrowsize : float
         Scaling factor for the arrow size.
     arrowstyle : str
@@ -866,6 +870,7 @@ def _curly_vector_from_dataset(
         alpha=alpha,
         facecolor=facecolor,
         edgecolor=edgecolor,
+        rasterized=rasterized,
         arrowsize=arrowsize,
         arrowstyle=arrowstyle,
         transform=transform,
@@ -899,6 +904,7 @@ def _curly_vector_from_arrays(
     alpha: float | None = None,
     facecolor: Any = None,
     edgecolor: Any = None,
+    rasterized: bool | None = None,
     arrowsize=1,
     arrowstyle="->",
     transform: Any = None,
@@ -948,6 +954,7 @@ def _curly_vector_from_arrays(
         alpha=alpha,
         facecolor=facecolor,
         edgecolor=edgecolor,
+        rasterized=rasterized,
         arrowsize=arrowsize,
         arrowstyle=arrowstyle,
         transform=transform,
@@ -1012,6 +1019,9 @@ def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
     facecolor, edgecolor : color-like, optional
         Arrow-head fill and edge colors, similar to ``plt.quiver``. These are
         mainly relevant for the filled ``arrowstyle="-|>"`` head.
+    rasterized : bool, optional
+        Whether to rasterize the generated curly-vector artists when exporting
+        to vector formats such as PDF or SVG.
     arrowsize : float, default: 1
         Scales the arrow-head size.
     arrowstyle : str, default: ``"->"``
