@@ -183,6 +183,7 @@ class TestDatasetCurlyVector:
             facecolor="gold",
             edgecolor="firebrick",
             pivot="mid",
+            rasterized=True,
         )
 
         call_args = mock_curly_vector.call_args
@@ -191,6 +192,7 @@ class TestDatasetCurlyVector:
         assert call_args[1]["facecolor"] == "gold"
         assert call_args[1]["edgecolor"] == "firebrick"
         assert call_args[1]["pivot"] == "mid"
+        assert call_args[1]["rasterized"] is True
         assert result is mock_result
 
         plt.close(fig)
