@@ -30,23 +30,13 @@ Plotting API Cleanup
   - ``skyborn.plot.vector_key`` for the reference-vector annotation artist
   - ``skyborn.plot.scatter`` for Matplotlib-compatible
     display-space-thinned stippling
-  - ``skyborn.plot.streamline`` for Matplotlib-compatible
-    streamline rendering from arrays or datasets
 
 * Replaced wildcard plotting exports with an explicit ``skyborn.plot`` public API.
 * Added type annotations to the renamed public plotting entry points and key artist class.
 * Added ``skyborn.plot.scatter`` for gridded map and profile stippling with
   NCL-style display-space thinning.
-* Added ``skyborn.plot.streamline`` for black-and-white or colored streamlines
-  on ordinary axes and Cartopy maps.
-* Consolidated ``scatter`` and ``streamline`` back to one public module each so
-  the plot package does not keep growing as ``feature.py + feature_plot.py``
-  pairs.
-* Replaced the temporary Matplotlib-backed ``streamline`` internals with a
-  Skyborn-controlled backend that traces lines, spaces seeds, and places arrows
-  without delegating the final render to ``Axes.streamplot(...)``.
 * Updated plotting tests, examples, and documentation to cover both
-  ``curly_vector``, ``scatter``, and ``streamline``.
+  ``curly_vector`` and ``scatter``.
 
 Version 0.3.17
 ------------------------
