@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import xarray as xr
+from matplotlib import colors as mcolors
 from matplotlib.collections import LineCollection
 from matplotlib.transforms import Bbox
 
@@ -203,6 +204,33 @@ class TestCurlyVector:
             assert result.anchor == anchor
             plt.close(fig)
 
+    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    def test_curly_vector_accepts_quiver_pivot_alias(
+        self, mock_ncl_curly, sample_vector_field
+    ):
+        """Matplotlib-style pivot should map onto the native anchor concept."""
+        x, y, u, v = sample_vector_field
+        mock_ncl_curly.return_value = Mock(spec=CurlyVectorPlotSet)
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        curly_vector(ax, x, y, u, v, pivot="tip")
+
+        assert mock_ncl_curly.call_args.kwargs["anchor"] == "head"
+
+        plt.close(fig)
+
+    def test_curly_vector_rejects_conflicting_anchor_and_pivot(
+        self, sample_vector_field
+    ):
+        """Conflicting anchor/pivot aliases should fail fast."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        with pytest.raises(ValueError, match="anchor and pivot refer to different"):
+            curly_vector(ax, x, y, u, v, anchor="tail", pivot="tip")
+
+        plt.close(fig)
+
     def test_curly_vector_open_arrowstyle_uses_open_heads(self, sample_vector_field):
         """Test that ``arrowstyle='->'`` uses open line heads."""
         x, y, u, v = sample_vector_field
@@ -245,6 +273,38 @@ class TestCurlyVector:
         assert len(result.lines.get_segments()) > 0
         assert len(result.arrows) > 0
         assert all(patch in ax.patches for patch in result.arrows)
+
+        plt.close(fig)
+
+    def test_curly_vector_filled_arrowstyle_honors_quiver_like_head_colors_and_alpha(
+        self, sample_vector_field
+    ):
+        """Filled heads should honor facecolor/edgecolor/alpha kwargs."""
+        x, y, u, v = sample_vector_field
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        result = curly_vector(
+            ax,
+            x,
+            y,
+            u,
+            v,
+            arrowstyle="-|>",
+            density=0.8,
+            color="black",
+            facecolor="yellow",
+            edgecolor="red",
+            alpha=0.25,
+        )
+
+        assert result.lines.get_alpha() == pytest.approx(0.25)
+        assert len(result.arrows) > 0
+        assert result.arrows[0].get_facecolor() == pytest.approx(
+            mcolors.to_rgba("yellow", alpha=0.25)
+        )
+        assert result.arrows[0].get_edgecolor() == pytest.approx(
+            mcolors.to_rgba("red", alpha=0.25)
+        )
 
         plt.close(fig)
 
@@ -440,6 +500,41 @@ class TestCurlyVector:
         np.testing.assert_allclose(
             np.asarray(call_kwargs["linewidth"], dtype=float), 200.0 + u
         )
+
+        plt.close(fig)
+
+    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    def test_curly_vector_sorts_descending_regular_array_coordinates(
+        self, mock_ncl_curly
+    ):
+        """Direct array input should accept descending lat/lon style axes."""
+        x = np.array([110.0, 108.0, 106.0, 104.0])
+        y = np.array([90.0, 60.0, 30.0, 0.0, -30.0, -60.0, -90.0])
+        u = np.arange(y.size * x.size, dtype=float).reshape(y.size, x.size)
+        v = -u
+        color = 100.0 + u
+        linewidth = 200.0 + u
+        mock_ncl_curly.return_value = Mock(spec=CurlyVectorPlotSet)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        curly_vector(
+            ax,
+            x,
+            y,
+            u,
+            v,
+            color=color,
+            linewidth=linewidth,
+        )
+
+        call_args = mock_ncl_curly.call_args
+        np.testing.assert_allclose(call_args.args[1], x[::-1])
+        np.testing.assert_allclose(call_args.args[2], y[::-1])
+        np.testing.assert_allclose(call_args.args[3], u[::-1, ::-1])
+        np.testing.assert_allclose(call_args.args[4], v[::-1, ::-1])
+        np.testing.assert_allclose(call_args.kwargs["color"], color[::-1, ::-1])
+        np.testing.assert_allclose(call_args.kwargs["linewidth"], linewidth[::-1, ::-1])
 
         plt.close(fig)
 
