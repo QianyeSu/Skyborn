@@ -35,7 +35,9 @@ High-performance trend detection for climate data with vectorized implementation
 Plotting
 ------------------
 
-Visualization and plotting utilities.
+Visualization and plotting utilities including NCL-like curly vectors and
+display-space-thinned scatter stippling, plus Matplotlib-compatible
+streamlines for map and profile flow visualization.
 
 Interpolation
 -----------------------
