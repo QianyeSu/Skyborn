@@ -36,6 +36,77 @@ def _normalize_artist_alpha(alpha: Any) -> float | None:
     return alpha_value
 
 
+def _ncl_arrow_edge_size_px(
+    magnitude_value: Any,
+    max_mag: Any,
+    min_edge_px: Any,
+    max_edge_px: Any,
+) -> float:
+    """Scale the NCL-like arrow edge size between configured pixel bounds."""
+    max_mag = max(float(max_mag), 1e-12)
+    vmf = np.clip(float(magnitude_value) / max_mag, 0.0, 1.0)
+    return float(min_edge_px) + (float(max_edge_px) - float(min_edge_px)) * vmf
+
+
+def _resolve_open_arrow_size(edge_size_px: Any) -> tuple[float, float]:
+    """Convert an NCL-like edge size into open-head length/width pixels."""
+    edge_size_px = max(float(edge_size_px), 1.0)
+    half_angle = 0.5
+    shaft_length_px = edge_size_px * np.cos(half_angle)
+    head_width_px = 2.0 * edge_size_px * np.sin(half_angle)
+    return shaft_length_px, head_width_px
+
+
+def _curly_head_axes_dimensions(
+    axes: Any,
+    magnitude_value: Any,
+    *,
+    max_magnitude: Any,
+    arrowsize: Any,
+) -> tuple[float, float]:
+    """Resolve reference-key head dimensions in axes fractions."""
+    try:
+        magnitude_value = float(magnitude_value)
+    except (TypeError, ValueError):
+        return 0.0, 0.0
+
+    if axes is None or not np.isfinite(magnitude_value) or magnitude_value <= 0.0:
+        return 0.0, 0.0
+
+    try:
+        axes_width_px = max(float(axes.bbox.width), 1.0)
+        axes_height_px = max(float(axes.bbox.height), 1.0)
+    except Exception:
+        return 0.0, 0.0
+
+    try:
+        max_mag = float(max_magnitude) if max_magnitude is not None else magnitude_value
+    except (TypeError, ValueError):
+        max_mag = magnitude_value
+    if not np.isfinite(max_mag) or max_mag <= 0.0:
+        max_mag = magnitude_value
+
+    try:
+        arrowsize = max(float(arrowsize), 0.1)
+    except (TypeError, ValueError):
+        arrowsize = 1.0
+
+    min_edge_px = max(axes_width_px * 0.003 * arrowsize, 1.2)
+    max_edge_px = max(axes_width_px * 0.012 * arrowsize, min_edge_px)
+    head_length_px, head_width_px = _resolve_open_arrow_size(
+        _ncl_arrow_edge_size_px(
+            magnitude_value,
+            max_mag=max_mag,
+            min_edge_px=min_edge_px,
+            max_edge_px=max_edge_px,
+        )
+    )
+    return (
+        max(float(head_length_px) / axes_width_px, 0.0),
+        max(float(head_width_px) / axes_height_px, 0.0),
+    )
+
+
 def _normalize_curly_pivot(pivot: Any) -> str | None:
     """Map Matplotlib quiver-style pivots to curly-vector anchors."""
     if pivot is None:
