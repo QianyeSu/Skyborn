@@ -911,76 +911,16 @@ def _trace_ncl_direction_python(
     )
 
 
-def _ncl_step_length_px(base_step_px, local_speed, speed_scale):
-    speed_scale = max(float(speed_scale), 1e-12)
-    speed_fraction = np.clip(float(local_speed) / speed_scale, 0.0, 1.0)
-    return max(0.35, float(base_step_px) * speed_fraction * speed_fraction)
-
-
-def _corrected_ncl_display_origin(current_display, previous_display):
-    if previous_display is None:
-        return np.asarray(current_display, dtype=float)
-    current_display = np.asarray(current_display, dtype=float)
-    previous_display = np.asarray(previous_display, dtype=float)
-    return current_display - (current_display - previous_display) / 3.0
-
-
-def _clip_display_step_to_viewport(start_display, end_display, viewport):
-    start_display = np.asarray(start_display, dtype=float)
-    end_display = np.asarray(end_display, dtype=float)
-    if np.all(np.isfinite(end_display)) and viewport.contains(*end_display):
-        return end_display, False
-
-    delta = end_display - start_display
-    if not np.all(np.isfinite(delta)):
-        return start_display, True
-
-    factors = [1.0]
-    if delta[0] < -1e-12:
-        factors.append((viewport.x0 - start_display[0]) / delta[0])
-    elif delta[0] > 1e-12:
-        factors.append((viewport.x1 - start_display[0]) / delta[0])
-
-    if delta[1] < -1e-12:
-        factors.append((viewport.y0 - start_display[1]) / delta[1])
-    elif delta[1] > 1e-12:
-        factors.append((viewport.y1 - start_display[1]) / delta[1])
-
-    factor = float(np.clip(min(factors), 0.0, 1.0))
-    return start_display + delta * factor, True
-
-
 def _sample_local_vector_state(grid, u, v, transform, point, display_sampler=None):
-    point = np.asarray(point, dtype=float)
-    u_value = _sample_grid_field(grid, u, point[0], point[1])
-    v_value = _sample_grid_field(grid, v, point[0], point[1])
-    if u_value is None or v_value is None:
-        return None
-
-    if display_sampler is not None:
-        sampled_mapping = display_sampler.sample(point)
-        if sampled_mapping is None:
-            return None
-        origin_display, jacobian = sampled_mapping
-    else:
-        jacobian = _local_display_jacobian(transform, point, grid)
-        if jacobian is None:
-            return None
-
-        origin_display = transform.transform(np.asarray([point]))[0]
-        if not np.all(np.isfinite(origin_display)):
-            return None
-
-    display_vector = jacobian @ np.array([u_value, v_value], dtype=float)
-    display_norm = np.hypot(*display_vector)
-    if not np.isfinite(display_norm) or display_norm <= 1e-12:
-        return None
-
-    return (
-        origin_display,
-        jacobian,
-        display_vector / display_norm,
-        np.hypot(u_value, v_value),
+    return _vector_engine._sample_local_vector_state(
+        grid=grid,
+        u=u,
+        v=v,
+        transform=transform,
+        point=point,
+        display_sampler=display_sampler,
+        sample_grid_field_fn=_sample_grid_field,
+        local_display_jacobian_fn=_local_display_jacobian,
     )
 
 
@@ -1252,74 +1192,3 @@ def _tip_display_geometry(
             return None
 
     return _tip_display_geometry_from_display_curve(display_curve, backoff_px)
-
-
-class Grid:
-    """Grid of data."""
-
-    def __init__(self, x, y, allow_non_uniform=False):
-
-        if np.ndim(x) == 1:
-            pass
-        elif np.ndim(x) == 2:
-            x_row = x[0]
-            if not np.allclose(x_row, x):
-                raise ValueError("The rows of 'x' must be equal")
-            x = x_row
-        else:
-            raise ValueError("'x' can have at maximum 2 dimensions")
-
-        if np.ndim(y) == 1:
-            pass
-        elif np.ndim(y) == 2:
-            yt = np.transpose(y)  # Also works for nested lists.
-            y_col = yt[0]
-            if not np.allclose(y_col, yt):
-                raise ValueError("The columns of 'y' must be equal")
-            y = y_col
-        else:
-            raise ValueError("'y' can have at maximum 2 dimensions")
-
-        if not (np.diff(x) > 0).all():
-            raise ValueError("'x' must be strictly increasing")
-        if not (np.diff(y) > 0).all():
-            raise ValueError("'y' must be strictly increasing")
-
-        self.nx = len(x)
-        self.ny = len(y)
-
-        if self.nx < 2 or self.ny < 2:
-            raise ValueError("'x' and 'y' must each contain at least 2 points")
-
-        self.dx = x[1] - x[0]
-        self.dy = y[1] - y[0]
-
-        self.x_origin = x[0]
-        self.y_origin = y[0]
-
-        self.width = x[-1] - x[0]
-        self.height = y[-1] - y[0]
-
-        # Only check for equal spacing if not allowing non-uniform grids
-        if not allow_non_uniform:
-            if not np.allclose(np.diff(x), self.width / (self.nx - 1)):
-                raise ValueError("'x' values must be equally spaced")
-            if not np.allclose(np.diff(y), self.height / (self.ny - 1)):
-                raise ValueError("'y' values must be equally spaced")
-        else:
-            # For non-uniform grids, use average spacing
-            self.dx = self.width / (self.nx - 1)
-            self.dy = self.height / (self.ny - 1)
-
-        self.inv_dx = 1.0 / max(float(self.dx), 1e-12)
-        self.inv_dy = 1.0 / max(float(self.dy), 1e-12)
-
-    @property
-    def shape(self):
-        return self.ny, self.nx
-
-    def within_grid(self, xi, yi):
-        """Return whether (*xi*, *yi*) is a valid index of the grid."""
-        # Note that xi/yi can be floats; so, for example, we can't simply check
-        # `xi < self.nx` since *xi* can be `self.nx - 1 < xi < self.nx`
-        return 0 <= xi <= self.nx - 1 and 0 <= yi <= self.ny - 1
