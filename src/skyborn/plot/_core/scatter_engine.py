@@ -12,7 +12,7 @@ from .._core.thinning import (
 )
 from .._shared import coords as _coord_helpers
 from .._shared.style import _resolve_scatter_aliases
-from ..vector_plot import _thin_ncl_mapped_candidates
+from ..vector import _thin_ncl_mapped_candidates
 
 
 def _resolve_spacing_fraction(
