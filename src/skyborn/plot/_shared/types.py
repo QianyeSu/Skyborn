@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Hashable
+from typing import Optional, Tuple
 
 CoordinateShape = tuple[int, ...]
-TargetDims = tuple[Hashable, ...] | None
+TargetDims = Optional[Tuple[Hashable, ...]]
