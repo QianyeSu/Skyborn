@@ -12,14 +12,14 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ._core.thinning import (
+    _map_ncl_display_points_to_viewport,
+    _resolve_ncl_min_distance_fraction,
+)
 from ._shared import coords as _coord_helpers
 from ._shared.axes import _is_cartopy_crs_like, _looks_like_axes
 from ._shared.style import _resolve_scatter_aliases
-from .vector_plot import (
-    _map_ncl_display_points_to_viewport,
-    _resolve_ncl_min_distance_fraction,
-    _thin_ncl_mapped_candidates,
-)
+from .vector_plot import _thin_ncl_mapped_candidates
 
 __all__ = ["scatter"]
 
