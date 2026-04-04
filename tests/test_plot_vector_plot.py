@@ -11,8 +11,8 @@ from matplotlib import colors as mcolors
 from matplotlib.collections import LineCollection
 from matplotlib.transforms import Bbox
 
-import skyborn.plot.vector_plot as vector_plot_module
-from skyborn.plot.vector_plot import (
+import skyborn.plot.vector as vector_plot_module
+from skyborn.plot.vector import (
     CurlyVectorPlotSet,
     DomainMap,
     Grid,
@@ -21,6 +21,9 @@ from skyborn.plot.vector_plot import (
     StreamMask,
     TerminateTrajectory,
     _apply_ncl_preset_defaults,
+)
+from skyborn.plot.vector import _array_curly_vector as curly_vector
+from skyborn.plot.vector import (
     _axis_coordinate_1d,
     _axis_is_uniform,
     _candidate_data_from_display_step,
@@ -54,7 +57,6 @@ from skyborn.plot.vector_plot import (
     _tip_display_geometry_from_display_curve,
     _trim_curve_for_open_head,
     _trim_display_curve_from_end,
-    curly_vector,
     interpgrid,
 )
 
@@ -204,7 +206,7 @@ class TestCurlyVector:
             assert result.anchor == anchor
             plt.close(fig)
 
-    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    @patch("skyborn.plot.vector._curly_vector_ncl")
     def test_curly_vector_accepts_quiver_pivot_alias(
         self, mock_ncl_curly, sample_vector_field
     ):
@@ -219,7 +221,7 @@ class TestCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    @patch("skyborn.plot.vector._curly_vector_ncl")
     def test_curly_vector_accepts_quiver_style_aliases(
         self, mock_ncl_curly, sample_vector_field
     ):
@@ -545,7 +547,7 @@ class TestCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    @patch("skyborn.plot.vector._curly_vector_ncl")
     def test_curly_vector_profile_preset_applies_conservative_defaults(
         self, mock_ncl_curly, sample_vector_field
     ):
@@ -570,7 +572,7 @@ class TestCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    @patch("skyborn.plot.vector._curly_vector_ncl")
     def test_curly_vector_profile_preset_preserves_explicit_overrides(
         self, mock_ncl_curly, sample_vector_field
     ):
@@ -611,7 +613,7 @@ class TestCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    @patch("skyborn.plot.vector._curly_vector_ncl")
     def test_curly_vector_accepts_array_like_style_fields_on_regular_grid(
         self, mock_ncl_curly, sample_vector_field
     ):
@@ -635,7 +637,7 @@ class TestCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    @patch("skyborn.plot.vector._curly_vector_ncl")
     def test_curly_vector_sorts_descending_regular_array_coordinates(
         self, mock_ncl_curly
     ):
@@ -701,7 +703,7 @@ class TestCurlyVector:
         assert resolved[3] is None
         assert resolved[4] == "profile"
 
-    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    @patch("skyborn.plot.vector._curly_vector_ncl")
     def test_curly_vector_auto_profile_preset_for_non_uniform_coordinates(
         self, mock_ncl_curly, sample_vector_field
     ):
@@ -725,7 +727,7 @@ class TestCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    @patch("skyborn.plot.vector._curly_vector_ncl")
     def test_curly_vector_allow_non_uniform_grid_keeps_uniform_axes_on_default_preset(
         self, mock_ncl_curly, sample_vector_field
     ):
@@ -746,7 +748,7 @@ class TestCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    @patch("skyborn.plot.vector._curly_vector_ncl")
     def test_curly_vector_non_uniform_2d_meshgrid_preserves_original_resolution(
         self, mock_ncl_curly
     ):
@@ -770,7 +772,7 @@ class TestCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    @patch("skyborn.plot.vector._curly_vector_ncl")
     def test_curly_vector_non_uniform_masked_values_stay_nan_after_regridding(
         self, mock_ncl_curly
     ):
@@ -795,7 +797,7 @@ class TestCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.vector_plot._curly_vector_ncl")
+    @patch("skyborn.plot.vector._curly_vector_ncl")
     def test_curly_vector_non_uniform_style_fields_follow_vector_regridding(
         self, mock_ncl_curly
     ):
