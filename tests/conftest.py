@@ -31,7 +31,7 @@ def sample_climate_data():
     xr.Dataset
         Dataset with temperature and precipitation data
     """
-    time = pd.date_range("2020-01-01", periods=12, freq="M")
+    time = pd.date_range("2020-01-01", periods=12, freq="ME")
     lat = np.linspace(-90, 90, 73)
     lon = np.linspace(0, 357.5, 144)
 
