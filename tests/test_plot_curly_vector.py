@@ -9,9 +9,10 @@ import pytest
 import xarray as xr
 
 import skyborn.plot as plot_module
-import skyborn.plot.ncl_vector as ncl_vector_module
 import skyborn.plot.vector as vector_module
-from skyborn.plot.ncl_vector import (
+from skyborn.plot.vector import (
+    CurlyVectorKey,
+    CurlyVectorPlotSet,
     _append_cyclic_column,
     _apply_dataset_isel,
     _build_curvilinear_target_grid,
@@ -28,25 +29,24 @@ from skyborn.plot.ncl_vector import (
     _prepare_source_vector_grid,
     _wrap_periodic_grid_queries,
     curly_vector,
+    curly_vector_key,
 )
-from skyborn.plot.vector_key import CurlyVectorKey, curly_vector_key
-from skyborn.plot.vector_plot import CurlyVectorPlotSet
 
 
 class TestVectorFacade:
     """Test the unified public vector facade module."""
 
     def test_vector_module_reexports_current_public_vector_names(self):
-        assert vector_module.curly_vector is ncl_vector_module.curly_vector
+        assert vector_module.curly_vector is curly_vector
         assert vector_module.curly_vector_key is curly_vector_key
         assert vector_module.CurlyVectorKey is CurlyVectorKey
         assert vector_module.CurlyVectorPlotSet is CurlyVectorPlotSet
 
-    def test_plot_package_reexports_through_vector_facade(self):
+    def test_plot_package_reexports_only_function_surface(self):
         assert plot_module.curly_vector is vector_module.curly_vector
         assert plot_module.curly_vector_key is vector_module.curly_vector_key
-        assert plot_module.CurlyVectorKey is vector_module.CurlyVectorKey
-        assert plot_module.CurlyVectorPlotSet is vector_module.CurlyVectorPlotSet
+        assert not hasattr(plot_module, "CurlyVectorKey")
+        assert not hasattr(plot_module, "CurlyVectorPlotSet")
 
 
 class TestDatasetCurlyVector:
@@ -131,7 +131,7 @@ class TestDatasetCurlyVector:
         assert isinstance(result, CurlyVectorPlotSet)
         plt.close()
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_array_input_uses_current_axes(self, mock_curly_vector):
         """Array input should default to the current axes when ax is omitted."""
         mock_result = Mock(spec=CurlyVectorPlotSet)
@@ -156,7 +156,7 @@ class TestDatasetCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_array_input_accepts_ax_keyword(self, mock_curly_vector):
         """Array input should also accept ax=... like pyplot.quiver()."""
         mock_result = Mock(spec=CurlyVectorPlotSet)
@@ -177,7 +177,7 @@ class TestDatasetCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_array_input_forwards_quiver_style_kwargs(
         self, mock_curly_vector
     ):
@@ -215,7 +215,7 @@ class TestDatasetCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_array_input_forwards_quiver_style_aliases(
         self, mock_curly_vector
     ):
@@ -255,7 +255,7 @@ class TestDatasetCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_dataset_input_resolves_quiver_style_aliases(
         self, mock_curly_vector, sample_data
     ):
@@ -296,7 +296,7 @@ class TestDatasetCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_wrapper_default_arrowstyle_matches_core(
         self, mock_curly_vector, sample_data
     ):
@@ -357,7 +357,7 @@ class TestDatasetCurlyVector:
         plt.close(fig)
         pytest.skip("Transform test requires complex matplotlib transform mocking")
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_converts_crs_like_transform(
         self, mock_curly_vector, sample_data
     ):
@@ -407,7 +407,7 @@ class TestDatasetCurlyVector:
         assert isinstance(result, CurlyVectorPlotSet)
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_coerces_arraylike_color_and_linewidth(
         self, mock_curly_vector, sample_data
     ):
@@ -442,8 +442,8 @@ class TestDatasetCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._regrid_cartopy_vectors")
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._regrid_cartopy_vectors")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_regrids_cartopy_vectors(
         self, mock_curly_vector, mock_regrid_vectors, sample_data
     ):
@@ -517,14 +517,14 @@ class TestDatasetCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_supports_isel_for_multidimensional_inputs(
         self, mock_curly_vector
     ):
         """Test that curly_vector can select a 2D slice via isel."""
         mock_result = Mock(spec=CurlyVectorPlotSet)
         mock_curly_vector.return_value = mock_result
-        ncl_vector_module._ISSUED_PLOT_WARNINGS.clear()
+        vector_module._ISSUED_PLOT_WARNINGS.clear()
 
         x = np.linspace(100.0, 110.0, 6)
         y = np.linspace(20.0, 28.0, 5)
@@ -565,7 +565,7 @@ class TestDatasetCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_sorts_descending_rectilinear_coordinates(
         self, mock_curly_vector
     ):
@@ -593,8 +593,8 @@ class TestDatasetCurlyVector:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._regrid_curvilinear_vectors")
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._regrid_curvilinear_vectors")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_regularizes_curvilinear_coordinates(
         self, mock_curly_vector, mock_regrid_curvilinear
     ):
@@ -697,7 +697,7 @@ class TestDatasetCurlyVector:
         assert isinstance(result, CurlyVectorPlotSet)
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_calls_curly_vector(self, mock_curly_vector, sample_data):
         """Test that curly_vector properly calls curly_vector."""
         mock_result = Mock(spec=CurlyVectorPlotSet)
@@ -722,7 +722,7 @@ class TestDatasetCurlyVector:
         assert result == mock_result
         plt.close(fig)
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_forwards_ncl_options(self, mock_curly_vector, sample_data):
         """Test forwarding of the NCL-like rendering options."""
         mock_result = Mock(spec=CurlyVectorPlotSet)
@@ -782,7 +782,7 @@ class TestDatasetCurlyVectorHelpers:
             np.arange(2 * 3 * 4).reshape(2, 3, 4),
             dims=("time", "level", "x"),
         )
-        ncl_vector_module._ISSUED_PLOT_WARNINGS.clear()
+        vector_module._ISSUED_PLOT_WARNINGS.clear()
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
@@ -1029,7 +1029,7 @@ class TestDatasetCurlyVectorHelpers:
         np.testing.assert_allclose(u_out, u_values)
         np.testing.assert_allclose(v_out, v_values)
 
-    @patch("skyborn.plot.ncl_vector._array_curly_vector")
+    @patch("skyborn.plot.vector._array_curly_vector")
     def test_curly_vector_dataset_flips_external_style_fields_with_descending_axes(
         self, mock_curly_vector
     ):
