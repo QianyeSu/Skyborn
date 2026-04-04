@@ -1106,10 +1106,6 @@ def _curly_vector_ncl(
         viewport=axes.bbox,
         display_sampler=display_sampler,
     )
-    try:
-        inverse_transform = transform.inverted()
-    except Exception:
-        inverse_transform = None
 
     selected_centers = _select_ncl_centers(
         grid=grid,
