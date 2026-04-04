@@ -23,6 +23,7 @@ from ._core import legacy_stream as _legacy_stream
 from ._core import native as _native_helpers
 from ._core import sampling as _sampling
 from ._core import thinning as _thinning
+from ._core import vector_engine as _vector_engine
 from ._core.result import CurlyVectorPlotSet
 from ._core.vector_engine import (
     _curve_length_from_magnitude,
@@ -54,6 +55,10 @@ _candidate_data_from_display_step = _geometry._candidate_data_from_display_step
 _curve_shape_is_acceptable = _geometry._curve_shape_is_acceptable
 _display_points_to_data = _geometry._display_points_to_data
 _display_step_to_data = _geometry._display_step_to_data
+_default_ncl_box_center_candidates = _vector_engine._default_ncl_box_center_candidates
+_default_ncl_candidate_shape = _vector_engine._default_ncl_candidate_shape
+_density_scalar = _vector_engine._density_scalar
+_density_xy = _vector_engine._density_xy
 _evaluate_ncl_display_curve = _geometry._evaluate_ncl_display_curve
 _finite_difference_step = _geometry._finite_difference_step
 _fit_single_bend_display_curve = _geometry._fit_single_bend_display_curve
@@ -61,12 +66,15 @@ DomainMap = _legacy_stream.DomainMap
 interpgrid = _legacy_stream.interpgrid
 InvalidIndexError = _legacy_stream.InvalidIndexError
 _local_display_jacobian = _geometry._local_display_jacobian
+_map_ncl_display_points_to_viewport = _thinning._map_ncl_display_points_to_viewport
 _NCLDisplaySampler = _thinning._NCLDisplaySampler
 _NCLNativeTraceContext = _thinning._NCLNativeTraceContext
 OutOfBounds = _legacy_stream.OutOfBounds
 _point_at_arc_distance_from_end = _geometry._point_at_arc_distance_from_end
 _point_within_grid_data = _geometry._point_within_grid_data
 _prepare_ncl_display_sampler = _thinning._prepare_ncl_display_sampler
+_resolve_ncl_min_distance_fraction = _thinning._resolve_ncl_min_distance_fraction
+_valid_ncl_center_candidates = _vector_engine._valid_ncl_center_candidates
 _euler_step = _legacy_stream._euler_step
 _gen_starting_points = _legacy_stream._gen_starting_points
 _get_integrator = _legacy_stream._get_integrator
@@ -910,18 +918,6 @@ def _resolve_curly_anchor(anchor, integration_direction):
     return anchor
 
 
-def _density_xy(density):
-    density_xy = np.broadcast_to(np.asarray(density, dtype=float), 2).astype(float)
-    return np.maximum(density_xy, 0.1)
-
-
-def _density_scalar(density):
-    if np.isscalar(density):
-        return max(float(density), 0.1)
-    density_xy = _density_xy(density)
-    return float(np.mean(density_xy))
-
-
 def _prepare_ncl_native_trace_context(grid, u, v, viewport, display_sampler):
     if _trace_ncl_direction_native is None or display_sampler is None:
         return None
@@ -953,117 +949,30 @@ def _select_ncl_centers(
     display_sampler=None,
     ncl_preset=None,
 ):
-    candidates, candidate_magnitudes = _prepare_ncl_center_candidates(
+    return _vector_engine._select_ncl_centers(
+        grid=grid,
+        magnitude=magnitude,
+        transform=transform,
+        axes=axes,
+        density=density,
+        start_points=start_points,
+        min_distance=min_distance,
+        display_sampler=display_sampler,
+        ncl_preset=ncl_preset,
+        sample_grid_field_array=_sample_grid_field_array,
+        thin_ncl_mapped_candidates=_thin_ncl_mapped_candidates,
+    )
+
+
+def _prepare_ncl_center_candidates(grid, magnitude, density, start_points, ncl_preset):
+    return _vector_engine._prepare_ncl_center_candidates(
         grid=grid,
         magnitude=magnitude,
         density=density,
         start_points=start_points,
         ncl_preset=ncl_preset,
+        sample_grid_field_array=_sample_grid_field_array,
     )
-    if display_sampler is not None:
-        display_points = display_sampler.sample_display_points(candidates)
-    else:
-        display_points = transform.transform(candidates)
-    valid = _valid_ncl_center_candidates(
-        grid=grid,
-        candidates=candidates,
-        candidate_magnitudes=candidate_magnitudes,
-        display_points=display_points,
-        start_points=start_points,
-    )
-
-    candidates = candidates[valid]
-    display_points = display_points[valid]
-    candidate_magnitudes = candidate_magnitudes[valid]
-    if candidates.size == 0:
-        return []
-
-    mapped_points = _map_ncl_display_points_to_viewport(display_points, axes.bbox)
-    spacing_frac = _resolve_ncl_min_distance_fraction(
-        density=density,
-        min_distance=min_distance,
-        ncl_preset=ncl_preset,
-    )
-    selected_indices = _thin_ncl_mapped_candidates(mapped_points, spacing_frac)
-    return [(candidates[idx], candidate_magnitudes[idx]) for idx in selected_indices]
-
-
-def _prepare_ncl_center_candidates(grid, magnitude, density, start_points, ncl_preset):
-    if start_points is None:
-        candidates = _default_ncl_box_center_candidates(
-            grid,
-            density=density,
-            ncl_preset=ncl_preset,
-        )
-        candidate_magnitudes = _sample_grid_field_array(grid, magnitude, candidates)
-        return candidates, candidate_magnitudes
-
-    candidates = np.asanyarray(start_points, dtype=float)
-    if candidates.ndim != 2 or candidates.shape[1] != 2:
-        raise ValueError("'start_points' must be an (N, 2) array")
-    candidate_magnitudes = _sample_grid_field_array(grid, magnitude, candidates)
-    return candidates, candidate_magnitudes
-
-
-def _default_ncl_candidate_shape(grid, density):
-    density_xy = _density_xy(density)
-    candidate_nx = min(grid.nx - 1, max(int(np.ceil(30.0 * density_xy[0])), 1))
-    candidate_ny = min(grid.ny - 1, max(int(np.ceil(30.0 * density_xy[1])), 1))
-    return candidate_nx, candidate_ny
-
-
-def _default_ncl_box_center_candidates(grid, density=1, ncl_preset=None):
-    if grid.nx < 2 or grid.ny < 2:
-        return np.empty((0, 2), dtype=float)
-
-    candidate_nx, candidate_ny = _default_ncl_candidate_shape(grid, density)
-    if candidate_nx == grid.nx - 1 and candidate_ny == grid.ny - 1:
-        xs = grid.x_origin + (np.arange(grid.nx - 1) + 0.5) * grid.dx
-        ys = grid.y_origin + (np.arange(grid.ny - 1) + 0.5) * grid.dy
-    else:
-        x_edges = np.linspace(
-            grid.x_origin, grid.x_origin + grid.width, candidate_nx + 1
-        )
-        y_edges = np.linspace(
-            grid.y_origin, grid.y_origin + grid.height, candidate_ny + 1
-        )
-        xs = 0.5 * (x_edges[:-1] + x_edges[1:])
-        ys = 0.5 * (y_edges[:-1] + y_edges[1:])
-    grid_x, grid_y = np.meshgrid(xs, ys, indexing="xy")
-    return np.column_stack([grid_x.ravel(), grid_y.ravel()])
-
-
-def _valid_ncl_center_candidates(
-    grid, candidates, candidate_magnitudes, display_points, start_points
-):
-    valid = np.isfinite(display_points).all(axis=1) & np.isfinite(candidate_magnitudes)
-
-    for idx, (xd, yd) in enumerate(candidates):
-        if _point_within_grid_data(grid, np.array([xd, yd], dtype=float)):
-            continue
-        if start_points is not None:
-            raise ValueError(f"Starting point ({xd}, {yd}) outside of data boundaries")
-        valid[idx] = False
-
-    return valid
-
-
-def _map_ncl_display_points_to_viewport(display_points, viewport):
-    width = max(float(viewport.width), 1.0)
-    height = max(float(viewport.height), 1.0)
-    mapped = np.empty_like(display_points, dtype=float)
-    mapped[:, 0] = (display_points[:, 0] - float(viewport.x0)) / width
-    mapped[:, 1] = (display_points[:, 1] - float(viewport.y0)) / height
-    return mapped
-
-
-def _resolve_ncl_min_distance_fraction(density, min_distance, ncl_preset=None):
-    if min_distance is not None:
-        return max(float(min_distance), 1e-6)
-    spacing_frac = 0.9 / (30.0 * _density_scalar(density))
-    if _normalize_ncl_preset(ncl_preset) == "profile":
-        spacing_frac *= 0.6
-    return spacing_frac
 
 
 def _thin_ncl_mapped_candidates(mapped_points, spacing_frac):
