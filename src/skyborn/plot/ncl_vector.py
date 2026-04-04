@@ -16,8 +16,10 @@ import xarray as xr
 
 from . import _ncl_vector_dataset as _dataset_helpers
 from . import _ncl_vector_regrid as _regrid_helpers
+from ._shared.axes import _is_cartopy_crs_like, _looks_like_axes
+from ._shared.style import _collect_named_kwargs, _resolve_curly_style_aliases
 from .vector_key import CurlyVectorKey, curly_vector_key
-from .vector_plot import CurlyVectorPlotSet, _resolve_curly_style_aliases
+from .vector_plot import CurlyVectorPlotSet
 from .vector_plot import curly_vector as _array_curly_vector
 
 if TYPE_CHECKING:
@@ -52,21 +54,6 @@ _ARRAY_CURLY_VECTOR_KWARG_NAMES = (
     "min_distance",
     "ncl_preset",
 )
-
-
-def _is_cartopy_crs_like(transform) -> bool:
-    return transform is not None and hasattr(transform, "_as_mpl_transform")
-
-
-def _looks_like_axes(value: Any) -> bool:
-    return hasattr(value, "add_collection") and hasattr(value, "transData")
-
-
-def _collect_named_kwargs(
-    scope: dict[str, Any], names: tuple[str, ...]
-) -> dict[str, Any]:
-    """Collect a stable subset of keyword arguments from a local scope."""
-    return {name: scope[name] for name in names}
 
 
 _ISSUED_PLOT_WARNINGS = _dataset_helpers._ISSUED_PLOT_WARNINGS
