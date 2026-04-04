@@ -70,22 +70,27 @@ _local_display_jacobian = _geometry._local_display_jacobian
 _map_ncl_display_points_to_viewport = _thinning._map_ncl_display_points_to_viewport
 _NCLDisplaySampler = _thinning._NCLDisplaySampler
 _NCLNativeTraceContext = _thinning._NCLNativeTraceContext
+_ncl_step_length_px = _vector_engine._ncl_step_length_px
 OutOfBounds = _legacy_stream.OutOfBounds
 _point_at_arc_distance_from_end = _geometry._point_at_arc_distance_from_end
 _point_within_grid_data = _geometry._point_within_grid_data
 _prepare_ncl_display_sampler = _thinning._prepare_ncl_display_sampler
 _resolve_ncl_min_distance_fraction = _thinning._resolve_ncl_min_distance_fraction
+_resolve_curly_anchor = _vector_engine._resolve_curly_anchor
 _valid_ncl_center_candidates = _vector_engine._valid_ncl_center_candidates
 _euler_step = _legacy_stream._euler_step
 _gen_starting_points = _legacy_stream._gen_starting_points
 _get_integrator = _legacy_stream._get_integrator
 _integrate_rk12 = _legacy_stream._integrate_rk12
+Grid = _vector_engine.Grid
 StreamMask = _legacy_stream.StreamMask
 TerminateTrajectory = _legacy_stream.TerminateTrajectory
 _tip_display_geometry_from_display_curve = (
     _geometry._tip_display_geometry_from_display_curve
 )
 _trim_display_curve_from_end = _geometry._trim_display_curve_from_end
+_corrected_ncl_display_origin = _vector_engine._corrected_ncl_display_origin
+_clip_display_step_to_viewport = _vector_engine._clip_display_step_to_viewport
 
 _ISSUED_NATIVE_WARNINGS: set[str] = set()
 _NATIVE_IMPORT_ERROR: Exception | None = None
@@ -594,329 +599,48 @@ def _curly_vector_ncl(
     allow_non_uniform_grid=False,
     ncl_preset=None,
 ):
-    _warn_if_native_backend_unavailable()
-    grid = Grid(x, y, allow_non_uniform=allow_non_uniform_grid)
-
-    if zorder is None:
-        zorder = mlines.Line2D.zorder
-    if transform is None:
-        transform = axes.transData
-    if color is None:
-        color = axes._get_lines.get_next_color()
-    if linewidth is None:
-        linewidth = mpl.rcParams["lines.linewidth"]
-
-    artist_transform, artist_inverse_transform, bake_display_geometry = (
-        _resolve_artist_coordinate_context(axes, transform)
-    )
-
-    # The NCL-like branch sizes glyphs in display space. Ensure the data limits
-    # are initialized before sampling ``transData``; otherwise the default
-    # 0..1 axes limits can shrink global lon/lat glyphs into near-invisible
-    # dots before autoscaling happens at the end.
-    axes.update_datalim(
-        np.array(
-            [
-                [grid.x_origin, grid.y_origin],
-                [grid.x_origin + grid.width, grid.y_origin + grid.height],
-            ]
-        )
-    )
-    axes.autoscale_view()
-
-    if u.shape != grid.shape or v.shape != grid.shape:
-        raise ValueError("'u' and 'v' must match the shape of the (x, y) grid")
-
-    u = np.asarray(np.ma.masked_invalid(u).filled(np.nan), dtype=float)
-    v = np.asarray(np.ma.masked_invalid(v).filled(np.nan), dtype=float)
-    magnitude = np.hypot(u, v)
-    valid_magnitude = magnitude[np.isfinite(magnitude)]
-
-    resolved_anchor = _resolve_curly_anchor(anchor, integration_direction)
-
-    if valid_magnitude.size == 0:
-        lc = mcollections.LineCollection(
-            [],
-            transform=artist_transform,
-            zorder=zorder,
-            alpha=alpha,
-        )
-        if rasterized is not None:
-            lc.set_rasterized(bool(rasterized))
-        axes.add_collection(lc, autolim=False)
-        return CurlyVectorPlotSet(
-            lc,
-            (),
-            0.0,
-            magnitude,
-            zorder,
-            artist_transform,
-            axes,
-            linewidth,
-            color,
-            cm._ensure_cmap(cmap) if cmap is not None else None,
-            arrowsize,
-            arrowstyle,
-            start_points,
-            integration_direction,
-            grains,
-            broken_streamlines,
-            allow_non_uniform_grid,
-            density=density,
-            anchor=resolved_anchor,
-            length_scale=None,
-            rasterized=rasterized,
-        )
-
-    color_field, color_is_field = _coerce_matching_plot_field(color, grid.shape)
-    if color_field is None and color_is_field:
-        raise ValueError(
-            "If 'color' is given, it must match the shape of the (x, y) grid"
-        )
-    line_width_field, linewidth_is_field = _coerce_matching_plot_field(
-        linewidth, grid.shape
-    )
-    if line_width_field is None and linewidth_is_field:
-        raise ValueError(
-            "If 'linewidth' is given, it must match the shape of the (x, y) grid"
-        )
-
-    use_multicolor_lines = color_field is not None
-    color_default = None
-    line_width_default = linewidth
-    if use_multicolor_lines:
-        finite_color_values = _finite_plot_field_values(color_field, "color")
-        color_default = float(np.mean(finite_color_values))
-        if norm is None:
-            norm = mcolors.Normalize(
-                float(np.min(finite_color_values)) if vmin is None else float(vmin),
-                float(np.max(finite_color_values)) if vmax is None else float(vmax),
-            )
-        cmap = cm._ensure_cmap(cmap)
-    if line_width_field is not None:
-        finite_line_width_values = _finite_plot_field_values(
-            line_width_field, "linewidth"
-        )
-        line_width_default = float(np.mean(finite_line_width_values))
-
-    default_max_length_px = _default_ncl_max_length_px(axes.bbox, density)
-    requested_ref_length_px = (
-        0.0 if ref_length is None else max(axes.bbox.width * float(ref_length), 1.0)
-    )
-    ref_mag = 0.0 if ref_magnitude is None else float(ref_magnitude)
-    min_frac_length = float(np.clip(min_frac_length, 0.0, 1.0))
-    min_mag = float(np.min(valid_magnitude))
-    max_mag = float(np.max(valid_magnitude))
-    ref_length_px = _resolve_ncl_reference_length_px(
-        min_mag=min_mag,
-        max_mag=max_mag,
-        ref_mag=ref_mag,
-        requested_ref_length_px=requested_ref_length_px,
-        min_frac_length=min_frac_length,
-        default_max_length_px=default_max_length_px,
-    )
-    length_scale = _resolve_ncl_length_scale(
-        min_mag=min_mag,
-        max_mag=max_mag,
-        ref_mag=ref_mag,
-        requested_ref_length_px=requested_ref_length_px,
-        min_frac_length=min_frac_length,
-        default_max_length_px=default_max_length_px,
-    )
-    ref_length_frac = ref_length_px / max(float(axes.bbox.width), 1.0)
-    step_px = max(1.5, axes.bbox.width * 0.0045)
-    arrow_min_edge_px = max(axes.bbox.width * 0.003 * max(float(arrowsize), 0.1), 1.2)
-    arrow_max_edge_px = max(
-        axes.bbox.width * 0.012 * max(float(arrowsize), 0.1), arrow_min_edge_px
-    )
-    display_sampler = _prepare_ncl_display_sampler(grid, transform)
-    native_trace_context = _prepare_ncl_native_trace_context(
-        grid=grid,
+    return _vector_engine._curly_vector_ncl_impl(
+        axes=axes,
+        x=x,
+        y=y,
         u=u,
         v=v,
-        viewport=axes.bbox,
-        display_sampler=display_sampler,
-    )
-
-    selected_centers = _select_ncl_centers(
-        grid=grid,
-        magnitude=magnitude,
-        transform=transform,
-        axes=axes,
         density=density,
-        start_points=start_points,
-        min_distance=min_distance,
-        display_sampler=display_sampler,
-        ncl_preset=ncl_preset,
-    )
-
-    streamlines = []
-    line_colors = []
-    line_widths = []
-    arrows = []
-
-    for center, center_mag in selected_centers:
-        target_length_px = _curve_length_from_magnitude(center_mag, length_scale)
-        curve_result = _build_ncl_curve(
-            start_point=np.asarray(center, dtype=float),
-            total_length_px=target_length_px,
-            anchor=resolved_anchor,
-            grid=grid,
-            u=u,
-            v=v,
-            transform=transform,
-            step_px=step_px,
-            speed_scale=max_mag,
-            viewport=axes.bbox,
-            display_sampler=display_sampler,
-            native_trace_context=native_trace_context,
-        )
-        if curve_result is None:
-            continue
-        curve, display_curve = curve_result
-        if len(curve) < 2:
-            continue
-
-        if line_width_field is not None:
-            sampled_width = _sample_grid_field(
-                grid, line_width_field, center[0], center[1]
-            )
-            current_linewidth = (
-                float(sampled_width)
-                if sampled_width is not None
-                else line_width_default
-            )
-        else:
-            current_linewidth = linewidth
-
-        if use_multicolor_lines:
-            sampled_color = _sample_grid_field(grid, color_field, center[0], center[1])
-            if sampled_color is None:
-                sampled_color = color_default
-            curve_color = cmap(norm(sampled_color))
-        else:
-            curve_color = color
-
-        head_facecolor = curve_color if facecolor is None else facecolor
-        if edgecolor is None:
-            head_edgecolor = curve_color
-        elif isinstance(edgecolor, str) and edgecolor.strip().lower() == "face":
-            head_edgecolor = head_facecolor
-        else:
-            head_edgecolor = edgecolor
-
-        head_length_px, head_width_px = _resolve_open_arrow_size(
-            _ncl_arrow_edge_size_px(
-                center_mag,
-                max_mag=max_mag,
-                min_edge_px=arrow_min_edge_px,
-                max_edge_px=arrow_max_edge_px,
-            )
-        )
-        artist_curve = curve
-        if bake_display_geometry:
-            baked_curve = _display_points_to_data(
-                artist_transform,
-                display_curve,
-                inverse_transform=artist_inverse_transform,
-            )
-            if baked_curve is not None and len(baked_curve) >= 2:
-                artist_curve = baked_curve
-
-        streamlines.append(artist_curve)
-        if use_multicolor_lines:
-            line_colors.append(curve_color)
-        if line_width_field is not None:
-            line_widths.append(current_linewidth)
-
-        head_segments, arrow = _build_ncl_arrow_artists(
-            curve=artist_curve,
-            grid=grid,
-            transform=artist_transform,
-            arrowstyle=arrowstyle,
-            head_length_px=head_length_px,
-            head_width_px=head_width_px,
-            facecolor=head_facecolor,
-            edgecolor=head_edgecolor,
-            linewidth=current_linewidth,
-            alpha=alpha,
-            zorder=zorder,
-            inverse_transform=artist_inverse_transform,
-            display_curve=display_curve,
-        )
-        if head_segments:
-            streamlines.extend(head_segments)
-            if use_multicolor_lines:
-                line_colors.extend([curve_color] * len(head_segments))
-            if line_width_field is not None:
-                line_widths.extend([current_linewidth] * len(head_segments))
-        if arrow is not None:
-            arrows.append(arrow)
-
-    line_kw = {"zorder": zorder}
-    if use_multicolor_lines:
-        line_kw["colors"] = line_colors
-    else:
-        line_kw["color"] = color
-
-    if line_width_field is not None:
-        line_kw["linewidths"] = line_widths
-    else:
-        line_kw["linewidth"] = linewidth
-    if alpha is not None:
-        line_kw["alpha"] = alpha
-
-    lc = mcollections.LineCollection(streamlines, transform=artist_transform, **line_kw)
-    if rasterized is not None:
-        lc.set_rasterized(bool(rasterized))
-    # The axes limits were already seeded from the full grid extent above, so
-    # avoid Cartopy reprojecting every segment again just to recompute datalim.
-    axes.add_collection(lc, autolim=False)
-
-    for patch in arrows:
-        if rasterized is not None:
-            patch.set_rasterized(bool(rasterized))
-        axes.add_patch(patch)
-
-    axes.autoscale_view()
-    return CurlyVectorPlotSet(
-        lc,
-        tuple(arrows),
-        ref_length_frac,
-        magnitude,
-        zorder,
-        artist_transform,
-        axes,
-        linewidth,
-        color,
-        cmap,
-        arrowsize,
-        arrowstyle,
-        start_points,
-        integration_direction,
-        grains,
-        broken_streamlines,
-        allow_non_uniform_grid,
-        density=density,
-        anchor=resolved_anchor,
-        ncl_preset=ncl_preset,
-        length_scale=length_scale,
+        linewidth=linewidth,
+        color=color,
+        vmin=vmin,
+        vmax=vmax,
+        cmap=cmap,
+        norm=norm,
+        alpha=alpha,
+        facecolor=facecolor,
+        edgecolor=edgecolor,
         rasterized=rasterized,
+        arrowsize=arrowsize,
+        arrowstyle=arrowstyle,
+        transform=transform,
+        zorder=zorder,
+        start_points=start_points,
+        integration_direction=integration_direction,
+        grains=grains,
+        broken_streamlines=broken_streamlines,
+        anchor=anchor,
+        ref_magnitude=ref_magnitude,
+        ref_length=ref_length,
+        min_frac_length=min_frac_length,
+        min_distance=min_distance,
+        allow_non_uniform_grid=allow_non_uniform_grid,
+        ncl_preset=ncl_preset,
+        warn_if_native_backend_unavailable_fn=_warn_if_native_backend_unavailable,
+        grid_cls=Grid,
+        prepare_ncl_display_sampler_fn=_prepare_ncl_display_sampler,
+        prepare_ncl_native_trace_context_fn=_prepare_ncl_native_trace_context,
+        select_ncl_centers_fn=_select_ncl_centers,
+        build_ncl_curve_fn=_build_ncl_curve,
+        sample_grid_field_fn=_sample_grid_field,
+        build_ncl_arrow_artists_fn=_build_ncl_arrow_artists,
+        display_points_to_data_fn=_display_points_to_data,
     )
-
-
-def _resolve_curly_anchor(anchor, integration_direction):
-    mpl._api.check_in_list(
-        ["forward", "backward", "both"], integration_direction=integration_direction
-    )
-    if anchor is None:
-        anchor = {
-            "forward": "tail",
-            "backward": "head",
-            "both": "center",
-        }[integration_direction]
-    mpl._api.check_in_list(["tail", "center", "head"], anchor=anchor)
-    return anchor
 
 
 def _prepare_ncl_native_trace_context(grid, u, v, viewport, display_sampler):
