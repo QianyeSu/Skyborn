@@ -14,8 +14,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
-from . import _ncl_vector_dataset as _dataset_helpers
-from . import _ncl_vector_regrid as _regrid_helpers
+from ._adapters import cartopy_vector as _cartopy_adapter
+from ._adapters import dataset_vector as _dataset_adapter
+from ._adapters import grid_prepare as _grid_prepare_adapter
 from ._shared.axes import _is_cartopy_crs_like, _looks_like_axes
 from ._shared.style import _collect_named_kwargs, _resolve_curly_style_aliases
 from .vector_key import CurlyVectorKey, curly_vector_key
@@ -56,38 +57,40 @@ _ARRAY_CURLY_VECTOR_KWARG_NAMES = (
 )
 
 
-_ISSUED_PLOT_WARNINGS = _dataset_helpers._ISSUED_PLOT_WARNINGS
-_warn_plot_once = _dataset_helpers._warn_plot_once
-_apply_dataset_isel = _dataset_helpers._apply_dataset_isel
-_get_plot_dataarray = _dataset_helpers._get_plot_dataarray
-_transpose_2d_dataarray_to_dims = _dataset_helpers._transpose_2d_dataarray_to_dims
-_filled_scalar_field_array = _dataset_helpers._filled_scalar_field_array
+_ISSUED_PLOT_WARNINGS = _dataset_adapter._ISSUED_PLOT_WARNINGS
+_warn_plot_once = _dataset_adapter._warn_plot_once
+_apply_dataset_isel = _dataset_adapter._apply_dataset_isel
+_get_plot_dataarray = _dataset_adapter._get_plot_dataarray
+_transpose_2d_dataarray_to_dims = _dataset_adapter._transpose_2d_dataarray_to_dims
+_filled_scalar_field_array = _dataset_adapter._filled_scalar_field_array
 _extract_curly_vector_dataset_source = (
-    _dataset_helpers._extract_curly_vector_dataset_source
+    _dataset_adapter._extract_curly_vector_dataset_source
 )
-_prepare_dataset_style_field = _dataset_helpers._prepare_dataset_style_field
+_prepare_dataset_style_field = _dataset_adapter._prepare_dataset_style_field
 
 
-_default_cartopy_target_extent = _regrid_helpers._default_cartopy_target_extent
-_normalize_regrid_shape = _regrid_helpers._normalize_regrid_shape
-_normalize_density_pair = _regrid_helpers._normalize_density_pair
-_is_curvilinear_grid = _regrid_helpers._is_curvilinear_grid
-_default_curvilinear_regrid_shape = _regrid_helpers._default_curvilinear_regrid_shape
-_build_curvilinear_target_grid = _regrid_helpers._build_curvilinear_target_grid
-_rcm2rgrid_2d = _regrid_helpers._rcm2rgrid_2d
-_rcm2rgrid_fields = _regrid_helpers._rcm2rgrid_fields
-_maybe_as_scalar_field = _regrid_helpers._maybe_as_scalar_field
-_regrid_curvilinear_vectors = _regrid_helpers._regrid_curvilinear_vectors
-_build_projection_target_grid = _regrid_helpers._build_projection_target_grid
-_prepare_source_vector_grid = _regrid_helpers._prepare_source_vector_grid
-_grid_spans_full_longitude = _regrid_helpers._grid_spans_full_longitude
-_has_cyclic_longitude_endpoint = _regrid_helpers._has_cyclic_longitude_endpoint
-_append_cyclic_column = _regrid_helpers._append_cyclic_column
-_wrap_periodic_grid_queries = _regrid_helpers._wrap_periodic_grid_queries
+_default_cartopy_target_extent = _cartopy_adapter._default_cartopy_target_extent
+_normalize_regrid_shape = _grid_prepare_adapter._normalize_regrid_shape
+_normalize_density_pair = _grid_prepare_adapter._normalize_density_pair
+_is_curvilinear_grid = _grid_prepare_adapter._is_curvilinear_grid
+_default_curvilinear_regrid_shape = (
+    _grid_prepare_adapter._default_curvilinear_regrid_shape
+)
+_build_curvilinear_target_grid = _grid_prepare_adapter._build_curvilinear_target_grid
+_rcm2rgrid_2d = _grid_prepare_adapter._rcm2rgrid_2d
+_rcm2rgrid_fields = _grid_prepare_adapter._rcm2rgrid_fields
+_maybe_as_scalar_field = _grid_prepare_adapter._maybe_as_scalar_field
+_regrid_curvilinear_vectors = _grid_prepare_adapter._regrid_curvilinear_vectors
+_build_projection_target_grid = _cartopy_adapter._build_projection_target_grid
+_prepare_source_vector_grid = _grid_prepare_adapter._prepare_source_vector_grid
+_grid_spans_full_longitude = _grid_prepare_adapter._grid_spans_full_longitude
+_has_cyclic_longitude_endpoint = _grid_prepare_adapter._has_cyclic_longitude_endpoint
+_append_cyclic_column = _grid_prepare_adapter._append_cyclic_column
+_wrap_periodic_grid_queries = _grid_prepare_adapter._wrap_periodic_grid_queries
 _extract_regular_grid_from_regridded_vectors = (
-    _regrid_helpers._extract_regular_grid_from_regridded_vectors
+    _cartopy_adapter._extract_regular_grid_from_regridded_vectors
 )
-_regrid_cartopy_vectors = _regrid_helpers._regrid_cartopy_vectors
+_regrid_cartopy_vectors = _cartopy_adapter._regrid_cartopy_vectors
 
 
 def _prepare_curly_vector_dataset_inputs(
