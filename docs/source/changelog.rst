@@ -22,9 +22,15 @@ Scatter Stippling
   - ``skyborn.plot.vector.CurlyVectorPlotSet``
   - ``skyborn.plot.vector.CurlyVectorKey``
 
-* Refactored the ``skyborn.plot`` vector wrapper internals so
-  ``ncl_vector.py`` delegates dataset and regridding helpers to smaller
-  private modules without changing the public plotting behavior.
+* Consolidated the curly-vector implementation into
+  ``skyborn.plot.vector`` so the public wrapper logic and the low-level
+  vector helper surface now live in one top-level module.
+* Removed the separate top-level implementation files
+  ``ncl_vector.py``, ``vector_key.py``, and ``vector_plot.py`` from
+  ``skyborn.plot``.
+* Kept historical module imports working through package-level
+  compatibility aliases, so existing imports do not need to break
+  immediately.
 * Updated plotting examples and user-facing documentation to recommend
   ``skyborn.plot.vector`` as the module-oriented import path for curly-vector
   usage while preserving the existing package-level ``skyborn.plot`` exports.
