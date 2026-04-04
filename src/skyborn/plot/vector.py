@@ -56,35 +56,17 @@ __all__ = [
 ]
 
 _candidate_data_from_display_step = _geometry._candidate_data_from_display_step
-_curve_shape_is_acceptable = _geometry._curve_shape_is_acceptable
 _display_points_to_data = _geometry._display_points_to_data
-_display_step_to_data = _geometry._display_step_to_data
-_default_ncl_box_center_candidates = _vector_engine._default_ncl_box_center_candidates
-_default_ncl_candidate_shape = _vector_engine._default_ncl_candidate_shape
-_density_scalar = _vector_engine._density_scalar
-_density_xy = _vector_engine._density_xy
 _evaluate_ncl_display_curve = _geometry._evaluate_ncl_display_curve
-_finite_difference_step = _geometry._finite_difference_step
-_fit_single_bend_display_curve = _geometry._fit_single_bend_display_curve
 DomainMap = _legacy_stream.DomainMap
 interpgrid = _legacy_stream.interpgrid
 InvalidIndexError = _legacy_stream.InvalidIndexError
 _local_display_jacobian = _geometry._local_display_jacobian
-_map_ncl_display_points_to_viewport = _thinning._map_ncl_display_points_to_viewport
-_NCLDisplaySampler = _thinning._NCLDisplaySampler
 _NCLNativeTraceContext = _thinning._NCLNativeTraceContext
 _ncl_step_length_px = _vector_engine._ncl_step_length_px
 OutOfBounds = _legacy_stream.OutOfBounds
-_point_at_arc_distance_from_end = _geometry._point_at_arc_distance_from_end
 _point_within_grid_data = _geometry._point_within_grid_data
 _prepare_ncl_display_sampler = _thinning._prepare_ncl_display_sampler
-_resolve_ncl_min_distance_fraction = _thinning._resolve_ncl_min_distance_fraction
-_resolve_curly_anchor = _vector_engine._resolve_curly_anchor
-_valid_ncl_center_candidates = _vector_engine._valid_ncl_center_candidates
-_euler_step = _legacy_stream._euler_step
-_gen_starting_points = _legacy_stream._gen_starting_points
-_get_integrator = _legacy_stream._get_integrator
-_integrate_rk12 = _legacy_stream._integrate_rk12
 Grid = _vector_engine.Grid
 StreamMask = _legacy_stream.StreamMask
 TerminateTrajectory = _legacy_stream.TerminateTrajectory
@@ -154,9 +136,6 @@ _CURLY_VECTOR_NCL_KWARG_NAMES = (
     "ncl_preset",
 )
 
-_ISSUED_PLOT_WARNINGS = _dataset_adapter._ISSUED_PLOT_WARNINGS
-_apply_dataset_isel = _dataset_adapter._apply_dataset_isel
-_get_plot_dataarray = _dataset_adapter._get_plot_dataarray
 _extract_curly_vector_dataset_source = (
     _dataset_adapter._extract_curly_vector_dataset_source
 )
@@ -164,18 +143,12 @@ _prepare_dataset_style_field = _dataset_adapter._prepare_dataset_style_field
 
 _default_cartopy_target_extent = _cartopy_adapter._default_cartopy_target_extent
 _normalize_regrid_shape = _grid_prepare_adapter._normalize_regrid_shape
-_normalize_density_pair = _grid_prepare_adapter._normalize_density_pair
 _is_curvilinear_grid = _grid_prepare_adapter._is_curvilinear_grid
 _default_curvilinear_regrid_shape = (
     _grid_prepare_adapter._default_curvilinear_regrid_shape
 )
-_build_curvilinear_target_grid = _grid_prepare_adapter._build_curvilinear_target_grid
 _maybe_as_scalar_field = _grid_prepare_adapter._maybe_as_scalar_field
 _regrid_curvilinear_vectors = _grid_prepare_adapter._regrid_curvilinear_vectors
-_prepare_source_vector_grid = _grid_prepare_adapter._prepare_source_vector_grid
-_grid_spans_full_longitude = _grid_prepare_adapter._grid_spans_full_longitude
-_append_cyclic_column = _grid_prepare_adapter._append_cyclic_column
-_wrap_periodic_grid_queries = _grid_prepare_adapter._wrap_periodic_grid_queries
 _extract_regular_grid_from_regridded_vectors = (
     _cartopy_adapter._extract_regular_grid_from_regridded_vectors
 )
