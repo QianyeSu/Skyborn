@@ -10,15 +10,9 @@ from __future__ import annotations
 import warnings
 from typing import Any
 
-import matplotlib as mpl
-import matplotlib.collections as mcollections
-import matplotlib.colors as mcolors
-import matplotlib.lines as mlines
 import numpy as np
-from matplotlib import cm
 
 from ._artists import vector_artists as _artist_helpers
-from ._artists.vector_artists import _ncl_arrow_edge_size_px, _resolve_open_arrow_size
 from ._core import geometry as _geometry
 from ._core import legacy_stream as _legacy_stream
 from ._core import native as _native_helpers
@@ -26,14 +20,6 @@ from ._core import sampling as _sampling
 from ._core import thinning as _thinning
 from ._core import vector_engine as _vector_engine
 from ._core.result import CurlyVectorPlotSet
-from ._core.vector_engine import (
-    _curve_length_from_magnitude,
-    _default_ncl_max_length_px,
-    _finite_plot_field_values,
-    _resolve_artist_coordinate_context,
-    _resolve_ncl_length_scale,
-    _resolve_ncl_reference_length_px,
-)
 from ._shared.coords import (
     _axis_coordinate_1d,
     _axis_is_uniform,
@@ -640,6 +626,7 @@ def _curly_vector_ncl(
         sample_grid_field_fn=_sample_grid_field,
         build_ncl_arrow_artists_fn=_build_ncl_arrow_artists,
         display_points_to_data_fn=_display_points_to_data,
+        result_cls=CurlyVectorPlotSet,
     )
 
 
