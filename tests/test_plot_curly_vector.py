@@ -8,7 +8,9 @@ import numpy as np
 import pytest
 import xarray as xr
 
+import skyborn.plot as plot_module
 import skyborn.plot.ncl_vector as ncl_vector_module
+import skyborn.plot.vector as vector_module
 from skyborn.plot.ncl_vector import (
     _append_cyclic_column,
     _apply_dataset_isel,
@@ -29,6 +31,22 @@ from skyborn.plot.ncl_vector import (
 )
 from skyborn.plot.vector_key import CurlyVectorKey, curly_vector_key
 from skyborn.plot.vector_plot import CurlyVectorPlotSet
+
+
+class TestVectorFacade:
+    """Test the unified public vector facade module."""
+
+    def test_vector_module_reexports_current_public_vector_names(self):
+        assert vector_module.curly_vector is ncl_vector_module.curly_vector
+        assert vector_module.curly_vector_key is curly_vector_key
+        assert vector_module.CurlyVectorKey is CurlyVectorKey
+        assert vector_module.CurlyVectorPlotSet is CurlyVectorPlotSet
+
+    def test_plot_package_reexports_through_vector_facade(self):
+        assert plot_module.curly_vector is vector_module.curly_vector
+        assert plot_module.curly_vector_key is vector_module.curly_vector_key
+        assert plot_module.CurlyVectorKey is vector_module.CurlyVectorKey
+        assert plot_module.CurlyVectorPlotSet is vector_module.CurlyVectorPlotSet
 
 
 class TestDatasetCurlyVector:
