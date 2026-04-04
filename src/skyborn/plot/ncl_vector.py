@@ -7,7 +7,6 @@ Created: 2026-03-01 14:58:56
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Hashable
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +14,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
+from . import _ncl_vector_dataset as _dataset_helpers
+from . import _ncl_vector_regrid as _regrid_helpers
 from .vector_key import CurlyVectorKey, curly_vector_key
 from .vector_plot import CurlyVectorPlotSet, _resolve_curly_style_aliases
 from .vector_plot import curly_vector as _array_curly_vector
@@ -23,7 +24,6 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
 __all__ = ["curly_vector", "CurlyVectorKey", "curly_vector_key"]
-_ISSUED_PLOT_WARNINGS: set[str] = set()
 _ARRAY_CURLY_VECTOR_KWARG_NAMES = (
     "density",
     "linewidth",
@@ -62,13 +62,6 @@ def _looks_like_axes(value: Any) -> bool:
     return hasattr(value, "add_collection") and hasattr(value, "transData")
 
 
-def _warn_plot_once(key: str, message: str) -> None:
-    if key in _ISSUED_PLOT_WARNINGS:
-        return
-    _ISSUED_PLOT_WARNINGS.add(key)
-    warnings.warn(message, UserWarning, stacklevel=3)
-
-
 def _collect_named_kwargs(
     scope: dict[str, Any], names: tuple[str, ...]
 ) -> dict[str, Any]:
@@ -76,513 +69,38 @@ def _collect_named_kwargs(
     return {name: scope[name] for name in names}
 
 
-def _apply_dataset_isel(da: xr.DataArray, isel):
-    if not isel:
-        return da
-    requested = dict(isel)
-    indexers = {dim: value for dim, value in requested.items() if dim in da.dims}
-    unused = tuple(sorted(dim for dim in requested if dim not in da.dims))
-    if unused:
-        _warn_plot_once(
-            f"unused_isel:{unused}",
-            f"Ignoring isel indexers {list(unused)} because they are not present "
-            f"in DataArray dims {tuple(da.dims)}.",
-        )
-    return da.isel(indexers) if indexers else da
-
-
-def _get_plot_dataarray(ds: xr.Dataset, value, *, isel=None, role: str) -> xr.DataArray:
-    if isinstance(value, xr.DataArray):
-        da = value
-    else:
-        da = ds[value]
-    da = _apply_dataset_isel(da, isel)
-    da = da.squeeze(drop=True)
-    if da.ndim == 0:
-        raise ValueError(f"{role} must resolve to at least one dimension")
-    if da.ndim > 2:
-        remaining_dims = [dim for dim, size in da.sizes.items() if size > 1]
-        raise ValueError(
-            f"{role} must resolve to 1D or 2D data after selection; remaining dims: "
-            f"{remaining_dims}. Pass a 2D slice or use isel=..."
-        )
-    return da
-
-
-def _transpose_2d_dataarray_to_dims(
-    da: xr.DataArray, dims: tuple[Hashable, Hashable], *, role: str
-) -> xr.DataArray:
-    if da.ndim != 2:
-        raise ValueError(f"{role} must resolve to a 2D array before plotting")
-    if da.dims == dims:
-        return da
-    if set(da.dims) != set(dims):
-        raise ValueError(
-            f"{role} dims {da.dims} do not match the target vector dims {dims}; "
-            "2D vector inputs must already live on the same physical grid"
-        )
-    return da.transpose(*dims)
-
-
-def _filled_scalar_field_array(value: Any) -> np.ndarray:
-    array = np.ma.asarray(value, dtype=float)
-    if np.ma.isMaskedArray(array):
-        return np.asarray(array.filled(np.nan), dtype=float)
-    return np.asarray(array, dtype=float)
-
-
-def _extract_curly_vector_dataset_source(
-    ds, x, y, u, v, *, isel=None, return_metadata: bool = False
-):
-    x_da = _get_plot_dataarray(ds, x, isel=isel, role="x")
-    y_da = _get_plot_dataarray(ds, y, isel=isel, role="y")
-    u_da = _get_plot_dataarray(ds, u, isel=isel, role="u")
-    v_da = _get_plot_dataarray(ds, v, isel=isel, role="v")
-
-    if u_da.ndim != 2 or v_da.ndim != 2:
-        raise ValueError("u and v must each resolve to 2D arrays before plotting")
-    v_da = _transpose_2d_dataarray_to_dims(v_da, u_da.dims, role="v")
-    if u_da.shape != v_da.shape:
-        raise ValueError(
-            "u and v must share the same 2D shape. If your vector components live on "
-            "different staggered or unmatched grids, align them onto the same physical "
-            "grid before calling curly_vector()."
-        )
-
-    metadata = {
-        "vector_dims": tuple(u_da.dims),
-        "x_descending": False,
-        "y_descending": False,
-    }
-
-    if x_da.ndim == 1 and y_da.ndim == 1:
-        x_values = np.asarray(x_da.data, dtype=float)
-        y_values = np.asarray(y_da.data, dtype=float)
-        u_values = np.asarray(u_da.data, dtype=float)
-        v_values = np.asarray(v_da.data, dtype=float)
-
-        expected_shape = (y_da.size, x_da.size)
-        if u_da.shape != expected_shape:
-            raise ValueError(
-                f"u/v shape {u_da.shape} does not match the rectilinear x/y grid "
-                f"shape {expected_shape}"
-            )
-
-        if x_values.size > 1 and x_values[0] > x_values[-1]:
-            x_values = x_values[::-1]
-            u_values = u_values[:, ::-1]
-            v_values = v_values[:, ::-1]
-            metadata["x_descending"] = True
-        if y_values.size > 1 and y_values[0] > y_values[-1]:
-            y_values = y_values[::-1]
-            u_values = u_values[::-1, :]
-            v_values = v_values[::-1, :]
-            metadata["y_descending"] = True
-
-        if return_metadata:
-            return x_values, y_values, u_values, v_values, metadata
-        return x_values, y_values, u_values, v_values
-    elif x_da.ndim == 2 and y_da.ndim == 2:
-        x_da = _transpose_2d_dataarray_to_dims(x_da, u_da.dims, role="x")
-        y_da = _transpose_2d_dataarray_to_dims(y_da, u_da.dims, role="y")
-        if x_da.shape != y_da.shape:
-            raise ValueError("2D x and y coordinates must have the same shape")
-        if x_da.shape != u_da.shape:
-            raise ValueError(
-                f"2D x/y shape {x_da.shape} must match the u/v shape {u_da.shape}"
-            )
-    else:
-        raise ValueError("x and y must both be 1D or both be 2D")
-
-    values = (
-        np.asarray(x_da.data, dtype=float),
-        np.asarray(y_da.data, dtype=float),
-        np.asarray(u_da.data, dtype=float),
-        np.asarray(v_da.data, dtype=float),
-    )
-    if return_metadata:
-        return (*values, metadata)
-    return values
-
-
-def _prepare_dataset_style_field(
-    value: Any,
-    *,
-    isel,
-    expected_shape: tuple[int, ...],
-    vector_dims: tuple[Hashable, Hashable],
-    x_descending: bool,
-    y_descending: bool,
-    role: str,
-) -> Any:
-    if value is None or isinstance(value, str) or np.isscalar(value):
-        return value
-
-    if isinstance(value, xr.DataArray):
-        da = _apply_dataset_isel(value, isel).squeeze(drop=True)
-        if da.ndim == 2:
-            da = _transpose_2d_dataarray_to_dims(da, vector_dims, role=role)
-            array = _filled_scalar_field_array(da.data)
-        else:
-            array = np.asarray(da)
-    else:
-        array = np.asarray(value)
-
-    if array.shape != expected_shape:
-        return value
-
-    field = _filled_scalar_field_array(array)
-    if y_descending:
-        field = field[::-1, :]
-    if x_descending:
-        field = field[:, ::-1]
-    return field
-
-
-def _default_cartopy_target_extent(ax, target_extent):
-    if target_extent is not None or not hasattr(ax, "get_extent"):
-        return target_extent
-    try:
-        return ax.get_extent(ax.projection)
-    except Exception:
-        return target_extent
-
-
-def _regrid_cartopy_vectors(
-    src_crs,
-    target_proj,
-    regrid_shape,
-    x,
-    y,
-    u,
-    v,
-    *scalars,
-    target_extent=None,
-):
-    try:
-        from scipy.interpolate import RegularGridInterpolator
-    except ImportError as err:
-        raise ImportError(
-            "scipy is required for Cartopy projection regridding support."
-        ) from err
-
-    x_1d, y_1d, u, v, scalar_list = _prepare_source_vector_grid(
-        x, y, u, v, scalars=scalars
-    )
-    x_target, y_target = _build_projection_target_grid(
-        target_proj, regrid_shape, target_extent
-    )
-    source_points = src_crs.transform_points(target_proj, x_target, y_target)
-    x_source = source_points[..., 0]
-    y_source = source_points[..., 1]
-    valid = np.isfinite(x_source) & np.isfinite(y_source)
-
-    x_query = _wrap_periodic_grid_queries(x_source, x_1d)
-    sample_points = np.column_stack([y_source[valid], x_query[valid]])
-
-    u_interp = RegularGridInterpolator(
-        (y_1d, x_1d),
-        u,
-        method="linear",
-        bounds_error=False,
-        fill_value=np.nan,
-    )
-    v_interp = RegularGridInterpolator(
-        (y_1d, x_1d),
-        v,
-        method="linear",
-        bounds_error=False,
-        fill_value=np.nan,
-    )
-
-    u_sampled = np.full(x_target.shape, np.nan, dtype=float)
-    v_sampled = np.full(y_target.shape, np.nan, dtype=float)
-    if np.any(valid):
-        u_sampled[valid] = u_interp(sample_points)
-        v_sampled[valid] = v_interp(sample_points)
-
-    valid_vectors = valid & np.isfinite(u_sampled) & np.isfinite(v_sampled)
-    u_target = np.full_like(u_sampled, np.nan)
-    v_target = np.full_like(v_sampled, np.nan)
-    if np.any(valid_vectors):
-        ut, vt = target_proj.transform_vectors(
-            src_crs,
-            x_source[valid_vectors],
-            y_source[valid_vectors],
-            u_sampled[valid_vectors],
-            v_sampled[valid_vectors],
-        )
-        u_target[valid_vectors] = ut
-        v_target[valid_vectors] = vt
-
-    scalar_targets = []
-    for scalar in scalar_list:
-        scalar_interp = RegularGridInterpolator(
-            (y_1d, x_1d),
-            scalar,
-            method="linear",
-            bounds_error=False,
-            fill_value=np.nan,
-        )
-        scalar_target = np.full(x_target.shape, np.nan, dtype=float)
-        if np.any(valid):
-            scalar_target[valid] = scalar_interp(sample_points)
-        scalar_targets.append(scalar_target)
-
-    return (x_target, y_target, u_target, v_target, *scalar_targets)
-
-
-def _normalize_regrid_shape(regrid_shape):
-    if np.isscalar(regrid_shape):
-        size = max(int(regrid_shape), 2)
-        return size, size
-    nx, ny = regrid_shape
-    return max(int(nx), 2), max(int(ny), 2)
-
-
-def _normalize_density_pair(density):
-    try:
-        density_pair = np.broadcast_to(np.asarray(density, dtype=float), 2)
-    except ValueError as err:
-        raise ValueError("density must be a scalar or a length-2 sequence") from err
-    return float(density_pair[0]), float(density_pair[1])
-
-
-def _is_curvilinear_grid(x, y):
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    if x.ndim != 2 or y.ndim != 2:
-        return False
-    if x.shape != y.shape:
-        raise ValueError("2D x and y coordinates must have matching shapes")
-
-    x_mesh = np.broadcast_to(x[0, :], x.shape)
-    y_mesh = np.broadcast_to(y[:, 0][:, None], y.shape)
-    return not (
-        np.allclose(x, x_mesh, equal_nan=True)
-        and np.allclose(y, y_mesh, equal_nan=True)
-    )
-
-
-def _default_curvilinear_regrid_shape(x, density):
-    density_x, density_y = _normalize_density_pair(density)
-    ny_src, nx_src = np.asarray(x).shape
-    nx = min(nx_src, max(24, int(np.clip(round(72.0 * density_x), 24, 144))))
-    ny = min(ny_src, max(18, int(np.clip(round(56.0 * density_y), 18, 112))))
-    return nx, ny
-
-
-def _build_curvilinear_target_grid(x, y, target_shape):
-    nx, ny = _normalize_regrid_shape(target_shape)
-    lon2d = np.asarray(x, dtype=float)
-    lat2d = np.asarray(y, dtype=float)
-    finite = np.isfinite(lon2d) & np.isfinite(lat2d)
-    if not np.any(finite):
-        raise ValueError("Curvilinear x/y coordinates contain no finite points")
-
-    lon_work = np.rad2deg(np.unwrap(np.deg2rad(lon2d), axis=1))
-    lon1d = np.linspace(
-        float(np.nanmin(lon_work[finite])), float(np.nanmax(lon_work[finite])), nx
-    )
-    lat1d = np.linspace(
-        float(np.nanmin(lat2d[finite])), float(np.nanmax(lat2d[finite])), ny
-    )
-    return lon1d, lat1d
-
-
-def _rcm2rgrid_2d(lat2d, lon2d, field, lat1d, lon1d):
-    try:
-        from skyborn.interp import rcm2rgrid
-    except ImportError as err:
-        raise ImportError(
-            "Curvilinear vector support requires skyborn.interp.rcm2rgrid to be available."
-        ) from err
-
-    field = np.asarray(field, dtype=float)
-    regridded = rcm2rgrid(
-        np.asarray(lat2d, dtype=float),
-        np.asarray(lon2d, dtype=float),
-        field[np.newaxis, :, :],
-        np.asarray(lat1d, dtype=float),
-        np.asarray(lon1d, dtype=float),
-        msg=np.nan,
-        meta=False,
-    )
-    regridded = np.asarray(regridded, dtype=float)
-    if regridded.ndim == 3:
-        regridded = regridded[0]
-    return regridded
-
-
-def _rcm2rgrid_fields(lat2d, lon2d, fields, lat1d, lon1d):
-    try:
-        from skyborn.interp import rcm2rgrid
-    except ImportError as err:
-        raise ImportError(
-            "Curvilinear vector support requires skyborn.interp.rcm2rgrid to be available."
-        ) from err
-
-    field_stack = np.asarray(
-        [np.asarray(field, dtype=float) for field in fields],
-        dtype=float,
-    )
-    regridded = rcm2rgrid(
-        np.asarray(lat2d, dtype=float),
-        np.asarray(lon2d, dtype=float),
-        field_stack,
-        np.asarray(lat1d, dtype=float),
-        np.asarray(lon1d, dtype=float),
-        msg=np.nan,
-        meta=False,
-    )
-    regridded = np.asarray(regridded, dtype=float)
-    if regridded.ndim == 2:
-        regridded = regridded[np.newaxis, :, :]
-    return [regridded[idx] for idx in range(regridded.shape[0])]
-
-
-def _maybe_as_scalar_field(value, expected_shape):
-    if value is None or isinstance(value, str) or np.isscalar(value):
-        return None
-    array = np.asarray(value)
-    if array.shape != expected_shape:
-        return None
-    return _filled_scalar_field_array(array)
-
-
-def _regrid_curvilinear_vectors(x, y, u, v, *scalars, target_shape):
-    lon1d, lat1d = _build_curvilinear_target_grid(x, y, target_shape)
-    regridded_fields = _rcm2rgrid_fields(y, x, (u, v, *scalars), lat1d, lon1d)
-    u_reg, v_reg, *scalar_regs = regridded_fields
-    return (lon1d, lat1d, u_reg, v_reg, *scalar_regs)
-
-
-def _build_projection_target_grid(target_proj, regrid_shape, target_extent):
-    if target_extent is None:
-        target_extent = target_proj.x_limits + target_proj.y_limits
-    nx, ny = _normalize_regrid_shape(regrid_shape)
-    x_target = np.linspace(float(target_extent[0]), float(target_extent[1]), nx)
-    y_target = np.linspace(float(target_extent[2]), float(target_extent[3]), ny)
-    return np.meshgrid(x_target, y_target)
-
-
-def _prepare_source_vector_grid(x, y, u, v, scalars=()):
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    u = np.asarray(u, dtype=float)
-    v = np.asarray(v, dtype=float)
-    scalar_list = [np.asarray(s, dtype=float) for s in scalars]
-
-    if x.ndim == 2:
-        x = x[0, :]
-    if y.ndim == 2:
-        y = y[:, 0]
-
-    if x.ndim != 1 or y.ndim != 1:
-        raise ValueError(
-            "Cartopy projection regridding requires 1D or meshgrid x/y coordinates"
-        )
-
-    if u.shape != (len(y), len(x)) or v.shape != (len(y), len(x)):
-        raise ValueError(
-            "u and v must match the source y/x grid shape for projection regridding"
-        )
-
-    if len(x) > 1 and x[0] > x[-1]:
-        x = x[::-1]
-        u = u[:, ::-1]
-        v = v[:, ::-1]
-        scalar_list = [s[:, ::-1] for s in scalar_list]
-
-    if len(y) > 1 and y[0] > y[-1]:
-        y = y[::-1]
-        u = u[::-1, :]
-        v = v[::-1, :]
-        scalar_list = [s[::-1, :] for s in scalar_list]
-
-    if _grid_spans_full_longitude(x):
-        x_base = x.copy()
-        x, u = _append_cyclic_column(x_base, u)
-        _, v = _append_cyclic_column(x_base, v)
-        scalar_list = [_append_cyclic_column(x_base, s)[1] for s in scalar_list]
-
-    return x, y, u, v, scalar_list
-
-
-def _grid_spans_full_longitude(x):
-    if len(x) < 2:
-        return False
-    spacing = float(np.nanmedian(np.diff(x)))
-    span = float(x[-1] - x[0] + spacing)
-    return np.isfinite(span) and 300.0 <= span <= 370.0
-
-
-def _has_cyclic_longitude_endpoint(x, period=360.0):
-    x = np.asarray(x, dtype=float)
-    if len(x) < 2:
-        return False
-
-    spacing = float(np.nanmedian(np.diff(x)))
-    tolerance = max(1e-6, abs(spacing) * 1e-3)
-    span = float(x[-1] - x[0])
-    return np.isfinite(span) and abs(span - float(period)) <= tolerance
-
-
-def _append_cyclic_column(x, field, period=360.0):
-    x = np.asarray(x, dtype=float)
-    field = np.asarray(field, dtype=float)
-    x_cyclic = np.concatenate([x, [x[0] + float(period)]])
-    field_cyclic = np.concatenate([field, field[:, :1]], axis=1)
-    return x_cyclic, field_cyclic
-
-
-def _wrap_periodic_grid_queries(x_query, x_1d, period=360.0):
-    x_query = np.asarray(x_query, dtype=float)
-    x_1d = np.asarray(x_1d, dtype=float)
-    if len(x_1d) < 2:
-        return x_query
-
-    has_cyclic_endpoint = _has_cyclic_longitude_endpoint(x_1d, period=period)
-    if not has_cyclic_endpoint and not _grid_spans_full_longitude(x_1d):
-        return x_query
-
-    x_min = float(x_1d[0])
-    x_max = float(x_1d[-1])
-    wrapped = ((x_query - x_min) % float(period)) + x_min
-    if not has_cyclic_endpoint:
-        wrapped = np.where(wrapped > x_max, wrapped - float(period), wrapped)
-    return wrapped
-
-
-def _extract_regular_grid_from_regridded_vectors(
-    x_grid,
-    y_grid,
-    u_grid,
-    v_grid,
-    scalar_grids,
-):
-    x_grid = np.asarray(x_grid)
-    y_grid = np.asarray(y_grid)
-    u_grid = np.asarray(u_grid)
-    v_grid = np.asarray(v_grid)
-
-    x_1d = np.asarray(x_grid[0, :], dtype=float)
-    y_1d = np.asarray(y_grid[:, 0], dtype=float)
-    scalar_grids = [np.asarray(s) for s in scalar_grids]
-
-    if x_1d.size > 1 and x_1d[0] > x_1d[-1]:
-        x_1d = x_1d[::-1]
-        u_grid = u_grid[:, ::-1]
-        v_grid = v_grid[:, ::-1]
-        scalar_grids = [s[:, ::-1] for s in scalar_grids]
-
-    if y_1d.size > 1 and y_1d[0] > y_1d[-1]:
-        y_1d = y_1d[::-1]
-        u_grid = u_grid[::-1, :]
-        v_grid = v_grid[::-1, :]
-        scalar_grids = [s[::-1, :] for s in scalar_grids]
-
-    return x_1d, y_1d, u_grid, v_grid, scalar_grids
+_ISSUED_PLOT_WARNINGS = _dataset_helpers._ISSUED_PLOT_WARNINGS
+_warn_plot_once = _dataset_helpers._warn_plot_once
+_apply_dataset_isel = _dataset_helpers._apply_dataset_isel
+_get_plot_dataarray = _dataset_helpers._get_plot_dataarray
+_transpose_2d_dataarray_to_dims = _dataset_helpers._transpose_2d_dataarray_to_dims
+_filled_scalar_field_array = _dataset_helpers._filled_scalar_field_array
+_extract_curly_vector_dataset_source = (
+    _dataset_helpers._extract_curly_vector_dataset_source
+)
+_prepare_dataset_style_field = _dataset_helpers._prepare_dataset_style_field
+
+
+_default_cartopy_target_extent = _regrid_helpers._default_cartopy_target_extent
+_normalize_regrid_shape = _regrid_helpers._normalize_regrid_shape
+_normalize_density_pair = _regrid_helpers._normalize_density_pair
+_is_curvilinear_grid = _regrid_helpers._is_curvilinear_grid
+_default_curvilinear_regrid_shape = _regrid_helpers._default_curvilinear_regrid_shape
+_build_curvilinear_target_grid = _regrid_helpers._build_curvilinear_target_grid
+_rcm2rgrid_2d = _regrid_helpers._rcm2rgrid_2d
+_rcm2rgrid_fields = _regrid_helpers._rcm2rgrid_fields
+_maybe_as_scalar_field = _regrid_helpers._maybe_as_scalar_field
+_regrid_curvilinear_vectors = _regrid_helpers._regrid_curvilinear_vectors
+_build_projection_target_grid = _regrid_helpers._build_projection_target_grid
+_prepare_source_vector_grid = _regrid_helpers._prepare_source_vector_grid
+_grid_spans_full_longitude = _regrid_helpers._grid_spans_full_longitude
+_has_cyclic_longitude_endpoint = _regrid_helpers._has_cyclic_longitude_endpoint
+_append_cyclic_column = _regrid_helpers._append_cyclic_column
+_wrap_periodic_grid_queries = _regrid_helpers._wrap_periodic_grid_queries
+_extract_regular_grid_from_regridded_vectors = (
+    _regrid_helpers._extract_regular_grid_from_regridded_vectors
+)
+_regrid_cartopy_vectors = _regrid_helpers._regrid_cartopy_vectors
 
 
 def _prepare_curly_vector_dataset_inputs(
