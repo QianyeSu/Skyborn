@@ -17,6 +17,36 @@ def _display_jump_threshold(lengths):
     return max(baseline * 12.0, 1e-6)
 
 
+def _map_ncl_display_points_to_viewport(display_points, viewport):
+    width = max(float(viewport.width), 1.0)
+    height = max(float(viewport.height), 1.0)
+    mapped = np.empty_like(display_points, dtype=float)
+    mapped[:, 0] = (display_points[:, 0] - float(viewport.x0)) / width
+    mapped[:, 1] = (display_points[:, 1] - float(viewport.y0)) / height
+    return mapped
+
+
+def _resolve_ncl_min_distance_fraction(density, min_distance, ncl_preset=None):
+    if min_distance is not None:
+        return max(float(min_distance), 1e-6)
+
+    if np.isscalar(density):
+        density_scalar = max(float(density), 0.1)
+    else:
+        density_xy = np.broadcast_to(np.asarray(density, dtype=float), 2).astype(float)
+        density_scalar = float(np.mean(np.maximum(density_xy, 0.1)))
+
+    spacing_frac = 0.9 / (30.0 * density_scalar)
+    if ncl_preset is not None and str(ncl_preset).strip().lower() in {
+        "profile",
+        "vertical_profile",
+        "vertical-profile",
+        "lat_pressure",
+    }:
+        spacing_frac *= 0.6
+    return spacing_frac
+
+
 class _NCLDisplaySampler:
     """Sample a precomputed data->display mapping on the plotting grid."""
 
