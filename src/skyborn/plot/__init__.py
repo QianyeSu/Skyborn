@@ -5,9 +5,16 @@ Copyright (c) 2025-2026 Qianye Su
 Created: 2026-03-01 14:58:56
 """
 
+import sys
+
+from . import vector as _vector_module
 from .plotting import add_equal_axes, createFigure
 from .scatter import scatter
 from .vector import CurlyVectorKey, CurlyVectorPlotSet, curly_vector, curly_vector_key
+
+sys.modules.setdefault(__name__ + ".ncl_vector", _vector_module)
+sys.modules.setdefault(__name__ + ".vector_key", _vector_module)
+sys.modules.setdefault(__name__ + ".vector_plot", _vector_module)
 
 __all__ = [
     "CurlyVectorKey",
