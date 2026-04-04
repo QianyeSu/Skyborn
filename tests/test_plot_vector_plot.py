@@ -12,6 +12,25 @@ from matplotlib.collections import LineCollection
 from matplotlib.transforms import Bbox
 
 import skyborn.plot.vector as vector_plot_module
+from skyborn.plot._core.geometry import (
+    _curve_shape_is_acceptable,
+    _display_step_to_data,
+    _finite_difference_step,
+    _fit_single_bend_display_curve,
+    _point_at_arc_distance_from_end,
+)
+from skyborn.plot._core.legacy_stream import _gen_starting_points
+from skyborn.plot._core.thinning import (
+    _map_ncl_display_points_to_viewport,
+    _NCLDisplaySampler,
+    _resolve_ncl_min_distance_fraction,
+)
+from skyborn.plot._core.vector_engine import (
+    _default_ncl_box_center_candidates,
+    _default_ncl_candidate_shape,
+    _density_scalar,
+    _density_xy,
+)
 from skyborn.plot.vector import (
     CurlyVectorPlotSet,
     DomainMap,
@@ -27,29 +46,16 @@ from skyborn.plot.vector import (
     _axis_coordinate_1d,
     _axis_is_uniform,
     _candidate_data_from_display_step,
-    _curve_shape_is_acceptable,
-    _default_ncl_box_center_candidates,
-    _default_ncl_candidate_shape,
-    _density_scalar,
-    _density_xy,
-    _display_step_to_data,
     _evaluate_ncl_display_curve,
-    _finite_difference_step,
-    _fit_single_bend_display_curve,
-    _gen_starting_points,
     _infer_profile_ncl_ref_magnitude,
     _local_display_jacobian,
-    _map_ncl_display_points_to_viewport,
     _ncl_step_length_px,
-    _NCLDisplaySampler,
     _normalize_ncl_preset,
     _open_arrow_geometry,
-    _point_at_arc_distance_from_end,
     _point_within_grid_data,
     _prepare_ncl_display_sampler,
     _prepare_ncl_native_trace_context,
     _resolve_default_ncl_preset,
-    _resolve_ncl_min_distance_fraction,
     _sample_grid_field,
     _sample_grid_field_array,
     _select_ncl_centers,
