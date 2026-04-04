@@ -19,6 +19,8 @@ from matplotlib import cm, patches
 
 from ._artists.vector_artists import _ncl_arrow_edge_size_px, _resolve_open_arrow_size
 from ._core import geometry as _geometry
+from ._core import legacy_stream as _legacy_stream
+from ._core import native as _native_helpers
 from ._core import sampling as _sampling
 from ._core import thinning as _thinning
 from ._core.result import CurlyVectorPlotSet
@@ -48,26 +50,29 @@ from ._shared.style import (
 
 __all__ = ["curly_vector", "CurlyVectorPlotSet"]
 
-_acceptable_ncl_display_curve = _geometry._acceptable_ncl_display_curve
 _candidate_data_from_display_step = _geometry._candidate_data_from_display_step
-_chaikin_smooth_display_curve = _geometry._chaikin_smooth_display_curve
 _curve_shape_is_acceptable = _geometry._curve_shape_is_acceptable
-_curve_to_display = _geometry._curve_to_display
 _display_points_to_data = _geometry._display_points_to_data
 _display_step_to_data = _geometry._display_step_to_data
-_display_to_data = _geometry._display_to_data
-_display_jump_threshold = _thinning._display_jump_threshold
 _evaluate_ncl_display_curve = _geometry._evaluate_ncl_display_curve
 _finite_difference_step = _geometry._finite_difference_step
 _fit_single_bend_display_curve = _geometry._fit_single_bend_display_curve
+DomainMap = _legacy_stream.DomainMap
+interpgrid = _legacy_stream.interpgrid
+InvalidIndexError = _legacy_stream.InvalidIndexError
 _local_display_jacobian = _geometry._local_display_jacobian
 _NCLDisplaySampler = _thinning._NCLDisplaySampler
 _NCLNativeTraceContext = _thinning._NCLNativeTraceContext
+OutOfBounds = _legacy_stream.OutOfBounds
 _point_at_arc_distance_from_end = _geometry._point_at_arc_distance_from_end
-_point_at_arc_fraction = _geometry._point_at_arc_fraction
 _point_within_grid_data = _geometry._point_within_grid_data
-_postprocess_ncl_curve = _geometry._postprocess_ncl_curve
 _prepare_ncl_display_sampler = _thinning._prepare_ncl_display_sampler
+_euler_step = _legacy_stream._euler_step
+_gen_starting_points = _legacy_stream._gen_starting_points
+_get_integrator = _legacy_stream._get_integrator
+_integrate_rk12 = _legacy_stream._integrate_rk12
+StreamMask = _legacy_stream.StreamMask
+TerminateTrajectory = _legacy_stream.TerminateTrajectory
 _tip_display_geometry_from_display_curve = (
     _geometry._tip_display_geometry_from_display_curve
 )
@@ -1067,21 +1072,14 @@ def _thin_ncl_mapped_candidates(mapped_points, spacing_frac):
         return []
 
     spacing_frac = max(float(spacing_frac), 1e-6)
-    if _thin_ncl_mapped_candidates_native is not None:
-        try:
-            selected = _thin_ncl_mapped_candidates_native(
-                mapped_points=mapped_points,
-                spacing_frac=spacing_frac,
-            )
-        except Exception as err:
-            _disable_native_helper(
-                "_thin_ncl_mapped_candidates_native",
-                "candidate thinning",
-                err,
-            )
-            selected = None
-        if selected is not None:
-            return np.asarray(selected, dtype=int).tolist()
+    selected = _native_helpers._try_native_thin_ncl_mapped_candidates(
+        native_thinner=_thin_ncl_mapped_candidates_native,
+        mapped_points=mapped_points,
+        spacing_frac=spacing_frac,
+        on_error=_disable_native_helper,
+    )
+    if selected is not None:
+        return selected
 
     spacing_sq = spacing_frac * spacing_frac
     bucket_scale = 1.0 / spacing_frac
@@ -1259,42 +1257,15 @@ def _trace_ncl_direction_via_native(
     speed_scale,
     native_trace_context=None,
 ):
-    if native_trace_context is None:
-        return None
-
-    try:
-        curve = _trace_ncl_direction_native(
-            u=native_trace_context.u,
-            v=native_trace_context.v,
-            display_grid=native_trace_context.display_grid,
-            cell_valid=native_trace_context.cell_valid,
-            x_origin=native_trace_context.x_origin,
-            y_origin=native_trace_context.y_origin,
-            dx=native_trace_context.dx,
-            dy=native_trace_context.dy,
-            start_x=float(start_point[0]),
-            start_y=float(start_point[1]),
-            max_length_px=float(max_length_px),
-            direction_sign=float(direction_sign),
-            step_px=float(step_px),
-            speed_scale=float(speed_scale),
-            viewport_x0=native_trace_context.viewport_x0,
-            viewport_y0=native_trace_context.viewport_y0,
-            viewport_x1=native_trace_context.viewport_x1,
-            viewport_y1=native_trace_context.viewport_y1,
-            max_steps=512,
-        )
-    except Exception as err:
-        _disable_native_helper("_trace_ncl_direction_native", "trace", err)
-        return None
-
-    if curve is None:
-        return None
-    curve = np.asarray(curve, dtype=float)
-    return (
-        curve
-        if curve.ndim == 2 and curve.shape[0] >= 2 and curve.shape[1] == 2
-        else None
+    return _native_helpers._try_native_trace_ncl_direction(
+        native_tracer=_trace_ncl_direction_native,
+        native_trace_context=native_trace_context,
+        start_point=start_point,
+        max_length_px=max_length_px,
+        direction_sign=direction_sign,
+        step_px=step_px,
+        speed_scale=speed_scale,
+        on_error=_disable_native_helper,
     )
 
 
@@ -1553,23 +1524,16 @@ def _sample_local_vector_state(grid, u, v, transform, point, display_sampler=Non
 
 
 def _sample_grid_field(grid, field, xd, yd):
-    if _sample_grid_field_native is not None and not np.ma.isMaskedArray(field):
-        try:
-            value = _sample_grid_field_native(
-                field=np.asarray(field, dtype=float),
-                x_origin=float(grid.x_origin),
-                y_origin=float(grid.y_origin),
-                dx=float(grid.dx),
-                dy=float(grid.dy),
-                x=float(xd),
-                y=float(yd),
-            )
-        except Exception as err:
-            _disable_native_helper("_sample_grid_field_native", "scalar sampling", err)
-            value = None
-        if value is not None:
-            value = float(value)
-            return value if np.isfinite(value) else None
+    value = _native_helpers._try_native_sample_grid_field(
+        native_sampler=_sample_grid_field_native,
+        grid=grid,
+        field=field,
+        xd=xd,
+        yd=yd,
+        on_error=_disable_native_helper,
+    )
+    if value is not None:
+        return value
 
     return _sampling._sample_grid_field_python(
         grid=grid,
@@ -1590,28 +1554,16 @@ def _sample_grid_field_array(grid, field, points):
     if len(points) == 0:
         return sampled
 
-    if _sample_grid_field_array_native is not None and not np.ma.isMaskedArray(field):
-        try:
-            sampled_native = _sample_grid_field_array_native(
-                field=np.asarray(field, dtype=float),
-                x_origin=float(grid.x_origin),
-                y_origin=float(grid.y_origin),
-                dx=float(grid.dx),
-                dy=float(grid.dy),
-                points=points,
-            )
-        except Exception as err:
-            _disable_native_helper(
-                "_sample_grid_field_array_native",
-                "vectorized sampling",
-                err,
-            )
-            sampled_native = None
-        if sampled_native is not None:
-            sampled_native = np.asarray(sampled_native, dtype=float)
-            if sampled_native.shape == sampled.shape:
-                sampled_native[~np.isfinite(sampled_native)] = np.nan
-                return sampled_native
+    sampled_native = _native_helpers._try_native_sample_grid_field_array(
+        native_sampler=_sample_grid_field_array_native,
+        grid=grid,
+        field=field,
+        points=points,
+        expected_shape=sampled.shape,
+        on_error=_disable_native_helper,
+    )
+    if sampled_native is not None:
+        return sampled_native
 
     return _sampling._sample_grid_field_array_python(
         grid=grid,
@@ -1877,73 +1829,6 @@ def _tip_display_geometry(
     return _tip_display_geometry_from_display_curve(display_curve, backoff_px)
 
 
-# Coordinate definitions
-# ========================
-
-
-class DomainMap:
-    """
-    Map representing different coordinate systems.
-
-    Coordinate definitions:
-
-    * axes-coordinates goes from 0 to 1 in the domain.
-    * data-coordinates are specified by the input x-y coordinates.
-    * grid-coordinates goes from 0 to N and 0 to M for an N x M grid,
-      where N and M match the shape of the input data.
-    * mask-coordinates goes from 0 to N and 0 to M for an N x M mask,
-      where N and M are user-specified to control the density of streamlines.
-
-    This class also has methods for adding trajectories to the StreamMask.
-    Before adding a trajectory, run `start_trajectory` to keep track of regions
-    crossed by a given trajectory. Later, if you decide the trajectory is bad
-    (e.g., if the trajectory is very short) just call `undo_trajectory`.
-    """
-
-    def __init__(self, grid, mask):
-        self.grid = grid
-        self.mask = mask
-        # Constants for conversion between grid- and mask-coordinates
-        self.x_grid2mask = (mask.nx - 1) / (grid.nx - 1)
-        self.y_grid2mask = (mask.ny - 1) / (grid.ny - 1)
-
-        self.x_mask2grid = 1.0 / self.x_grid2mask
-        self.y_mask2grid = 1.0 / self.y_grid2mask
-
-        self.x_data2grid = 1.0 / grid.dx
-        self.y_data2grid = 1.0 / grid.dy
-
-    def grid2mask(self, xi, yi):
-        """Return nearest space in mask-coords from given grid-coords."""
-        return round(xi * self.x_grid2mask), round(yi * self.y_grid2mask)
-
-    def mask2grid(self, xm, ym):
-        return xm * self.x_mask2grid, ym * self.y_mask2grid
-
-    def data2grid(self, xd, yd):
-        return xd * self.x_data2grid, yd * self.y_data2grid
-
-    def grid2data(self, xg, yg):
-        return xg / self.x_data2grid, yg / self.y_data2grid
-
-    def start_trajectory(self, xg, yg, broken_streamlines=True):
-        xm, ym = self.grid2mask(xg, yg)
-        self.mask._start_trajectory(xm, ym, broken_streamlines)
-
-    def reset_start_point(self, xg, yg):
-        xm, ym = self.grid2mask(xg, yg)
-        self.mask._current_xy = (xm, ym)
-
-    def update_trajectory(self, xg, yg, broken_streamlines=True):
-        if not self.grid.within_grid(xg, yg):
-            raise InvalidIndexError
-        xm, ym = self.grid2mask(xg, yg)
-        self.mask._update_trajectory(xm, ym, broken_streamlines)
-
-    def undo_trajectory(self):
-        self.mask._undo_trajectory()
-
-
 class Grid:
     """Grid of data."""
 
@@ -2013,323 +1898,3 @@ class Grid:
         # Note that xi/yi can be floats; so, for example, we can't simply check
         # `xi < self.nx` since *xi* can be `self.nx - 1 < xi < self.nx`
         return 0 <= xi <= self.nx - 1 and 0 <= yi <= self.ny - 1
-
-
-class StreamMask:
-    """
-    Mask to keep track of discrete regions crossed by streamlines.
-
-    The resolution of this grid determines the approximate spacing between
-    trajectories. Streamlines are only allowed to pass through zeroed cells:
-    When a streamline enters a cell, that cell is set to 1, and no new
-    streamlines are allowed to enter.
-    """
-
-    def __init__(self, density):
-        try:
-            self.nx, self.ny = (30 * np.broadcast_to(density, 2)).astype(int)
-        except ValueError as err:
-            raise ValueError("'density' must be a scalar or be of length " "2") from err
-        if self.nx < 0 or self.ny < 0:
-            raise ValueError("'density' must be positive")
-        self._mask = np.zeros((self.ny, self.nx))
-        self.shape = self._mask.shape
-
-        self._current_xy = None
-
-    def __getitem__(self, args):
-        return self._mask[args]
-
-    def _start_trajectory(self, xm, ym, broken_streamlines=True):
-        """Start recording streamline trajectory"""
-        self._traj = []
-        self._update_trajectory(xm, ym, broken_streamlines)
-
-    def _undo_trajectory(self):
-        """Remove current trajectory from mask"""
-        for t in self._traj:
-            self._mask[t] = 0
-
-    def _update_trajectory(self, xm, ym, broken_streamlines=True):
-        """
-        Update current trajectory position in mask.
-
-        If the new position has already been filled, raise `InvalidIndexError`.
-        """
-        if self._current_xy != (xm, ym):
-            if self[ym, xm] == 0:
-                self._traj.append((ym, xm))
-                self._mask[ym, xm] = 1
-                self._current_xy = (xm, ym)
-            else:
-                if broken_streamlines:
-                    raise InvalidIndexError
-                else:
-                    pass
-
-
-class InvalidIndexError(Exception):
-    pass
-
-
-class TerminateTrajectory(Exception):
-    pass
-
-
-# Integrator definitions
-# =======================
-
-
-def _get_integrator(u, v, dmap, resolution, magnitude, integration_direction):
-
-    # rescale velocity onto grid-coordinates for integrations.
-    u, v = dmap.data2grid(u, v)
-
-    # speed (path length) will be in axes-coordinates
-    u_ax = u / (dmap.grid.nx - 1)
-    v_ax = v / (dmap.grid.ny - 1)
-    speed = np.ma.sqrt(u_ax**2 + v_ax**2)
-
-    def forward_time(xi, yi):
-        if not dmap.grid.within_grid(xi, yi):
-            raise OutOfBounds
-        ds_dt = interpgrid(speed, xi, yi)
-        if ds_dt == 0:
-            raise TerminateTrajectory()
-        dt_ds = 1.0 / ds_dt
-        ui = interpgrid(u, xi, yi)
-        vi = interpgrid(v, xi, yi)
-        return ui * dt_ds, vi * dt_ds
-
-    def backward_time(xi, yi):
-        dxi, dyi = forward_time(xi, yi)
-        return -dxi, -dyi
-
-    def integrate(x0, y0, broken_streamlines=True):
-        """
-        Return x, y grid-coordinates of trajectory based on starting point.
-
-        Integrate both forward and backward in time from starting point in
-        grid coordinates.
-
-        Integration is terminated when a trajectory reaches a domain boundary
-        or when it crosses into an already occupied cell in the StreamMask. The
-        resulting trajectory is None if it is shorter than `minlength`.
-        """
-
-        stotal, xy_traj = 0.0, []
-
-        try:
-            dmap.start_trajectory(x0, y0, broken_streamlines)
-        except InvalidIndexError:
-            return None
-        if integration_direction in ["both", "backward"]:
-            s, xyt = _integrate_rk12(
-                x0, y0, dmap, backward_time, resolution, magnitude, broken_streamlines
-            )
-            stotal += s
-            xy_traj += xyt[::-1]
-
-        if integration_direction in ["both", "forward"]:
-            dmap.reset_start_point(x0, y0)
-            s, xyt = _integrate_rk12(
-                x0, y0, dmap, forward_time, resolution, magnitude, broken_streamlines
-            )
-            stotal += s
-            xy_traj += xyt[1:]
-
-        if len(xy_traj) > 1:
-            return np.broadcast_arrays(xy_traj, np.empty((1, 2)))[0]
-        else:  # reject short trajectories
-            dmap.undo_trajectory()
-            return None
-
-    return integrate
-
-
-class OutOfBounds(IndexError):
-    pass
-
-
-def _integrate_rk12(x0, y0, dmap, f, resolution, magnitude, broken_streamlines=True):
-    """
-    2nd-order Runge-Kutta algorithm with adaptive step size.
-
-    This method is also referred to as the improved Euler's method, or Heun's
-    method. This method is favored over higher-order methods because:
-
-    1. To get decent looking trajectories and to sample every mask cell
-       on the trajectory we need a small timestep, so a lower order
-       solver doesn't hurt us unless the data is *very* high resolution.
-       In fact, for cases where the user inputs
-       data smaller or of similar grid size to the mask grid, the higher
-       order corrections are negligible because of the very fast linear
-       interpolation used in `interpgrid`.
-
-    2. For high resolution input data (i.e. beyond the mask
-       resolution), we must reduce the timestep. Therefore, an adaptive
-       timestep is more suited to the problem as this would be very hard
-       to judge automatically otherwise.
-
-    This integrator is about 1.5 - 2x as fast as RK4 and RK45 solvers (using
-    similar Python implementations) in most setups.
-    """
-    # This error is below that needed to match the RK4 integrator. It
-    # is set for visual reasons -- too low and corners start
-    # appearing ugly and jagged. Can be tuned.
-    maxerror = 0.003
-
-    # This limit is important (for all integrators) to avoid the
-    # trajectory skipping some mask cells. We could relax this
-    # condition if we use the code which is commented out below to
-    # increment the location gradually. However, due to the efficient
-    # nature of the interpolation, this doesn't boost speed by much
-    # for quite a bit of complexity.
-    maxds = min(1.0 / dmap.mask.nx, 1.0 / dmap.mask.ny, 0.1)
-
-    ds = maxds
-    stotal = 0
-    xi = x0
-    yi = y0
-    xyf_traj = []
-    m_total = []
-
-    while True:
-        try:
-            if dmap.grid.within_grid(xi, yi):
-                xyf_traj.append((xi, yi))
-                m_total.append(interpgrid(magnitude, xi, yi))
-                maxlength = resolution * np.mean(m_total)
-            else:
-                raise OutOfBounds
-
-            # Compute the two intermediate gradients.
-            # f should raise OutOfBounds if the locations given are
-            # outside the grid.
-            k1x, k1y = f(xi, yi)
-            k2x, k2y = f(xi + ds * k1x, yi + ds * k1y)
-
-        except OutOfBounds:
-            # Out of the domain during this step.
-            # Take an Euler step to the boundary to improve neatness
-            # unless the trajectory is currently empty.
-            if xyf_traj:
-                ds, xyf_traj = _euler_step(xyf_traj, dmap, f)
-                stotal += ds
-            break
-        except TerminateTrajectory:
-            break
-
-        dx1 = ds * k1x
-        dy1 = ds * k1y
-        dx2 = ds * 0.5 * (k1x + k2x)
-        dy2 = ds * 0.5 * (k1y + k2y)
-
-        ny, nx = dmap.grid.shape
-        # Error is normalized to the axes coordinates
-        error = np.hypot((dx2 - dx1) / (nx - 1), (dy2 - dy1) / (ny - 1))
-
-        # Only save step if within error tolerance
-        if error < maxerror:
-            xi += dx2
-            yi += dy2
-            try:
-                dmap.update_trajectory(xi, yi, broken_streamlines)
-            except InvalidIndexError:
-                break
-            if stotal + ds > maxlength:
-                break
-            stotal += ds
-
-        # recalculate stepsize based on step error
-        if error == 0:
-            ds = maxds
-        else:
-            ds = min(maxds, 0.85 * ds * (maxerror / error) ** 0.5)
-
-    return stotal, xyf_traj
-
-
-def _euler_step(xyf_traj, dmap, f):
-    """Simple Euler integration step that extends streamline to boundary."""
-    ny, nx = dmap.grid.shape
-    xi, yi = xyf_traj[-1]
-    cx, cy = f(xi, yi)
-    if cx == 0:
-        dsx = np.inf
-    elif cx < 0:
-        dsx = xi / -cx
-    else:
-        dsx = (nx - 1 - xi) / cx
-    if cy == 0:
-        dsy = np.inf
-    elif cy < 0:
-        dsy = yi / -cy
-    else:
-        dsy = (ny - 1 - yi) / cy
-    ds = min(dsx, dsy)
-    xyf_traj.append((xi + cx * ds, yi + cy * ds))
-    return ds, xyf_traj
-
-
-# Utility functions
-# ========================
-
-
-def interpgrid(a, xi, yi):
-    """Fast 2D, linear interpolation on an integer grid"""
-
-    Ny, Nx = np.shape(a)
-    if isinstance(xi, np.ndarray):
-        x = np.clip(np.asarray(xi, dtype=int), 0, Nx - 1)
-        y = np.clip(np.asarray(yi, dtype=int), 0, Ny - 1)
-        # Check that xn, yn don't exceed max index
-        xn = np.clip(x + 1, 0, Nx - 1)
-        yn = np.clip(y + 1, 0, Ny - 1)
-    else:
-        x = int(np.clip(int(xi), 0, Nx - 1))
-        y = int(np.clip(int(yi), 0, Ny - 1))
-        # conditional is faster than clipping for integers
-        if x == (Nx - 1):
-            xn = x
-        else:
-            xn = x + 1
-        if y == (Ny - 1):
-            yn = y
-        else:
-            yn = y + 1
-
-    a00 = a[y, x]
-    a01 = a[y, xn]
-    a10 = a[yn, x]
-    a11 = a[yn, xn]
-    xt = xi - x
-    yt = yi - y
-    a0 = a00 * (1 - xt) + a01 * xt
-    a1 = a10 * (1 - xt) + a11 * xt
-    ai = a0 * (1 - yt) + a1 * yt
-
-    if not isinstance(xi, np.ndarray):
-        if np.ma.is_masked(ai):
-            raise TerminateTrajectory
-
-    return ai
-
-
-def _gen_starting_points(x, y, grains):
-    if isinstance(grains, tuple):
-        nx, ny = grains
-    elif isinstance(grains, int):
-        nx = ny = grains
-
-    eps = np.finfo(np.float32).eps
-
-    tmp_x = np.linspace(x.min() + eps, x.max() - eps, nx)
-    tmp_y = np.linspace(y.min() + eps, y.max() - eps, ny)
-
-    xs = np.tile(tmp_x, ny)
-    ys = np.repeat(tmp_y, nx)
-
-    seed_points = np.array([xs, ys])
-
-    return seed_points.T
