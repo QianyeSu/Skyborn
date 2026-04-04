@@ -12,7 +12,6 @@ from matplotlib import cm
 from .._artists.vector_artists import _ncl_arrow_edge_size_px, _resolve_open_arrow_size
 from .._shared.coords import _coerce_matching_plot_field
 from .geometry import _point_within_grid_data
-from .result import CurlyVectorPlotSet
 from .thinning import (
     _map_ncl_display_points_to_viewport,
     _resolve_ncl_min_distance_fraction,
