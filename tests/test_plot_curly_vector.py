@@ -1137,7 +1137,6 @@ class TestCurlyVectorKey:
         mock_set.glyph_length_axes_fraction.side_effect = (
             lambda value: float(value) / 100.0
         )
-        mock_set.glyph_head_axes_dimensions.return_value = (0.018, 0.026)
         return mock_set
 
     def test_curly_vector_legend_default_ncl_layout(self, mock_curly_vector_set):
@@ -1319,7 +1318,6 @@ class TestCurlyVectorKeyInternals:
         mock_set.glyph_length_axes_fraction.side_effect = (
             lambda value: float(value) / 100.0
         )
-        mock_set.glyph_head_axes_dimensions.return_value = (0.02, 0.03)
         return mock_set
 
     def test_curly_vector_key_rejects_invalid_labelpos(self, mock_curly_vector_set):
@@ -1388,14 +1386,16 @@ class TestCurlyVectorKeyInternals:
 
         plt.close(fig)
 
-    def test_calculate_head_geometry_falls_back_when_plotset_returns_invalid_values(
+    def test_calculate_head_geometry_falls_back_when_shared_helper_returns_invalid_values(
         self, mock_curly_vector_set
     ):
         fig, ax = plt.subplots(figsize=(8, 6))
-        mock_curly_vector_set.glyph_head_axes_dimensions.return_value = (np.nan, np.nan)
-
         legend = CurlyVectorKey(ax=ax, curly_vector_set=mock_curly_vector_set, U=10.0)
-        head_length, head_width = legend._calculate_head_geometry()
+        with patch(
+            "skyborn.plot._artists.vector_key_artist._curly_head_axes_dimensions",
+            return_value=(np.nan, np.nan),
+        ):
+            head_length, head_width = legend._calculate_head_geometry()
 
         assert 0.0 < head_length <= legend.arrow_length * 0.5
         assert head_width > 0.0
@@ -1556,7 +1556,6 @@ class TestCurlyVectorKeyHelper:
         mock_set.arrowstyle = "->"
         mock_set.arrowsize = 1.0
         mock_set.glyph_length_axes_fraction.return_value = 0.1
-        mock_set.glyph_head_axes_dimensions.return_value = (0.016, 0.024)
         return mock_set
 
     def test_curly_vector_key_basic(self, mock_curly_vector_set):
