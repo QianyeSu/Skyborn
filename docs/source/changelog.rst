@@ -31,6 +31,18 @@ Scatter Stippling
 * Kept historical module imports working through package-level
   compatibility aliases, so existing imports do not need to break
   immediately.
+* Narrowed the ``skyborn.plot`` package-root export surface so the common
+  public entry points are now function-first:
+
+  - ``skyborn.plot.curly_vector``
+  - ``skyborn.plot.curly_vector_key``
+  - ``skyborn.plot.scatter``
+  - ``skyborn.plot.add_equal_axes``
+  - ``skyborn.plot.createFigure``
+
+* Removed the temporary package-level compatibility aliases for the deleted
+  historical modules ``skyborn.plot.ncl_vector``, ``skyborn.plot.vector_key``,
+  and ``skyborn.plot.vector_plot``.
 * Updated plotting examples and user-facing documentation to recommend
   ``skyborn.plot.vector`` as the module-oriented import path for curly-vector
   usage while preserving the existing package-level ``skyborn.plot`` exports.
