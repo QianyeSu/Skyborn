@@ -806,6 +806,7 @@ def _curly_vector_ncl_impl(
     sample_grid_field_fn=None,
     build_ncl_arrow_artists_fn=None,
     display_points_to_data_fn=None,
+    result_cls=None,
 ):
     warn_if_native_backend_unavailable_fn()
     grid = grid_cls(x, y, allow_non_uniform=allow_non_uniform_grid)
@@ -853,7 +854,7 @@ def _curly_vector_ncl_impl(
         if rasterized is not None:
             lc.set_rasterized(bool(rasterized))
         axes.add_collection(lc, autolim=False)
-        return CurlyVectorPlotSet(
+        return result_cls(
             lc,
             (),
             0.0,
@@ -1088,7 +1089,7 @@ def _curly_vector_ncl_impl(
         axes.add_patch(patch)
 
     axes.autoscale_view()
-    return CurlyVectorPlotSet(
+    return result_cls(
         lc,
         tuple(arrows),
         ref_length_frac,
