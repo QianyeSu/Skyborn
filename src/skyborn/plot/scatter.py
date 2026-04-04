@@ -11,9 +11,10 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-import xarray as xr
 
-from .ncl_vector import _is_cartopy_crs_like, _looks_like_axes
+from ._shared import coords as _coord_helpers
+from ._shared.axes import _is_cartopy_crs_like, _looks_like_axes
+from ._shared.style import _resolve_scatter_aliases
 from .vector_plot import (
     _map_ncl_display_points_to_viewport,
     _resolve_ncl_min_distance_fraction,
@@ -22,189 +23,14 @@ from .vector_plot import (
 
 __all__ = ["scatter"]
 
-
-def _resolve_scatter_aliases(
-    c: Any,
-    kwargs: dict[str, Any],
-) -> tuple[Any, dict[str, Any]]:
-    """Resolve singular compatibility aliases onto Matplotlib scatter kwargs."""
-    resolved = dict(kwargs)
-
-    if "color" in resolved:
-        if c is not None:
-            raise ValueError("Use only one of 'c' or 'color'")
-        c = resolved.pop("color")
-
-    if "linewidth" in resolved:
-        if "linewidths" in resolved:
-            raise ValueError("Use only one of 'linewidth' or 'linewidths'")
-        resolved["linewidths"] = resolved.pop("linewidth")
-
-    if "facecolor" in resolved:
-        if "facecolors" in resolved:
-            raise ValueError("Use only one of 'facecolor' or 'facecolors'")
-        resolved["facecolors"] = resolved.pop("facecolor")
-
-    if "edgecolor" in resolved:
-        if "edgecolors" in resolved:
-            raise ValueError("Use only one of 'edgecolor' or 'edgecolors'")
-        resolved["edgecolors"] = resolved.pop("edgecolor")
-
-    return c, resolved
-
-
-def _filled_array(value: Any, *, dtype=float) -> np.ndarray:
-    """Return a plain ndarray with masked values replaced by NaN."""
-    array = np.ma.asarray(value, dtype=dtype)
-    if np.ma.isMaskedArray(array):
-        return np.asarray(array.filled(np.nan), dtype=dtype)
-    return np.asarray(array, dtype=dtype)
-
-
-def _subset_ready_array(value: Any) -> np.ndarray:
-    """Normalize one style array so it can be subset safely by retained points."""
-    array = np.ma.asarray(value)
-    if np.ma.isMaskedArray(array):
-        fill_value = np.nan if np.issubdtype(array.dtype, np.number) else None
-        return np.asarray(array.filled(fill_value))
-    return np.asarray(array)
-
-
-def _maybe_squeezed_dataarray(value: Any) -> xr.DataArray | None:
-    """Return a squeezed DataArray or ``None`` for non-xarray inputs."""
-    if not isinstance(value, xr.DataArray):
-        return None
-    return value.squeeze(drop=True)
-
-
-def _transpose_dataarray_if_possible(
-    value: Any, target_dims: tuple[Any, ...] | None
-) -> Any:
-    """Align a DataArray to the target plotting dimension order when possible."""
-    da = _maybe_squeezed_dataarray(value)
-    if da is None or target_dims is None or da.ndim != len(target_dims):
-        return da if da is not None else value
-    if da.dims == target_dims or set(da.dims) != set(target_dims):
-        return da
-    return da.transpose(*target_dims)
-
-
-def _normalized_field_array(
-    value: Any, target_dims: tuple[Any, ...] | None = None
-) -> np.ndarray:
-    """Return one style or mask field as an ndarray in plotting dimension order."""
-    value = _transpose_dataarray_if_possible(value, target_dims)
-    if isinstance(value, xr.DataArray):
-        value = value.data
-    return _subset_ready_array(value)
-
-
-def _infer_grid_from_reference(
-    value: Any,
-    grid_shape: tuple[int, int],
-    target_dims: tuple[Any, ...] | None,
-) -> bool:
-    """Infer whether 1D x/y should be expanded to a grid from companion fields."""
-    if value is None:
-        return False
-    array = _normalized_field_array(value, target_dims=target_dims)
-    return array.ndim == 2 and array.shape == grid_shape
-
-
-def _normalize_coordinates(
-    x: Any,
-    y: Any,
-    *,
-    reference_fields: tuple[Any, ...],
-) -> tuple[np.ndarray, np.ndarray, tuple[int, ...], bool, tuple[Any, ...] | None]:
-    """Normalize paired points or grid coordinates into a consistent plotting form.
-
-    This helper supports three common inputs:
-
-    1. Paired 1D points: ``x[i], y[i]`` describe one point each.
-    2. 1D grid axes: ``x`` and ``y`` describe a rectilinear grid and must be
-       expanded with ``meshgrid`` before masking and thinning.
-    3. 2D meshgrid-like coordinates: already expanded and ready to use.
-
-    The ambiguous case is two 1D arrays. When their lengths differ, they are
-    necessarily grid axes. When their lengths match, we inspect companion
-    fields such as ``where`` / ``mask`` / ``s`` / ``c`` to see whether the user
-    is actually passing grid-shaped metadata, in which case the 1D coordinates
-    should also be interpreted as grid axes.
-    """
-    x_obj = _maybe_squeezed_dataarray(x)
-    y_obj = _maybe_squeezed_dataarray(y)
-
-    target_dims = None
-    if x_obj is not None and y_obj is not None and x_obj.ndim == y_obj.ndim == 2:
-        y_obj = _transpose_dataarray_if_possible(y_obj, tuple(x_obj.dims))
-        target_dims = tuple(x_obj.dims)
-    elif x_obj is not None and y_obj is not None and x_obj.ndim == y_obj.ndim == 1:
-        target_dims = (y_obj.dims[0], x_obj.dims[0])
-
-    x_values = _filled_array(x_obj.data if x_obj is not None else x, dtype=float)
-    y_values = _filled_array(y_obj.data if y_obj is not None else y, dtype=float)
-
-    if x_values.ndim == 2 or y_values.ndim == 2:
-        if x_values.ndim != 2 or y_values.ndim != 2:
-            raise ValueError("x and y must both be 1D or both be 2D")
-        if x_values.shape != y_values.shape:
-            raise ValueError("2D x and y coordinates must have the same shape")
-        return x_values, y_values, x_values.shape, True, target_dims
-
-    if x_values.ndim != 1 or y_values.ndim != 1:
-        raise ValueError("x and y must each be 1D or 2D arrays")
-
-    grid_shape = (int(y_values.size), int(x_values.size))
-    grid_like = x_values.size != y_values.size
-    if not grid_like:
-        # Two equally long 1D arrays could be paired points or grid axes. Use
-        # the shapes of companion fields to disambiguate that case.
-        grid_like = any(
-            _infer_grid_from_reference(field, grid_shape, target_dims)
-            for field in reference_fields
-        )
-
-    if grid_like:
-        x_grid, y_grid = np.meshgrid(x_values, y_values, indexing="xy")
-        return x_grid, y_grid, grid_shape, True, target_dims
-
-    if x_values.shape != y_values.shape:
-        raise ValueError(
-            "Paired scatter points require x and y to have the same 1D length"
-        )
-    return x_values, y_values, x_values.shape, False, target_dims
-
-
-def _normalize_selection_mask(
-    *,
-    where: Any,
-    mask: Any,
-    candidate_shape: tuple[int, ...],
-    target_dims: tuple[Any, ...] | None,
-) -> np.ndarray:
-    """Return the boolean candidate-selection mask in plotting coordinate order."""
-    if where is not None and mask is not None:
-        raise ValueError("Use only one of 'where' or 'mask'")
-
-    selector = where if where is not None else mask
-    if selector is None:
-        return np.ones(candidate_shape, dtype=bool)
-
-    selector_array = _normalized_field_array(selector, target_dims=target_dims)
-    if selector_array.shape != candidate_shape:
-        raise ValueError(
-            f"Selection mask shape {selector_array.shape} must match candidate shape "
-            f"{candidate_shape}"
-        )
-
-    if np.issubdtype(selector_array.dtype, np.bool_):
-        return np.asarray(selector_array, dtype=bool)
-
-    # Numeric masks follow NumPy truthiness, but NaN should never create a
-    # candidate point implicitly.
-    finite = np.isfinite(selector_array)
-    return finite & (selector_array != 0)
+_filled_array = _coord_helpers._filled_float_array
+_subset_ready_array = _coord_helpers._subset_ready_array
+_maybe_squeezed_dataarray = _coord_helpers._maybe_squeezed_dataarray
+_transpose_dataarray_if_possible = _coord_helpers._transpose_dataarray_if_possible
+_normalized_field_array = _coord_helpers._normalized_field_array
+_infer_grid_from_reference = _coord_helpers._infer_grid_from_reference
+_normalize_coordinates = _coord_helpers._normalize_coordinates
+_normalize_selection_mask = _coord_helpers._normalize_selection_mask
 
 
 def _resolve_spacing_fraction(
