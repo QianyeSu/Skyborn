@@ -15,6 +15,7 @@ import numpy as np
 import xarray as xr
 
 from ._adapters import cartopy_vector as _cartopy_adapter
+from ._adapters import curly_vector_entry as _entry_adapter
 from ._adapters import dataset_vector as _dataset_adapter
 from ._adapters import grid_prepare as _grid_prepare_adapter
 from ._shared.axes import _is_cartopy_crs_like, _looks_like_axes
@@ -107,93 +108,29 @@ def _prepare_curly_vector_dataset_inputs(
     linewidth,
     density,
 ):
-    src_crs = transform if _is_cartopy_crs_like(transform) else None
-    color_field = _maybe_as_scalar_field(color, np.shape(u))
-    linewidth_field = _maybe_as_scalar_field(linewidth, np.shape(u))
-    if color_field is not None:
-        color = color_field
-    if linewidth_field is not None:
-        linewidth = linewidth_field
-
-    if _is_curvilinear_grid(x, y):
-        scalar_fields = []
-        scalar_keys = []
-        if color_field is not None:
-            scalar_fields.append(color_field)
-            scalar_keys.append("color")
-        if linewidth_field is not None:
-            scalar_fields.append(linewidth_field)
-            scalar_keys.append("linewidth")
-
-        target_shape = (
-            _normalize_regrid_shape(curvilinear_regrid_shape)
-            if curvilinear_regrid_shape is not None
-            else _default_curvilinear_regrid_shape(x, density)
-        )
-        regrid_result = _regrid_curvilinear_vectors(
-            x,
-            y,
-            u,
-            v,
-            *scalar_fields,
-            target_shape=target_shape,
-        )
-        x, y, u, v, *scalar_grids = regrid_result
-        for key, scalar_grid in zip(scalar_keys, scalar_grids):
-            if key == "color":
-                color = scalar_grid
-            elif key == "linewidth":
-                linewidth = scalar_grid
-
-    if regrid_shape is None:
-        if src_crs is not None:
-            transform = src_crs._as_mpl_transform(ax)
-        return x, y, u, v, color, linewidth, transform
-
-    if src_crs is None:
-        raise ValueError("regrid_shape requires a Cartopy CRS passed via transform")
-    if not hasattr(ax, "projection"):
-        raise ValueError("regrid_shape requires a Cartopy GeoAxes with a projection")
-
-    scalar_fields = []
-    scalar_keys = []
-    color_field = _maybe_as_scalar_field(color, np.shape(u))
-    linewidth_field = _maybe_as_scalar_field(linewidth, np.shape(u))
-    if color_field is not None:
-        scalar_fields.append(color_field)
-        scalar_keys.append("color")
-    if linewidth_field is not None:
-        scalar_fields.append(linewidth_field)
-        scalar_keys.append("linewidth")
-
-    regrid_result = _regrid_cartopy_vectors(
-        src_crs=src_crs,
-        target_proj=ax.projection,
-        regrid_shape=regrid_shape,
-        x=x,
-        y=y,
-        u=u,
-        v=v,
-        *scalar_fields,
-        target_extent=_default_cartopy_target_extent(ax, target_extent),
+    return _entry_adapter._prepare_curly_vector_dataset_inputs_impl(
+        ax,
+        x,
+        y,
+        u,
+        v,
+        transform,
+        regrid_shape,
+        curvilinear_regrid_shape,
+        target_extent,
+        color,
+        linewidth,
+        density,
+        is_cartopy_crs_like_fn=_is_cartopy_crs_like,
+        maybe_as_scalar_field_fn=_maybe_as_scalar_field,
+        is_curvilinear_grid_fn=_is_curvilinear_grid,
+        normalize_regrid_shape_fn=_normalize_regrid_shape,
+        default_curvilinear_regrid_shape_fn=_default_curvilinear_regrid_shape,
+        regrid_curvilinear_vectors_fn=_regrid_curvilinear_vectors,
+        regrid_cartopy_vectors_fn=_regrid_cartopy_vectors,
+        default_cartopy_target_extent_fn=_default_cartopy_target_extent,
+        extract_regular_grid_from_regridded_vectors_fn=_extract_regular_grid_from_regridded_vectors,
     )
-
-    x_grid, y_grid, u_grid, v_grid, *scalar_grids = regrid_result
-    x, y, u, v, scalar_grids = _extract_regular_grid_from_regridded_vectors(
-        x_grid,
-        y_grid,
-        u_grid,
-        v_grid,
-        scalar_grids,
-    )
-
-    for key, scalar_grid in zip(scalar_keys, scalar_grids):
-        if key == "color":
-            color = scalar_grid
-        elif key == "linewidth":
-            linewidth = scalar_grid
-
-    return x, y, u, v, color, linewidth, None
 
 
 def _curly_vector_from_dataset(
@@ -369,74 +306,56 @@ def _curly_vector_from_dataset(
         - https://github.com/NCAR/geocat-viz/issues/4
         - https://docs.xarray.dev/en/stable/generated/xarray.Dataset.plot.streamplot.html#xarray.Dataset.plot.streamplot
     """
-    color, linewidth, facecolor, edgecolor, vmin, vmax = _resolve_curly_style_aliases(
-        color=color,
-        c=c,
-        linewidth=linewidth,
-        linewidths=linewidths,
-        facecolor=facecolor,
-        facecolors=facecolors,
-        edgecolor=edgecolor,
-        edgecolors=edgecolors,
-        norm=norm,
-        vmin=vmin,
-        vmax=vmax,
-    )
-
-    x, y, u, v, source_metadata = _extract_curly_vector_dataset_source(
+    return _entry_adapter._curly_vector_from_dataset_impl(
         ds,
         x,
         y,
         u,
         v,
-        isel=isel,
-        return_metadata=True,
-    )
-    color = _prepare_dataset_style_field(
-        color,
-        isel=isel,
-        expected_shape=np.shape(u),
-        vector_dims=source_metadata["vector_dims"],
-        x_descending=bool(source_metadata["x_descending"]),
-        y_descending=bool(source_metadata["y_descending"]),
-        role="color",
-    )
-    linewidth = _prepare_dataset_style_field(
-        linewidth,
-        isel=isel,
-        expected_shape=np.shape(u),
-        vector_dims=source_metadata["vector_dims"],
-        x_descending=bool(source_metadata["x_descending"]),
-        y_descending=bool(source_metadata["y_descending"]),
-        role="linewidth",
-    )
-
-    if ax is None:
-        ax = plt.gca()
-    x, y, u, v, color, linewidth, transform = _prepare_curly_vector_dataset_inputs(
         ax=ax,
-        x=x,
-        y=y,
-        u=u,
-        v=v,
+        density=density,
+        linewidth=linewidth,
+        linewidths=linewidths,
+        color=color,
+        c=c,
+        cmap=cmap,
+        norm=norm,
+        vmin=vmin,
+        vmax=vmax,
+        alpha=alpha,
+        facecolor=facecolor,
+        facecolors=facecolors,
+        edgecolor=edgecolor,
+        edgecolors=edgecolors,
+        rasterized=rasterized,
+        arrowsize=arrowsize,
+        arrowstyle=arrowstyle,
         transform=transform,
+        zorder=zorder,
+        start_points=start_points,
+        integration_direction=integration_direction,
+        grains=grains,
+        broken_streamlines=broken_streamlines,
+        anchor=anchor,
+        pivot=pivot,
+        ref_magnitude=ref_magnitude,
+        ref_length=ref_length,
+        min_frac_length=min_frac_length,
+        min_distance=min_distance,
+        ncl_preset=ncl_preset,
         regrid_shape=regrid_shape,
         curvilinear_regrid_shape=curvilinear_regrid_shape,
         target_extent=target_extent,
-        color=color,
-        linewidth=linewidth,
-        density=density,
+        isel=isel,
+        resolve_curly_style_aliases_fn=_resolve_curly_style_aliases,
+        extract_curly_vector_dataset_source_fn=_extract_curly_vector_dataset_source,
+        prepare_dataset_style_field_fn=_prepare_dataset_style_field,
+        gca_fn=plt.gca,
+        prepare_curly_vector_dataset_inputs_fn=_prepare_curly_vector_dataset_inputs,
+        collect_named_kwargs_fn=_collect_named_kwargs,
+        array_curly_vector_kwarg_names=_ARRAY_CURLY_VECTOR_KWARG_NAMES,
+        array_curly_vector_fn=_array_curly_vector,
     )
-
-    obj = _array_curly_vector(
-        ax,
-        x,
-        y,
-        u,
-        v,
-        **_collect_named_kwargs(locals(), _ARRAY_CURLY_VECTOR_KWARG_NAMES),
-    )
-    return obj
 
 
 def _curly_vector_from_arrays(
@@ -480,42 +399,51 @@ def _curly_vector_from_arrays(
     target_extent: Any = None,
 ) -> CurlyVectorPlotSet:
     """Array-input adapter that preserves Cartopy and curvilinear support."""
-    color, linewidth, facecolor, edgecolor, vmin, vmax = _resolve_curly_style_aliases(
-        color=color,
-        c=c,
-        linewidth=linewidth,
-        linewidths=linewidths,
-        facecolor=facecolor,
-        facecolors=facecolors,
-        edgecolor=edgecolor,
-        edgecolors=edgecolors,
-        norm=norm,
-        vmin=vmin,
-        vmax=vmax,
-    )
-
-    x, y, u, v, color, linewidth, transform = _prepare_curly_vector_dataset_inputs(
-        ax=ax,
-        x=np.asarray(x),
-        y=np.asarray(y),
-        u=np.asarray(u),
-        v=np.asarray(v),
-        transform=transform,
-        regrid_shape=regrid_shape,
-        curvilinear_regrid_shape=curvilinear_regrid_shape,
-        target_extent=target_extent,
-        color=color,
-        linewidth=linewidth,
-        density=density,
-    )
-
-    return _array_curly_vector(
+    return _entry_adapter._curly_vector_from_arrays_impl(
         ax,
         x,
         y,
         u,
         v,
-        **_collect_named_kwargs(locals(), _ARRAY_CURLY_VECTOR_KWARG_NAMES),
+        density=density,
+        linewidth=linewidth,
+        linewidths=linewidths,
+        color=color,
+        c=c,
+        cmap=cmap,
+        norm=norm,
+        vmin=vmin,
+        vmax=vmax,
+        alpha=alpha,
+        facecolor=facecolor,
+        facecolors=facecolors,
+        edgecolor=edgecolor,
+        edgecolors=edgecolors,
+        rasterized=rasterized,
+        arrowsize=arrowsize,
+        arrowstyle=arrowstyle,
+        transform=transform,
+        zorder=zorder,
+        start_points=start_points,
+        integration_direction=integration_direction,
+        grains=grains,
+        broken_streamlines=broken_streamlines,
+        anchor=anchor,
+        pivot=pivot,
+        ref_magnitude=ref_magnitude,
+        ref_length=ref_length,
+        min_frac_length=min_frac_length,
+        min_distance=min_distance,
+        ncl_preset=ncl_preset,
+        regrid_shape=regrid_shape,
+        curvilinear_regrid_shape=curvilinear_regrid_shape,
+        target_extent=target_extent,
+        resolve_curly_style_aliases_fn=_resolve_curly_style_aliases,
+        asarray_fn=np.asarray,
+        prepare_curly_vector_dataset_inputs_fn=_prepare_curly_vector_dataset_inputs,
+        collect_named_kwargs_fn=_collect_named_kwargs,
+        array_curly_vector_kwarg_names=_ARRAY_CURLY_VECTOR_KWARG_NAMES,
+        array_curly_vector_fn=_array_curly_vector,
     )
 
 
