@@ -14,6 +14,9 @@ Scatter Stippling
 * Implemented the public scatter entry point in its own
   ``skyborn.plot.scatter`` module so the display-space thinning logic stays
   isolated and easier to maintain.
+* Refactored the ``skyborn.plot`` vector wrapper internals so
+  ``ncl_vector.py`` delegates dataset and regridding helpers to smaller
+  private modules without changing the public plotting behavior.
 
 Version 0.3.18 (Current)
 ------------------------
