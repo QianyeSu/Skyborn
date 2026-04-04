@@ -9,6 +9,8 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
+from ._shared.coords import _filled_scalar_field_array
+
 _ISSUED_PLOT_WARNINGS: set[str] = set()
 
 
@@ -65,13 +67,6 @@ def _transpose_2d_dataarray_to_dims(
             "2D vector inputs must already live on the same physical grid"
         )
     return da.transpose(*dims)
-
-
-def _filled_scalar_field_array(value: Any) -> np.ndarray:
-    array = np.ma.asarray(value, dtype=float)
-    if np.ma.isMaskedArray(array):
-        return np.asarray(array.filled(np.nan), dtype=float)
-    return np.asarray(array, dtype=float)
 
 
 def _extract_curly_vector_dataset_source(
