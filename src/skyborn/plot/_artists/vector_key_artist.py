@@ -19,7 +19,7 @@ from matplotlib.patches import Polygon, Rectangle
 from matplotlib.text import Text
 
 from .._core.result import CurlyVectorPlotSet
-from .._shared.style import _normalize_supported_arrowstyle
+from .._shared.style import _curly_head_axes_dimensions, _normalize_supported_arrowstyle
 
 __all__ = ["CurlyVectorKey"]
 
@@ -195,20 +195,24 @@ class CurlyVectorKey(Artist):
         )
 
     def _calculate_head_geometry(self) -> tuple[float, float]:
-        head_dims = getattr(self.curly_vector_set, "glyph_head_axes_dimensions", None)
-        if callable(head_dims):
-            try:
-                head_length, head_width = head_dims(self.U)
-            except (TypeError, ValueError):
-                head_length, head_width = np.nan, np.nan
-            if np.isfinite(head_length) and np.isfinite(head_width):
-                head_length = max(float(head_length), 0.0)
-                head_width = max(float(head_width), 0.0)
-                if head_length > 0.0 and head_width > 0.0:
-                    return (
-                        min(head_length, self.arrow_length * 0.5),
-                        head_width,
-                    )
+        try:
+            head_length, head_width = _curly_head_axes_dimensions(
+                self.ax,
+                self.U,
+                max_magnitude=getattr(self.curly_vector_set, "max_magnitude", None),
+                arrowsize=getattr(self.curly_vector_set, "arrowsize", 1.0),
+            )
+        except Exception:
+            head_length, head_width = np.nan, np.nan
+
+        if np.isfinite(head_length) and np.isfinite(head_width):
+            head_length = max(float(head_length), 0.0)
+            head_width = max(float(head_width), 0.0)
+            if head_length > 0.0 and head_width > 0.0:
+                return (
+                    min(head_length, self.arrow_length * 0.5),
+                    head_width,
+                )
 
         fallback_length = min(
             max(self.arrow_length * 0.18, 0.010), self.arrow_length * 0.5
