@@ -1,4 +1,4 @@
-"""Internal entry orchestration for the public ``ncl_vector`` facade."""
+"""Internal entry orchestration for the public curly-vector facade."""
 
 from __future__ import annotations
 
