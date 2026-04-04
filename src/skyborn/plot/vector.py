@@ -1402,7 +1402,135 @@ def _curly_vector_from_arrays(
 
 
 def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
-    """Plot NCL-like curly vectors from arrays or an xarray dataset."""
+    """Plot NCL-like curly vectors from arrays or an xarray dataset.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset, optional
+        Dataset source for the dataset-style call form. When ``ds`` is used as
+        the first positional argument, ``x``, ``y``, ``u``, and ``v`` must be
+        the corresponding coordinate and variable names inside that dataset.
+    ax : matplotlib.axes.Axes, optional
+        Target axes for the vector plot. If omitted,
+        ``matplotlib.pyplot.gca()`` is used.
+    x, y : array-like or hashable
+        Coordinate definition for the vector field.
+
+        For array-style calls, these may be 1D or 2D coordinate arrays. If 2D,
+        they should describe a meshgrid-like layout matching the vector field.
+        For dataset-style calls, they are the coordinate names inside ``ds``.
+    u, v : array-like or hashable
+        Vector components. For array-style calls, these are 2D numeric arrays
+        aligned with the supplied coordinates. For dataset-style calls, they are
+        variable names inside ``ds``.
+    density : float or tuple of float, optional
+        Controls the closeness of the rendered curly vectors. As in the
+        low-level engine, ``density=1`` corresponds to the default NCL-like
+        sampling density, and a tuple ``(density_x, density_y)`` can be used
+        for anisotropic spacing.
+    linewidth : float or 2D array, optional
+        Width of the curved vector shafts. A field array must match the vector
+        grid shape.
+    linewidths : float or 2D array, optional
+        Matplotlib ``quiver``-style alias for ``linewidth``.
+    color : color-like or 2D array, optional
+        Shaft color. If a 2D scalar field is supplied, Skyborn maps it through
+        ``cmap`` and ``norm``.
+    c : color-like or 2D array, optional
+        Matplotlib-style alias for ``color``.
+    cmap, norm
+        Colormap and normalization controls used when ``color``/``c`` is a
+        scalar field.
+    vmin, vmax : float, optional
+        Lower and upper normalization bounds used when ``color``/``c`` is a
+        scalar field and ``norm`` is omitted.
+    alpha : float, optional
+        Matplotlib artist alpha applied to both the curved shafts and the
+        arrow heads.
+    facecolor, edgecolor : color-like, optional
+        Explicit arrow-head fill and edge colors. When omitted, the resolved
+        shaft color is reused.
+    facecolors, edgecolors : color-like, optional
+        Matplotlib-style aliases for ``facecolor`` and ``edgecolor``.
+    rasterized : bool, optional
+        Whether to rasterize the generated curly-vector artists when exporting
+        to vector formats such as PDF or SVG.
+    arrowsize : float, optional
+        Scaling factor for the arrow size.
+    arrowstyle : str, optional
+        Supported arrow-head style. Use ``"->"`` for the open NCL-like line
+        head or ``"-|>"`` for a filled triangular head.
+    transform : optional
+        Coordinate transformation for the plot. Standard Matplotlib transforms
+        are forwarded directly. Cartopy CRS-like objects are normalized
+        internally.
+    zorder : float, optional
+        Z-order of the curved shafts and arrow heads.
+    start_points : (N, 2) array-like, optional
+        Explicit seed points for the curly-vector glyphs in data coordinates.
+    integration_direction : {'forward', 'backward', 'both'}, optional
+        Integrate the glyph shape in the forward, backward, or both directions.
+    grains : int, optional
+        Number of grains used during streamline-style integration.
+    broken_streamlines : bool, optional
+        If ``False``, forces traces to continue until they leave the domain. If
+        ``True``, traces may terminate early when they come too close to
+        another glyph.
+    anchor : {'tail', 'center', 'head'} or None, optional
+        Anchor point for the NCL-like curved-glyph renderer. If omitted, the
+        anchor is inferred from ``integration_direction``.
+    pivot : {'tail', 'mid', 'middle', 'tip'} or None, optional
+        Matplotlib ``quiver``-style alias for ``anchor``.
+    ref_magnitude : float, optional
+        Reference magnitude used when mapping a physical vector magnitude to a
+        display-space glyph length. If omitted, the maximum field magnitude is
+        used.
+    ref_length : float, optional
+        Reference glyph length as a fraction of the axes width. If omitted, a
+        NCL-like default scaled by ``arrowsize`` is used.
+    min_frac_length : float, optional
+        Minimum glyph length as a fraction of the reference length.
+    min_distance : float, optional
+        Minimum glyph-center spacing as a fraction of the axes width. If
+        omitted, it is inferred from ``density``.
+    ncl_preset : {None, 'profile'}, optional
+        Optional preset override for NCL-like glyph tuning. In most cases you
+        can leave this as ``None`` and let Skyborn choose the default behavior.
+    regrid_shape : int or (int, int), optional
+        Target shape for projection-aware Cartopy regridding. This requires a
+        Cartopy CRS-like ``transform`` and a GeoAxes with a projection.
+    curvilinear_regrid_shape : int or (int, int), optional
+        Target shape used when the source coordinates describe a curvilinear
+        grid. If omitted, Skyborn infers a conservative default from the source
+        grid and ``density``.
+    target_extent : tuple of float, optional
+        Explicit ``(xmin, xmax, ymin, ymax)`` target extent used during
+        projection-aware regridding.
+    isel : mapping or tuple, optional
+        Dataset-only selection forwarded before extracting ``x``, ``y``, ``u``,
+        and ``v`` from ``ds``.
+    **kwargs
+        Additional style and artist options supported by the public wrapper.
+
+    Returns
+    -------
+    CurlyVectorPlotSet
+        Container object with attributes
+
+        - ``lines``: `.LineCollection` of the curved vector shafts.
+        - ``arrows``: tuple of arrow-head artists added to the axes. Open
+          arrow styles use line segments only and may therefore return an empty
+          tuple.
+
+    Notes
+    -----
+    Supported call styles
+
+    - ``curly_vector(ax, x, y, u, v, ...)``
+    - ``curly_vector(x, y, u, v, ..., ax=ax)``
+    - ``curly_vector(x, y, u, v, ...)``
+    - ``curly_vector(ds, x="lon", y="lat", u="u", v="v", ax=ax, ...)``
+    """
     if not args:
         raise TypeError(
             "curly_vector() expects either (ax, x, y, u, v, ...) or "
@@ -1433,7 +1561,70 @@ def curly_vector_key(
     *args: Any,
     **kwargs: Any,
 ) -> CurlyVectorKey:
-    """Add an NCL-like reference-vector annotation to axes."""
+    """Add an NCL-like reference-vector annotation to axes.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes, optional
+        Target axes for the reference key. If omitted,
+        ``matplotlib.pyplot.gca()`` is used.
+    curly_vector_set : CurlyVectorPlotSet
+        Plot result returned by :func:`curly_vector`. The key reads glyph scale
+        and reference-length information from this object.
+    U : float, optional
+        Reference vector magnitude to display in the key. Defaults to ``2.0``.
+    units : str, optional
+        Units label displayed with the reference magnitude. Defaults to
+        ``"m/s"``.
+    label : str, optional
+        Optional custom label text for the annotation.
+    description : str, optional
+        Optional secondary description line shown with the reference key.
+    width, height : float, optional
+        Size of the reference-key box in axes coordinates.
+    loc : {"lower left", "lower right", "upper left", "upper right"}, optional
+        Preset box location used when explicit ``x``/``y`` axes coordinates are
+        not provided.
+    x, y : float, optional
+        Explicit box anchor position in axes coordinates. These two parameters
+        must be provided together and override ``loc``.
+    labelpos : {"N", "S", "E", "W"}, optional
+        Relative label placement around the reference arrow.
+    max_arrow_length : float, optional
+        Maximum arrow length used by the fallback reference-arrow geometry.
+    arrow_props, patch_props, text_props : dict, optional
+        Styling dictionaries forwarded to the low-level arrow, frame, and text
+        artists.
+    padding : float, optional
+        Internal padding between the frame and the reference-arrow/text layout.
+    margin : float, optional
+        Margin from the axes edge when ``loc`` is used.
+    reference_speed : float, optional
+        Fallback reference speed used when the plot set cannot provide a usable
+        scale mapping.
+    center_label : bool, optional
+        Whether to center the main label rather than using the default
+        north/south/east/west placement logic.
+    frameon : bool, optional
+        Whether to draw the surrounding reference-key frame.
+    show_description : bool, optional
+        Whether to render the description text when one is available.
+    **kwargs
+        Additional keyword arguments forwarded to :class:`CurlyVectorKey`.
+
+    Returns
+    -------
+    CurlyVectorKey
+        The reference-key artist added to the axes.
+
+    Notes
+    -----
+    Supported call styles
+
+    - ``curly_vector_key(ax, curly_vector_set, U=2.0, ...)``
+    - ``curly_vector_key(curly_vector_set, U=2.0, ax=ax, ...)``
+    - ``curly_vector_key(curly_vector_set, ...)``
+    """
     if not args and "curly_vector_set" not in kwargs:
         raise TypeError(
             "curly_vector_key() expects either (ax, curly_vector_set, ...) or "
