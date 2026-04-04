@@ -15,8 +15,9 @@ import matplotlib.collections as mcollections
 import matplotlib.colors as mcolors
 import matplotlib.lines as mlines
 import numpy as np
-from matplotlib import cm, patches
+from matplotlib import cm
 
+from ._artists import vector_artists as _artist_helpers
 from ._artists.vector_artists import _ncl_arrow_edge_size_px, _resolve_open_arrow_size
 from ._core import geometry as _geometry
 from ._core import legacy_stream as _legacy_stream
@@ -1034,79 +1035,21 @@ def _trace_ncl_curve(
     display_sampler=None,
     native_trace_context=None,
 ):
-    if total_length_px <= 0:
-        return None
-
-    if anchor == "center":
-        backward = _trace_ncl_direction(
-            start_point,
-            total_length_px / 2.0,
-            -1.0,
-            grid,
-            u,
-            v,
-            transform,
-            step_px,
-            speed_scale,
-            viewport,
-            display_sampler=display_sampler,
-            native_trace_context=native_trace_context,
-        )
-        forward = _trace_ncl_direction(
-            start_point,
-            total_length_px / 2.0,
-            1.0,
-            grid,
-            u,
-            v,
-            transform,
-            step_px,
-            speed_scale,
-            viewport,
-            display_sampler=display_sampler,
-            native_trace_context=native_trace_context,
-        )
-        if backward is None and forward is None:
-            return None
-        if backward is None:
-            return forward
-        if forward is None:
-            return backward[::-1]
-        return np.vstack([backward[::-1], forward[1:]])
-
-    if anchor == "tail":
-        return _trace_ncl_direction(
-            start_point,
-            total_length_px,
-            1.0,
-            grid,
-            u,
-            v,
-            transform,
-            step_px,
-            speed_scale,
-            viewport,
-            display_sampler=display_sampler,
-            native_trace_context=native_trace_context,
-        )
-
-    backward = _trace_ncl_direction(
-        start_point,
-        total_length_px,
-        -1.0,
-        grid,
-        u,
-        v,
-        transform,
-        step_px,
-        speed_scale,
-        viewport,
+    return _vector_engine._trace_ncl_curve(
+        start_point=start_point,
+        total_length_px=total_length_px,
+        anchor=anchor,
+        grid=grid,
+        u=u,
+        v=v,
+        transform=transform,
+        step_px=step_px,
+        speed_scale=speed_scale,
+        viewport=viewport,
         display_sampler=display_sampler,
         native_trace_context=native_trace_context,
+        trace_ncl_direction_fn=_trace_ncl_direction,
     )
-    if backward is None:
-        return None
-    return backward[::-1]
 
 
 def _build_ncl_curve(
@@ -1123,39 +1066,22 @@ def _build_ncl_curve(
     display_sampler=None,
     native_trace_context=None,
 ):
-    current_length_px = float(total_length_px)
-
-    for _ in range(4):
-        curve = _trace_ncl_curve(
-            start_point=start_point,
-            total_length_px=current_length_px,
-            anchor=anchor,
-            grid=grid,
-            u=u,
-            v=v,
-            transform=transform,
-            step_px=step_px,
-            speed_scale=speed_scale,
-            viewport=viewport,
-            display_sampler=display_sampler,
-            native_trace_context=native_trace_context,
-        )
-        if curve is not None and len(curve) >= 2:
-            display_curve, transform_failed = _evaluate_ncl_display_curve(
-                curve,
-                transform,
-                viewport=viewport,
-            )
-            if display_curve is not None:
-                return curve, display_curve
-            if transform_failed:
-                return curve, None
-
-        current_length_px *= 0.78
-        if current_length_px <= step_px:
-            break
-
-    return None
+    return _vector_engine._build_ncl_curve(
+        start_point=start_point,
+        total_length_px=total_length_px,
+        anchor=anchor,
+        grid=grid,
+        u=u,
+        v=v,
+        transform=transform,
+        step_px=step_px,
+        speed_scale=speed_scale,
+        viewport=viewport,
+        display_sampler=display_sampler,
+        native_trace_context=native_trace_context,
+        trace_ncl_curve_fn=_trace_ncl_curve,
+        evaluate_ncl_display_curve_fn=_evaluate_ncl_display_curve,
+    )
 
 
 def _trace_ncl_direction_via_native(
@@ -1240,123 +1166,25 @@ def _trace_ncl_direction_python(
     viewport,
     display_sampler=None,
 ):
-    start_point = np.asarray(start_point, dtype=float)
-    initial_state = _sample_local_vector_state(
-        grid,
-        u,
-        v,
-        transform,
-        start_point,
+    return _vector_engine._trace_ncl_direction_python(
+        start_point=start_point,
+        max_length_px=max_length_px,
+        direction_sign=direction_sign,
+        grid=grid,
+        u=u,
+        v=v,
+        transform=transform,
+        step_px=step_px,
+        speed_scale=speed_scale,
+        viewport=viewport,
         display_sampler=display_sampler,
+        sample_local_vector_state_fn=_sample_local_vector_state,
+        ncl_step_length_px_fn=_ncl_step_length_px,
+        corrected_ncl_display_origin_fn=_corrected_ncl_display_origin,
+        clip_display_step_to_viewport_fn=_clip_display_step_to_viewport,
+        candidate_data_from_display_step_fn=_candidate_data_from_display_step,
+        point_within_grid_data_fn=_point_within_grid_data,
     )
-    if initial_state is None:
-        return None
-
-    points = [start_point]
-    current_data = start_point
-    current_display = initial_state[0]
-    previous_display = None
-    travelled = 0.0
-
-    for step_index in range(512):
-        remaining = max_length_px - travelled
-        if remaining <= 1e-6:
-            break
-
-        if step_index == 0:
-            state = initial_state
-        else:
-            state = _sample_local_vector_state(
-                grid,
-                u,
-                v,
-                transform,
-                current_data,
-                display_sampler=display_sampler,
-            )
-        if state is None:
-            break
-        current_display, current_jacobian, current_direction, current_speed = state
-
-        step_length_px = min(
-            remaining,
-            _ncl_step_length_px(step_px, current_speed, speed_scale),
-        )
-        if step_length_px <= 1e-6:
-            break
-
-        corrected_display = _corrected_ncl_display_origin(
-            current_display, previous_display
-        )
-        candidate_display = (
-            corrected_display + direction_sign * current_direction * step_length_px
-        )
-        candidate_display, clipped = _clip_display_step_to_viewport(
-            corrected_display, candidate_display, viewport
-        )
-        candidate = _candidate_data_from_display_step(
-            current_data=current_data,
-            current_display=current_display,
-            candidate_display=candidate_display,
-            jacobian=current_jacobian,
-            transform=transform,
-        )
-        if candidate is None or not _point_within_grid_data(grid, candidate):
-            break
-
-        next_state = _sample_local_vector_state(
-            grid,
-            u,
-            v,
-            transform,
-            candidate,
-            display_sampler=display_sampler,
-        )
-        if next_state is not None:
-            _, next_jacobian, next_direction, next_speed = next_state
-            average_direction = direction_sign * (current_direction + next_direction)
-            average_norm = np.hypot(*average_direction)
-            if average_norm > 1e-12:
-                average_speed = 0.5 * (current_speed + next_speed)
-                step_length_px = min(
-                    remaining,
-                    _ncl_step_length_px(step_px, average_speed, speed_scale),
-                )
-                candidate_display = (
-                    corrected_display
-                    + average_direction / average_norm * step_length_px
-                )
-                candidate_display, clipped = _clip_display_step_to_viewport(
-                    corrected_display,
-                    candidate_display,
-                    viewport,
-                )
-                candidate = _candidate_data_from_display_step(
-                    current_data=current_data,
-                    current_display=current_display,
-                    candidate_display=candidate_display,
-                    jacobian=0.5 * (current_jacobian + next_jacobian),
-                    transform=transform,
-                )
-                if candidate is None or not _point_within_grid_data(grid, candidate):
-                    break
-
-        actual_step = np.hypot(*(candidate_display - current_display))
-        if actual_step <= 0.2:
-            break
-
-        points.append(candidate)
-        previous_display = current_display
-        current_display = candidate_display
-        current_data = candidate
-        travelled += actual_step
-
-        if clipped:
-            break
-
-    if len(points) < 2:
-        return None
-    return np.asarray(points)
 
 
 def _ncl_step_length_px(base_step_px, local_speed, speed_scale):
@@ -1497,44 +1325,22 @@ def _build_arrow_polygon(
     display_sampler=None,
     inverse_transform=None,
 ):
-    geometry = _tip_display_geometry(
-        curve,
-        transform,
-        head_length_px * 1.25,
-        display_curve=display_curve,
-        display_sampler=display_sampler,
-    )
-    if geometry is None:
-        return None
-
-    tip_display, unit = geometry
-    normal = np.array([-unit[1], unit[0]])
-    base_center = tip_display - unit * head_length_px
-    display_vertices = np.vstack(
-        [
-            tip_display,
-            base_center + normal * head_width_px / 2.0,
-            base_center - normal * head_width_px / 2.0,
-        ]
-    )
-
-    data_vertices = _display_points_to_data(
-        transform,
-        display_vertices,
-        inverse_transform=inverse_transform,
-    )
-    if data_vertices is None:
-        return None
-
-    return patches.Polygon(
-        data_vertices,
-        closed=True,
+    return _artist_helpers._build_arrow_polygon(
+        curve=curve,
+        grid=grid,
         transform=transform,
+        head_length_px=head_length_px,
+        head_width_px=head_width_px,
         facecolor=facecolor,
         edgecolor=edgecolor,
-        linewidth=max(float(linewidth) * 0.5, 0.5),
+        linewidth=linewidth,
         alpha=alpha,
         zorder=zorder,
+        display_curve=display_curve,
+        display_sampler=display_sampler,
+        inverse_transform=inverse_transform,
+        tip_display_geometry_fn=_tip_display_geometry,
+        display_points_to_data_fn=_display_points_to_data,
     )
 
 
@@ -1554,43 +1360,29 @@ def _build_ncl_arrow_artists(
     display_sampler=None,
     inverse_transform=None,
 ):
-    if _uses_open_arrow_head(arrowstyle):
-        return (
-            _build_open_arrow_segments(
-                curve=curve,
-                grid=grid,
-                transform=transform,
-                head_length_px=head_length_px,
-                head_width_px=head_width_px,
-                display_curve=display_curve,
-                display_sampler=display_sampler,
-                inverse_transform=inverse_transform,
-            ),
-            None,
-        )
-
-    return (
-        [],
-        _build_arrow_polygon(
-            curve=curve,
-            grid=grid,
-            transform=transform,
-            head_length_px=head_length_px,
-            head_width_px=head_width_px,
-            facecolor=facecolor,
-            edgecolor=edgecolor,
-            linewidth=linewidth,
-            alpha=alpha,
-            zorder=zorder,
-            display_curve=display_curve,
-            display_sampler=display_sampler,
-            inverse_transform=inverse_transform,
-        ),
+    return _artist_helpers._build_ncl_arrow_artists(
+        curve=curve,
+        grid=grid,
+        transform=transform,
+        arrowstyle=arrowstyle,
+        head_length_px=head_length_px,
+        head_width_px=head_width_px,
+        facecolor=facecolor,
+        edgecolor=edgecolor,
+        linewidth=linewidth,
+        alpha=alpha,
+        zorder=zorder,
+        display_curve=display_curve,
+        display_sampler=display_sampler,
+        inverse_transform=inverse_transform,
+        uses_open_arrow_head_fn=_uses_open_arrow_head,
+        build_open_arrow_segments_fn=_build_open_arrow_segments,
+        build_arrow_polygon_fn=_build_arrow_polygon,
     )
 
 
 def _uses_open_arrow_head(arrowstyle):
-    return str(arrowstyle).strip() == "->"
+    return _artist_helpers._uses_open_arrow_head(arrowstyle)
 
 
 def _trim_curve_for_open_head(curve, transform, head_length_px, display_sampler=None):
