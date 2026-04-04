@@ -18,8 +18,8 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon, Rectangle
 from matplotlib.text import Text
 
+from .._core.result import CurlyVectorPlotSet
 from .._shared.style import _normalize_supported_arrowstyle
-from ..vector_plot import CurlyVectorPlotSet
 
 __all__ = ["CurlyVectorKey"]
 
