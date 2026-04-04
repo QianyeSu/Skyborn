@@ -15,6 +15,17 @@ Curly Vector Plots
 
 .. autofunction:: skyborn.plot.curly_vector
 
+The recommended module-oriented import path for the vector feature family is
+``skyborn.plot.vector``:
+
+.. code-block:: python
+
+   from skyborn.plot.vector import curly_vector, curly_vector_key
+
+The package-level names ``skyborn.plot.curly_vector`` and
+``skyborn.plot.curly_vector_key`` remain available and forward to the same
+public behavior.
+
 The same ``skyborn.plot.curly_vector`` entry point supports both call styles:
 
 - ``curly_vector(ax, x, y, u, v, ...)`` for direct NumPy / Matplotlib input
@@ -56,6 +67,7 @@ Example Usage
    import matplotlib.pyplot as plt
    import numpy as np
    import xarray as xr
+   from skyborn.plot.vector import curly_vector
 
    # Create figure with equal axes
    fig, ax = plt.subplots()
@@ -67,14 +79,14 @@ Example Usage
    u = np.random.random((25, 50))
    v = np.random.random((25, 50))
 
-   skb.plot.curly_vector(ax, lon, lat, u, v)
+   curly_vector(ax, lon, lat, u, v)
 
    # Dataset wrapper API
    ds = xr.Dataset(
        {"u": (("lat", "lon"), u), "v": (("lat", "lon"), v)},
        coords={"lon": lon, "lat": lat},
    )
-   skb.plot.curly_vector(ds, x="lon", y="lat", u="u", v="v", ax=ax)
+   curly_vector(ds, x="lon", y="lat", u="u", v="v", ax=ax)
 
    # Display-space-thinned stippling on a gridded significance mask
    p = xr.DataArray(
@@ -100,13 +112,14 @@ The plotting module is designed for creating publication-quality atmospheric vis
 
    import skyborn as skb
    import matplotlib.pyplot as plt
+   from skyborn.plot.vector import curly_vector
 
    # Create figure
    fig = skb.plot.createFigure(figsize=(12, 8), dpi=300)
    ax = fig.add_subplot(111)
 
    # Plot wind vectors from arrays
-   curly = skb.plot.curly_vector(ax, lon, lat, u_wind, v_wind)
+   curly = curly_vector(ax, lon, lat, u_wind, v_wind)
 
    # Add significance stippling from a gridded mask
    stipple = skb.plot.scatter(ax, lon, lat, where=p_values < 0.05, density=2)
