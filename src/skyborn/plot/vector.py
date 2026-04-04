@@ -733,48 +733,13 @@ def _prepare_ncl_center_candidates(grid, magnitude, density, start_points, ncl_p
 
 
 def _thin_ncl_mapped_candidates(mapped_points, spacing_frac):
-    mapped_points = np.asarray(mapped_points, dtype=float)
-    if len(mapped_points) == 0:
-        return []
-
-    spacing_frac = max(float(spacing_frac), 1e-6)
-    selected = _native_helpers._try_native_thin_ncl_mapped_candidates(
+    return _thinning._thin_ncl_mapped_candidates(
+        mapped_points,
+        spacing_frac,
         native_thinner=_thin_ncl_mapped_candidates_native,
-        mapped_points=mapped_points,
-        spacing_frac=spacing_frac,
+        try_native_thin_fn=_native_helpers._try_native_thin_ncl_mapped_candidates,
         on_error=_disable_native_helper,
     )
-    if selected is not None:
-        return selected
-
-    spacing_sq = spacing_frac * spacing_frac
-    bucket_scale = 1.0 / spacing_frac
-    bucket_map = {}
-
-    for idx, mapped_point in enumerate(mapped_points):
-        bucket = tuple(np.floor(mapped_point * bucket_scale).astype(int))
-        bucket_map.setdefault(bucket, []).append(idx)
-
-    culled = np.zeros(len(mapped_points), dtype=bool)
-    selected = []
-
-    for idx, mapped_point in enumerate(mapped_points):
-        if culled[idx]:
-            continue
-
-        selected.append(idx)
-        bucket = tuple(np.floor(mapped_point * bucket_scale).astype(int))
-
-        for ix in range(bucket[0] - 1, bucket[0] + 2):
-            for iy in range(bucket[1] - 1, bucket[1] + 2):
-                for other_idx in bucket_map.get((ix, iy), ()):
-                    if other_idx <= idx or culled[other_idx]:
-                        continue
-                    offset = mapped_point - mapped_points[other_idx]
-                    if float(np.dot(offset, offset)) < spacing_sq:
-                        culled[other_idx] = True
-
-    return selected
 
 
 def _trace_ncl_curve(
