@@ -17,9 +17,24 @@ import matplotlib.lines as mlines
 import numpy as np
 from matplotlib import cm, patches
 
+from ._shared.coords import (
+    _axis_coordinate_1d,
+    _axis_is_uniform,
+    _coerce_matching_plot_field,
+    _extract_meshgrid_axes,
+    _filled_float_array,
+    _normalize_regular_grid_orientation,
+)
+from ._shared.style import (
+    _collect_named_kwargs,
+    _normalize_artist_alpha,
+    _normalize_supported_arrowstyle,
+    _resolve_curly_anchor_alias,
+    _resolve_curly_style_aliases,
+)
+
 __all__ = ["curly_vector", "CurlyVectorPlotSet"]
 
-_SUPPORTED_CURLY_ARROWSTYLES = ("->", "-|>")
 _ISSUED_NATIVE_WARNINGS: set[str] = set()
 _NATIVE_IMPORT_ERROR: Exception | None = None
 _CURLY_VECTOR_NCL_KWARG_NAMES = (
@@ -109,31 +124,6 @@ def _normalize_ncl_preset(ncl_preset):
     raise ValueError(f"Unsupported ncl_preset {ncl_preset!r}")
 
 
-def _axis_coordinate_1d(values, axis_name):
-    values = np.asarray(values, dtype=float)
-    if values.ndim == 1:
-        return values
-    if values.ndim != 2:
-        return None
-    if axis_name == "x":
-        return values[0, :]
-    if axis_name == "y":
-        return values[:, 0]
-    raise ValueError(f"Unsupported axis_name {axis_name!r}")
-
-
-def _axis_is_uniform(values, rtol=1e-6, atol=1e-10):
-    values = np.asarray(values, dtype=float)
-    if values.ndim != 1 or values.size < 3:
-        return True
-    diffs = np.diff(values)
-    if not np.all(np.isfinite(diffs)):
-        return False
-    reference = float(np.nanmedian(diffs))
-    tolerance = max(float(atol), abs(reference) * float(rtol))
-    return np.all(np.abs(diffs - reference) <= tolerance)
-
-
 def _resolve_default_ncl_preset(x, y, allow_non_uniform_grid, ncl_preset):
     preset = _normalize_ncl_preset(ncl_preset)
     if preset is not None:
@@ -186,221 +176,6 @@ def _apply_ncl_preset_defaults(
         ref_length = 0.06
 
     return allow_non_uniform_grid, ref_magnitude, ref_length, min_distance, preset
-
-
-def _normalize_supported_arrowstyle(arrowstyle: Any) -> str:
-    """Validate and normalize the supported curly-vector arrow styles."""
-    normalized = str(arrowstyle).strip()
-    if normalized not in _SUPPORTED_CURLY_ARROWSTYLES:
-        supported = ", ".join(repr(value) for value in _SUPPORTED_CURLY_ARROWSTYLES)
-        raise ValueError(f"arrowstyle must be one of {supported}; got {arrowstyle!r}")
-    return normalized
-
-
-def _collect_named_kwargs(
-    scope: dict[str, Any], names: tuple[str, ...]
-) -> dict[str, Any]:
-    """Collect a stable subset of keyword arguments from a local scope."""
-    return {name: scope[name] for name in names}
-
-
-def _normalize_artist_alpha(alpha: Any) -> float | None:
-    """Validate a Matplotlib-style artist alpha value."""
-    if alpha is None:
-        return None
-
-    alpha_value = float(alpha)
-    if not np.isfinite(alpha_value) or not 0.0 <= alpha_value <= 1.0:
-        raise ValueError("alpha must be a finite number between 0 and 1")
-    return alpha_value
-
-
-def _normalize_curly_pivot(pivot: Any) -> str | None:
-    """Map Matplotlib quiver-style pivots to curly-vector anchors."""
-    if pivot is None:
-        return None
-
-    normalized = str(pivot).strip().lower()
-    mapping = {
-        "tail": "tail",
-        "mid": "center",
-        "middle": "center",
-        "tip": "head",
-    }
-    if normalized not in mapping:
-        supported = ", ".join(repr(value) for value in mapping)
-        raise ValueError(f"pivot must be one of {supported}; got {pivot!r}")
-    return mapping[normalized]
-
-
-def _resolve_curly_anchor_alias(anchor: Any, pivot: Any) -> Any:
-    """Resolve Matplotlib-style ``pivot`` into the native ``anchor`` setting."""
-    pivot_anchor = _normalize_curly_pivot(pivot)
-    if anchor is None:
-        return pivot_anchor
-    if pivot_anchor is None:
-        return anchor
-    if str(anchor).strip().lower() != pivot_anchor:
-        raise ValueError(
-            "anchor and pivot refer to different glyph anchors; "
-            f"got anchor={anchor!r} and pivot={pivot!r}"
-        )
-    return anchor
-
-
-def _resolve_curly_style_aliases(
-    *,
-    color: Any,
-    c: Any,
-    linewidth: Any,
-    linewidths: Any,
-    facecolor: Any,
-    facecolors: Any,
-    edgecolor: Any,
-    edgecolors: Any,
-    norm: Any,
-    vmin: Any,
-    vmax: Any,
-) -> tuple[Any, Any, Any, Any, float | None, float | None]:
-    """Resolve Matplotlib-style curly-vector aliases onto canonical names."""
-    if color is not None and c is not None:
-        raise ValueError("Use only one of 'c' or 'color'")
-    if linewidth is not None and linewidths is not None:
-        raise ValueError("Use only one of 'linewidth' or 'linewidths'")
-    if facecolor is not None and facecolors is not None:
-        raise ValueError("Use only one of 'facecolor' or 'facecolors'")
-    if edgecolor is not None and edgecolors is not None:
-        raise ValueError("Use only one of 'edgecolor' or 'edgecolors'")
-    if norm is not None and (vmin is not None or vmax is not None):
-        raise ValueError("Use only one of 'norm' or 'vmin'/'vmax'")
-
-    if color is None:
-        color = c
-    if linewidth is None:
-        linewidth = linewidths
-    if facecolor is None:
-        facecolor = facecolors
-    if edgecolor is None:
-        edgecolor = edgecolors
-
-    vmin_value = None if vmin is None else float(vmin)
-    vmax_value = None if vmax is None else float(vmax)
-    if vmin_value is not None and not np.isfinite(vmin_value):
-        raise ValueError("vmin must be finite")
-    if vmax_value is not None and not np.isfinite(vmax_value):
-        raise ValueError("vmax must be finite")
-
-    return color, linewidth, facecolor, edgecolor, vmin_value, vmax_value
-
-
-def _filled_float_array(values: Any) -> np.ndarray:
-    array = np.ma.asarray(values, dtype=float)
-    if np.ma.isMaskedArray(array):
-        return np.asarray(array.filled(np.nan), dtype=float)
-    return np.asarray(array, dtype=float)
-
-
-def _coerce_matching_plot_field(
-    values: Any,
-    expected_shape: tuple[int, ...],
-) -> tuple[np.ndarray | None, bool]:
-    """Return a 2D scalar field when the input matches the vector-grid shape."""
-    if values is None or isinstance(values, str) or np.isscalar(values):
-        return None, False
-
-    array = np.asarray(values)
-    if array.shape == expected_shape:
-        return _filled_float_array(array), True
-    return None, array.ndim >= 2
-
-
-def _normalize_regular_grid_orientation(
-    x: Any,
-    y: Any,
-    u: Any,
-    v: Any,
-    color: Any = None,
-    linewidth: Any = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Any, Any]:
-    """Normalize descending rectilinear axes to ascending order.
-
-    This keeps the low-level ``Grid`` invariant intact while allowing public
-    ``curly_vector(x, y, u, v, ...)`` calls to accept meteorological latitude
-    axes such as ``90 .. -90``. Only meshgrid-like regular coordinates are
-    normalized here; irregular inputs continue to follow the existing
-    validation/regridding paths.
-    """
-
-    try:
-        x_axis, y_axis = _extract_meshgrid_axes(x, y)
-    except ValueError:
-        return x, y, u, v, color, linewidth
-
-    u_values = _filled_float_array(u)
-    v_values = _filled_float_array(v)
-    expected_shape = (y_axis.size, x_axis.size)
-    if u_values.shape != expected_shape or v_values.shape != expected_shape:
-        return x, y, u, v, color, linewidth
-
-    color_field, _ = _coerce_matching_plot_field(color, expected_shape)
-    linewidth_field, _ = _coerce_matching_plot_field(linewidth, expected_shape)
-
-    x_norm = np.asarray(x_axis, dtype=float)
-    y_norm = np.asarray(y_axis, dtype=float)
-    u_norm = u_values
-    v_norm = v_values
-
-    if x_norm.size > 1 and x_norm[0] > x_norm[-1]:
-        x_norm = x_norm[::-1]
-        u_norm = u_norm[:, ::-1]
-        v_norm = v_norm[:, ::-1]
-        if color_field is not None:
-            color_field = color_field[:, ::-1]
-        if linewidth_field is not None:
-            linewidth_field = linewidth_field[:, ::-1]
-
-    if y_norm.size > 1 and y_norm[0] > y_norm[-1]:
-        y_norm = y_norm[::-1]
-        u_norm = u_norm[::-1, :]
-        v_norm = v_norm[::-1, :]
-        if color_field is not None:
-            color_field = color_field[::-1, :]
-        if linewidth_field is not None:
-            linewidth_field = linewidth_field[::-1, :]
-
-    if color_field is not None:
-        color = color_field
-    if linewidth_field is not None:
-        linewidth = linewidth_field
-
-    return x_norm, y_norm, u_norm, v_norm, color, linewidth
-
-
-def _extract_meshgrid_axes(x: Any, y: Any) -> tuple[np.ndarray, np.ndarray]:
-    x_values = np.asarray(x, dtype=float)
-    y_values = np.asarray(y, dtype=float)
-
-    if x_values.ndim == 1 and y_values.ndim == 1:
-        return x_values, y_values
-
-    if x_values.ndim != 2 or y_values.ndim != 2:
-        raise ValueError(
-            "allow_non_uniform_grid requires 1D axes or meshgrid-like 2D x/y coordinates"
-        )
-    if x_values.shape != y_values.shape:
-        raise ValueError("2D x and y coordinates must have the same shape")
-
-    x_axis = np.asarray(x_values[0, :], dtype=float)
-    y_axis = np.asarray(y_values[:, 0], dtype=float)
-    if not np.allclose(x_values, x_axis[np.newaxis, :], equal_nan=True):
-        raise ValueError(
-            "2D x coordinates must be meshgrid-like when allow_non_uniform_grid=True"
-        )
-    if not np.allclose(y_values, y_axis[:, np.newaxis], equal_nan=True):
-        raise ValueError(
-            "2D y coordinates must be meshgrid-like when allow_non_uniform_grid=True"
-        )
-    return x_axis, y_axis
 
 
 def _regrid_non_uniform_vectors_to_uniform(
