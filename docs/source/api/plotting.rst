@@ -33,12 +33,6 @@ The same ``skyborn.plot.curly_vector`` entry point supports both call styles:
 
 .. autofunction:: skyborn.plot.curly_vector_key
 
-.. autoclass:: skyborn.plot.CurlyVectorPlotSet
-   :members:
-
-.. autoclass:: skyborn.plot.CurlyVectorKey
-   :members:
-
 Scatter Stippling
 -----------------
 
