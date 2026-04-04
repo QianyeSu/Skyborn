@@ -19,13 +19,11 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon, Rectangle
 from matplotlib.text import Text
 
-from .vector_plot import CurlyVectorPlotSet, _normalize_supported_arrowstyle
+from ._shared.axes import _looks_like_axes
+from ._shared.style import _normalize_supported_arrowstyle
+from .vector_plot import CurlyVectorPlotSet
 
 __all__ = ["CurlyVectorKey", "curly_vector_key"]
-
-
-def _looks_like_axes(value: Any) -> bool:
-    return hasattr(value, "add_artist") and hasattr(value, "transAxes")
 
 
 class CurlyVectorKey(Artist):
