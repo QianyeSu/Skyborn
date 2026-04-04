@@ -47,6 +47,69 @@ def _resolve_ncl_min_distance_fraction(density, min_distance, ncl_preset=None):
     return spacing_frac
 
 
+def _thin_ncl_mapped_candidates_python(mapped_points, spacing_frac):
+    """Cull nearby mapped candidates using the scan-order STTHIN-style pass."""
+    spacing_sq = spacing_frac * spacing_frac
+    bucket_scale = 1.0 / spacing_frac
+    bucket_map = {}
+
+    for idx, mapped_point in enumerate(mapped_points):
+        bucket = tuple(np.floor(mapped_point * bucket_scale).astype(int))
+        bucket_map.setdefault(bucket, []).append(idx)
+
+    culled = np.zeros(len(mapped_points), dtype=bool)
+    selected = []
+
+    for idx, mapped_point in enumerate(mapped_points):
+        if culled[idx]:
+            continue
+
+        selected.append(idx)
+        bucket = tuple(np.floor(mapped_point * bucket_scale).astype(int))
+
+        for ix in range(bucket[0] - 1, bucket[0] + 2):
+            for iy in range(bucket[1] - 1, bucket[1] + 2):
+                for other_idx in bucket_map.get((ix, iy), ()):
+                    if other_idx <= idx or culled[other_idx]:
+                        continue
+                    offset = mapped_point - mapped_points[other_idx]
+                    if float(np.dot(offset, offset)) < spacing_sq:
+                        culled[other_idx] = True
+
+    return selected
+
+
+def _thin_ncl_mapped_candidates(
+    mapped_points,
+    spacing_frac,
+    *,
+    native_thinner=None,
+    try_native_thin_fn=None,
+    on_error=None,
+):
+    """Thin mapped candidates with optional native acceleration."""
+    mapped_points = np.asarray(mapped_points, dtype=float)
+    if len(mapped_points) == 0:
+        return []
+
+    spacing_frac = max(float(spacing_frac), 1e-6)
+    if (
+        native_thinner is not None
+        and try_native_thin_fn is not None
+        and on_error is not None
+    ):
+        selected = try_native_thin_fn(
+            native_thinner=native_thinner,
+            mapped_points=mapped_points,
+            spacing_frac=spacing_frac,
+            on_error=on_error,
+        )
+        if selected is not None:
+            return selected
+
+    return _thin_ncl_mapped_candidates_python(mapped_points, spacing_frac)
+
+
 class _NCLDisplaySampler:
     """Sample a precomputed data->display mapping on the plotting grid."""
 
