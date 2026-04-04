@@ -369,3 +369,30 @@ def _tip_display_geometry_from_display_curve(display_curve, backoff_px):
     if direction_norm <= 1e-12:
         return None
     return tip_display, direction / direction_norm
+
+
+def _tip_display_geometry(
+    curve,
+    transform,
+    backoff_px,
+    display_curve=None,
+    display_sampler=None,
+):
+    del display_sampler
+    curve = np.asarray(curve, dtype=float)
+    if len(curve) < 2:
+        return None
+
+    if display_curve is None:
+        try:
+            display_curve = transform.transform(curve)
+        except Exception:
+            return None
+        if not np.all(np.isfinite(display_curve)):
+            return None
+    else:
+        display_curve = np.asarray(display_curve, dtype=float)
+        if not np.all(np.isfinite(display_curve)):
+            return None
+
+    return _tip_display_geometry_from_display_curve(display_curve, backoff_px)
