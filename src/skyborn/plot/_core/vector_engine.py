@@ -315,3 +315,282 @@ def _valid_ncl_center_candidates(
         valid[idx] = False
 
     return valid
+
+
+def _trace_ncl_curve(
+    start_point,
+    total_length_px,
+    anchor,
+    grid,
+    u,
+    v,
+    transform,
+    step_px,
+    speed_scale,
+    viewport,
+    display_sampler=None,
+    native_trace_context=None,
+    trace_ncl_direction_fn=None,
+):
+    if total_length_px <= 0:
+        return None
+
+    if anchor == "center":
+        backward = trace_ncl_direction_fn(
+            start_point,
+            total_length_px / 2.0,
+            -1.0,
+            grid,
+            u,
+            v,
+            transform,
+            step_px,
+            speed_scale,
+            viewport,
+            display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
+        )
+        forward = trace_ncl_direction_fn(
+            start_point,
+            total_length_px / 2.0,
+            1.0,
+            grid,
+            u,
+            v,
+            transform,
+            step_px,
+            speed_scale,
+            viewport,
+            display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
+        )
+        if backward is None and forward is None:
+            return None
+        if backward is None:
+            return forward
+        if forward is None:
+            return backward[::-1]
+        return np.vstack([backward[::-1], forward[1:]])
+
+    if anchor == "tail":
+        return trace_ncl_direction_fn(
+            start_point,
+            total_length_px,
+            1.0,
+            grid,
+            u,
+            v,
+            transform,
+            step_px,
+            speed_scale,
+            viewport,
+            display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
+        )
+
+    backward = trace_ncl_direction_fn(
+        start_point,
+        total_length_px,
+        -1.0,
+        grid,
+        u,
+        v,
+        transform,
+        step_px,
+        speed_scale,
+        viewport,
+        display_sampler=display_sampler,
+        native_trace_context=native_trace_context,
+    )
+    if backward is None:
+        return None
+    return backward[::-1]
+
+
+def _build_ncl_curve(
+    start_point,
+    total_length_px,
+    anchor,
+    grid,
+    u,
+    v,
+    transform,
+    step_px,
+    speed_scale,
+    viewport,
+    display_sampler=None,
+    native_trace_context=None,
+    trace_ncl_curve_fn=None,
+    evaluate_ncl_display_curve_fn=None,
+):
+    current_length_px = float(total_length_px)
+
+    for _ in range(4):
+        curve = trace_ncl_curve_fn(
+            start_point=start_point,
+            total_length_px=current_length_px,
+            anchor=anchor,
+            grid=grid,
+            u=u,
+            v=v,
+            transform=transform,
+            step_px=step_px,
+            speed_scale=speed_scale,
+            viewport=viewport,
+            display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
+        )
+        if curve is not None and len(curve) >= 2:
+            display_curve, transform_failed = evaluate_ncl_display_curve_fn(
+                curve,
+                transform,
+                viewport=viewport,
+            )
+            if display_curve is not None:
+                return curve, display_curve
+            if transform_failed:
+                return curve, None
+
+        current_length_px *= 0.78
+        if current_length_px <= step_px:
+            break
+
+    return None
+
+
+def _trace_ncl_direction_python(
+    start_point,
+    max_length_px,
+    direction_sign,
+    grid,
+    u,
+    v,
+    transform,
+    step_px,
+    speed_scale,
+    viewport,
+    display_sampler=None,
+    sample_local_vector_state_fn=None,
+    ncl_step_length_px_fn=None,
+    corrected_ncl_display_origin_fn=None,
+    clip_display_step_to_viewport_fn=None,
+    candidate_data_from_display_step_fn=None,
+    point_within_grid_data_fn=None,
+):
+    start_point = np.asarray(start_point, dtype=float)
+    initial_state = sample_local_vector_state_fn(
+        grid,
+        u,
+        v,
+        transform,
+        start_point,
+        display_sampler=display_sampler,
+    )
+    if initial_state is None:
+        return None
+
+    points = [start_point]
+    current_data = start_point
+    current_display = initial_state[0]
+    previous_display = None
+    travelled = 0.0
+
+    for step_index in range(512):
+        remaining = max_length_px - travelled
+        if remaining <= 1e-6:
+            break
+
+        if step_index == 0:
+            state = initial_state
+        else:
+            state = sample_local_vector_state_fn(
+                grid,
+                u,
+                v,
+                transform,
+                current_data,
+                display_sampler=display_sampler,
+            )
+        if state is None:
+            break
+        current_display, current_jacobian, current_direction, current_speed = state
+
+        step_length_px = min(
+            remaining,
+            ncl_step_length_px_fn(step_px, current_speed, speed_scale),
+        )
+        if step_length_px <= 1e-6:
+            break
+
+        corrected_display = corrected_ncl_display_origin_fn(
+            current_display, previous_display
+        )
+        candidate_display = (
+            corrected_display + direction_sign * current_direction * step_length_px
+        )
+        candidate_display, clipped = clip_display_step_to_viewport_fn(
+            corrected_display, candidate_display, viewport
+        )
+        candidate = candidate_data_from_display_step_fn(
+            current_data=current_data,
+            current_display=current_display,
+            candidate_display=candidate_display,
+            jacobian=current_jacobian,
+            transform=transform,
+        )
+        if candidate is None or not point_within_grid_data_fn(grid, candidate):
+            break
+
+        next_state = sample_local_vector_state_fn(
+            grid,
+            u,
+            v,
+            transform,
+            candidate,
+            display_sampler=display_sampler,
+        )
+        if next_state is not None:
+            _, next_jacobian, next_direction, next_speed = next_state
+            average_direction = direction_sign * (current_direction + next_direction)
+            average_norm = np.hypot(*average_direction)
+            if average_norm > 1e-12:
+                average_speed = 0.5 * (current_speed + next_speed)
+                step_length_px = min(
+                    remaining,
+                    ncl_step_length_px_fn(step_px, average_speed, speed_scale),
+                )
+                candidate_display = (
+                    corrected_display
+                    + average_direction / average_norm * step_length_px
+                )
+                candidate_display, clipped = clip_display_step_to_viewport_fn(
+                    corrected_display,
+                    candidate_display,
+                    viewport,
+                )
+                candidate = candidate_data_from_display_step_fn(
+                    current_data=current_data,
+                    current_display=current_display,
+                    candidate_display=candidate_display,
+                    jacobian=0.5 * (current_jacobian + next_jacobian),
+                    transform=transform,
+                )
+                if candidate is None or not point_within_grid_data_fn(grid, candidate):
+                    break
+
+        actual_step = np.hypot(*(candidate_display - current_display))
+        if actual_step <= 0.2:
+            break
+
+        points.append(candidate)
+        previous_display = current_display
+        current_display = candidate_display
+        current_data = candidate
+        travelled += actual_step
+
+        if clipped:
+            break
+
+    if len(points) < 2:
+        return None
+    return np.asarray(points)
