@@ -24,6 +24,7 @@ from skyborn.plot._core.thinning import (
     _map_ncl_display_points_to_viewport,
     _NCLDisplaySampler,
     _resolve_ncl_min_distance_fraction,
+    _thin_ncl_mapped_candidates_python,
 )
 from skyborn.plot._core.vector_engine import (
     _default_ncl_box_center_candidates,
@@ -59,7 +60,6 @@ from skyborn.plot.vector import (
     _sample_grid_field,
     _sample_grid_field_array,
     _select_ncl_centers,
-    _thin_ncl_mapped_candidates,
     _tip_display_geometry_from_display_curve,
     _trim_curve_for_open_head,
     _trim_display_curve_from_end,
@@ -1153,7 +1153,9 @@ class TestCurlyVector:
         assert mapped[2] == pytest.approx([1.0, 1.0])
         plt.close(fig)
 
-    def test_thin_ncl_mapped_candidates_culls_later_neighbors_in_scan_order(self):
+    def test_thin_ncl_mapped_candidates_python_culls_later_neighbors_in_scan_order(
+        self,
+    ):
         """The STTHIN-style pass should keep the first candidate and cull later nearby ones."""
         mapped_points = np.array(
             [
@@ -1164,7 +1166,10 @@ class TestCurlyVector:
             ]
         )
 
-        selected = _thin_ncl_mapped_candidates(mapped_points, spacing_frac=0.05)
+        selected = _thin_ncl_mapped_candidates_python(
+            mapped_points,
+            spacing_frac=0.05,
+        )
 
         assert selected == [0, 2]
 
