@@ -155,11 +155,8 @@ _CURLY_VECTOR_NCL_KWARG_NAMES = (
 )
 
 _ISSUED_PLOT_WARNINGS = _dataset_adapter._ISSUED_PLOT_WARNINGS
-_warn_plot_once = _dataset_adapter._warn_plot_once
 _apply_dataset_isel = _dataset_adapter._apply_dataset_isel
 _get_plot_dataarray = _dataset_adapter._get_plot_dataarray
-_transpose_2d_dataarray_to_dims = _dataset_adapter._transpose_2d_dataarray_to_dims
-_filled_scalar_field_array = _dataset_adapter._filled_scalar_field_array
 _extract_curly_vector_dataset_source = (
     _dataset_adapter._extract_curly_vector_dataset_source
 )
@@ -173,14 +170,10 @@ _default_curvilinear_regrid_shape = (
     _grid_prepare_adapter._default_curvilinear_regrid_shape
 )
 _build_curvilinear_target_grid = _grid_prepare_adapter._build_curvilinear_target_grid
-_rcm2rgrid_2d = _grid_prepare_adapter._rcm2rgrid_2d
-_rcm2rgrid_fields = _grid_prepare_adapter._rcm2rgrid_fields
 _maybe_as_scalar_field = _grid_prepare_adapter._maybe_as_scalar_field
 _regrid_curvilinear_vectors = _grid_prepare_adapter._regrid_curvilinear_vectors
-_build_projection_target_grid = _cartopy_adapter._build_projection_target_grid
 _prepare_source_vector_grid = _grid_prepare_adapter._prepare_source_vector_grid
 _grid_spans_full_longitude = _grid_prepare_adapter._grid_spans_full_longitude
-_has_cyclic_longitude_endpoint = _grid_prepare_adapter._has_cyclic_longitude_endpoint
 _append_cyclic_column = _grid_prepare_adapter._append_cyclic_column
 _wrap_periodic_grid_queries = _grid_prepare_adapter._wrap_periodic_grid_queries
 _extract_regular_grid_from_regridded_vectors = (
