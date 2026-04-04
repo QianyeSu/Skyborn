@@ -10,24 +10,29 @@ import xarray as xr
 
 import skyborn.plot as plot_module
 import skyborn.plot.vector as vector_module
+from skyborn.plot._adapters.dataset_vector import (
+    _ISSUED_PLOT_WARNINGS,
+    _apply_dataset_isel,
+    _get_plot_dataarray,
+)
+from skyborn.plot._adapters.grid_prepare import (
+    _append_cyclic_column,
+    _build_curvilinear_target_grid,
+    _grid_spans_full_longitude,
+    _normalize_density_pair,
+    _prepare_source_vector_grid,
+    _wrap_periodic_grid_queries,
+)
 from skyborn.plot.vector import (
     CurlyVectorKey,
     CurlyVectorPlotSet,
-    _append_cyclic_column,
-    _apply_dataset_isel,
-    _build_curvilinear_target_grid,
     _default_cartopy_target_extent,
     _default_curvilinear_regrid_shape,
     _extract_curly_vector_dataset_source,
     _extract_regular_grid_from_regridded_vectors,
-    _get_plot_dataarray,
-    _grid_spans_full_longitude,
     _is_curvilinear_grid,
     _maybe_as_scalar_field,
-    _normalize_density_pair,
     _normalize_regrid_shape,
-    _prepare_source_vector_grid,
-    _wrap_periodic_grid_queries,
     curly_vector,
     curly_vector_key,
 )
@@ -524,7 +529,7 @@ class TestDatasetCurlyVector:
         """Test that curly_vector can select a 2D slice via isel."""
         mock_result = Mock(spec=CurlyVectorPlotSet)
         mock_curly_vector.return_value = mock_result
-        vector_module._ISSUED_PLOT_WARNINGS.clear()
+        _ISSUED_PLOT_WARNINGS.clear()
 
         x = np.linspace(100.0, 110.0, 6)
         y = np.linspace(20.0, 28.0, 5)
@@ -782,7 +787,7 @@ class TestDatasetCurlyVectorHelpers:
             np.arange(2 * 3 * 4).reshape(2, 3, 4),
             dims=("time", "level", "x"),
         )
-        vector_module._ISSUED_PLOT_WARNINGS.clear()
+        _ISSUED_PLOT_WARNINGS.clear()
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
