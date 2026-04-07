@@ -918,6 +918,83 @@ class TestInterpolationHelperCoverage:
         assert hasattr(result.data, "chunks")
         assert result.compute().shape == (2, 2, 2)
 
+    def test_interp_hybrid_to_pressure_chunks_eager_data_when_other_inputs_are_dask(
+        self,
+    ):
+        """Fallback dask path should chunk eager data when companion inputs are dask-backed."""
+        pytest.importorskip("dask")
+
+        data = xr.DataArray(
+            np.arange(2 * 3 * 2, dtype=float).reshape(2, 3, 2),
+            dims=["time", "lev", "x"],
+            coords={"time": [0, 1], "lev": [0, 1, 2], "x": [0, 1]},
+        )
+        ps = xr.DataArray(
+            np.full((2, 2), 100000.0),
+            dims=["time", "x"],
+            coords={"time": [0, 1], "x": [0, 1]},
+        ).chunk({"time": 1, "x": 2})
+        hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["lev"])
+
+        result = interp_hybrid_to_pressure(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            new_levels=np.array([95000.0, 70000.0]),
+            lev_dim="lev",
+        )
+
+        assert hasattr(result.data, "chunks")
+        assert result.compute().shape == (2, 2, 2)
+
+    def test_interp_hybrid_to_pressure_preserves_metadata_when_xarray_map_blocks_succeeds(
+        self, monkeypatch
+    ):
+        """When xr.map_blocks returns a DataArray directly, metadata should be copied."""
+        pytest.importorskip("dask")
+
+        data = xr.DataArray(
+            np.arange(2 * 3 * 2, dtype=float).reshape(2, 3, 2),
+            dims=["time", "lev", "x"],
+            coords={"time": [0, 1], "lev": [0, 1, 2], "x": [0, 1]},
+            name="foo",
+            attrs={"units": "K", "long_name": "temperature"},
+        ).chunk({"time": 1, "lev": 3, "x": 2})
+        ps = xr.DataArray(
+            np.full((2, 2), 100000.0),
+            dims=["time", "x"],
+            coords={"time": [0, 1], "x": [0, 1]},
+        )
+        hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["lev"])
+
+        def fake_map_blocks(func, arr, args=(), kwargs=None, template=None):
+            del func, arr, args, kwargs, template
+            return xr.DataArray(
+                np.zeros((2, 2, 2)),
+                dims=["time", "plev", "x"],
+                coords={"time": [0, 1], "plev": [95000.0, 70000.0], "x": [0, 1]},
+            )
+
+        monkeypatch.setattr(xr, "map_blocks", fake_map_blocks)
+
+        result = interp_hybrid_to_pressure(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            new_levels=np.array([95000.0, 70000.0]),
+            lev_dim="lev",
+        )
+
+        assert result.name == "foo"
+        assert result.attrs["units"] == "K"
+        assert result.attrs["long_name"] == "temperature"
+        assert result.dims == ("time", "plev", "x")
+        assert result.shape == (2, 2, 2)
+
     def test_interp_sigma_to_hybrid_autodetects_vertical_with_cf_accessor(self):
         """Sigma interpolation should also honor cf_xarray vertical metadata."""
         pytest.importorskip("cf_xarray")
