@@ -10,7 +10,7 @@ import pytest
 import xarray as xr
 
 from skyborn.interp import rcm2points
-from skyborn.interp.errors import CoordinateError, DimensionError
+from skyborn.interp.errors import ChunkError, CoordinateError, DimensionError
 
 
 @pytest.fixture
@@ -321,6 +321,21 @@ class TestRcm2pointsEdgeCases:
         result = rcm2points(lat2d, lon2d, fi_xr, lat1d, lon1d, meta=False)
 
         assert isinstance(result, (np.ndarray, xr.DataArray))
+
+    def test_chunked_spatial_dimensions_raise_chunk_error(
+        self, sample_curvilinear_grid, sample_field_3d, sample_points
+    ):
+        """Test dask-backed inputs must be unchunked along the rightmost two dimensions."""
+        lat2d, lon2d = sample_curvilinear_grid
+        lat1d, lon1d = sample_points
+        fi_xr = xr.DataArray(sample_field_3d, dims=["time", "lat", "lon"]).chunk(
+            {"time": 1, "lat": 5, "lon": 6}
+        )
+
+        with pytest.raises(
+            ChunkError, match="unchunked along the rightmost two dimensions"
+        ):
+            rcm2points(lat2d, lon2d, fi_xr, lat1d, lon1d)
 
 
 if __name__ == "__main__":
