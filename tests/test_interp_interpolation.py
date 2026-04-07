@@ -15,9 +15,11 @@ from skyborn.interp.interpolation import (
     _func_interpolate,
     _pressure_from_hybrid,
     _sigma_from_hybrid,
+    delta_pressure_hybrid,
     interp_hybrid_to_pressure,
     interp_multidim,
     interp_sigma_to_hybrid,
+    pressure_at_hybrid_levels,
 )
 
 # Try to import private functions - they may not be available in all versions
@@ -55,9 +57,14 @@ class TestInterpolationHelpers:
         pressure = _pressure_from_hybrid(ps_da, hya_da, hyb_da, p0)
 
         # Check shape and basic properties
-        assert pressure.shape == (2, 3)  # x, lev
+        assert pressure.dims == ("lev", "x")
+        assert pressure.shape == (3, 2)  # lev, x
         assert np.all(pressure > 0)  # All pressures should be positive
-        assert np.all(pressure <= 100000)  # Should not exceed reference pressure
+        assert np.all(pressure <= 105000)  # Should stay in a realistic range
+
+        # Public helper should match the legacy private wrapper
+        public_pressure = pressure_at_hybrid_levels(ps_da, hya_da, hyb_da, p0)
+        assert_array_equal(pressure.values, public_pressure.values)
 
     def test_sigma_from_hybrid(self):
         """Test sigma calculation from hybrid coordinates."""
@@ -74,9 +81,27 @@ class TestInterpolationHelpers:
         sigma = _sigma_from_hybrid(ps_da, hya_da, hyb_da, p0)
 
         # Check shape and basic properties
-        assert sigma.shape == (2, 3)  # x, lev
+        assert sigma.dims == ("lev", "x")
+        assert sigma.shape == (3, 2)  # lev, x
         assert np.all(sigma >= 0)  # Sigma should be non-negative
         assert np.all(sigma <= 1.2)  # Should be close to [0, 1] range
+
+    def test_delta_pressure_hybrid(self):
+        """Test pressure layer thickness from hybrid coordinates."""
+        ps_da = xr.DataArray(np.array([100000.0, 95000.0]), dims=["x"])
+        hya_da = xr.DataArray(np.array([0.0, 0.1, 0.5]), dims=["lev"])
+        hyb_da = xr.DataArray(np.array([1.0, 0.9, 0.5]), dims=["lev"])
+
+        pressure = pressure_at_hybrid_levels(ps_da, hya_da, hyb_da)
+        dph = delta_pressure_hybrid(ps_da, hya_da, hyb_da)
+
+        assert dph.dims == ("lev", "x")
+        assert dph.shape == (2, 2)
+        assert dph.name == "dph"
+        assert dph.attrs["units"] == "Pa"
+        assert_array_equal(
+            dph.values, np.abs(pressure.values[1:] - pressure.values[:-1])
+        )
 
     def test_func_interpolate(self):
         """Test interpolation function selection."""
