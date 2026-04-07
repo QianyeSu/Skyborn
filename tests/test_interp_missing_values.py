@@ -132,6 +132,16 @@ class TestPy2FortMsg:
         assert msg_fort == custom_fort
         assert result[1] == 99
 
+    def test_int16_default_python_missing_value_branch(self):
+        """Test integer dtype default missing-value selection when msg_py is omitted."""
+        data = np.array([1, msg_dtype[np.int16], 3], dtype=np.int16)
+        custom_fort = np.int16(-123)
+        result, msg_py, msg_fort = py2fort_msg(data, msg_fort=custom_fort)
+
+        assert msg_py == msg_dtype[np.int16]
+        assert msg_fort == custom_fort
+        assert result[1] == custom_fort
+
     def test_uint16_array(self):
         """Test uint16 array."""
         data = np.array([100, 200, 65535, 400], dtype=np.uint16)
