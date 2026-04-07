@@ -10,6 +10,7 @@ import pytest
 import xarray as xr
 from numpy.testing import assert_array_almost_equal, assert_array_equal
 
+import skyborn.interp.regridding as regridding_module
 from skyborn.interp.regridding import (
     BilinearRegridder,
     ConservativeRegridder,
@@ -240,6 +241,14 @@ class TestNearestRegridder:
         assert np.all(indices >= 0)
         assert np.all(indices < source_grid.shape[0] * source_grid.shape[1])
 
+    def test_nearest_neighbor_2d_wrong_shape_raises(self, sample_grids):
+        """Test the private 2D kernel rejects arrays with the wrong source shape."""
+        source_grid, target_grid = sample_grids
+        regridder = NearestRegridder(source_grid, target_grid)
+
+        with pytest.raises(ValueError, match="to match source.shape"):
+            regridder._nearest_neighbor_2d(np.zeros((2, 2)))
+
 
 class TestBilinearRegridder:
     """Test bilinear regridding functionality."""
@@ -425,6 +434,42 @@ class TestConservativeWeights:
         # Each row should sum to approximately 1
         row_sums = np.sum(weights, axis=1)
         assert_array_almost_equal(row_sums, np.ones(len(target_lon)), decimal=5)
+
+    def test_latitude_weights_zero_sum_rows_fall_back_to_uniform(self, monkeypatch):
+        """Test zero-overlap latitude rows use equal weights instead of dividing by zero."""
+        source_lat = np.deg2rad(np.array([-60, 0, 60]))
+        target_lat = np.deg2rad(np.array([-30, 30]))
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_latitude_overlap",
+            lambda source_points, target_points: np.zeros(
+                (len(target_points), len(source_points))
+            ),
+        )
+
+        weights = _conservative_latitude_weights(source_lat, target_lat)
+        expected = np.full((len(target_lat), len(source_lat)), 1.0 / len(source_lat))
+
+        assert_array_almost_equal(weights, expected)
+
+    def test_longitude_weights_zero_sum_rows_fall_back_to_uniform(self, monkeypatch):
+        """Test zero-overlap longitude rows use equal weights instead of dividing by zero."""
+        source_lon = np.deg2rad(np.array([0, 90, 180, 270]))
+        target_lon = np.deg2rad(np.array([45, 135]))
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_longitude_overlap",
+            lambda first_points, second_points: np.zeros(
+                (len(first_points), len(second_points))
+            ),
+        )
+
+        weights = _conservative_longitude_weights(source_lon, target_lon)
+        expected = np.full((len(target_lon), len(source_lon)), 1.0 / len(source_lon))
+
+        assert_array_almost_equal(weights, expected)
 
     def test_latitude_overlap_function(self):
         """Test latitude overlap calculation."""
