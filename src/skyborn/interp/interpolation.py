@@ -10,6 +10,8 @@ References
 General interpolation formulations adapted for atmospheric datasets.
 """
 
+from __future__ import annotations
+
 import typing
 import warnings
 
@@ -17,8 +19,13 @@ import metpy.interpolate
 import numpy as np
 import xarray as xr
 
-__all__ = ["interp_hybrid_to_pressure",
-           "interp_sigma_to_hybrid", "interp_multidim"]
+__all__ = [
+    "pressure_at_hybrid_levels",
+    "delta_pressure_hybrid",
+    "interp_hybrid_to_pressure",
+    "interp_sigma_to_hybrid",
+    "interp_multidim",
+]
 
 supported_types = typing.Union[xr.DataArray, np.ndarray]
 
@@ -68,13 +75,157 @@ def _func_interpolate(method="linear"):
     return func_interpolate
 
 
-def _pressure_from_hybrid(psfc, hya, hyb, p0=100000.0):
-    """Calculate pressure at the hybrid levels."""
+def _interpolate_mb(data, curr_levels, new_levels, axis, method="linear"):
+    """Wrapper used by ``xarray.map_blocks`` for vertical interpolation."""
+
+    func_interpolate = _func_interpolate(method)
+    return func_interpolate(new_levels, curr_levels, data, axis=axis)
+
+
+def _rename_colliding_coeff_dim(target, hya, hyb):
+    """Avoid accidental xarray alignment when hybrid coeff dims collide."""
+
+    if not (
+        isinstance(target, xr.DataArray)
+        and isinstance(hya, xr.DataArray)
+        and isinstance(hyb, xr.DataArray)
+    ):
+        return hya, hyb
+
+    coeff_dim = hya.dims[0]
+    if coeff_dim in target.dims and target.sizes[coeff_dim] != hya.sizes[coeff_dim]:
+        new_dim = "lev"
+        if new_dim in target.dims:
+            new_dim = "__hybrid_lev__"
+        hya = hya.rename({coeff_dim: new_dim})
+        hyb = hyb.rename({hyb.dims[0]: new_dim})
+
+    return hya, hyb
+
+
+def pressure_at_hybrid_levels(psfc, hya, hyb, p0=100000.0):
+    """Calculate pressure at hybrid levels.
+
+    Parameters
+    ----------
+    psfc : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        Surface pressure in Pascals.
+
+    hya, hyb : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        One-dimensional hybrid coefficients.
+
+    p0 : float, optional
+        Reference pressure in Pascals.
+
+    Returns
+    -------
+    :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        Pressure at hybrid levels in Pascals.
+    """
+
+    if not all(isinstance(x, (xr.DataArray, np.ndarray)) for x in (psfc, hya, hyb)):
+        raise TypeError("psfc, hya, and hyb must be xarray DataArrays or numpy arrays")
+
+    if not (
+        all(isinstance(x, np.ndarray) for x in (psfc, hya, hyb))
+        or all(isinstance(x, xr.DataArray) for x in (psfc, hya, hyb))
+    ):
+        raise TypeError(
+            "psfc, hya, and hyb must all be the same type (all numpy arrays or all xarray DataArrays)"
+        )
+
+    if hya.shape != hyb.shape:
+        raise ValueError(f"dimension mismatch: hya: {hya.shape} hyb: {hyb.shape}")
+
+    if isinstance(hya, np.ndarray):
+        if hya.ndim != 1:
+            raise ValueError(
+                f"hya and hyb must be 1-dimensional if numpy inputs: {hya.shape}"
+            )
+        reshape = (hya.shape[0],) + (1,) * np.ndim(psfc)
+        hya = hya.reshape(reshape)
+        hyb = hyb.reshape(reshape)
+        return hya * p0 + hyb * psfc
+
+    if hya.dims != hyb.dims:
+        warnings.warn(
+            "hya and hyb have different dimension names, attempting rename",
+            stacklevel=2,
+        )
+        hyb = hyb.rename({b: a for a, b in zip(hya.dims, hyb.dims)})
+
+    hya, hyb = _rename_colliding_coeff_dim(psfc, hya, hyb)
 
     # p(k) = hya(k) * p0 + hyb(k) * psfc
 
     # This will be in Pa
     return hya * p0 + hyb * psfc
+
+
+def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
+    """Calculate pressure layer thickness for hybrid coordinates."""
+
+    if not all(isinstance(x, (xr.DataArray, np.ndarray)) for x in (ps, hya, hyb)):
+        raise TypeError("Inputs must be xarray DataArrays or numpy arrays")
+
+    if not isinstance(p0, (float, int, np.floating, np.integer)):
+        raise TypeError(f"p0 must be a scalar numeric value, received {type(p0)}")
+
+    if hya.shape != hyb.shape:
+        raise ValueError(f"dimension mismatch: hya: {hya.shape} hyb: {hyb.shape}")
+
+    if np.ndim(hya) != 1:
+        raise ValueError(f"hya and hyb must be 1-dimensional: {hya.shape}")
+
+    if isinstance(ps, np.ndarray):
+        hya_values = np.asarray(hya.data if isinstance(hya, xr.DataArray) else hya)
+        hyb_values = np.asarray(hyb.data if isinstance(hyb, xr.DataArray) else hyb)
+        reshape = (hya_values.shape[0] - 1,) + (1,) * ps.ndim
+        pa = (
+            p0 * hya_values[:-1].reshape(reshape)
+            + hyb_values[:-1].reshape(reshape) * ps
+        )
+        pb = p0 * hya_values[1:].reshape(reshape) + hyb_values[1:].reshape(reshape) * ps
+        return np.abs(pa - pb)
+
+    if isinstance(hya, np.ndarray):
+        hya = xr.DataArray(hya, dims=("lev",))
+        hyb = xr.DataArray(hyb, dims=("lev",))
+    else:
+        hya = xr.DataArray(np.asarray(hya.data), dims=hya.dims)
+        hyb = xr.DataArray(np.asarray(hyb.data), dims=hyb.dims)
+        if hya.dims != hyb.dims:
+            warnings.warn(
+                "hya and hyb have different dimension names, attempting rename",
+                stacklevel=2,
+            )
+            hyb = hyb.rename({b: a for a, b in zip(hya.dims, hyb.dims)})
+
+    hya, hyb = _rename_colliding_coeff_dim(ps, hya, hyb)
+
+    lev_name = hya.dims[0]
+    pa = (
+        p0 * hya.isel({lev_name: slice(None, -1)})
+        + hyb.isel({lev_name: slice(None, -1)}) * ps
+    )
+    pb = (
+        p0 * hya.isel({lev_name: slice(1, None)})
+        + hyb.isel({lev_name: slice(1, None)}) * ps
+    )
+
+    dph = abs(pa - pb)
+    dph.name = "dph"
+    dph.attrs = {
+        "long_name": "pressure layer thickness",
+        "units": "Pa",
+    }
+    return dph
+
+
+def _pressure_from_hybrid(psfc, hya, hyb, p0=100000.0):
+    """Backward-compatible wrapper for :func:`pressure_at_hybrid_levels`."""
+
+    return pressure_at_hybrid_levels(psfc, hya, hyb, p0)
 
 
 def _pre_interp_multidim(
@@ -164,6 +315,15 @@ def _post_interp_multidim(data_in, missing_val):
 def _sigma_from_hybrid(psfc, hya, hyb, p0=100000.0):
     """Calculate sigma at the hybrid levels."""
 
+    if isinstance(hya, xr.DataArray) and isinstance(hyb, xr.DataArray):
+        if hya.dims != hyb.dims:
+            warnings.warn(
+                "hya and hyb have different dimension names, attempting rename",
+                stacklevel=2,
+            )
+            hyb = hyb.rename({b: a for a, b in zip(hya.dims, hyb.dims)})
+        hya, hyb = _rename_colliding_coeff_dim(psfc, hya, hyb)
+
     # sig(k) = hya(k) * p0 / psfc + hyb(k)
 
     # This will be in Pa
@@ -173,6 +333,15 @@ def _sigma_from_hybrid(psfc, hya, hyb, p0=100000.0):
 def _vertical_remap(func_interpolate, new_levels, xcoords, data, interp_axis=0):
     """Execute the defined interpolation function on data."""
 
+    if (
+        not isinstance(xcoords, xr.DataArray)
+        and np.ndim(xcoords) == 1
+        and np.ndim(data) > 1
+    ):
+        reshape = [1] * np.ndim(data)
+        reshape[interp_axis] = np.shape(xcoords)[0]
+        xcoords = np.reshape(xcoords, tuple(reshape))
+
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore", r"Interpolation point out of data bounds encountered"
@@ -180,46 +349,34 @@ def _vertical_remap(func_interpolate, new_levels, xcoords, data, interp_axis=0):
         return func_interpolate(new_levels, xcoords, data, axis=interp_axis)
 
 
-def _temp_extrapolate(data, lev_dim, lev, p_sfc, ps, phi_sfc):
-    r"""This helper function extrapolates temperature below ground using the
-    ECMWF formulation described in `Vertical Interpolation and Truncation of
-    Model-Coordinate Data <https://dx.doi.org/10.5065/D6HX19NH>`__ by Trenberth,
-    Berry, & Buja [NCAR/TN-396, 1993]. Specifically equation 16 is used:
+def _temp_extrapolate(data_or_t_bot, *args):
+    r"""Extrapolate temperature below ground.
+
+    This helper accepts both the upstream-style call
+    ``_temp_extrapolate(t_bot, lev, p_sfc, ps, phi_sfc)`` and the legacy
+    Skyborn call ``_temp_extrapolate(data, lev_dim, lev, p_sfc, ps, phi_sfc)``.
 
     .. math::
         T = T_* \left( 1 + \alpha ln \frac{p}{p_s} + \frac{1}{2}\left( \alpha ln \frac{p}{p_s} \right)^2 + \frac{1}{6} \left( \alpha ln \frac{p}{p_s} \right)^3 \right)
-
-    Parameters
-    ----------
-    data: :class:`xarray.DataArray`
-        The temperature at the lowest level of the model.
-
-    lev_dim: str
-        The name of the vertical dimension.
-
-    lev: int
-        The pressure levels of interest. Must be in the same units as ``ps`` and ``p_sfc``
-
-    p_sfc: :class:`xarray.DataArray`
-        The pressure at the lowest level of the model. Must be in the same units as ``lev`` and ``ps``
-
-    ps: :class:`xarray.DataArray`
-        An array of surface pressures. Must be in the same units as ``lev`` and ``p_sfc``
-
-    phi_sfc: :class:`xarray.DataArray`
-        The geopotential at the lowest level of the model.
-
-    Returns
-    -------
-    result: :class:`xarray.DataArray`
-        The extrapolated temperatures at the provided pressure levels.
     """
+    if len(args) == 4:
+        lev, p_sfc, ps, phi_sfc = args
+        t_bot = data_or_t_bot
+    elif len(args) == 5 and isinstance(args[0], str):
+        lev_dim, lev, p_sfc, ps, phi_sfc = args
+        t_bot = data_or_t_bot.isel({lev_dim: -1}, drop=True)
+    else:
+        raise TypeError(
+            "_temp_extrapolate accepts either "
+            "(t_bot, lev, p_sfc, ps, phi_sfc) or "
+            "(data, lev_dim, lev, p_sfc, ps, phi_sfc)"
+        )
+
     R_d = 287.04  # dry air gas constant
     g_inv = 1 / 9.80616  # inverse of gravity
     alpha = 0.0065 * R_d * g_inv
 
-    tstar = data.isel({lev_dim: -1}, drop=True) * \
-        (1 + alpha * (ps / p_sfc - 1))
+    tstar = t_bot * (1 + alpha * (ps / p_sfc - 1))
     hgt = phi_sfc * g_inv
     t0 = tstar + 0.0065 * hgt
     tplat = xr.apply_ufunc(np.minimum, 298, t0, dask="parallelized")
@@ -286,8 +443,7 @@ def _geo_height_extrapolate(t_bot, lev, p_sfc, ps, phi_sfc):
     )
 
     alph = xr.where((tstar > 290.5) & (t0 > 290.5), 0, alph)
-    tstar = xr.where((tstar > 290.5) & (t0 > 290.5),
-                     0.5 * (290.5 + tstar), tstar)
+    tstar = xr.where((tstar > 290.5) & (t0 > 290.5), 0.5 * (290.5 + tstar), tstar)
 
     tstar = xr.where((tstar < 255), 0.5 * (tstar + 255), tstar)
 
@@ -342,8 +498,7 @@ def _vertical_remap_extrap(
         A DataArray containing the data after extrapolation.
     """
 
-    sfc_index = pressure[lev_dim].argmax(
-        dim=lev_dim)  # index of the model surface
+    sfc_index = pressure[lev_dim].argmax(dim=lev_dim)  # index of the model surface
     p_sfc = pressure.isel(
         {lev_dim: sfc_index}, drop=True
     )  # extract pressure at lowest level
@@ -351,7 +506,7 @@ def _vertical_remap_extrap(
     if variable == "temperature":
         output = output.where(
             output.plev <= p_sfc,
-            _temp_extrapolate(data, lev_dim, output.plev, p_sfc, ps, phi_sfc),
+            _temp_extrapolate(t_bot, output.plev, p_sfc, ps, phi_sfc),
         )
     elif variable == "geopotential":
         output = output.where(
@@ -364,6 +519,67 @@ def _vertical_remap_extrap(
         )
 
     return output
+
+
+def _is_dask_backed(array):
+    """Return True when an xarray object is backed by a dask array."""
+
+    return (
+        isinstance(array, xr.DataArray)
+        and getattr(array.data, "chunks", None) is not None
+    )
+
+
+def _is_pint_backed(array):
+    """Return True when an xarray object is backed by pint quantities."""
+
+    if not isinstance(array, xr.DataArray):
+        return False
+
+    module_name = getattr(array.data, "__module__", "")
+    return module_name.startswith("pint") or (
+        hasattr(array.data, "magnitude") and hasattr(array.data, "units")
+    )
+
+
+def _strip_unexpected_pint_units(output, in_pint):
+    """Remove unexpected pint wrapping introduced by MetPy."""
+
+    if in_pint:
+        return output
+
+    if hasattr(output.data, "magnitude"):
+        output.data = output.data.magnitude
+
+    return output
+
+
+def _align_hybrid_level_dimension(hyam, hybm, lev_dim):
+    """Rename hybrid coefficient dimensions so they align with ``lev_dim``."""
+
+    if hyam.shape != hybm.shape:
+        raise ValueError(
+            f"dimension mismatch between `hyam` and `hybm`: {hyam.shape} vs {hybm.shape}"
+        )
+
+    if hyam.ndim != 1 or hybm.ndim != 1:
+        raise ValueError("`hyam` and `hybm` must be one-dimensional arrays")
+
+    if hyam.dims != hybm.dims:
+        warnings.warn(
+            "hyam and hybm have different dimension names, attempting rename",
+            stacklevel=2,
+        )
+        hybm = hybm.rename(
+            {source: target for target, source in zip(hyam.dims, hybm.dims)}
+        )
+
+    coeff_dim = hyam.dims[0]
+    if coeff_dim != lev_dim:
+        hyam = hyam.rename({coeff_dim: lev_dim})
+        hybm = hybm.rename({hybm.dims[0]: lev_dim})
+
+    return hyam, hybm
 
 
 def interp_hybrid_to_pressure(
@@ -477,10 +693,16 @@ def interp_hybrid_to_pressure(
     `vinth2p_ecmwf <https://www.ncl.ucar.edu/Document/Functions/Built-in/vinth2p_ecmwf.shtml>`__
     """
 
+    if not all(isinstance(x, xr.DataArray) for x in (data, ps, hyam, hybm)):
+        raise TypeError("data, ps, hyam, and hybm must be xarray DataArray objects")
+
+    new_levels = np.asarray(new_levels)
+    in_pint = any(_is_pint_backed(arr) for arr in (data, ps, hyam, hybm))
+    in_dask = any(_is_dask_backed(arr) for arr in (data, ps, hyam, hybm))
+
     # Check inputs
     if extrapolate and (variable is None):
-        raise ValueError(
-            "If `extrapolate` is True, `variable` must be provided.")
+        raise ValueError("If `extrapolate` is True, `variable` must be provided.")
 
     if variable in ["geopotential", "temperature"] and (
         t_bot is None or phi_sfc is None
@@ -499,11 +721,15 @@ def interp_hybrid_to_pressure(
     # Determine the level dimension and then the interpolation axis
     if lev_dim is None:
         try:
+            if hasattr(data.cf, "guess_coord_axis"):
+                data = data.cf.guess_coord_axis()
             lev_dim = data.cf["vertical"].name
-        except Exception:
+        except Exception as exc:
             raise ValueError(
                 "Unable to determine vertical dimension name. Please specify the name via `lev_dim` argument."
-            )
+            ) from exc
+
+    hyam, hybm = _align_hybrid_level_dimension(hyam, hybm, lev_dim)
 
     try:
         func_interpolate = _func_interpolate(method)
@@ -513,79 +739,68 @@ def interp_hybrid_to_pressure(
     interp_axis = data.dims.index(lev_dim)
 
     # Calculate pressure levels at the hybrid levels
-    pressure = _pressure_from_hybrid(ps, hyam, hybm, p0)  # Pa
+    pressure = pressure_at_hybrid_levels(ps, hyam, hybm, p0)  # Pa
 
     # Make pressure shape same as data shape
     pressure = pressure.transpose(*data.dims)
+    output = None
 
-    ###############################################################################
-    # Workaround
-    #
-    # For the issue with metpy's xarray interface:
-    #
-    # `metpy.interpolate.interpolate_1d` had "no implementation found for
-    # 'numpy.apply_along_axis'" issue for cases where the input is
-    # xarray.Dataarray and has more than 3 dimensions (e.g. 4th dim of `time`).
+    chunk_sizes = getattr(data, "chunksizes", None) or {}
+    if _is_dask_backed(data) and lev_dim in chunk_sizes:
+        if len(chunk_sizes[lev_dim]) == 1:
+            try:
+                output = xr.map_blocks(
+                    _interpolate_mb,
+                    data,
+                    args=(pressure, new_levels, interp_axis, method),
+                )
+            except Exception:
+                output = None
+        else:
+            warnings.warn(
+                f"Chunking along {lev_dim} is not recommended for performance reasons.",
+                stacklevel=2,
+            )
 
-    # Use dask.array.core.map_blocks instead of xarray.apply_ufunc and
-    # auto-chunk input arrays to ensure using only Numpy interface of
-    # `metpy.interpolate.interpolate_1d`.
+    if in_dask and output is None:
+        from dask.array.core import map_blocks
 
-    # # Apply vertical interpolation
-    # # Apply Dask parallelization with xarray.apply_ufunc
-    # output = xr.apply_ufunc(
-    #     _vertical_remap,
-    #     data,
-    #     pressure,
-    #     exclude_dims=set((lev_dim,)),  # Set dimensions allowed to change size
-    #     input_core_dims=[[lev_dim], [lev_dim]],  # Set core dimensions
-    #     output_core_dims=[["plev"]],  # Specify output dimensions
-    #     vectorize=True,  # loop over non-core dims
-    #     dask="parallelized",  # Dask parallelization
-    #     output_dtypes=[data.dtype],
-    #     dask_gufunc_kwargs={"output_sizes": {
-    #         "plev": len(new_levels)
-    #     }},
-    # )
+        if not _is_dask_backed(data):
+            data = data.chunk({dim: size for dim, size in data.sizes.items()})
 
-    # If an unchunked Xarray input is given, chunk it just with its dims
-    if data.chunks is None:
-        data_chunk = dict([(k, v) for (k, v) in zip(
-            list(data.dims), list(data.shape))])
-        data = data.chunk(data_chunk)
+        pressure = pressure.chunk(data.chunksizes)
+        out_chunks = list(data.chunks)
+        out_chunks[interp_axis] = (new_levels.size,)
+        out_chunks = tuple(out_chunks)
 
-    # Chunk pressure equal to data's chunks
-    pressure = pressure.chunk(data.chunksizes)
+        output = map_blocks(
+            _vertical_remap,
+            func_interpolate,
+            new_levels,
+            pressure.data,
+            data.data,
+            interp_axis,
+            chunks=out_chunks,
+            dtype=data.dtype,
+            drop_axis=[interp_axis],
+            new_axis=[interp_axis],
+        )
+    elif output is None:
+        output = _vertical_remap(
+            func_interpolate, new_levels, pressure.data, data.data, interp_axis
+        )
 
-    # Output data structure elements
-    out_chunks = list(data.chunks)
-    out_chunks[interp_axis] = (new_levels.size,)
-    out_chunks = tuple(out_chunks)
-    # ''' end of boilerplate
+    if isinstance(output, xr.DataArray):
+        output = output.copy(deep=False)
+        output.name = data.name
+        output.attrs = data.attrs
+    else:
+        output = xr.DataArray(output, name=data.name, attrs=data.attrs)
 
-    from dask.array.core import map_blocks
-
-    output = map_blocks(
-        _vertical_remap,
-        func_interpolate,
-        new_levels,
-        pressure.data,
-        data.data,
-        interp_axis,
-        chunks=out_chunks,
-        dtype=data.dtype,
-        drop_axis=[interp_axis],
-        new_axis=[interp_axis],
-    )
-
-    # End of Workaround
-    ###############################################################################
-
-    output = xr.DataArray(output, name=data.name, attrs=data.attrs)
+    output = _strip_unexpected_pint_units(output, in_pint)
 
     # Set output dims and coords
-    dims = [data.dims[i] if i !=
-            interp_axis else "plev" for i in range(data.ndim)]
+    dims = [data.dims[i] if i != interp_axis else "plev" for i in range(data.ndim)]
 
     # Rename output dims. This is only needed with above workaround block
     dims_dict = {output.dims[i]: dims[i] for i in range(len(output.dims))}
@@ -604,6 +819,7 @@ def interp_hybrid_to_pressure(
         output = _vertical_remap_extrap(
             new_levels, lev_dim, data, output, pressure, ps, variable, t_bot, phi_sfc
         )
+        output = _strip_unexpected_pint_units(output, in_pint)
 
     return output
 
@@ -709,8 +925,7 @@ def interp_sigma_to_hybrid(
 
         for idx, (d, s) in enumerate(zip(data_stacked, sigma_stacked)):
             output[idx, :] = xr.DataArray(
-                _vertical_remap(func_interpolate, s.data,
-                                sig_coords.data, d.data),
+                _vertical_remap(func_interpolate, s.data, sig_coords.data, d.data),
                 dims=[lev_dim],
             )
 
@@ -721,8 +936,7 @@ def interp_sigma_to_hybrid(
 
         output = data[: len(hyam)].copy()
         output[: len(hyam)] = xr.DataArray(
-            _vertical_remap(func_interpolate, sigma.data,
-                            sig_coords.data, data.data),
+            _vertical_remap(func_interpolate, sigma.data, sig_coords.data, data.data),
             dims=[lev_dim],
         )
 
@@ -856,7 +1070,6 @@ def interp_multidim(
     data_out = data_in_modified.interp(
         output_coords, method=method, kwargs={"fill_value": fill_value}
     )
-    data_out_modified = _post_interp_multidim(
-        data_out, missing_val=missing_val)
+    data_out_modified = _post_interp_multidim(data_out, missing_val=missing_val)
 
     return data_out_modified
