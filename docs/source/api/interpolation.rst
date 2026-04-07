@@ -42,6 +42,27 @@ Regridding Functions
 Interpolation Functions
 -----------------------
 
+Skyborn's model-level interpolation utilities support hybrid-sigma to pressure
+remapping, sigma-to-hybrid remapping, and multidimensional spatial interpolation
+for atmospheric fields. The hybrid-level workflow now exposes helper functions
+for diagnosing hybrid pressures and layer thicknesses and uses a more flexible
+execution path for ``interp_hybrid_to_pressure``:
+
+* direct in-memory interpolation for ordinary NumPy-backed xarray inputs
+* ``xarray.map_blocks`` when Dask chunking is favorable
+* Dask ``map_blocks`` fallback for chunked inputs that still need the older
+  workaround path
+
+Hybrid-Level Diagnostics
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: skyborn.interp.pressure_at_hybrid_levels
+
+.. autofunction:: skyborn.interp.delta_pressure_hybrid
+
+Model-Level Remapping
+~~~~~~~~~~~~~~~~~~~~~
+
 .. autofunction:: skyborn.interp.interp_hybrid_to_pressure
 
 .. autofunction:: skyborn.interp.interp_sigma_to_hybrid
