@@ -1183,7 +1183,9 @@ class TestMultidimensionalInterpolation:
         lat_out = np.array([45])
         lon_out = np.array([90])
 
-        result = interp_multidim(data_in=data_in, lat_out=lat_out, lon_out=lon_out)
+        result = interp_multidim(
+            data_in=data_in, lat_out=lat_out, lon_out=lon_out, method="nearest"
+        )
 
         assert result.shape == (1, 1)
         assert result.values[0, 0] == 5
