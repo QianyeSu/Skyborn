@@ -47,6 +47,23 @@ Scatter Stippling
   ``skyborn.plot.vector`` as the module-oriented import path for curly-vector
   usage while preserving the existing package-level ``skyborn.plot`` exports.
 
+Interpolation
+
+* Enhanced model-level interpolation in
+  ``skyborn.interp.interpolation``.
+* Improved ``skyborn.interp.interp_hybrid_to_pressure`` so hybrid-sigma to
+  pressure remapping now chooses a more suitable execution path for ordinary
+  in-memory arrays and Dask-backed arrays instead of always forcing the older
+  chunked workaround.
+* Added public hybrid-level diagnostics:
+
+  - ``skyborn.interp.pressure_at_hybrid_levels``
+  - ``skyborn.interp.delta_pressure_hybrid``
+
+* Improved below-ground temperature extrapolation support in the hybrid-level
+  interpolation workflow while keeping compatibility with the older Skyborn
+  helper calling pattern.
+
 Version 0.3.18 (Current)
 ------------------------
 
