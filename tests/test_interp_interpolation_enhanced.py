@@ -15,9 +15,14 @@ from numpy.testing import assert_allclose, assert_array_almost_equal, assert_arr
 
 from skyborn.interp.interpolation import (
     __pres_lev_mandatory__,
+    _align_hybrid_level_dimension,
     _func_interpolate,
+    _interpolate_mb,
+    _is_pint_backed,
     _pressure_from_hybrid,
+    _rename_colliding_coeff_dim,
     _sigma_from_hybrid,
+    _strip_unexpected_pint_units,
     delta_pressure_hybrid,
     interp_hybrid_to_pressure,
     interp_multidim,
@@ -587,6 +592,394 @@ class TestInterpolationGeoCatSyncCoverage:
 
         assert out.shape == (2, 1, 1)
         assert np.all(np.isfinite(out.values))
+
+
+class TestInterpolationHelperCoverage:
+    """Extra helper and branch coverage for interpolation internals."""
+
+    def test_interpolate_mb_wrapper_uses_requested_method(self):
+        """The map-block helper should dispatch to the selected interpolation func."""
+        data = np.array([280.0, 250.0, 220.0])
+        curr_levels = np.array([1000.0, 700.0, 400.0])
+        new_levels = np.array([850.0, 550.0])
+
+        result = _interpolate_mb(data, curr_levels, new_levels, axis=0, method="linear")
+
+        assert_array_almost_equal(result, np.array([265.0, 235.0]))
+
+    def test_rename_colliding_coeff_dim_passthrough_for_non_dataarrays(self):
+        """Non-xarray inputs should be returned unchanged by the rename guard."""
+        hya = np.array([0.0, 0.2])
+        hyb = np.array([1.0, 0.0])
+
+        out_hya, out_hyb = _rename_colliding_coeff_dim(np.array([100000.0]), hya, hyb)
+
+        assert out_hya is hya
+        assert out_hyb is hyb
+
+    def test_rename_colliding_coeff_dim_uses_internal_name_when_lev_exists(self):
+        """A colliding coeff dim should fall back to the private helper dim name."""
+        target = xr.DataArray(
+            np.ones((3, 4)),
+            dims=["dim_0", "lev"],
+            coords={"dim_0": range(3), "lev": range(4)},
+        )
+        hya = xr.DataArray([0.0, 0.1], dims=["dim_0"])
+        hyb = xr.DataArray([1.0, 0.0], dims=["dim_0"])
+
+        out_hya, out_hyb = _rename_colliding_coeff_dim(target, hya, hyb)
+
+        assert out_hya.dims == ("__hybrid_lev__",)
+        assert out_hyb.dims == ("__hybrid_lev__",)
+
+    def test_pressure_from_hybrid_rejects_invalid_input_types(self):
+        """Hybrid-pressure helper should reject non-array and mixed-type inputs."""
+        with pytest.raises(
+            TypeError, match="must be xarray DataArrays or numpy arrays"
+        ):
+            pressure_at_hybrid_levels([100000.0], np.array([0.0]), np.array([1.0]))
+
+        with pytest.raises(TypeError, match="must all be the same type"):
+            pressure_at_hybrid_levels(
+                xr.DataArray([100000.0], dims=["x"]),
+                np.array([0.0]),
+                np.array([1.0]),
+            )
+
+    def test_pressure_from_hybrid_numpy_validation_and_execution(self):
+        """Numpy inputs should validate shape and broadcast into level-first output."""
+        with pytest.raises(ValueError, match="dimension mismatch"):
+            pressure_at_hybrid_levels(
+                np.array([100000.0]), np.array([0.0, 0.2]), np.array([1.0])
+            )
+
+        with pytest.raises(ValueError, match="1-dimensional"):
+            pressure_at_hybrid_levels(
+                np.array([100000.0]),
+                np.array([[0.0, 0.2]]),
+                np.array([[1.0, 0.0]]),
+            )
+
+        pressure = pressure_at_hybrid_levels(
+            np.array([100000.0, 90000.0]),
+            np.array([0.0, 0.2]),
+            np.array([1.0, 0.0]),
+        )
+
+        assert pressure.shape == (2, 2)
+        assert_array_equal(
+            pressure, np.array([[100000.0, 90000.0], [20000.0, 20000.0]])
+        )
+
+    def test_pressure_from_hybrid_warns_on_coeff_dim_name_mismatch(self):
+        """Different xarray coeff dim names should warn and be renamed."""
+        ps = xr.DataArray([100000.0, 95000.0], dims=["x"])
+        hya = xr.DataArray([0.0, 0.2], dims=["a"])
+        hyb = xr.DataArray([1.0, 0.0], dims=["b"])
+
+        with pytest.warns(UserWarning, match="different dimension names"):
+            pressure = pressure_at_hybrid_levels(ps, hya, hyb)
+
+        assert pressure.dims == ("a", "x")
+        assert pressure.shape == (2, 2)
+
+    def test_delta_pressure_hybrid_rejects_invalid_inputs(self):
+        """Layer-thickness helper should validate input types, shapes, and dimensions."""
+        with pytest.raises(
+            TypeError, match="Inputs must be xarray DataArrays or numpy arrays"
+        ):
+            delta_pressure_hybrid([100000.0], np.array([0.0]), np.array([1.0]))
+
+        with pytest.raises(TypeError, match="p0 must be a scalar numeric value"):
+            delta_pressure_hybrid(
+                np.array([100000.0]), np.array([0.0]), np.array([1.0]), p0="bad"
+            )
+
+        with pytest.raises(ValueError, match="dimension mismatch"):
+            delta_pressure_hybrid(
+                np.array([100000.0]), np.array([0.0, 0.2]), np.array([1.0])
+            )
+
+        with pytest.raises(ValueError, match="1-dimensional"):
+            delta_pressure_hybrid(
+                np.array([100000.0]),
+                np.array([[0.0, 0.2]]),
+                np.array([[1.0, 0.0]]),
+            )
+
+    def test_delta_pressure_hybrid_numpy_and_dataarray_coeff_paths(self):
+        """Delta-pressure helper should support both numpy and xarray pressure inputs."""
+        hya = np.array([0.0, 0.2, 0.5])
+        hyb = np.array([1.0, 0.5, 0.0])
+
+        dph_np = delta_pressure_hybrid(np.array([100000.0, 90000.0]), hya, hyb)
+        assert dph_np.shape == (2, 2)
+        assert_array_equal(dph_np, np.array([[30000.0, 25000.0], [20000.0, 15000.0]]))
+
+        dph_da = delta_pressure_hybrid(
+            xr.DataArray([100000.0, 90000.0], dims=["x"]), hya, hyb
+        )
+        assert dph_da.dims == ("lev", "x")
+        assert_array_equal(dph_da.values, dph_np)
+
+    def test_delta_pressure_hybrid_warns_on_coeff_dim_name_mismatch(self):
+        """Xarray coeff dim mismatches should be normalized with a warning."""
+        ps = xr.DataArray([100000.0], dims=["x"])
+        hya = xr.DataArray([0.0, 0.2], dims=["a"])
+        hyb = xr.DataArray([1.0, 0.0], dims=["b"])
+
+        with pytest.warns(UserWarning, match="different dimension names"):
+            dph = delta_pressure_hybrid(ps, hya, hyb)
+
+        assert dph.dims == ("a", "x")
+        assert dph.shape == (1, 1)
+
+    def test_sigma_from_hybrid_warns_on_coeff_dim_name_mismatch(self):
+        """Sigma helper should also warn and rename mismatched coeff dims."""
+        ps = xr.DataArray([101325.0], dims=["x"])
+        hya = xr.DataArray([0.0, 0.2], dims=["a"])
+        hyb = xr.DataArray([1.0, 0.0], dims=["b"])
+
+        with pytest.warns(UserWarning, match="different dimension names"):
+            sigma = _sigma_from_hybrid(ps, hya, hyb)
+
+        assert sigma.dims == ("a", "x")
+        assert sigma.shape == (2, 1)
+
+    @pytest.mark.skipif(
+        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
+    )
+    def test_temp_extrapolate_rejects_invalid_call_signature(self):
+        """Temperature extrapolation should reject unsupported legacy signatures."""
+        with pytest.raises(TypeError, match="accepts either"):
+            _temp_extrapolate(xr.DataArray([280.0], dims=["lev"]), 100000.0)
+
+    def test_pint_detection_and_strip_helpers(self):
+        """Pint helper utilities should preserve expected quantity semantics."""
+        pint = pytest.importorskip("pint")
+        ureg = pint.UnitRegistry()
+        quantity = xr.DataArray(np.array([1.0, 2.0]) * ureg.kelvin, dims=["x"])
+
+        assert _is_pint_backed(np.array([1.0, 2.0])) is False
+        assert _is_pint_backed(quantity) is True
+
+        kept = _strip_unexpected_pint_units(quantity.copy(deep=False), in_pint=True)
+        assert hasattr(kept.data, "magnitude")
+
+        stripped = _strip_unexpected_pint_units(
+            quantity.copy(deep=False), in_pint=False
+        )
+        assert isinstance(stripped.data, np.ndarray)
+        assert_array_equal(stripped.values, np.array([1.0, 2.0]))
+
+    def test_align_hybrid_level_dimension_validation_and_warning_paths(self):
+        """Coefficient alignment helper should validate and rename as needed."""
+        with pytest.raises(ValueError, match="dimension mismatch"):
+            _align_hybrid_level_dimension(
+                xr.DataArray([0.0, 0.2], dims=["a"]),
+                xr.DataArray([1.0], dims=["a"]),
+                "lev",
+            )
+
+        with pytest.raises(ValueError, match="one-dimensional arrays"):
+            _align_hybrid_level_dimension(
+                xr.DataArray([[0.0, 0.2]], dims=["a", "b"]),
+                xr.DataArray([[1.0, 0.0]], dims=["a", "b"]),
+                "lev",
+            )
+
+        with pytest.warns(UserWarning, match="different dimension names"):
+            hyam, hybm = _align_hybrid_level_dimension(
+                xr.DataArray([0.0, 0.2], dims=["a"]),
+                xr.DataArray([1.0, 0.0], dims=["b"]),
+                "lev",
+            )
+
+        assert hyam.dims == ("lev",)
+        assert hybm.dims == ("lev",)
+
+    def test_interp_hybrid_to_pressure_requires_dataarray_inputs(self):
+        """Public hybrid-pressure interpolation should reject non-xarray inputs."""
+        data = xr.DataArray(
+            np.arange(6, dtype=float).reshape(3, 2),
+            dims=["lev", "x"],
+            coords={"lev": [0, 1, 2], "x": [0, 1]},
+        )
+        hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["lev"])
+
+        with pytest.raises(TypeError, match="must be xarray DataArray objects"):
+            interp_hybrid_to_pressure(
+                data=data,
+                ps=np.full((2,), 100000.0),
+                hyam=hyam,
+                hybm=hybm,
+                new_levels=np.array([95000.0]),
+                lev_dim="lev",
+            )
+
+    def test_interp_hybrid_to_pressure_autodetects_vertical_with_cf_accessor(self):
+        """Vertical axis should be auto-detected when cf_xarray metadata is present."""
+        pytest.importorskip("cf_xarray")
+        import cf_xarray  # noqa: F401
+
+        data = xr.DataArray(
+            np.arange(2 * 3 * 2, dtype=float).reshape(2, 3, 2),
+            dims=["time", "model_level", "x"],
+            coords={
+                "time": [0, 1],
+                "model_level": xr.DataArray(
+                    [1, 2, 3], dims=["model_level"], attrs={"positive": "down"}
+                ),
+                "x": [0, 1],
+            },
+        )
+        ps = xr.DataArray(
+            np.full((2, 2), 100000.0),
+            dims=["time", "x"],
+            coords={"time": [0, 1], "x": [0, 1]},
+        )
+        hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["hlev"])
+        hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["hlev"])
+
+        result = interp_hybrid_to_pressure(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            new_levels=np.array([95000.0, 70000.0]),
+        )
+
+        assert result.dims == ("time", "plev", "x")
+        assert result.shape == (2, 2, 2)
+
+    def test_interp_hybrid_to_pressure_dask_single_vertical_chunk_preserves_metadata(
+        self,
+    ):
+        """Single-chunk vertical dask inputs should use the xarray map-block path."""
+        pytest.importorskip("dask")
+
+        data = xr.DataArray(
+            np.arange(2 * 3 * 2, dtype=float).reshape(2, 3, 2),
+            dims=["time", "lev", "x"],
+            coords={"time": [0, 1], "lev": [0, 1, 2], "x": [0, 1]},
+            name="foo",
+            attrs={"units": "K"},
+        ).chunk({"time": 1, "lev": 3, "x": 2})
+        ps = xr.DataArray(
+            np.full((2, 2), 100000.0),
+            dims=["time", "x"],
+            coords={"time": [0, 1], "x": [0, 1]},
+        ).chunk({"time": 1, "x": 2})
+        hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["lev"])
+
+        result = interp_hybrid_to_pressure(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            new_levels=np.array([95000.0, 70000.0]),
+            lev_dim="lev",
+        )
+
+        assert hasattr(result.data, "chunks")
+        assert result.name == "foo"
+        assert result.attrs["units"] == "K"
+        assert result.compute().shape == (2, 2, 2)
+
+    def test_interp_hybrid_to_pressure_dask_warns_for_chunked_vertical_dimension(self):
+        """Multi-chunk vertical dask inputs should warn and use the fallback path."""
+        pytest.importorskip("dask")
+
+        data = xr.DataArray(
+            np.arange(2 * 3 * 2, dtype=float).reshape(2, 3, 2),
+            dims=["time", "lev", "x"],
+            coords={"time": [0, 1], "lev": [0, 1, 2], "x": [0, 1]},
+        ).chunk({"time": 1, "lev": 1, "x": 2})
+        ps = xr.DataArray(
+            np.full((2, 2), 100000.0),
+            dims=["time", "x"],
+            coords={"time": [0, 1], "x": [0, 1]},
+        ).chunk({"time": 1, "x": 2})
+        hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["lev"])
+
+        with pytest.warns(UserWarning, match="Chunking along lev"):
+            result = interp_hybrid_to_pressure(
+                data=data,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                new_levels=np.array([95000.0, 70000.0]),
+                lev_dim="lev",
+            )
+
+        assert hasattr(result.data, "chunks")
+        assert result.compute().shape == (2, 2, 2)
+
+    def test_interp_sigma_to_hybrid_autodetects_vertical_with_cf_accessor(self):
+        """Sigma interpolation should also honor cf_xarray vertical metadata."""
+        pytest.importorskip("cf_xarray")
+        import cf_xarray  # noqa: F401
+
+        data = xr.DataArray(
+            np.arange(2 * 3 * 2, dtype=float).reshape(2, 3, 2),
+            dims=["time", "model_level", "x"],
+            coords={
+                "time": [0, 1],
+                "model_level": xr.DataArray(
+                    [0.2, 0.6, 1.0], dims=["model_level"], attrs={"positive": "down"}
+                ),
+                "x": [0, 1],
+            },
+        )
+        sig_coords = xr.DataArray([0.2, 0.6, 1.0], dims=["model_level"])
+        ps = xr.DataArray(
+            np.full((2, 2), 100000.0),
+            dims=["time", "x"],
+            coords={"time": [0, 1], "x": [0, 1]},
+        )
+        hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["hlev"])
+        hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["hlev"])
+
+        result = interp_sigma_to_hybrid(
+            data=data,
+            sig_coords=sig_coords,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+        )
+
+        assert result.dims == ("time", "hlev", "x")
+        assert result.shape == (2, 3, 2)
+
+    def test_interp_sigma_to_hybrid_requires_explicit_vertical_when_cf_fails(self):
+        """Without lev_dim or CF metadata, sigma interpolation should fail clearly."""
+        data = xr.DataArray(
+            np.arange(2 * 3 * 2, dtype=float).reshape(2, 3, 2),
+            dims=["time", "model_level", "x"],
+            coords={"time": [0, 1], "model_level": [0.2, 0.6, 1.0], "x": [0, 1]},
+        )
+        sig_coords = xr.DataArray([0.2, 0.6, 1.0], dims=["model_level"])
+        ps = xr.DataArray(
+            np.full((2, 2), 100000.0),
+            dims=["time", "x"],
+            coords={"time": [0, 1], "x": [0, 1]},
+        )
+        hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["hlev"])
+        hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["hlev"])
+
+        with pytest.raises(
+            ValueError, match="Unable to determine vertical dimension name"
+        ):
+            interp_sigma_to_hybrid(
+                data=data,
+                sig_coords=sig_coords,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+            )
 
 
 # Performance and stress tests
