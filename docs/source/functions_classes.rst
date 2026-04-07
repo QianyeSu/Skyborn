@@ -189,6 +189,10 @@ Interpolation Functions
      - Description
    * - :func:`skyborn.interp.interp_hybrid_to_pressure`
      - Hybrid to pressure interpolation
+   * - :func:`skyborn.interp.pressure_at_hybrid_levels`
+     - Diagnose pressure on hybrid model levels
+   * - :func:`skyborn.interp.delta_pressure_hybrid`
+     - Diagnose layer thickness between hybrid model levels
    * - :func:`skyborn.interp.interp_sigma_to_hybrid`
      - Sigma to hybrid interpolation
    * - :func:`skyborn.interp.interp_multidim`
