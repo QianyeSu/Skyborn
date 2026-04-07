@@ -6,7 +6,9 @@ chunking behavior, metadata warnings, and backward compatibility wrappers.
 Target: 95%+ coverage for triple_to_grid.py
 """
 
+import importlib
 import warnings
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -20,6 +22,27 @@ from skyborn.interp.triple_to_grid import (
     triple2grid,
     triple_to_grid_2d,
 )
+
+triple_to_grid_module = importlib.import_module("skyborn.interp.triple_to_grid")
+
+
+class _FakeCoord:
+    """Minimal coordinate stub for xarray-validation branch tests."""
+
+    def __init__(self, ndim, shape):
+        self.ndim = ndim
+        self.shape = shape
+
+
+class _FakeGridToTripleDataArray:
+    """Minimal DataArray-like stub used to isolate coordinate validation logic."""
+
+    def __init__(self, shape, x_coord, y_coord):
+        self.dims = ("y", "x")
+        self.shape = shape
+        self.ndim = len(shape)
+        self.coords = {"x": x_coord, "y": y_coord}
+        self.attrs = {}
 
 
 @pytest.fixture
@@ -280,6 +303,76 @@ class TestGridToTripleValidation:
         da3 = da.expand_dims({"z": 2})  # make it 3D
         with pytest.raises(DimensionError):
             grid_to_triple(da3)
+
+    def test_xarray_x_coord_must_be_1d(self, monkeypatch):
+        """Test xarray-style inputs reject multi-dimensional x coordinates."""
+        monkeypatch.setattr(
+            triple_to_grid_module,
+            "xr",
+            SimpleNamespace(DataArray=_FakeGridToTripleDataArray),
+        )
+        data = _FakeGridToTripleDataArray(
+            shape=(4, 3),
+            x_coord=_FakeCoord(ndim=2, shape=(4, 3)),
+            y_coord=_FakeCoord(ndim=1, shape=(4,)),
+        )
+
+        with pytest.raises(DimensionError, match="`x_in` must have one dimension"):
+            grid_to_triple(data)
+
+    def test_xarray_x_coord_size_must_match_right_dimension(self, monkeypatch):
+        """Test xarray-style inputs reject x coordinates with the wrong length."""
+        monkeypatch.setattr(
+            triple_to_grid_module,
+            "xr",
+            SimpleNamespace(DataArray=_FakeGridToTripleDataArray),
+        )
+        data = _FakeGridToTripleDataArray(
+            shape=(4, 3),
+            x_coord=_FakeCoord(ndim=1, shape=(2,)),
+            y_coord=_FakeCoord(ndim=1, shape=(4,)),
+        )
+
+        with pytest.raises(
+            DimensionError,
+            match="`x_in` must have the same size",
+        ):
+            grid_to_triple(data)
+
+    def test_xarray_y_coord_must_be_1d(self, monkeypatch):
+        """Test xarray-style inputs reject multi-dimensional y coordinates."""
+        monkeypatch.setattr(
+            triple_to_grid_module,
+            "xr",
+            SimpleNamespace(DataArray=_FakeGridToTripleDataArray),
+        )
+        data = _FakeGridToTripleDataArray(
+            shape=(4, 3),
+            x_coord=_FakeCoord(ndim=1, shape=(3,)),
+            y_coord=_FakeCoord(ndim=2, shape=(4, 1)),
+        )
+
+        with pytest.raises(DimensionError, match="`y_in` must have one dimension"):
+            grid_to_triple(data)
+
+    def test_xarray_y_coord_size_must_match_left_dimension(self, monkeypatch):
+        """Test xarray-style inputs reject y coordinates with the wrong length."""
+        monkeypatch.setattr(
+            triple_to_grid_module,
+            "xr",
+            SimpleNamespace(DataArray=_FakeGridToTripleDataArray),
+        )
+        data = _FakeGridToTripleDataArray(
+            shape=(4, 3),
+            x_coord=_FakeCoord(ndim=1, shape=(3,)),
+            y_coord=_FakeCoord(ndim=1, shape=(3,)),
+        )
+
+        with pytest.raises(
+            DimensionError,
+            match="`y_in` must have the same size",
+        ):
+            grid_to_triple(data)
 
 
 class TestTripleToGridDaskPath:
