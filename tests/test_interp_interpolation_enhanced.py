@@ -115,28 +115,31 @@ class TestInterpolationEdgeCases:
         assert len(result_log) == 1
         assert result_log[0] > 1.0 and result_log[0] < 100.0
 
-    def test_hybrid_to_pressure_single_level(self):
-        """Test hybrid to pressure interpolation with single vertical level."""
-        # Single level data
+    def test_hybrid_to_pressure_exact_surface_match(self):
+        """Test hybrid to pressure interpolation for an exact surface-pressure match."""
+        # Minimal supported two-level data
         data = xr.DataArray(
-            [[280.0, 285.0], [275.0, 290.0]],  # 2x2 spatial grid
+            [
+                [[280.0, 285.0], [275.0, 290.0]],
+                [[240.0, 245.0], [235.0, 250.0]],
+            ],
+            dims=["lev", "lat", "lon"],
+            coords={"lat": [0, 30], "lon": [0, 90]},
+        )
+
+        ps = xr.DataArray(
+            [[101325.0, 101325.0], [100000.0, 100000.0]],
             dims=["lat", "lon"],
             coords={"lat": [0, 30], "lon": [0, 90]},
         )
 
-        ps = xr.DataArray([101325.0, 100000.0], dims=["lat"], coords={"lat": [0, 30]})
-
-        # Single hybrid level (surface)
-        hya = xr.DataArray([0.0], dims=["lev"])
-        hyb = xr.DataArray([1.0], dims=["lev"])
-
-        # Add level dimension to data
-        data_3d = data.expand_dims({"lev": [0]})
+        hya = xr.DataArray([0.0, 0.2], dims=["lev"])
+        hyb = xr.DataArray([1.0, 0.0], dims=["lev"])
 
         new_levels = np.array([101325.0, 95000.0])
 
         result = interp_hybrid_to_pressure(
-            data=data_3d,
+            data=data,
             ps=ps,
             hyam=hya,
             hybm=hyb,
@@ -159,7 +162,9 @@ class TestInterpolationEdgeCases:
             coords={"lat": [0], "lev": range(nlev), "lon": [0]},
         )
 
-        ps = xr.DataArray([101325.0], dims=["lat"], coords={"lat": [0]})
+        ps = xr.DataArray(
+            [[101325.0]], dims=["lat", "lon"], coords={"lat": [0], "lon": [0]}
+        )
         hya = xr.DataArray(np.linspace(0.0, 0.2, nlev), dims=["lev"])
         hyb = xr.DataArray(np.linspace(1.0, 0.0, nlev), dims=["lev"])
         t_bot = data.isel(lev=-1, drop=True)
@@ -201,7 +206,9 @@ class TestInterpolationEdgeCases:
             coords={"lat": [0], "lev": range(nlev), "lon": [0]},
         )
 
-        ps = xr.DataArray([100000.0], dims=["lat"])
+        ps = xr.DataArray(
+            [[100000.0]], dims=["lat", "lon"], coords={"lat": [0], "lon": [0]}
+        )
         hya = xr.DataArray(np.linspace(0.0, 0.1, nlev), dims=["lev"])
         hyb = xr.DataArray(np.linspace(1.0, 0.0, nlev), dims=["lev"])
         t_bot = xr.DataArray(
