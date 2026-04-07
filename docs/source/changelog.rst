@@ -1,7 +1,7 @@
 Changelog
 =========
 
-Version 0.3.19 (Planned)
+Version 0.3.19 (Current)
 ------------------------
 
 Scatter Stippling
@@ -64,7 +64,7 @@ Interpolation
   interpolation workflow while keeping compatibility with the older Skyborn
   helper calling pattern.
 
-Version 0.3.18 (Current)
+Version 0.3.18
 ------------------------
 
 Plotting API Cleanup
