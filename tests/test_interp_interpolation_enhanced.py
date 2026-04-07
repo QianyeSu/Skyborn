@@ -18,9 +18,11 @@ from skyborn.interp.interpolation import (
     _func_interpolate,
     _pressure_from_hybrid,
     _sigma_from_hybrid,
+    delta_pressure_hybrid,
     interp_hybrid_to_pressure,
     interp_multidim,
     interp_sigma_to_hybrid,
+    pressure_at_hybrid_levels,
 )
 
 # Try to import private functions - they may not be available
@@ -57,34 +59,35 @@ class TestInterpolationEdgeCases:
 
     def test_pressure_from_hybrid_zero_surface_pressure(self):
         """Test pressure calculation with zero surface pressure."""
-        ps = xr.DataArray([0.0, 50000.0])
-        hya = xr.DataArray([0.0, 25000.0])
-        hyb = xr.DataArray([1.0, 0.5])
+        ps = xr.DataArray([0.0, 50000.0], dims=["x"])
+        hya = xr.DataArray([0.0, 25000.0], dims=["lev"])
+        hyb = xr.DataArray([1.0, 0.5], dims=["lev"])
         p0 = 100000.0
 
         pressure = _pressure_from_hybrid(ps, hya, hyb, p0)
 
         # First point should have zero pressure at surface
+        assert pressure.shape == (2, 2)
         assert pressure[0, 0] == 0.0
         assert pressure[1, 0] > 0.0  # Second point should be positive
 
     def test_sigma_from_hybrid_edge_values(self):
         """Test sigma calculation with edge values."""
-        ps = xr.DataArray([101325.0])
+        ps = xr.DataArray([101325.0], dims=["x"])
         # Test with hya=0 (pure sigma) and hyb=0 (pure pressure)
-        hya = xr.DataArray([0.0, 50000.0, 101325.0])
-        hyb = xr.DataArray([1.0, 0.0, 0.0])
+        hya = xr.DataArray([0.0, 50000.0, 101325.0], dims=["lev"])
+        hyb = xr.DataArray([1.0, 0.0, 0.0], dims=["lev"])
         p0 = 101325.0
 
         sigma = _sigma_from_hybrid(ps, hya, hyb, p0)
 
-        assert sigma.shape == (1, 3)
+        assert sigma.shape == (3, 1)
         assert_array_almost_equal(sigma[0, 0], 1.0, decimal=10)  # Pure sigma level
         assert_array_almost_equal(
-            sigma[0, 1], 50000.0 / 101325.0, decimal=6
+            sigma[1, 0], 50000.0 / 101325.0, decimal=6
         )  # Pure pressure
         # At reference pressure
-        assert_array_almost_equal(sigma[0, 2], 1.0, decimal=10)
+        assert_array_almost_equal(sigma[2, 0], 1.0, decimal=10)
 
     def test_func_interpolate_function_properties(self):
         """Test properties of interpolation functions."""
@@ -133,7 +136,12 @@ class TestInterpolationEdgeCases:
         new_levels = np.array([101325.0, 95000.0])
 
         result = interp_hybrid_to_pressure(
-            data=data_3d, ps=ps, hyam=hya, hybm=hyb, new_levels=new_levels
+            data=data_3d,
+            ps=ps,
+            hyam=hya,
+            hybm=hyb,
+            new_levels=new_levels,
+            lev_dim="lev",
         )
 
         assert result.shape == (2, 2, 2)  # plev, lat, lon
@@ -153,6 +161,10 @@ class TestInterpolationEdgeCases:
         ps = xr.DataArray([101325.0], dims=["lat"], coords={"lat": [0]})
         hya = xr.DataArray(np.linspace(0, 50000, nlev), dims=["lev"])
         hyb = xr.DataArray(np.linspace(1.0, 0.0, nlev), dims=["lev"])
+        t_bot = data.isel(lev=-1, drop=True)
+        phi_sfc = xr.DataArray(
+            [[0.0]], dims=["lat", "lon"], coords={"lat": [0], "lon": [0]}
+        )
 
         # Request levels both within and outside the data range
         # surface, mid, top
@@ -164,8 +176,11 @@ class TestInterpolationEdgeCases:
             hyam=hya,
             hybm=hyb,
             new_levels=new_levels,
+            lev_dim="lev",
             extrapolate=True,
             variable="temperature",
+            t_bot=t_bot,
+            phi_sfc=phi_sfc,
         )
 
         assert result.shape == (1, 3, 1)  # lat, plev, lon
@@ -188,6 +203,12 @@ class TestInterpolationEdgeCases:
         ps = xr.DataArray([100000.0], dims=["lat"])
         hya = xr.DataArray(np.linspace(0, 30000, nlev), dims=["lev"])
         hyb = xr.DataArray(np.linspace(1.0, 0.0, nlev), dims=["lev"])
+        t_bot = xr.DataArray(
+            [[280.0]], dims=["lat", "lon"], coords={"lat": [0], "lon": [0]}
+        )
+        phi_sfc = xr.DataArray(
+            [[0.0]], dims=["lat", "lon"], coords={"lat": [0], "lon": [0]}
+        )
 
         new_levels = np.array([105000.0, 50000.0, 10000.0])
 
@@ -197,8 +218,11 @@ class TestInterpolationEdgeCases:
             hyam=hya,
             hybm=hyb,
             new_levels=new_levels,
+            lev_dim="lev",
             extrapolate=True,
             variable="geopotential",
+            t_bot=t_bot,
+            phi_sfc=phi_sfc,
         )
 
         assert result.shape == (1, 3, 1)
@@ -287,9 +311,24 @@ class TestInterpolationNumericalStability:
         pressure = _pressure_from_hybrid(ps, hya, hyb, p0)
 
         # Check for reasonable precision
+        assert pressure.shape == (3, 1)
         assert np.abs(pressure[0, 0] - 101325.0) < 1e-10
-        assert pressure[0, 1] < pressure[0, 0]  # Should be decreasing
-        assert pressure[0, 2] < pressure[0, 1]
+        assert pressure[1, 0] < pressure[0, 0]  # Should be decreasing
+        assert pressure[2, 0] < pressure[1, 0]
+
+    def test_public_hybrid_helpers_match_private_wrapper(self):
+        """Test public hybrid helpers against the legacy private wrapper."""
+        ps = xr.DataArray([100000.0, 95000.0], dims=["x"])
+        hya = xr.DataArray([0.0, 10000.0, 50000.0], dims=["lev"])
+        hyb = xr.DataArray([1.0, 0.8, 0.0], dims=["lev"])
+
+        pressure_public = pressure_at_hybrid_levels(ps, hya, hyb)
+        pressure_private = _pressure_from_hybrid(ps, hya, hyb)
+        dph = delta_pressure_hybrid(ps, hya, hyb)
+
+        assert_array_equal(pressure_public.values, pressure_private.values)
+        assert dph.shape == (2, 2)
+        assert np.all(dph.values >= 0)
 
     def test_interpolation_with_nan_values(self):
         """Test interpolation behavior with NaN values."""
@@ -308,7 +347,7 @@ class TestInterpolationNumericalStability:
 
         # Should handle NaN values gracefully
         result = interp_hybrid_to_pressure(
-            data=data, ps=ps, hyam=hya, hybm=hyb, new_levels=new_levels
+            data=data, ps=ps, hyam=hya, hybm=hyb, new_levels=new_levels, lev_dim="lev"
         )
 
         assert result.shape == (1, 1, 2)
@@ -332,7 +371,13 @@ class TestInterpolationNumericalStability:
         new_levels = np.array([50000.0])
 
         result = interp_hybrid_to_pressure(
-            data=data, ps=ps, hyam=hya, hybm=hyb, new_levels=new_levels, method="log"
+            data=data,
+            ps=ps,
+            hyam=hya,
+            hybm=hyb,
+            new_levels=new_levels,
+            lev_dim="lev",
+            method="log",
         )
 
         assert result.shape == (1, 1, 1)
@@ -418,7 +463,7 @@ class TestInterpolationSpecialCases:
         new_levels = np.array([75000.0, 25000.0])
 
         result = interp_hybrid_to_pressure(
-            data=data, ps=ps, hyam=hya, hybm=hyb, new_levels=new_levels
+            data=data, ps=ps, hyam=hya, hybm=hyb, new_levels=new_levels, lev_dim="lev"
         )
 
         assert result.shape == (5, 2, 1, 1)  # time, plev, lat, lon
@@ -459,7 +504,7 @@ class TestInterpolationStress:
 
         # Should complete without memory errors
         result = interp_hybrid_to_pressure(
-            data=data, ps=ps, hyam=hya, hybm=hyb, new_levels=new_levels
+            data=data, ps=ps, hyam=hya, hybm=hyb, new_levels=new_levels, lev_dim="lev"
         )
 
         assert result.shape == (50, 5, 90, 180)
