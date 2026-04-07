@@ -38,7 +38,7 @@ except (ImportError, AttributeError) as e:
             content = f.read()
             match = re.search(
                 r'__version__\s*=\s*[\'"]([^\'"]+)[\'"]', content)
-            release = match.group(1) if match else '0.3.18'
+            release = match.group(1) if match else '0.3.19'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -225,7 +225,7 @@ def get_version_from_init():
             if version_match:
                 return version_match.group(1)
 
-    return "0.3.18"  # fallback version
+    return "0.3.19"  # fallback version
 
 
 def setup_entrance_page(app, exception):
