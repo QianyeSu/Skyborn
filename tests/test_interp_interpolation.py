@@ -946,7 +946,7 @@ class TestSigmaToHybridInterpolation:
             [220, 250, 280, 290], dims=["sigma"], coords={"sigma": sigma_coords}
         )
 
-        ps = xr.DataArray([101325])  # Scalar surface pressure
+        ps = xr.DataArray(101325)  # Scalar surface pressure
         hya = xr.DataArray([0.0, 0.1])  # 2 hybrid levels
         hyb = xr.DataArray([0.8, 0.4])
 
@@ -1158,7 +1158,9 @@ class TestMultidimensionalInterpolation:
         lat_out = np.array([15, 45])
         lon_out = np.array([45, 135, 225])
 
-        result = interp_multidim(data_in=data_in, lat_out=lat_out, lon_out=lon_out)
+        result = interp_multidim(
+            data_in=data_in, lat_out=lat_out, lon_out=lon_out, method="nearest"
+        )
 
         # Should preserve time dimension and interpolate spatial dimensions
         assert result.shape == (4, 2, 3)  # time, lat_out, lon_out
