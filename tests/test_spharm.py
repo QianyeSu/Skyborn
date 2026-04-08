@@ -18,6 +18,8 @@ if src_path not in sys.path:
 
 try:
     from skyborn.spharm import Spharmt, gaussian_lats_wts, getspecindx, regrid
+    from skyborn.spharm import spherical_harmonics as spharm_mod
+    from skyborn.spharm.spherical_harmonics import SpheremackError, ValidationError
 
     SPHARM_AVAILABLE = True
     print("✓ spharm module imported successfully in test")
@@ -27,6 +29,9 @@ except ImportError as e:
     regrid = None
     gaussian_lats_wts = None
     getspecindx = None
+    spharm_mod = None
+    SpheremackError = None
+    ValidationError = None
     print(f"✗ spharm module import failed in test: {e}")
 except Exception as e:
     SPHARM_AVAILABLE = False
@@ -34,6 +39,9 @@ except Exception as e:
     regrid = None
     gaussian_lats_wts = None
     getspecindx = None
+    spharm_mod = None
+    SpheremackError = None
+    ValidationError = None
     print(f"✗ spharm module import error in test: {e}")
 
 
@@ -1209,6 +1217,160 @@ class TestSpharmtAdditionalCoverage:
         np.testing.assert_allclose(div_stored, div_computed, rtol=1e-6, atol=1e-10)
         np.testing.assert_allclose(u_stored, u_computed, rtol=1e-5, atol=1e-5)
         np.testing.assert_allclose(v_stored, v_computed, rtol=1e-5, atol=1e-5)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_internal_dispatch_and_validation_branches(self):
+        """Exercise uncovered internal validation and dispatch branches."""
+        sht = object.__new__(Spharmt)
+        sht.gridtype = "triangular"
+        sht.legfunc = "stored"
+
+        with pytest.raises(ValidationError, match="Unsupported combination"):
+            sht._initialize_spherepack_arrays()
+
+        with pytest.raises(SpheremackError, match="gaqd failed with error code 7"):
+            sht._call_spherepack_safely(
+                lambda: (np.arange(3, dtype=np.float32), 7),
+                operation_name="gaqd",
+            )
+
+        def backend_failure():
+            raise RuntimeError("backend exploded")
+
+        with pytest.raises(SpheremackError, match="specintrp failed: backend exploded"):
+            sht._call_spherepack_safely(
+                backend_failure,
+                operation_name="specintrp",
+            )
+
+        sht.temp_attr = "value"
+        del sht.temp_attr
+        assert "temp_attr" not in sht.__dict__
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_public_validation_error_branches(self):
+        """Exercise public validation branches beyond the happy path."""
+        sht = Spharmt(nlon=36, nlat=19)
+
+        with pytest.raises(
+            ValidationError, match="grdtospec needs a rank 2 or 3 array"
+        ):
+            sht.grdtospec(np.zeros(19, dtype=np.float32))
+
+        too_large_ntrunc = (20 + 1) * (20 + 2) // 2
+        bad_spec = np.zeros(too_large_ntrunc, dtype=np.complex64)
+        with pytest.raises(ValidationError, match="ntrunc too large"):
+            sht.spectogrd(bad_spec)
+
+        u = np.zeros((19, 36), dtype=np.float32)
+        v = np.zeros((18, 36), dtype=np.float32)
+        with pytest.raises(
+            ValidationError, match="ugrid and vgrid must have the same shape"
+        ):
+            sht.getvrtdivspec(u, v)
+
+        vrt = np.zeros(6, dtype=np.complex64)
+        div = np.zeros(10, dtype=np.complex64)
+        with pytest.raises(
+            ValidationError, match="vrtspec and divspec must have the same shape"
+        ):
+            sht.getuv(vrt, div)
+
+        with pytest.raises(
+            ValidationError, match="ugrid and vgrid must have the same shape"
+        ):
+            sht.getpsichi(u, v)
+
+        smooth = np.ones((19, 1), dtype=np.float32)
+        with pytest.raises(ValidationError, match="smooth must be rank 1"):
+            sht.specsmooth(np.zeros((19, 36), dtype=np.float32), smooth)
+
+        grid_out = Spharmt(nlon=72, nlat=37)
+        with pytest.raises(ValidationError, match="regrid needs a rank 2 or 3 array"):
+            regrid(sht, grid_out, np.zeros(19, dtype=np.float32))
+
+        with pytest.raises(
+            ValidationError, match="regrid needs input array of size 19 by 36"
+        ):
+            regrid(sht, grid_out, np.zeros((18, 36), dtype=np.float32))
+
+        with pytest.raises(
+            ValidationError, match="smooth must be rank 1 with size grdout.nlat"
+        ):
+            regrid(
+                sht,
+                grid_out,
+                np.zeros((19, 36), dtype=np.float32),
+                smooth=np.ones((2, 2), dtype=np.float32),
+            )
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_helper_backend_error_branches(self, monkeypatch):
+        """Exercise helper backend failures and validation branches."""
+        with pytest.raises(ValidationError, match="ntrunc must be non-negative"):
+            getspecindx(-1)
+
+        with pytest.raises(ValidationError, match="m must be >= 2"):
+            spharm_mod.getgeodesicpts(1)
+
+        monkeypatch.setattr(
+            spharm_mod._spherepack,
+            "gaqd",
+            lambda nlat: (
+                np.zeros(nlat, dtype=np.float32),
+                np.ones(nlat, dtype=np.float32),
+                5,
+            ),
+        )
+        with pytest.raises(
+            SpheremackError,
+            match="Failed to compute Gaussian latitudes: gaqd failed with error code 5",
+        ):
+            spharm_mod.gaussian_lats_wts(4)
+
+        monkeypatch.setattr(
+            spharm_mod._spherepack,
+            "ihgeod",
+            lambda m: (_ for _ in ()).throw(RuntimeError("bad geodesic backend")),
+        )
+        with pytest.raises(
+            SpheremackError,
+            match="Failed to compute geodesic points: bad geodesic backend",
+        ):
+            spharm_mod.getgeodesicpts(2)
+
+        with pytest.raises(
+            ValidationError, match="lat must be between -90 and 90 degrees"
+        ):
+            spharm_mod.legendre(95.0, 4)
+
+        with pytest.raises(ValidationError, match="ntrunc must be non-negative"):
+            spharm_mod.legendre(45.0, -1)
+
+        monkeypatch.setattr(
+            spharm_mod._spherepack,
+            "getlegfunc",
+            lambda lat, ntrunc: (_ for _ in ()).throw(RuntimeError("legendre backend")),
+        )
+        with pytest.raises(
+            SpheremackError,
+            match="Failed to compute Legendre functions: legendre backend",
+        ):
+            spharm_mod.legendre(30.0, 3)
+
+        dataspec = np.zeros(6, dtype=np.complex64)
+        legfuncs = np.zeros(6, dtype=np.float32)
+        monkeypatch.setattr(
+            spharm_mod._spherepack,
+            "specintrp",
+            lambda lon, ntrunc, spec, funcs: (_ for _ in ()).throw(
+                RuntimeError("interp backend")
+            ),
+        )
+        with pytest.raises(
+            SpheremackError, match="Spectral interpolation failed: interp backend"
+        ):
+            spharm_mod.specintrp(45.0, dataspec, legfuncs)
 
 
 if __name__ == "__main__":
