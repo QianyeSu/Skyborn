@@ -210,8 +210,12 @@ def trop_wmo(
         This is required by the underlying WMO tropopause algorithm.
     xdim : int or str, optional
         Longitude dimension index/name. Auto-detected if None. Not required for 1D profiles.
+        For `(time, level, lat)` cross-sections, the missing longitude axis may be
+        left as None or passed explicitly as -1.
     ydim : int or str, optional
         Latitude dimension index/name. Auto-detected if None. Not required for 1D profiles.
+        For `(time, level, lon)` cross-sections, the missing latitude axis may be
+        left as None or passed explicitly as -1.
     levdim : int or str, optional
         Vertical level dimension index/name. Auto-detected if None.
     timedim : int or str, optional
@@ -278,6 +282,15 @@ def trop_wmo(
     >>> temp_time_lat = ds.temperature.isel(lon=0)  # (time, level, lat)
     >>> result = trop_wmo(temp_time_lat)
     >>> # Result shape: (time, lat)
+    >>>
+    >>> # Explicitly mark the missing horizontal axis if desired
+    >>> result = trop_wmo(
+    ...     temp_time_lat,
+    ...     xdim=None,  # xdim=-1 is also accepted in the xarray wrapper
+    ...     ydim='lat',
+    ...     levdim='level',
+    ...     timedim='time',
+    ... )
 
     **Advanced usage with explicit isobaric pressure:**
 
