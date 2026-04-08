@@ -8,7 +8,7 @@ and height output.
 
 Key Features:
     - WMO tropopause definition implementation
-    - Multi-dimensional array support (3D and 4D)
+    - Multi-dimensional array support (2D, 3D, and 4D)
     - Dimension reordering for arbitrary input layouts
     - Pressure and height calculation
     - Integration with compiled Fortran routines
@@ -59,7 +59,7 @@ def _order_dims_for_fortran(
 ) -> Tuple[np.ndarray, Dict]:
     """
     Reorder array dimensions for Fortran routines.
-    Handles 2D, 3D, and 4D data.
+    Handles 2D, 3D, and 4D data, including time-varying cross-sections.
 
     Parameters
     ----------
@@ -96,7 +96,19 @@ def _order_dims_for_fortran(
         else:
             raise ValueError("2D data must have either lat or lon dimension")
 
-    # For 3D data and above, use standard order: (lat, lon, level, [time])
+    # For 3D time-varying cross-sections, use (spatial, time, level).
+    # This lets the existing 3D Fortran routine treat time as the second
+    # horizontal axis while preserving the vertical axis in the final position.
+    elif (
+        original_ndim == 3
+        and timedim is not None
+        and timedim >= 0
+        and ((xdim >= 0) != (ydim >= 0))
+    ):
+        spatial_dim = ydim if ydim >= 0 else xdim
+        new_order = [spatial_dim, timedim, levdim]
+
+    # For other 3D+ data, use standard order: (lat, lon, level, [time])
     else:
         if ydim >= 0:
             new_order.append(ydim)
@@ -147,7 +159,8 @@ def _restore_dims_from_fortran(
     """
     if remove_level_dim:
         # Output arrays don't have level dimension, adjust inverse order
-        # Remove level dimension index and shift higher indices down
+        # Remove level dimension index and shift higher indices down.
+        # All current multi-dimensional Fortran layouts place level at axis 2.
         inverse_order = []
         levdim_pos = 2  # Level is at position 2 in (lat, lon, level, [time])
 
@@ -292,6 +305,16 @@ def trop_wmo(
     if len(set(dims_to_check)) != len(dims_to_check):
         raise ValueError("Dimension indices must be unique")
 
+    if (
+        ndim == 3
+        and ((xdim >= 0) != (ydim >= 0))
+        and not (timedim is not None and timedim >= 0)
+    ):
+        raise ValueError(
+            "3D temperature arrays with only one spatial dimension must specify "
+            "timedim so time-varying cross-sections can be ordered correctly"
+        )
+
     # Handle masked arrays
     if ma.is_masked(pressure):
         pressure = ma.filled(pressure, missing_value)
@@ -342,7 +365,7 @@ def trop_wmo(
         ntime = None
         is_4d = False
         is_2d = True
-    elif len(shape) == 3:  # 3D data (lat, lon, level)
+    elif len(shape) == 3:  # 3D data (lat, lon, level) or (spatial, time, level)
         nlat, nlon, _ = shape  # level dimension from pressure
         ntime = None
         is_4d = False
