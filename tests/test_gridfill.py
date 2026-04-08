@@ -5,6 +5,8 @@ These tests verify the functionality of the gridfill module for filling
 missing values in gridded data using Poisson equation solvers.
 """
 
+import importlib
+
 import numpy as np
 import numpy.ma as ma
 import pytest
@@ -22,8 +24,31 @@ try:
     )
     from skyborn.gridfill.xarray import fill as xr_fill
     from skyborn.gridfill.xarray import fill_multiple, validate_grid_coverage
+
+    gridfill_module = importlib.import_module("skyborn.gridfill.gridfill")
+    gridfill_xarray_module = importlib.import_module("skyborn.gridfill.xarray")
 except ImportError:
     HAS_XARRAY = False
+
+
+class _FakeCoord:
+    """Minimal coordinate stub for validation-only tests."""
+
+    def __init__(self, values):
+        self.values = np.asarray(values)
+
+    def __len__(self):
+        return len(self.values)
+
+
+class _FakeCoverageData:
+    """Minimal DataArray-like object for validate_grid_coverage tests."""
+
+    def __init__(self, values, dims, coords):
+        self.values = values
+        self.ndim = values.ndim
+        self.dims = dims
+        self.coords = coords
 
 
 class TestGridfill:
@@ -592,6 +617,67 @@ class TestGridfill:
         rmse = np.sqrt(np.mean((filled_values - true_values) ** 2))
         assert rmse < 0.1  # Reasonable error for interpolation
 
+    def test_verbose_reports_slice_convergence_status(self, monkeypatch, capsys):
+        """Test verbose output covers both converged and non-converged slices."""
+        data = np.arange(2 * 4 * 5, dtype=float).reshape(2, 4, 5)
+        mask = np.zeros_like(data, dtype=bool)
+        mask[:, 1, 2] = True
+        masked_data = ma.array(data, mask=mask)
+
+        def fake_poisson_fill_grids(
+            grids,
+            masks,
+            relax,
+            eps,
+            itermax,
+            cyclic,
+            initzonal,
+            initzonal_linear,
+            initial_value,
+        ):
+            return np.array([4, 9], dtype=np.int32), np.array([1.0e-6, 1.0e-2])
+
+        monkeypatch.setattr(
+            gridfill_module, "_poisson_fill_grids", fake_poisson_fill_grids
+        )
+
+        filled, converged = fill(masked_data, xdim=2, ydim=1, eps=1.0e-4, verbose=True)
+        captured = capsys.readouterr().out
+
+        assert filled.shape == data.shape
+        np.testing.assert_array_equal(converged, np.array([True, False]))
+        assert "[0] relaxation converged" in captured
+        assert "[1] relaxation did not converge" in captured
+        assert "maximum residual" in captured
+
+    def test_backend_nonconvergence_is_returned_to_caller(self, monkeypatch):
+        """Test wrapper preserves mixed convergence flags from the backend."""
+        data = np.arange(2 * 3 * 4, dtype=float).reshape(2, 3, 4)
+        mask = np.zeros_like(data, dtype=bool)
+        mask[:, 1, 1] = True
+        masked_data = ma.array(data, mask=mask)
+
+        def fake_poisson_fill_grids(
+            grids,
+            masks,
+            relax,
+            eps,
+            itermax,
+            cyclic,
+            initzonal,
+            initzonal_linear,
+            initial_value,
+        ):
+            return np.array([2, 3], dtype=np.int32), np.array([1.0e-3, 1.0e-8])
+
+        monkeypatch.setattr(
+            gridfill_module, "_poisson_fill_grids", fake_poisson_fill_grids
+        )
+
+        _, converged = fill(masked_data, xdim=2, ydim=1, eps=1.0e-4)
+
+        np.testing.assert_array_equal(converged, np.array([False, True]))
+
 
 @pytest.mark.skipif(not HAS_XARRAY, reason="xarray not available")
 class TestGridfillXArray:
@@ -681,11 +767,93 @@ class TestGridfillXArray:
         assert y_dim == 1
         assert x_dim == 2
 
+    def test_coordinate_detection_uses_axis_attributes(self):
+        """Test coordinate detection falls back to axis metadata."""
+        lons = np.linspace(0, 360, 10, endpoint=False)
+        lats = np.linspace(-80, 80, 8)
+        data = np.random.rand(8, 10)
+        data[2:4, 3:5] = np.nan
+
+        da = xr.DataArray(
+            data,
+            coords={
+                "northing": ("northing", lats, {"axis": "Y"}),
+                "easting": ("easting", lons, {"axis": "X"}),
+            },
+            dims=["northing", "easting"],
+        )
+
+        y_name, x_name, y_dim, x_dim = _find_spatial_coordinates(da)
+
+        assert y_name == "northing"
+        assert x_name == "easting"
+        assert y_dim == 0
+        assert x_dim == 1
+
+    def test_coordinate_detection_uses_units_metadata(self):
+        """Test coordinate detection falls back to coordinate units."""
+        lons = np.linspace(5, 355, 10)
+        lats = np.linspace(-75, 75, 8)
+        data = np.random.rand(8, 10)
+        data[1:3, 4:7] = np.nan
+
+        da = xr.DataArray(
+            data,
+            coords={
+                "row": ("row", lats, {"units": "degrees_north"}),
+                "col": ("col", lons, {"units": "degrees_east"}),
+            },
+            dims=["row", "col"],
+        )
+
+        y_name, x_name, y_dim, x_dim = _find_spatial_coordinates(da)
+
+        assert y_name == "row"
+        assert x_name == "col"
+        assert y_dim == 0
+        assert x_dim == 1
+
+    def test_coordinate_detection_errors_when_coord_names_are_not_dims(self):
+        """Test descriptive error when detected coordinate names are not dimensions."""
+        lons = np.linspace(0, 360, 10, endpoint=False)
+        lats = np.linspace(-80, 80, 8)
+
+        da = xr.DataArray(
+            np.random.rand(8, 10),
+            coords={
+                "latitude": ("row", lats, {"standard_name": "latitude"}),
+                "longitude": ("col", lons, {"standard_name": "longitude"}),
+            },
+            dims=["row", "col"],
+        )
+
+        with pytest.raises(ValueError, match="Coordinate dimension not found"):
+            _find_spatial_coordinates(da)
+
     def test_cyclic_detection(self, global_data):
         """Test automatic cyclic boundary detection."""
         lon_coord = global_data.coords["lon"]
         cyclic = _detect_cyclic_longitude(lon_coord)
         assert cyclic is True
+
+    def test_cyclic_detection_honors_circular_attribute(self):
+        """Test cyclic detection accepts an explicit circular attribute."""
+        lon_coord = xr.DataArray(np.array([20.0, 40.0, 60.0]), dims=["lon"])
+        lon_coord.attrs["circular"] = True
+
+        assert _detect_cyclic_longitude(lon_coord) is True
+
+    def test_cyclic_detection_accepts_near_zero_to_360_range(self):
+        """Test cyclic detection catches near-global 0-360 coordinates."""
+        lon_coord = xr.DataArray(np.array([5.0, 120.0, 240.0, 355.0]), dims=["lon"])
+
+        assert _detect_cyclic_longitude(lon_coord) is True
+
+    def test_cyclic_detection_accepts_near_minus180_to_180_range(self):
+        """Test cyclic detection catches near-global -180 to 180 coordinates."""
+        lon_coord = xr.DataArray(np.array([-175.0, -60.0, 60.0, 175.0]), dims=["lon"])
+
+        assert _detect_cyclic_longitude(lon_coord) is True
 
     def test_xarray_fill_basic(self, sample_data):
         """Test basic xarray fill operation."""
@@ -792,6 +960,9 @@ class TestGridfillXArray:
         with pytest.raises(ValueError, match="x_dim 'invalid' not found"):
             xr_fill(sample_data, eps=1e-3, x_dim="invalid", y_dim="lat")
 
+        with pytest.raises(ValueError, match="y_dim 'invalid' not found"):
+            xr_fill(sample_data, eps=1e-3, x_dim="lon", y_dim="invalid")
+
     def test_xarray_missing_coordinates(self):
         """Test error handling when spatial coordinates cannot be found."""
         # Create DataArray without recognizable spatial coordinates
@@ -847,6 +1018,34 @@ class TestGridfillXArray:
         assert isinstance(filled, xr.DataArray)
         # Check that previously masked values are now filled
         assert not np.any(ma.getmask(filled.values))
+
+    def test_xarray_fill_auto_detected_cyclic_verbose_message(
+        self, global_data, monkeypatch, capsys
+    ):
+        """Test auto-detected cyclic state is announced when verbose=True."""
+
+        def fake_fill(
+            masked_data,
+            xdim,
+            ydim,
+            eps,
+            relax=0.6,
+            itermax=100,
+            initzonal=False,
+            initzonal_linear=False,
+            cyclic=False,
+            initial_value=0.0,
+            verbose=False,
+        ):
+            return np.asarray(masked_data.filled(0.0)), np.array([True])
+
+        monkeypatch.setattr(gridfill_xarray_module.gridfill, "fill", fake_fill)
+
+        filled = xr_fill(global_data, eps=1e-3, cyclic=None, verbose=True)
+        captured = capsys.readouterr().out
+
+        assert isinstance(filled, xr.DataArray)
+        assert "Auto-detected cyclic=True" in captured
 
     def test_xarray_convergence_warning(self):
         """Test warning when algorithm doesn't converge."""
@@ -928,6 +1127,73 @@ class TestGridfillXArray:
             msg for msg in validation["messages"] if "regular" in msg.lower()
         ]
         assert len(irregular_messages) > 0
+
+    def test_xarray_validation_reports_low_slice_coverage(self):
+        """Test validation reports under-covered slices in higher-dimensional data."""
+        lons = np.linspace(0, 360, 5, endpoint=False)
+        lats = np.linspace(-60, 60, 4)
+        time = np.arange(2)
+
+        data = np.random.rand(2, 4, 5)
+        data[1, :, :] = np.nan
+        data[1, 0, :2] = 1.0
+
+        da = xr.DataArray(
+            data,
+            coords={
+                "time": time,
+                "lat": ("lat", lats, {"standard_name": "latitude"}),
+                "lon": ("lon", lons, {"standard_name": "longitude"}),
+            },
+            dims=["time", "lat", "lon"],
+        )
+
+        validation = validate_grid_coverage(da, min_coverage=0.5)
+
+        assert any(
+            "Some slices have insufficient coverage" in msg
+            for msg in validation["messages"]
+        )
+
+    def test_xarray_validation_reports_irregular_y_spacing(self):
+        """Test validation reports irregular spacing along the y coordinate."""
+        lons = np.linspace(0, 360, 8, endpoint=False)
+        lats = np.array([-60.0, -20.0, 0.0, 35.0, 60.0])
+        data = np.random.rand(5, 8)
+        data[1:3, 2:5] = np.nan
+
+        da = xr.DataArray(
+            data,
+            coords={
+                "lat": ("lat", lats, {"standard_name": "latitude"}),
+                "lon": ("lon", lons, {"standard_name": "longitude"}),
+            },
+            dims=["lat", "lon"],
+        )
+
+        validation = validate_grid_coverage(da)
+
+        assert "Y-coordinate spacing is not regular" in validation["messages"]
+
+    def test_xarray_validation_uses_masked_array_mask(self):
+        """Test validation honors masked-array masks when values expose one."""
+        values = ma.array(
+            [[1.0, 2.0], [3.0, 4.0]],
+            mask=[[False, True], [False, False]],
+        )
+        fake = _FakeCoverageData(
+            values=values,
+            dims=("lat", "lon"),
+            coords={
+                "lat": _FakeCoord([-10.0, 10.0]),
+                "lon": _FakeCoord([0.0, 20.0]),
+            },
+        )
+
+        validation = validate_grid_coverage(fake, x_dim="lon", y_dim="lat")
+
+        assert validation["missing_points"] == 1
+        assert validation["coverage"] == pytest.approx(0.75)
 
     def test_xarray_single_missing_point(self):
         """Test with only a single missing point."""
