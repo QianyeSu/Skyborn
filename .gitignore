@@ -64,6 +64,7 @@ venv.bak/
 .codex/
 .vscode/
 .idea/
+openspec/
 *.swp
 *.swo
 
