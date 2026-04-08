@@ -4,6 +4,8 @@ WMO tropopause calculation for xarray DataArrays.
 This module provides functions to calculate tropopause properties from xarray
 DataArrays using the WMO definition. It automatically detects spatial coordinates
 and preserves coordinate information and metadata throughout the computation process.
+In addition to full latitude-longitude grids, it supports time-varying meridional
+or zonal cross-sections such as `(time, level, lat)` and `(time, level, lon)`.
 
 *** DATA REQUIREMENTS ***
 - CRITICAL: This function requires ISOBARIC (constant pressure level) data
@@ -48,7 +50,8 @@ def _detect_atmospheric_dimensions(
 ) -> Tuple[Optional[int], Optional[int], int, Optional[int]]:
     """
     Auto-detect dimension indices for atmospheric data in xarray DataArray.
-    Supports 2D, 3D, and 4D data.
+    Supports 1D profiles, 2D cross-sections, 3D grids or time-varying
+    cross-sections, and 4D time-varying grids.
 
     Parameters
     ----------
@@ -111,7 +114,7 @@ def _detect_atmospheric_dimensions(
         "PRESSURE_LEVEL",
         "PRESSURE",
     }
-    time_names = {"time", "t", "T", "year", "month", "yr", "mn", "season"}
+    time_names = {"time", "t", "year", "month", "yr", "mn", "season"}
 
     xdim = ydim = levdim = timedim = None
 
@@ -124,7 +127,7 @@ def _detect_atmospheric_dimensions(
             ydim = i
         elif any(name in dim_lower for name in lev_names):
             levdim = i
-        elif any(name in dim_lower for name in time_names):
+        elif dim_lower in time_names:
             timedim = i
 
     # Level dimension is required
@@ -146,8 +149,20 @@ def _detect_atmospheric_dimensions(
                 f"For 2D data, need at least one spatial dimension (lat or lon). "
                 f"Found dims: {dims}"
             )
-    elif ndim >= 3:
-        # 3D+ data - need both lat and lon dimensions
+    elif ndim == 3:
+        has_full_horizontal_grid = xdim is not None and ydim is not None
+        has_time_cross_section = timedim is not None and (
+            xdim is not None or ydim is not None
+        )
+
+        if not (has_full_horizontal_grid or has_time_cross_section):
+            raise ValueError(
+                f"For 3D data, need both lat and lon dimensions unless one dimension is time. "
+                f"Found dims: {dims}. "
+                f"Please specify xdim and ydim explicitly."
+            )
+    elif ndim >= 4:
+        # 4D+ data - need both lat and lon dimensions
         if xdim is None or ydim is None:
             raise ValueError(
                 f"For {ndim}D data, need both lat and lon dimensions. Found dims: {dims}. "
@@ -183,7 +198,9 @@ def trop_wmo(
     ----------
     temperature : xarray.DataArray
         Atmospheric temperature data [K] on isobaric (constant pressure) levels.
-        Can be 1D profile, 2D, 3D, or 4D array.
+        Can be a 1D profile, a 2D `(level, lat)` / `(level, lon)` cross-section,
+        a 3D `(level, lat, lon)` grid or `(time, level, lat)` / `(time, level, lon)`
+        time-varying cross-section, or a 4D `(time, level, lat, lon)` array.
         Must have level coordinate (for pressure generation) if pressure is not provided.
     pressure : xarray.DataArray, optional
         Atmospheric pressure data [hPa or Pa] on isobaric levels. If None, will be
@@ -255,6 +272,12 @@ def trop_wmo(
     >>> temp_2d = ds.temperature.isel(time=0, lon=0)  # (level, lat) - isobaric levels
     >>> result = trop_wmo(temp_2d)
     >>> # Result shape: (lat,)
+
+    **3D Time-Varying Cross-section (Isobaric Data):**
+
+    >>> temp_time_lat = ds.temperature.isel(lon=0)  # (time, level, lat)
+    >>> result = trop_wmo(temp_time_lat)
+    >>> # Result shape: (time, lat)
 
     **Advanced usage with explicit isobaric pressure:**
 
