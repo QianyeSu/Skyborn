@@ -57,6 +57,26 @@ class TestDetectAtmosphericDimensions:
         assert levdim == 0
         assert timedim is None
 
+    def test_3d_time_level_lat(self):
+        """Test 3D time-varying meridional section data."""
+        temp = xr.DataArray(np.random.rand(12, 5, 10), dims=["time", "level", "lat"])
+        xdim, ydim, levdim, timedim = _detect_atmospheric_dimensions(temp)
+
+        assert xdim is None
+        assert ydim == 2
+        assert levdim == 1
+        assert timedim == 0
+
+    def test_3d_time_level_lon(self):
+        """Test 3D time-varying zonal section data."""
+        temp = xr.DataArray(np.random.rand(12, 5, 10), dims=["time", "level", "lon"])
+        xdim, ydim, levdim, timedim = _detect_atmospheric_dimensions(temp)
+
+        assert xdim == 2
+        assert ydim is None
+        assert levdim == 1
+        assert timedim == 0
+
     def test_4d_time_level_lat_lon(self):
         """Test 4D data with time, level, lat, lon."""
         temp = xr.DataArray(
@@ -400,6 +420,70 @@ class TestTropWmoMultiDimensional:
         mock_trop.assert_called_once()
         assert result.pressure.dims == ("time", "lat", "lon")
         assert result.pressure.shape == (self.ntime, self.nlat, self.nlon)
+
+    @patch("skyborn.calc.troposphere.tropopause.trop_wmo")
+    def test_3d_time_lat_cross_section(self, mock_trop):
+        """Test (time, level, lat) cross-section processing."""
+        temp_time_lat = xr.DataArray(
+            300 - np.random.rand(self.ntime, self.nlev, self.nlat) * 80,
+            dims=["time", "level", "lat"],
+            coords={
+                "time": pd.date_range("2000-01-01", periods=self.ntime, freq="ME"),
+                "level": self.pressure_levels,
+                "lat": np.linspace(-45, 45, self.nlat),
+            },
+        )
+
+        mock_trop.return_value = {
+            "pressure": np.random.rand(self.ntime, self.nlat) * 200 + 100,
+            "height": np.random.rand(self.ntime, self.nlat) * 5000 + 8000,
+            "level_index": np.random.randint(0, self.nlev, (self.ntime, self.nlat)),
+            "lapse_rate": np.random.rand(self.ntime, self.nlat) * 3,
+            "success": np.ones((self.ntime, self.nlat), dtype=bool),
+        }
+
+        result = trop_wmo(temp_time_lat)
+
+        mock_trop.assert_called_once()
+        call_args = mock_trop.call_args[1]
+        assert call_args["xdim"] == -1
+        assert call_args["ydim"] == 2
+        assert call_args["levdim"] == 1
+        assert call_args["timedim"] == 0
+        assert result.pressure.dims == ("time", "lat")
+        assert result.pressure.shape == (self.ntime, self.nlat)
+
+    @patch("skyborn.calc.troposphere.tropopause.trop_wmo")
+    def test_3d_time_lon_cross_section(self, mock_trop):
+        """Test (time, level, lon) cross-section processing."""
+        temp_time_lon = xr.DataArray(
+            300 - np.random.rand(self.ntime, self.nlev, self.nlon) * 80,
+            dims=["time", "level", "lon"],
+            coords={
+                "time": pd.date_range("2000-01-01", periods=self.ntime, freq="ME"),
+                "level": self.pressure_levels,
+                "lon": np.linspace(0, 360, self.nlon),
+            },
+        )
+
+        mock_trop.return_value = {
+            "pressure": np.random.rand(self.ntime, self.nlon) * 200 + 100,
+            "height": np.random.rand(self.ntime, self.nlon) * 5000 + 8000,
+            "level_index": np.random.randint(0, self.nlev, (self.ntime, self.nlon)),
+            "lapse_rate": np.random.rand(self.ntime, self.nlon) * 3,
+            "success": np.ones((self.ntime, self.nlon), dtype=bool),
+        }
+
+        result = trop_wmo(temp_time_lon)
+
+        mock_trop.assert_called_once()
+        call_args = mock_trop.call_args[1]
+        assert call_args["xdim"] == 2
+        assert call_args["ydim"] == -1
+        assert call_args["levdim"] == 1
+        assert call_args["timedim"] == 0
+        assert result.pressure.dims == ("time", "lon")
+        assert result.pressure.shape == (self.ntime, self.nlon)
 
     def test_explicit_dimension_specification(self):
         """Test with explicitly specified dimensions."""
