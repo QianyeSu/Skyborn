@@ -19,7 +19,10 @@ except ImportError:
     xr = None
 
 if XARRAY_AVAILABLE:
+    from skyborn.windspharm import xarray as xarray_mod
     from skyborn.windspharm.xarray import VectorWind
+else:
+    xarray_mod = None
 
 
 @pytest.mark.skipif(not XARRAY_AVAILABLE, reason="xarray not available")
@@ -749,3 +752,91 @@ class TestXarraySpecialOperations:
         assert "time" in vort_trunc.coords
         assert "lat" in vort_trunc.coords
         assert "lon" in vort_trunc.coords
+
+
+@pytest.mark.skipif(not XARRAY_AVAILABLE, reason="xarray not available")
+class TestXarrayTargetedCoverage:
+    """Targeted regression tests for uncovered xarray branches."""
+
+    def test_gradient_and_truncate_reverse_south_to_north_fields(self):
+        """Exercise latitude-reversal branches in gradient and truncate."""
+        lat = np.linspace(-90.0, 90.0, 19)
+        lon = np.linspace(0.0, 357.5, 36)
+        u = xr.DataArray(
+            np.random.randn(19, 36),
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+        )
+        v = xr.DataArray(
+            np.random.randn(19, 36),
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+        )
+        vw = VectorWind(u, v)
+
+        scalar = xr.DataArray(
+            np.random.randn(19, 36),
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+            name="temperature",
+        )
+
+        grad_u, grad_v = vw.gradient(scalar)
+        assert isinstance(grad_u, xr.DataArray)
+        assert isinstance(grad_v, xr.DataArray)
+        assert grad_u.coords["lat"].values[0] > grad_u.coords["lat"].values[-1]
+        assert grad_u.name == "zonal_gradient_of_temperature"
+        assert grad_v.name == "meridional_gradient_of_temperature"
+
+        trunc = vw.truncate(scalar, truncation=10)
+        assert isinstance(trunc, xr.DataArray)
+        assert trunc.coords["lat"].values[0] > trunc.coords["lat"].values[-1]
+
+    def test_find_coord_and_dim_error_paths(self):
+        """Exercise coordinate lookup failure branches directly."""
+        plain = xr.DataArray(np.ones((2, 3)), dims=["row", "col"])
+        with pytest.raises(ValueError, match="Cannot find a latitude coordinate"):
+            xarray_mod._find_latitude_coordinate(plain)
+
+        multi_lat = xr.DataArray(
+            np.ones((2, 3)),
+            dims=["lat", "aux_lat"],
+            coords={
+                "lat": xr.DataArray(
+                    [90.0, -90.0], dims=["lat"], attrs={"units": "degrees_north"}
+                ),
+                "aux_lat": xr.DataArray(
+                    [80.0, -80.0, 0.0],
+                    dims=["aux_lat"],
+                    attrs={"axis": "Y"},
+                ),
+            },
+        )
+        with pytest.raises(
+            ValueError, match="Multiple latitude coordinates are not allowed"
+        ):
+            xarray_mod._find_latitude_coordinate(multi_lat)
+
+    def test_axis_metadata_coordinate_detection(self):
+        """Latitude/longitude discovery should work from axis metadata."""
+        y = xr.DataArray(
+            np.linspace(-90.0, 90.0, 19),
+            dims=["y"],
+            attrs={"axis": "Y"},
+        )
+        x = xr.DataArray(
+            np.linspace(0.0, 357.5, 36),
+            dims=["x"],
+            attrs={"axis": "X"},
+        )
+        u = xr.DataArray(
+            np.random.randn(19, 36), dims=["y", "x"], coords={"y": y, "x": x}
+        )
+        v = xr.DataArray(
+            np.random.randn(19, 36), dims=["y", "x"], coords={"y": y, "x": x}
+        )
+
+        vw = VectorWind(u, v)
+        vort = vw.vorticity()
+        assert isinstance(vort, xr.DataArray)
+        assert vort.dims == ("y", "x")
