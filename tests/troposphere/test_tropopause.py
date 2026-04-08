@@ -67,6 +67,26 @@ class TestOrderDimsForFortran:
         assert ordered_grid.shape == (10, 15, 5)
         assert info["new_order"] == [1, 2, 0]
 
+    def test_3d_time_level_lat_ordering(self):
+        """Test 3D array ordering (time, level, lat) -> (lat, time, level)."""
+        grid = np.random.rand(12, 5, 10)  # (time, level, lat)
+        xdim, ydim, levdim, timedim = -1, 2, 1, 0
+
+        ordered_grid, info = _order_dims_for_fortran(grid, xdim, ydim, levdim, timedim)
+
+        assert ordered_grid.shape == (10, 12, 5)
+        assert info["new_order"] == [2, 0, 1]
+
+    def test_3d_time_level_lon_ordering(self):
+        """Test 3D array ordering (time, level, lon) -> (lon, time, level)."""
+        grid = np.random.rand(12, 5, 15)  # (time, level, lon)
+        xdim, ydim, levdim, timedim = 2, -1, 1, 0
+
+        ordered_grid, info = _order_dims_for_fortran(grid, xdim, ydim, levdim, timedim)
+
+        assert ordered_grid.shape == (15, 12, 5)
+        assert info["new_order"] == [2, 0, 1]
+
     def test_4d_with_time_ordering(self):
         """Test 4D array ordering (time, level, lat, lon) -> (lat, lon, level, time)."""
         grid = np.random.rand(12, 5, 10, 15)  # (time, level, lat, lon)
@@ -193,6 +213,16 @@ class TestTropWmoInputValidation:
 
         with pytest.raises(ValueError, match="Dimension indices must be unique"):
             trop_wmo(temperature, pressure, xdim=1, ydim=1, levdim=0)
+
+    def test_3d_single_spatial_requires_timedim(self):
+        """Test that 3D time-varying sections must provide timedim."""
+        temperature = np.random.rand(12, 5, 10)  # (time, level, lat)
+        pressure = np.array([100, 200, 300, 500, 700])
+
+        with pytest.raises(
+            ValueError, match="must specify timedim so time-varying cross-sections"
+        ):
+            trop_wmo(temperature, pressure, xdim=-1, ydim=2, levdim=1)
 
     def test_unsupported_data_shape(self):
         """Test error for unsupported data shapes."""
@@ -468,6 +498,69 @@ class TestTropWmo3DData:
         # Output should match original spatial dimensions
         assert result["pressure"].shape == (10, 15)  # (lat, lon)
         mock_fortran.assert_called_once()
+
+
+class TestTropWmo3DTimeCrossSections:
+    """Test trop_wmo function with time-varying 3D cross-sections."""
+
+    def setup_method(self):
+        """Set up 3D time-cross-section test data."""
+        self.pressure = np.array([100, 200, 300, 500, 700, 850, 1000])
+        self.ntime = 12
+        self.nlat = 10
+        self.nlon = 15
+        self.temp_time_lat = np.random.rand(self.ntime, 7, self.nlat) * 50 + 250
+        self.temp_time_lon = np.random.rand(self.ntime, 7, self.nlon) * 50 + 250
+
+    @patch("skyborn.calc.troposphere.tropopause_height.tropopause_grid_3d")
+    def test_3d_time_level_lat_processing(self, mock_fortran):
+        """Test (time, level, lat) processing via the 3D grid routine."""
+        mock_fortran.return_value = (
+            np.random.rand(self.nlat, self.ntime) * 200 + 100,  # (lat, time)
+            np.random.rand(self.nlat, self.ntime) * 5000 + 8000,
+            np.random.randint(0, 7, (self.nlat, self.ntime)),
+            np.random.rand(self.nlat, self.ntime) * 3,
+            np.ones((self.nlat, self.ntime), dtype=bool),
+        )
+
+        result = trop_wmo(
+            self.temp_time_lat,
+            self.pressure,
+            xdim=-1,
+            ydim=2,
+            levdim=1,
+            timedim=0,
+        )
+
+        assert result["pressure"].shape == (self.ntime, self.nlat)
+        mock_fortran.assert_called_once()
+        temp_passed = mock_fortran.call_args[0][2]
+        assert temp_passed.shape == (self.nlat, self.ntime, 7)
+
+    @patch("skyborn.calc.troposphere.tropopause_height.tropopause_grid_3d")
+    def test_3d_time_level_lon_processing(self, mock_fortran):
+        """Test (time, level, lon) processing via the 3D grid routine."""
+        mock_fortran.return_value = (
+            np.random.rand(self.nlon, self.ntime) * 200 + 100,  # (lon, time)
+            np.random.rand(self.nlon, self.ntime) * 5000 + 8000,
+            np.random.randint(0, 7, (self.nlon, self.ntime)),
+            np.random.rand(self.nlon, self.ntime) * 3,
+            np.ones((self.nlon, self.ntime), dtype=bool),
+        )
+
+        result = trop_wmo(
+            self.temp_time_lon,
+            self.pressure,
+            xdim=2,
+            ydim=-1,
+            levdim=1,
+            timedim=0,
+        )
+
+        assert result["pressure"].shape == (self.ntime, self.nlon)
+        mock_fortran.assert_called_once()
+        temp_passed = mock_fortran.call_args[0][2]
+        assert temp_passed.shape == (self.nlon, self.ntime, 7)
 
 
 class TestTropWmo4DData:
