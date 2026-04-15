@@ -17,6 +17,14 @@ Troposphere
 * Added focused regression coverage for the new NumPy-core and xarray wrapper
   paths.
 
+Scatter Stippling
+
+* Improved ``skyborn.plot.scatter`` so masked rectilinear grids now default to
+  NCL-like cell-interior stippling before display-space thinning, allowing
+  month-lat and other coarse cross-sections to place dots between coordinate
+  centers while preserving ``placement="points"`` for the original node-based
+  behavior.
+
 Version 0.3.19 (Current)
 ------------------------
 
@@ -30,11 +38,6 @@ Scatter Stippling
 * Implemented the public scatter entry point in its own
   ``skyborn.plot.scatter`` module so the display-space thinning logic stays
   isolated and easier to maintain.
-* Improved ``skyborn.plot.scatter`` so masked rectilinear grids now default to
-  NCL-like cell-interior stippling before display-space thinning, allowing
-  month-lat and other coarse cross-sections to place dots between coordinate
-  centers while preserving ``placement="points"`` for the original node-based
-  behavior.
 * Added ``skyborn.plot.vector`` as the unified public facade for the
   curly-vector feature family:
 
