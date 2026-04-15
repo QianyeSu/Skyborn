@@ -22,6 +22,12 @@ from skyborn.plot._adapters.cartopy_vector import (
 from skyborn.plot._adapters.curly_vector_entry import (
     _prepare_curly_vector_dataset_inputs_impl,
 )
+from skyborn.plot._adapters.dataset_vector import (
+    _extract_curly_vector_dataset_source,
+    _get_plot_dataarray,
+    _prepare_dataset_style_field,
+    _transpose_2d_dataarray_to_dims,
+)
 from skyborn.plot._adapters.grid_prepare import (
     _build_curvilinear_target_grid,
     _maybe_as_scalar_field,
@@ -39,6 +45,7 @@ from skyborn.plot._artists.vector_artists import (
     _trim_curve_for_open_head,
     _uses_open_arrow_head,
 )
+from skyborn.plot._artists.vector_key_artist import CurlyVectorKey
 from skyborn.plot._core.geometry import (
     _acceptable_ncl_display_curve,
     _candidate_data_from_display_step,
@@ -70,6 +77,13 @@ from skyborn.plot._core.sampling import (
     _sample_grid_field_array_python,
     _sample_grid_field_python,
 )
+from skyborn.plot._core.scatter_engine import (
+    _generate_cell_candidates,
+    _resolve_placement,
+    _scatter_impl,
+    _subset_scatter_value,
+)
+from skyborn.plot._core.thinning import _thin_ncl_mapped_candidates
 from skyborn.plot._core.vector_engine import (
     Grid,
     _build_ncl_curve,
@@ -100,10 +114,17 @@ from skyborn.plot._shared.style import (
     _collect_named_kwargs,
     _curly_head_axes_dimensions,
     _normalize_artist_alpha,
+    _normalize_curly_pivot,
     _normalize_supported_arrowstyle,
     _resolve_curly_anchor_alias,
     _resolve_curly_style_aliases,
     _resolve_scatter_aliases,
+)
+from skyborn.plot.scatter import scatter as public_scatter
+from skyborn.plot.vector import (
+    _array_curly_vector,
+    _regrid_non_uniform_vectors_to_uniform,
+    curly_vector,
 )
 
 
@@ -123,6 +144,18 @@ class _BadTransform:
 
 def _make_test_grid() -> Grid:
     return Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0, 2.0]))
+
+
+def _make_mock_key_set(*, arrowstyle: str = "->") -> Mock:
+    plot_set = Mock(spec=CurlyVectorPlotSet)
+    plot_set.resolution = 0.5
+    plot_set.magnitude = np.array([[1.0, 2.0], [3.0, 4.0]])
+    plot_set.max_magnitude = 10.0
+    plot_set.ref_length_fraction = 0.12
+    plot_set.arrowstyle = arrowstyle
+    plot_set.arrowsize = 1.0
+    plot_set.glyph_length_axes_fraction.side_effect = lambda value: float(value) / 100.0
+    return plot_set
 
 
 class TestCartopyVectorHelpers:
@@ -2082,3 +2115,555 @@ class TestResultHelpers:
         empty = self._make_plot_set(magnitude=[[np.nan]])
         assert empty.max_magnitude is None
         assert empty.glyph_length_axes_fraction(1.0) == pytest.approx(0.0)
+
+
+class TestDatasetVectorCoverage:
+    def test_dataset_vector_helpers_cover_remaining_validation_paths(self):
+        ds = xr.Dataset({"u": (("lat", "lon"), np.ones((2, 3)))})
+        dataarray = _get_plot_dataarray(ds, ds["u"], role="u")
+        assert dataarray.identical(ds["u"])
+
+        with pytest.raises(ValueError, match="2D array before plotting"):
+            _transpose_2d_dataarray_to_dims(
+                xr.DataArray(np.array([1.0, 2.0]), dims=("lon",)),
+                ("lat", "lon"),
+                role="v",
+            )
+
+        x = xr.DataArray(np.array([0.0, 1.0, 2.0]), dims=("lon",))
+        y = xr.DataArray(np.array([10.0, 20.0]), dims=("lat",))
+        u = xr.DataArray(np.arange(6.0).reshape(2, 3), dims=("lat", "lon"))
+        v = xr.DataArray(np.arange(6.0, 12.0).reshape(2, 3), dims=("lat", "lon"))
+
+        x_out, y_out, u_out, v_out = _extract_curly_vector_dataset_source(
+            xr.Dataset(),
+            x,
+            y,
+            u,
+            v,
+        )
+        np.testing.assert_allclose(x_out, x.values)
+        np.testing.assert_allclose(y_out, y.values)
+        np.testing.assert_allclose(u_out, u.values)
+        np.testing.assert_allclose(v_out, v.values)
+
+        with pytest.raises(ValueError, match="share the same 2D shape"):
+            _extract_curly_vector_dataset_source(
+                xr.Dataset(),
+                x,
+                y,
+                u,
+                xr.DataArray(np.ones((3, 3)), dims=("lat", "lon")),
+            )
+
+        with pytest.raises(ValueError, match="does not match the rectilinear x/y grid"):
+            _extract_curly_vector_dataset_source(
+                xr.Dataset(),
+                xr.DataArray(np.array([0.0, 1.0, 2.0, 3.0]), dims=("lon",)),
+                y,
+                u,
+                v,
+            )
+
+        with pytest.raises(ValueError, match="same shape"):
+            _extract_curly_vector_dataset_source(
+                xr.Dataset(),
+                xr.DataArray(np.arange(6.0).reshape(2, 3), dims=("lat", "lon")),
+                xr.DataArray(np.arange(4.0).reshape(2, 2), dims=("lat", "lon")),
+                u,
+                v,
+            )
+
+        with pytest.raises(ValueError, match="must match the u/v shape"):
+            _extract_curly_vector_dataset_source(
+                xr.Dataset(),
+                xr.DataArray(np.arange(4.0).reshape(2, 2), dims=("lat", "lon")),
+                xr.DataArray(np.arange(4.0).reshape(2, 2), dims=("lat", "lon")),
+                u,
+                v,
+            )
+
+    def test_prepare_dataset_style_field_handles_1d_dataarray_and_shape_mismatch(self):
+        from_dataarray = _prepare_dataset_style_field(
+            xr.DataArray(np.array([1.0, 2.0, 3.0]), dims=("lon",)),
+            isel=None,
+            expected_shape=(3,),
+            vector_dims=("lat", "lon"),
+            x_descending=False,
+            y_descending=False,
+            role="color",
+        )
+        np.testing.assert_allclose(from_dataarray, np.array([1.0, 2.0, 3.0]))
+
+        original = np.arange(4.0).reshape(2, 2)
+        returned = _prepare_dataset_style_field(
+            original,
+            isel=None,
+            expected_shape=(2, 3),
+            vector_dims=("lat", "lon"),
+            x_descending=False,
+            y_descending=False,
+            role="linewidth",
+        )
+        assert returned is original
+
+
+class TestScatterCoverage:
+    def test_public_scatter_argument_validation(self):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            with pytest.raises(
+                TypeError, match="expects at least x and y positional arguments"
+            ):
+                public_scatter()
+
+            with pytest.raises(TypeError, match="requires x and y arguments"):
+                public_scatter(ax, np.array([0.0, 1.0]))
+
+            with pytest.raises(
+                TypeError, match="received too many positional arguments"
+            ):
+                public_scatter(
+                    ax,
+                    np.array([0.0, 1.0]),
+                    np.array([0.0, 1.0]),
+                    5.0,
+                    "k",
+                    "extra",
+                )
+        finally:
+            plt.close(fig)
+
+    def test_scatter_engine_helpers_cover_remaining_branches(self):
+        assert (
+            _resolve_placement(
+                None,
+                grid_like=False,
+                where=None,
+                mask=None,
+                distance=None,
+                cell_geometry=None,
+            )
+            == "points"
+        )
+
+        with pytest.raises(ValueError, match="placement must be one of"):
+            _resolve_placement(
+                "invalid",
+                grid_like=True,
+                where=None,
+                mask=None,
+                distance=None,
+                cell_geometry={"kind": np.array("rectilinear")},
+            )
+
+        with pytest.raises(
+            ValueError, match="placement='cells' requires gridded coordinates"
+        ):
+            _resolve_placement(
+                "cells",
+                grid_like=True,
+                where=np.array([[True]]),
+                mask=None,
+                distance=None,
+                cell_geometry=None,
+            )
+
+        candidate_shape = (2, 2)
+        source_indices = np.array([0, 2], dtype=int)
+        candidate_source_positions = np.array([1, 0, 1], dtype=int)
+        retained_indices = np.array([2], dtype=int)
+
+        flattened = _subset_scatter_value(
+            np.array([0.0, 1.0, 2.0, 3.0]),
+            candidate_shape=candidate_shape,
+            source_indices=source_indices,
+            candidate_source_positions=candidate_source_positions,
+            retained_indices=retained_indices,
+            target_dims=None,
+        )
+        np.testing.assert_allclose(flattened, np.array([2.0]))
+
+        generated = _subset_scatter_value(
+            np.array([10.0, 11.0, 12.0]),
+            candidate_shape=candidate_shape,
+            source_indices=source_indices,
+            candidate_source_positions=candidate_source_positions,
+            retained_indices=retained_indices,
+            target_dims=None,
+        )
+        np.testing.assert_allclose(generated, np.array([12.0]))
+
+        odd = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+        assert (
+            _subset_scatter_value(
+                odd,
+                candidate_shape=candidate_shape,
+                source_indices=source_indices,
+                candidate_source_positions=candidate_source_positions,
+                retained_indices=retained_indices,
+                target_dims=None,
+            )
+            is odd
+        )
+
+    def test_generate_cell_candidates_and_scatter_impl_cover_error_paths(self):
+        bbox_axes = SimpleNamespace(bbox=Bbox.from_bounds(0.0, 0.0, 100.0, 100.0))
+        rect_geometry = {
+            "kind": np.array("rectilinear"),
+            "x_edges": np.array([0.0, 1.0]),
+            "y_edges": np.array([0.0, 1.0]),
+        }
+
+        empty_points, empty_sources = _generate_cell_candidates(
+            ax=bbox_axes,
+            transform=Affine2D(),
+            source_points=np.empty((0, 2), dtype=float),
+            source_indices=np.empty(0, dtype=int),
+            candidate_shape=(1, 1),
+            cell_geometry=rect_geometry,
+            spacing_fraction=0.1,
+        )
+        assert empty_points.shape == (0, 2)
+        assert empty_sources.shape == (0,)
+
+        with pytest.raises(ValueError, match="Unsupported cell geometry kind"):
+            _generate_cell_candidates(
+                ax=bbox_axes,
+                transform=Affine2D(),
+                source_points=np.array([[0.5, 0.5]]),
+                source_indices=np.array([0], dtype=int),
+                candidate_shape=(1, 1),
+                cell_geometry={"kind": np.array("weird")},
+                spacing_fraction=0.1,
+            )
+
+        fallback_points, fallback_sources = _generate_cell_candidates(
+            ax=bbox_axes,
+            transform=_BadTransform(),
+            source_points=np.array([[0.5, 0.5]]),
+            source_indices=np.array([0], dtype=int),
+            candidate_shape=(1, 1),
+            cell_geometry=rect_geometry,
+            spacing_fraction=0.1,
+        )
+        np.testing.assert_allclose(fallback_points, np.array([[0.5, 0.5]]))
+        np.testing.assert_array_equal(fallback_sources, np.array([0]))
+
+        with patch(
+            "skyborn.plot._core.scatter_engine._map_ncl_display_points_to_viewport",
+            return_value=np.full((4, 2), np.nan),
+        ):
+            nan_points, nan_sources = _generate_cell_candidates(
+                ax=bbox_axes,
+                transform=Affine2D(),
+                source_points=np.array([[0.5, 0.5]]),
+                source_indices=np.array([0], dtype=int),
+                candidate_shape=(1, 1),
+                cell_geometry=rect_geometry,
+                spacing_fraction=0.1,
+            )
+        np.testing.assert_allclose(nan_points, np.array([[0.5, 0.5]]))
+        np.testing.assert_array_equal(nan_sources, np.array([0]))
+
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            empty_collection = _scatter_impl(
+                ax, np.array([np.nan]), np.array([0.0]), zorder=7.0
+            )
+            assert empty_collection.get_zorder() == pytest.approx(7.0)
+
+            collection = _scatter_impl(
+                ax,
+                np.array([0.0, 1.0]),
+                np.array([0.0, 1.0]),
+                zorder=5.0,
+            )
+            assert collection.get_zorder() == pytest.approx(5.0)
+        finally:
+            plt.close(fig)
+
+
+class TestStyleAndGeometryCoverage:
+    def test_geometry_style_and_thinning_helpers_cover_remaining_branches(self):
+        curve = np.array([[0.0, 0.0], [1.0, 1.0]])
+
+        class _NonfiniteTransform:
+            def transform(self, values):
+                del values
+                return np.array([[0.0, 0.0], [np.nan, 1.0]])
+
+        assert _tip_display_geometry(curve, _NonfiniteTransform(), 1.0) is None
+        assert (
+            _tip_display_geometry(
+                curve,
+                Affine2D(),
+                1.0,
+                display_curve=np.array([[0.0, 0.0], [np.nan, 1.0]]),
+            )
+            is None
+        )
+
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            head_length, head_width = _curly_head_axes_dimensions(
+                ax,
+                3.0,
+                max_magnitude=0.0,
+                arrowsize=1.0,
+            )
+            assert head_length > 0.0
+            assert head_width > 0.0
+        finally:
+            plt.close(fig)
+
+        with pytest.raises(ValueError, match="pivot must be one of"):
+            _normalize_curly_pivot("corner")
+
+        assert _resolve_curly_anchor_alias("center", "mid") == "center"
+        assert _thin_ncl_mapped_candidates(np.empty((0, 2), dtype=float), 0.1) == []
+
+
+class TestVectorArtistCoverage:
+    def test_vector_artist_helpers_cover_nonfinite_paths(self):
+        curve = np.array([[0.0, 0.0], [1.0, 0.0]])
+
+        class _NonfiniteDisplayTransform:
+            def transform(self, values):
+                del values
+                return np.array([[0.0, 0.0], [np.nan, 1.0]])
+
+        assert (
+            _open_arrow_geometry(
+                curve,
+                _NonfiniteDisplayTransform(),
+                1.0,
+                tip_display_geometry_from_display_curve_fn=lambda display_curve, backoff: (
+                    np.asarray(display_curve[-1], dtype=float),
+                    np.array([1.0, 0.0]),
+                ),
+            )
+            is None
+        )
+
+        class _NonfiniteInverseTransform:
+            def inverted(self):
+                return SimpleNamespace(
+                    transform=lambda values: np.full(np.asarray(values).shape, np.nan)
+                )
+
+        trimmed = _trim_curve_for_open_head(
+            curve,
+            _NonfiniteInverseTransform(),
+            0.5,
+            open_arrow_geometry_fn=lambda *args, **kwargs: {
+                "display_curve": np.array([[0.0, 0.0], [1.0, 0.0]]),
+                "base_center_display": np.array([0.5, 0.0]),
+            },
+            trim_display_curve_from_end_fn=lambda display_curve, distance: np.array(
+                display_curve,
+                dtype=float,
+            ),
+        )
+        np.testing.assert_allclose(trimmed, curve)
+
+        assert (
+            _build_arrow_polygon(
+                curve,
+                None,
+                Affine2D(),
+                1.0,
+                0.5,
+                "k",
+                "k",
+                1.0,
+                1.0,
+                1.0,
+                tip_display_geometry_fn=lambda *args, **kwargs: (
+                    np.array([1.0, 0.0]),
+                    np.array([1.0, 0.0]),
+                ),
+                display_points_to_data_fn=lambda *args, **kwargs: None,
+            )
+            is None
+        )
+
+
+class TestVectorKeyCoverage:
+    def test_vector_key_helpers_cover_remaining_layout_and_fallback_paths(self):
+        fig, ax = plt.subplots(figsize=(6, 4))
+        try:
+            with pytest.raises(ValueError, match="finite axes coordinates"):
+                CurlyVectorKey(
+                    ax=ax,
+                    curly_vector_set=_make_mock_key_set(),
+                    U=2.0,
+                    x=np.nan,
+                    y=0.1,
+                )
+
+            legend_s = CurlyVectorKey(
+                ax=ax,
+                curly_vector_set=_make_mock_key_set(),
+                U=2.5,
+                description="Reference Vector",
+                labelpos="S",
+            )
+            assert legend_s._format_reference_value() == "2.5 m/s"
+            assert legend_s._resolve_text_blocks() == (
+                "Reference Vector",
+                "2.5 m/s",
+                None,
+            )
+
+            with patch(
+                "skyborn.plot._artists.vector_key_artist._curly_head_axes_dimensions",
+                side_effect=RuntimeError("bad head geometry"),
+            ):
+                head_length, head_width = legend_s._calculate_head_geometry()
+            assert head_length > 0.0
+            assert head_width > 0.0
+
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+
+            filled = CurlyVectorKey(
+                ax=ax,
+                curly_vector_set=_make_mock_key_set(arrowstyle="-|>"),
+                U=4.0,
+                labelpos="W",
+                arrow_props={"arrowstyle": "-|>"},
+            )
+            filled._update_arrow_geometry(0.1, 0.3, 0.4, 0.06, 0.05)
+            assert filled.head_left.get_visible() is False
+            assert filled.head_right.get_visible() is False
+            assert filled.head_fill.get_visible() is True
+
+            filled._layout_vertical(renderer, None, "Bottom")
+            assert filled.text.get_visible() is False
+            assert filled.text2.get_visible() is True
+
+            filled._layout_horizontal(renderer, "Side")
+            assert filled.text.get_horizontalalignment() == "right"
+
+            bad_fraction = CurlyVectorKey(
+                ax=ax,
+                curly_vector_set=_make_mock_key_set(),
+                U=4.0,
+                reference_speed=2.0,
+                max_arrow_length=0.08,
+            )
+            bad_fraction.curly_vector_set.glyph_length_axes_fraction.side_effect = (
+                ValueError("bad")
+            )
+            bad_fraction.curly_vector_set.max_magnitude = "bad"
+            bad_fraction.curly_vector_set.ref_length_fraction = object()
+            assert bad_fraction._calculate_arrow_length() == pytest.approx(0.16)
+        finally:
+            plt.close(fig)
+
+
+class TestVectorWrapperCoverage:
+    def test_regrid_non_uniform_vectors_to_uniform_covers_import_and_validation_paths(
+        self,
+    ):
+        x = np.array([0.0, 1.0, 2.0])
+        y = np.array([10.0, 20.0])
+        u = np.ones((2, 3))
+        v = np.ones((2, 3)) * 2.0
+
+        real_import = builtins.__import__
+
+        def _raising_import(name, *args, **kwargs):
+            if name == "scipy.interpolate":
+                raise ImportError("missing scipy")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=_raising_import):
+            with pytest.raises(
+                ImportError, match="scipy is required for non-uniform grid support"
+            ):
+                _regrid_non_uniform_vectors_to_uniform(x, y, u, v)
+
+        fake_interp_module = types.ModuleType("scipy.interpolate")
+        fake_interp_module.RegularGridInterpolator = object
+        fake_scipy = types.ModuleType("scipy")
+        fake_scipy.interpolate = fake_interp_module
+
+        with patch.dict(
+            sys.modules,
+            {"scipy": fake_scipy, "scipy.interpolate": fake_interp_module},
+        ):
+            with pytest.raises(
+                ValueError, match="must match the non-uniform grid shape"
+            ):
+                _regrid_non_uniform_vectors_to_uniform(x, y, np.ones((2, 2)), v)
+
+            with pytest.raises(ValueError, match="Non-uniform scalar style fields"):
+                _regrid_non_uniform_vectors_to_uniform(x, y, u, v, np.ones((2, 2)))
+
+            with pytest.raises(
+                ValueError,
+                match="x coordinates must be strictly monotonic after sorting",
+            ):
+                _regrid_non_uniform_vectors_to_uniform(
+                    np.array([1.0, 1.0, 2.0]),
+                    y,
+                    u,
+                    v,
+                )
+
+            with pytest.raises(
+                ValueError,
+                match="y coordinates must be strictly monotonic after sorting",
+            ):
+                _regrid_non_uniform_vectors_to_uniform(
+                    x,
+                    np.array([10.0, 10.0]),
+                    u,
+                    v,
+                )
+
+    def test_array_curly_vector_and_public_wrapper_cover_remaining_argument_paths(
+        self,
+    ):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            x = np.array([0.0, 2.0, 5.0])
+            y = np.array([1000.0, 500.0])
+            u = np.ones((2, 3))
+            v = np.ones((2, 3)) * 2.0
+
+            with pytest.raises(ValueError, match="If 'color' is given"):
+                _array_curly_vector(
+                    ax,
+                    x,
+                    y,
+                    u,
+                    v,
+                    allow_non_uniform_grid=True,
+                    color=np.ones((2, 2)),
+                )
+
+            with pytest.raises(ValueError, match="If 'linewidth' is given"):
+                _array_curly_vector(
+                    ax,
+                    x,
+                    y,
+                    u,
+                    v,
+                    allow_non_uniform_grid=True,
+                    linewidth=np.ones((2, 2)),
+                )
+
+            mock_result = Mock(spec=CurlyVectorPlotSet)
+            with patch(
+                "skyborn.plot.vector._curly_vector_from_arrays",
+                return_value=mock_result,
+            ) as mock_arrays:
+                result = curly_vector(ax, x, y, u, v, density=0.8)
+
+            assert result is mock_result
+            assert mock_arrays.call_args.args[0] is ax
+        finally:
+            plt.close(fig)
