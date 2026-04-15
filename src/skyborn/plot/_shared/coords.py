@@ -214,6 +214,79 @@ def _rectilinear_cell_edges(
     return _cell_edges_from_axis(x_axis), _cell_edges_from_axis(y_axis)
 
 
+def _center_grid_to_corner_grid(values: Any) -> np.ndarray:
+    """Infer cell-corner coordinates from a 2D grid of cell-center coordinates."""
+    array = np.asarray(values, dtype=float)
+    if array.ndim != 2 or array.size == 0:
+        raise ValueError("Corner inference requires a non-empty 2D center grid")
+
+    ny, nx = array.shape
+    padded = np.empty((ny + 2, nx + 2), dtype=float)
+    padded[1:-1, 1:-1] = array
+
+    if nx > 1:
+        padded[1:-1, 0] = 2.0 * array[:, 0] - array[:, 1]
+        padded[1:-1, -1] = 2.0 * array[:, -1] - array[:, -2]
+    else:
+        padded[1:-1, 0] = array[:, 0]
+        padded[1:-1, -1] = array[:, 0]
+
+    if ny > 1:
+        padded[0, 1:-1] = 2.0 * array[0, :] - array[1, :]
+        padded[-1, 1:-1] = 2.0 * array[-1, :] - array[-2, :]
+    else:
+        padded[0, 1:-1] = array[0, :]
+        padded[-1, 1:-1] = array[0, :]
+
+    if ny > 1 and nx > 1:
+        padded[0, 0] = 3.0 * array[0, 0] - array[0, 1] - array[1, 0]
+        padded[0, -1] = 3.0 * array[0, -1] - array[0, -2] - array[1, -1]
+        padded[-1, 0] = 3.0 * array[-1, 0] - array[-1, 1] - array[-2, 0]
+        padded[-1, -1] = 3.0 * array[-1, -1] - array[-1, -2] - array[-2, -1]
+    elif nx > 1:
+        padded[0, 0] = 2.0 * array[0, 0] - array[0, 1]
+        padded[0, -1] = 2.0 * array[0, -1] - array[0, -2]
+        padded[-1, 0] = padded[0, 0]
+        padded[-1, -1] = padded[0, -1]
+    elif ny > 1:
+        padded[0, 0] = 2.0 * array[0, 0] - array[1, 0]
+        padded[-1, 0] = 2.0 * array[-1, 0] - array[-2, 0]
+        padded[0, -1] = padded[0, 0]
+        padded[-1, -1] = padded[-1, 0]
+    else:
+        padded[0, 0] = array[0, 0]
+        padded[0, -1] = array[0, 0]
+        padded[-1, 0] = array[0, 0]
+        padded[-1, -1] = array[0, 0]
+
+    return 0.25 * (
+        padded[:-1, :-1] + padded[1:, :-1] + padded[:-1, 1:] + padded[1:, 1:]
+    )
+
+
+def _scatter_cell_geometry(x: Any, y: Any) -> dict[str, np.ndarray] | None:
+    """Return cell geometry metadata for rectilinear or curvilinear grids."""
+    rectilinear_edges = _rectilinear_cell_edges(x, y)
+    if rectilinear_edges is not None:
+        x_edges, y_edges = rectilinear_edges
+        return {
+            "kind": np.asarray("rectilinear"),
+            "x_edges": x_edges,
+            "y_edges": y_edges,
+        }
+
+    x_values = np.asarray(x, dtype=float)
+    y_values = np.asarray(y, dtype=float)
+    if x_values.ndim != 2 or y_values.ndim != 2 or x_values.shape != y_values.shape:
+        return None
+
+    return {
+        "kind": np.asarray("curvilinear"),
+        "x_corners": _center_grid_to_corner_grid(x_values),
+        "y_corners": _center_grid_to_corner_grid(y_values),
+    }
+
+
 def _coerce_matching_plot_field(
     values: Any,
     expected_shape: CoordinateShape,
