@@ -36,7 +36,7 @@ def _resolve_placement(
     where: Any,
     mask: Any,
     distance: float | None,
-    cell_edges: tuple[np.ndarray, np.ndarray] | None,
+    cell_geometry: dict[str, np.ndarray] | None,
 ) -> str:
     """Resolve how gridded stipple candidates should be positioned."""
     if placement is None:
@@ -47,7 +47,7 @@ def _resolve_placement(
     if placement_name not in {"auto", "points", "cells"}:
         raise ValueError("placement must be one of 'auto', 'points', or 'cells'")
 
-    supports_cells = cell_edges is not None
+    supports_cells = cell_geometry is not None
     if placement_name == "auto":
         if (
             grid_like
@@ -60,7 +60,7 @@ def _resolve_placement(
 
     if placement_name == "cells" and not supports_cells:
         raise ValueError(
-            "placement='cells' requires 1D axes or meshgrid-like rectilinear 2D x/y coordinates"
+            "placement='cells' requires gridded coordinates with inferable cell geometry"
         )
 
     return placement_name
@@ -145,11 +145,10 @@ def _generate_cell_candidates(
     source_points: np.ndarray,
     source_indices: np.ndarray,
     candidate_shape: tuple[int, ...],
-    x_edges: np.ndarray,
-    y_edges: np.ndarray,
+    cell_geometry: dict[str, np.ndarray],
     spacing_fraction: float | None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Expand selected rectilinear cells into interior stipple candidates.
+    """Expand selected cells into interior stipple candidates.
 
     NCL contour stippling behaves more like a fill pattern than a simple
     polymarker-on-node pass. To approximate that behavior while staying inside
@@ -162,17 +161,35 @@ def _generate_cell_candidates(
         return empty, np.empty(0, dtype=int)
 
     iy, ix = np.unravel_index(source_indices, candidate_shape)
-    x0 = np.asarray(x_edges[ix], dtype=float)
-    x1 = np.asarray(x_edges[ix + 1], dtype=float)
-    y0 = np.asarray(y_edges[iy], dtype=float)
-    y1 = np.asarray(y_edges[iy + 1], dtype=float)
+    kind = str(np.asarray(cell_geometry["kind"]).item())
+    if kind == "rectilinear":
+        x_edges = np.asarray(cell_geometry["x_edges"], dtype=float)
+        y_edges = np.asarray(cell_geometry["y_edges"], dtype=float)
+        corners = np.stack(
+            [
+                np.column_stack([x_edges[ix], y_edges[iy]]),
+                np.column_stack([x_edges[ix + 1], y_edges[iy]]),
+                np.column_stack([x_edges[ix + 1], y_edges[iy + 1]]),
+                np.column_stack([x_edges[ix], y_edges[iy + 1]]),
+            ],
+            axis=1,
+        )
+    elif kind == "curvilinear":
+        x_corners = np.asarray(cell_geometry["x_corners"], dtype=float)
+        y_corners = np.asarray(cell_geometry["y_corners"], dtype=float)
+        corners = np.stack(
+            [
+                np.column_stack([x_corners[iy, ix], y_corners[iy, ix]]),
+                np.column_stack([x_corners[iy, ix + 1], y_corners[iy, ix + 1]]),
+                np.column_stack([x_corners[iy + 1, ix + 1], y_corners[iy + 1, ix + 1]]),
+                np.column_stack([x_corners[iy + 1, ix], y_corners[iy + 1, ix]]),
+            ],
+            axis=1,
+        )
+    else:
+        raise ValueError(f"Unsupported cell geometry kind {kind!r}")
 
-    corner_points = np.column_stack(
-        [
-            np.concatenate([x0, x1, x0, x1]),
-            np.concatenate([y0, y0, y1, y1]),
-        ]
-    )
+    corner_points = corners.reshape(-1, 2)
     try:
         display_corners = np.asarray(transform.transform(corner_points), dtype=float)
     except Exception:
@@ -207,22 +224,21 @@ def _generate_cell_candidates(
             source_pos_chunks.append(np.array([source_pos], dtype=int))
             continue
 
-        x_edges_sub = np.linspace(
-            float(x0[source_pos]),
-            float(x1[source_pos]),
-            int(sub_x[source_pos]) + 1,
-            dtype=float,
-        )
-        y_edges_sub = np.linspace(
-            float(y0[source_pos]),
-            float(y1[source_pos]),
-            int(sub_y[source_pos]) + 1,
-            dtype=float,
-        )
-        xs = 0.5 * (x_edges_sub[:-1] + x_edges_sub[1:])
-        ys = 0.5 * (y_edges_sub[:-1] + y_edges_sub[1:])
-        grid_x, grid_y = np.meshgrid(xs, ys, indexing="xy")
-        cell_points = np.column_stack([grid_x.ravel(), grid_y.ravel()])
+        u_edges = np.linspace(0.0, 1.0, int(sub_x[source_pos]) + 1, dtype=float)
+        v_edges = np.linspace(0.0, 1.0, int(sub_y[source_pos]) + 1, dtype=float)
+        u = 0.5 * (u_edges[:-1] + u_edges[1:])
+        v = 0.5 * (v_edges[:-1] + v_edges[1:])
+        uu, vv = np.meshgrid(u, v, indexing="xy")
+
+        p00, p10, p11, p01 = corners[source_pos]
+        one_minus_u = 1.0 - uu
+        one_minus_v = 1.0 - vv
+        cell_points = (
+            one_minus_u[..., None] * one_minus_v[..., None] * p00
+            + uu[..., None] * one_minus_v[..., None] * p10
+            + uu[..., None] * vv[..., None] * p11
+            + one_minus_u[..., None] * vv[..., None] * p01
+        ).reshape(-1, 2)
         point_chunks.append(cell_points)
         source_pos_chunks.append(np.full(cell_points.shape[0], source_pos, dtype=int))
 
@@ -270,7 +286,7 @@ def _scatter_impl(
         candidate_shape=candidate_shape,
         target_dims=target_dims,
     )
-    cell_edges = _coord_helpers._rectilinear_cell_edges(x_values, y_values)
+    cell_geometry = _coord_helpers._scatter_cell_geometry(x_values, y_values)
 
     x_flat = np.ravel(np.asarray(x_values, dtype=float))
     y_flat = np.ravel(np.asarray(y_values, dtype=float))
@@ -325,20 +341,34 @@ def _scatter_impl(
         where=where,
         mask=mask,
         distance=distance,
-        cell_edges=cell_edges,
+        cell_geometry=cell_geometry,
     )
 
     source_points = np.column_stack([x_flat[source_indices], y_flat[source_indices]])
     if transform is ax.transData:
-        if resolved_placement == "cells" and cell_edges is not None:
-            x_edges, y_edges = cell_edges
-            extent_points = np.array(
-                [
-                    [float(np.nanmin(x_edges)), float(np.nanmin(y_edges))],
-                    [float(np.nanmax(x_edges)), float(np.nanmax(y_edges))],
-                ],
-                dtype=float,
-            )
+        if resolved_placement == "cells" and cell_geometry is not None:
+            kind = str(np.asarray(cell_geometry["kind"]).item())
+            if kind == "rectilinear":
+                extent_points = np.array(
+                    [
+                        [
+                            float(np.nanmin(cell_geometry["x_edges"])),
+                            float(np.nanmin(cell_geometry["y_edges"])),
+                        ],
+                        [
+                            float(np.nanmax(cell_geometry["x_edges"])),
+                            float(np.nanmax(cell_geometry["y_edges"])),
+                        ],
+                    ],
+                    dtype=float,
+                )
+            else:
+                extent_points = np.column_stack(
+                    [
+                        np.ravel(np.asarray(cell_geometry["x_corners"], dtype=float)),
+                        np.ravel(np.asarray(cell_geometry["y_corners"], dtype=float)),
+                    ]
+                )
             extent_points = extent_points[np.isfinite(extent_points).all(axis=1)]
             if len(extent_points) > 0:
                 ax.update_datalim(extent_points)
@@ -347,16 +377,14 @@ def _scatter_impl(
             ax.update_datalim(source_points)
             ax.autoscale_view()
 
-    if resolved_placement == "cells" and cell_edges is not None:
-        x_edges, y_edges = cell_edges
+    if resolved_placement == "cells" and cell_geometry is not None:
         candidate_points, candidate_source_positions = _generate_cell_candidates(
             ax=ax,
             transform=transform,
             source_points=source_points,
             source_indices=source_indices,
             candidate_shape=candidate_shape,
-            x_edges=x_edges,
-            y_edges=y_edges,
+            cell_geometry=cell_geometry,
             spacing_fraction=spacing_fraction,
         )
     else:
