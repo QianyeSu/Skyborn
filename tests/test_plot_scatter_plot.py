@@ -139,6 +139,68 @@ class TestScatterPlot:
 
         plt.close(fig)
 
+    def test_array_scatter_auto_cells_supports_curvilinear_2d_coordinates(self):
+        x_base, y_base = np.meshgrid(
+            np.linspace(100.0, 112.0, 5),
+            np.linspace(10.0, 22.0, 4),
+            indexing="xy",
+        )
+        x2d = x_base + 0.35 * (y_base - y_base.mean()) / max(np.ptp(y_base), 1.0)
+        y2d = y_base + 0.55 * np.sin(np.deg2rad(x_base * 4.0))
+        mask = np.ones(x2d.shape, dtype=bool)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        result = array_scatter(ax, x2d, y2d, where=mask, density=2.0, s=4.0, c="k")
+        offsets = np.asarray(result.get_offsets(), dtype=float)
+        centers = np.column_stack([x2d.ravel(), y2d.ravel()])
+        min_distance_sq = np.min(
+            np.sum(
+                (offsets[:, np.newaxis, :] - centers[np.newaxis, :, :]) ** 2, axis=2
+            ),
+            axis=1,
+        )
+
+        assert isinstance(result, PathCollection)
+        assert np.any(min_distance_sq > 1e-8)
+
+        plt.close(fig)
+
+    def test_array_scatter_curvilinear_cells_repeat_selected_candidate_styles(self):
+        x_base, y_base = np.meshgrid(
+            np.linspace(0.0, 4.0, 5),
+            np.linspace(-2.0, 2.0, 4),
+            indexing="xy",
+        )
+        x2d = x_base + 0.2 * y_base
+        y2d = y_base + 0.15 * np.sin(x_base)
+        mask = np.array(
+            [
+                [True, False, True, False, False],
+                [False, True, False, False, True],
+                [False, False, False, True, False],
+                [True, False, False, False, True],
+            ],
+            dtype=bool,
+        )
+        sizes = np.arange(mask.size, dtype=float).reshape(mask.shape) + 3.0
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        result = array_scatter(
+            ax,
+            x2d,
+            y2d,
+            where=mask,
+            placement="cells",
+            density=2.5,
+            s=sizes,
+            c="k",
+        )
+
+        observed_sizes = np.unique(np.asarray(result.get_sizes(), dtype=float))
+        np.testing.assert_allclose(observed_sizes, np.unique(sizes[mask]))
+
+        plt.close(fig)
+
     def test_array_scatter_subsets_grid_shaped_size_and_color_fields(self):
         x = np.linspace(0.0, 4.0, 5)
         y = np.linspace(10.0, 13.0, 4)
