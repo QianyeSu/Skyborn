@@ -66,6 +66,79 @@ class TestScatterPlot:
 
         plt.close(fig)
 
+    def test_array_scatter_auto_cells_place_points_between_rectilinear_centers(self):
+        x = np.arange(1.0, 13.0, dtype=float)
+        y = np.linspace(-30.0, 30.0, 3)
+        mask = np.ones((3, 12), dtype=bool)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        result = array_scatter(ax, x, y, where=mask, density=1.0, s=4.0, c="k")
+        offsets = np.asarray(result.get_offsets(), dtype=float)
+
+        assert isinstance(result, PathCollection)
+        assert np.any(np.abs(offsets[:, 0] - np.rint(offsets[:, 0])) > 1e-6)
+
+        plt.close(fig)
+
+    def test_array_scatter_points_placement_preserves_selected_grid_nodes(self):
+        x = np.arange(1.0, 6.0, dtype=float)
+        y = np.array([-15.0, 0.0, 15.0], dtype=float)
+        mask = np.array(
+            [
+                [True, False, True, False, True],
+                [False, True, False, True, False],
+                [True, False, False, False, True],
+            ],
+            dtype=bool,
+        )
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        result = array_scatter(
+            ax,
+            x,
+            y,
+            where=mask,
+            placement="points",
+            distance=1e-6,
+        )
+
+        expected_x, expected_y = np.meshgrid(x, y, indexing="xy")
+        expected = np.column_stack([expected_x[mask], expected_y[mask]])
+        offsets = np.asarray(result.get_offsets(), dtype=float)
+
+        np.testing.assert_allclose(offsets, expected)
+
+        plt.close(fig)
+
+    def test_array_scatter_cells_placement_repeats_selected_candidate_styles(self):
+        x = np.arange(1.0, 5.0, dtype=float)
+        y = np.array([-10.0, 10.0], dtype=float)
+        mask = np.array(
+            [
+                [True, False, True, False],
+                [False, True, False, True],
+            ],
+            dtype=bool,
+        )
+        sizes = np.array([7.0, 11.0, 13.0, 17.0], dtype=float)
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        result = array_scatter(
+            ax,
+            x,
+            y,
+            where=mask,
+            placement="cells",
+            density=2.0,
+            s=sizes,
+            c="k",
+        )
+
+        observed_sizes = np.unique(np.asarray(result.get_sizes(), dtype=float))
+        np.testing.assert_allclose(observed_sizes, sizes)
+
+        plt.close(fig)
+
     def test_array_scatter_subsets_grid_shaped_size_and_color_fields(self):
         x = np.linspace(0.0, 4.0, 5)
         y = np.linspace(10.0, 13.0, 4)
