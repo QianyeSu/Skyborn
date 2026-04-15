@@ -109,10 +109,10 @@ def scatter(*args: Any, **kwargs: Any):
     placement : {"auto", "points", "cells"}, optional
         Controls where gridded stipple candidates are generated before
         thinning. ``"points"`` keeps the original node-based behavior.
-        ``"cells"`` fills the selected rectilinear grid cells with interior
-        candidates so dots can appear between coordinate centers, which is
-        closer to NCL stipple fill behavior. The default ``"auto"`` enables
-        ``"cells"`` for masked rectilinear grids when spacing is controlled by
+        ``"cells"`` fills the selected grid cells with interior candidates so
+        dots can appear between coordinate centers, which is closer to NCL
+        stipple fill behavior. The default ``"auto"`` enables ``"cells"`` for
+        masked grids with inferable cell geometry when spacing is controlled by
         ``density`` or the default NCL-style rule, and otherwise falls back to
         ``"points"``.
     transform : optional
