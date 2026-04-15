@@ -24,6 +24,10 @@ Scatter Stippling
   month-lat and other coarse cross-sections to place dots between coordinate
   centers while preserving ``placement="points"`` for the original node-based
   behavior.
+* Extended ``skyborn.plot.scatter`` cell-interior stippling so the same
+  ``placement="cells"`` and default ``placement="auto"`` path now also
+  supports true curvilinear 2D ``x/y`` grids when cell geometry can be
+  inferred from the provided center coordinates.
 
 Version 0.3.19 (Current)
 ------------------------
