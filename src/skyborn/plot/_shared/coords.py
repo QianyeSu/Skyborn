@@ -170,6 +170,50 @@ def _axis_is_uniform(values: Any, rtol: float = 1e-6, atol: float = 1e-10) -> bo
     return np.all(np.abs(diffs - reference) <= tolerance)
 
 
+def _cell_edges_from_axis(values: Any) -> np.ndarray:
+    """Return inferred cell edges for one center-coordinate axis."""
+    axis = np.asarray(values, dtype=float)
+    if axis.ndim != 1 or axis.size == 0:
+        raise ValueError("Cell edges require a non-empty 1D axis")
+
+    edges = np.empty(axis.size + 1, dtype=float)
+    if axis.size == 1:
+        center = float(axis[0])
+        edges[0] = center - 0.5
+        edges[1] = center + 0.5
+        return edges
+
+    midpoints = 0.5 * (axis[:-1] + axis[1:])
+    edges[1:-1] = midpoints
+    edges[0] = axis[0] - 0.5 * (axis[1] - axis[0])
+    edges[-1] = axis[-1] + 0.5 * (axis[-1] - axis[-2])
+    return edges
+
+
+def _rectilinear_cell_edges(
+    x: Any,
+    y: Any,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Return cell edges for 1D or meshgrid-like rectilinear coordinates."""
+    x_values = np.asarray(x, dtype=float)
+    y_values = np.asarray(y, dtype=float)
+    x_axis = _axis_coordinate_1d(x_values, "x")
+    y_axis = _axis_coordinate_1d(y_values, "y")
+    if x_axis is None or y_axis is None:
+        return None
+
+    if x_values.ndim == 2 and not np.allclose(
+        x_values, x_axis[np.newaxis, :], equal_nan=True
+    ):
+        return None
+    if y_values.ndim == 2 and not np.allclose(
+        y_values, y_axis[:, np.newaxis], equal_nan=True
+    ):
+        return None
+
+    return _cell_edges_from_axis(x_axis), _cell_edges_from_axis(y_axis)
+
+
 def _coerce_matching_plot_field(
     values: Any,
     expected_shape: CoordinateShape,
