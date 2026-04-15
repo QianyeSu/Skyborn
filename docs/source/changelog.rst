@@ -1,6 +1,22 @@
 Changelog
 =========
 
+Version 0.3.20 (Planned)
+------------------------
+
+Troposphere
+
+* Extended ``skyborn.calc.troposphere`` WMO tropopause support to handle
+  time-varying single-axis isobaric cross-sections.
+* ``skyborn.calc.troposphere.xarray.trop_wmo()`` now accepts
+  ``(time, level, lat)`` and ``(time, level, lon)`` inputs and preserves the
+  corresponding output dimensions as ``(time, lat)`` and ``(time, lon)``.
+* Improved dimension ordering in ``skyborn.calc.troposphere.tropopause`` so
+  direct array workflows can process these cross-sections correctly when
+  ``timedim`` is provided explicitly.
+* Added focused regression coverage for the new NumPy-core and xarray wrapper
+  paths.
+
 Version 0.3.19 (Current)
 ------------------------
 
@@ -14,6 +30,11 @@ Scatter Stippling
 * Implemented the public scatter entry point in its own
   ``skyborn.plot.scatter`` module so the display-space thinning logic stays
   isolated and easier to maintain.
+* Improved ``skyborn.plot.scatter`` so masked rectilinear grids now default to
+  NCL-like cell-interior stippling before display-space thinning, allowing
+  month-lat and other coarse cross-sections to place dots between coordinate
+  centers while preserving ``placement="points"`` for the original node-based
+  behavior.
 * Added ``skyborn.plot.vector`` as the unified public facade for the
   curly-vector feature family:
 
