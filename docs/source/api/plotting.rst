@@ -51,10 +51,11 @@ applies NCL-style display-space thinning so dense lat-lon maps and
 latitude-pressure sections do not need manual ``[::step]`` tuning. In most
 cases, ``density`` is the only spacing control you need; ``distance`` is
 available when you want to override the retained-point spacing explicitly.
-For masked rectilinear grids, the default placement now fills the selected
-cells with interior candidates before thinning so month-lat and other coarse
-cross-sections can place dots between coordinate centers. Use
-``placement="points"`` when you explicitly want the older node-based behavior.
+For masked grids with inferable cell geometry, the default placement now fills
+the selected cells with interior candidates before thinning so month-lat,
+profile, and curvilinear-grid plots can place dots between coordinate centers.
+Use ``placement="points"`` when you explicitly want the older node-based
+behavior.
 
 Example Usage
 -------------
