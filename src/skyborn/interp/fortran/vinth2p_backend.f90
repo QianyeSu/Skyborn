@@ -14,6 +14,8 @@ module vinth2p_backend_core
     public :: extrapolate_temperature
     public :: interpolate_value
     public :: is_below_lowest_model_level
+    public :: levels_ascending
+    public :: locate_bracketing_level_ordered
     public :: lowest_bracketing_level_index
     public :: lowest_model_level_index
     public :: locate_bracketing_level
@@ -78,8 +80,18 @@ contains
         real(real64), intent(in) :: plev_out
         real(real64), intent(in) :: plevi(:)
 
-        integer :: nlev
-        logical :: is_ascending
+        kp = locate_bracketing_level_ordered(plev_out, plevi, levels_ascending(plevi))
+    end function locate_bracketing_level
+
+
+    pure integer function locate_bracketing_level_ordered( &
+        plev_out, plevi, is_ascending &
+    ) result(kp)
+        real(real64), intent(in) :: plev_out
+        real(real64), intent(in) :: plevi(:)
+        logical, intent(in) :: is_ascending
+
+        integer :: high, low, mid, nlev
 
         nlev = size(plevi)
         if (nlev < 2) then
@@ -87,33 +99,49 @@ contains
             return
         end if
 
-        is_ascending = levels_ascending(plevi)
         if (is_ascending) then
             if (plev_out <= plevi(1)) then
                 kp = 1
                 return
             end if
 
-            do kp = 1, nlev - 2
-                if (plev_out <= plevi(kp + 1)) then
-                    return
-                end if
-            end do
+            if (plev_out >= plevi(nlev - 1)) then
+                kp = nlev - 1
+                return
+            end if
         else
             if (plev_out >= plevi(1)) then
                 kp = 1
                 return
             end if
 
-            do kp = 1, nlev - 2
-                if (plev_out >= plevi(kp + 1)) then
-                    return
-                end if
-            end do
+            if (plev_out <= plevi(nlev - 1)) then
+                kp = nlev - 1
+                return
+            end if
         end if
 
-        kp = nlev - 1
-    end function locate_bracketing_level
+        low = 1
+        high = nlev - 1
+        do while (low < high)
+            mid = low + (high - low) / 2
+            if (is_ascending) then
+                if (plev_out <= plevi(mid + 1)) then
+                    high = mid
+                else
+                    low = mid + 1
+                end if
+            else
+                if (plev_out >= plevi(mid + 1)) then
+                    high = mid
+                else
+                    low = mid + 1
+                end if
+            end if
+        end do
+
+        kp = low
+    end function locate_bracketing_level_ordered
 
 
     pure real(real64) function double_log_pressure(pressure_mb) result(value)
@@ -224,8 +252,8 @@ subroutine dvinth2p_nodes_pa( &
     nlevi, ncol, nlevo)
     use vinth2p_backend_core, only : &
         real64, build_input_pressures, convert_levels_to_mb, &
-        interpolate_value, is_below_lowest_model_level, &
-        locate_bracketing_level, lowest_bracketing_level_index
+        interpolate_value, levels_ascending, locate_bracketing_level_ordered, &
+        lowest_bracketing_level_index, lowest_model_level_index
     implicit none
 
     integer, intent(in) :: intyp, kxtrp, nlevi, ncol, nlevo
@@ -234,9 +262,10 @@ subroutine dvinth2p_nodes_pa( &
     real(real64), intent(in) :: hbcofa(nlevi), hbcofb(nlevi)
     real(real64), intent(in) :: p0, plevo(nlevo), psfc(ncol), spvl
 
-    real(real64) :: plevi(nlevi), plevo_mb(nlevo)
+    real(real64) :: bottom_pressure, plevi(nlevi), plevo_mb(nlevo)
     real(real64) :: p0_mb, psfc_mb
-    integer :: bottom_pair_idx, j, k, kp
+    integer :: bottom_idx, bottom_pair_idx, j, k, kp
+    logical :: is_ascending
 
     p0_mb = p0 * 0.01_real64
     call convert_levels_to_mb(plevo, plevo_mb)
@@ -247,10 +276,13 @@ subroutine dvinth2p_nodes_pa( &
         else
             psfc_mb = psfc(j) * 0.01_real64
             call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
+            is_ascending = levels_ascending(plevi)
+            bottom_idx = lowest_model_level_index(plevi)
             bottom_pair_idx = lowest_bracketing_level_index(plevi)
+            bottom_pressure = plevi(bottom_idx)
 
             do k = 1, nlevo
-                if (is_below_lowest_model_level(plevo_mb(k), plevi)) then
+                if (plevo_mb(k) > bottom_pressure) then
                     if (kxtrp == 0) then
                         dato(k, j) = spvl
                     else
@@ -261,7 +293,7 @@ subroutine dvinth2p_nodes_pa( &
                         )
                     end if
                 else
-                    kp = locate_bracketing_level(plevo_mb(k), plevi)
+                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
                     if (kp < 1) then
                         dato(k, j) = spvl
                     else
@@ -283,8 +315,8 @@ subroutine dvinth2p_ecmwf_nodes_pa( &
     use vinth2p_backend_core, only : &
         real64, build_input_pressures, convert_levels_to_mb, &
         extrapolate_geopotential, extrapolate_temperature, &
-        interpolate_value, is_below_lowest_model_level, &
-        locate_bracketing_level, lowest_bracketing_level_index, &
+        interpolate_value, levels_ascending, locate_bracketing_level_ordered, &
+        lowest_bracketing_level_index, &
         lowest_model_level_index
     implicit none
 
@@ -295,9 +327,10 @@ subroutine dvinth2p_ecmwf_nodes_pa( &
     real(real64), intent(in) :: p0, plevo(nlevo), psfc(ncol), spvl
     real(real64), intent(in) :: tbot(ncol), phis(ncol)
 
-    real(real64) :: plevi(nlevi), plevo_mb(nlevo)
+    real(real64) :: bottom_pressure, plevi(nlevi), plevo_mb(nlevo)
     real(real64) :: p0_mb, psfc_mb
     integer :: bottom_idx, bottom_pair_idx, j, k, kp
+    logical :: is_ascending
 
     p0_mb = p0 * 0.01_real64
     call convert_levels_to_mb(plevo, plevo_mb)
@@ -308,11 +341,13 @@ subroutine dvinth2p_ecmwf_nodes_pa( &
         else
             psfc_mb = psfc(j) * 0.01_real64
             call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
+            is_ascending = levels_ascending(plevi)
             bottom_idx = lowest_model_level_index(plevi)
             bottom_pair_idx = lowest_bracketing_level_index(plevi)
+            bottom_pressure = plevi(bottom_idx)
 
             do k = 1, nlevo
-                if (is_below_lowest_model_level(plevo_mb(k), plevi)) then
+                if (plevo_mb(k) > bottom_pressure) then
                     if (kxtrp == 0) then
                         dato(k, j) = spvl
                     else
@@ -332,7 +367,7 @@ subroutine dvinth2p_ecmwf_nodes_pa( &
                         end select
                     end if
                 else
-                    kp = locate_bracketing_level(plevo_mb(k), plevi)
+                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
                     if (kp < 1) then
                         dato(k, j) = spvl
                     else
@@ -346,3 +381,42 @@ subroutine dvinth2p_ecmwf_nodes_pa( &
         end if
     end do
 end subroutine dvinth2p_ecmwf_nodes_pa
+
+
+subroutine dvinth2p_nodes_pa_into( &
+    dati, dato, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
+    nlevi, ncol, nlevo)
+    use vinth2p_backend_core, only : real64
+    implicit none
+
+    integer, intent(in) :: intyp, kxtrp, nlevi, ncol, nlevo
+    real(real64), intent(in) :: dati(nlevi, ncol)
+    real(real64), intent(inout) :: dato(nlevo, ncol)
+    real(real64), intent(in) :: hbcofa(nlevi), hbcofb(nlevi)
+    real(real64), intent(in) :: p0, plevo(nlevo), psfc(ncol), spvl
+
+    call dvinth2p_nodes_pa( &
+        dati, dato, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
+        nlevi, ncol, nlevo &
+    )
+end subroutine dvinth2p_nodes_pa_into
+
+
+subroutine dvinth2p_ecmwf_nodes_pa_into( &
+    dati, dato, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
+    nlevi, ncol, nlevo, varflg, tbot, phis)
+    use vinth2p_backend_core, only : real64
+    implicit none
+
+    integer, intent(in) :: intyp, kxtrp, nlevi, ncol, nlevo, varflg
+    real(real64), intent(in) :: dati(nlevi, ncol)
+    real(real64), intent(inout) :: dato(nlevo, ncol)
+    real(real64), intent(in) :: hbcofa(nlevi), hbcofb(nlevi)
+    real(real64), intent(in) :: p0, plevo(nlevo), psfc(ncol), spvl
+    real(real64), intent(in) :: tbot(ncol), phis(ncol)
+
+    call dvinth2p_ecmwf_nodes_pa( &
+        dati, dato, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
+        nlevi, ncol, nlevo, varflg, tbot, phis &
+    )
+end subroutine dvinth2p_ecmwf_nodes_pa_into
