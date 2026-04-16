@@ -19,6 +19,23 @@ import metpy.interpolate
 import numpy as np
 import xarray as xr
 
+try:
+    from .fortran.vinth2p_backend import (
+        dvinth2p_ecmwf_nodes_pa as _dvinth2p_ecmwf_nodes_pa,
+    )
+    from .fortran.vinth2p_backend import (
+        dvinth2p_ecmwf_nodes_pa_into as _dvinth2p_ecmwf_nodes_pa_into,
+    )
+    from .fortran.vinth2p_backend import dvinth2p_nodes_pa as _dvinth2p_nodes_pa
+    from .fortran.vinth2p_backend import (
+        dvinth2p_nodes_pa_into as _dvinth2p_nodes_pa_into,
+    )
+except Exception:
+    _dvinth2p_nodes_pa = None
+    _dvinth2p_ecmwf_nodes_pa = None
+    _dvinth2p_nodes_pa_into = None
+    _dvinth2p_ecmwf_nodes_pa_into = None
+
 __all__ = [
     "pressure_at_hybrid_levels",
     "delta_pressure_hybrid",
@@ -28,6 +45,7 @@ __all__ = [
 ]
 
 supported_types = typing.Union[xr.DataArray, np.ndarray]
+_VINTH2P_SPVL = np.float64(-9.96921e36)
 
 __pres_lev_mandatory__ = np.array(
     [
@@ -582,6 +600,165 @@ def _align_hybrid_level_dimension(hyam, hybm, lev_dim):
     return hyam, hybm
 
 
+def _vinth2p_intyp(method: str) -> int:
+    """Translate public interpolation methods to legacy vinth2p flags."""
+
+    if method == "linear":
+        return 1
+    if method == "log":
+        return 2
+
+    raise ValueError(
+        f"Unknown interpolation method: {method}. "
+        f'Supported methods are: "log" and "linear".'
+    )
+
+
+def _vinth2p_varflg(variable: str) -> int:
+    """Translate public extrapolation variable labels to ECMWF vinth flags."""
+
+    if variable == "temperature":
+        return 1
+    if variable == "geopotential":
+        return -1
+    return 0
+
+
+def _interp_hybrid_to_pressure_fortran(
+    data: xr.DataArray,
+    ps: xr.DataArray,
+    hyam: xr.DataArray,
+    hybm: xr.DataArray,
+    p0: float,
+    new_levels: np.ndarray,
+    lev_dim: str,
+    method: str,
+    extrapolate: bool,
+    variable: str,
+    t_bot: xr.DataArray,
+    phi_sfc: xr.DataArray,
+) -> xr.DataArray:
+    """Run eager hybrid-to-pressure interpolation through the compiled vinth2p backend."""
+
+    if _dvinth2p_nodes_pa is None:
+        raise RuntimeError("vinth2p backend is not available")
+
+    base_template = data.isel({lev_dim: 0}, drop=True)
+    lead_dims = base_template.dims
+    interp_axis = data.dims.index(lev_dim)
+    data_view = data.transpose(*lead_dims, lev_dim)
+
+    nlevi = data_view.shape[-1]
+    nlevo = new_levels.size
+    lead_shape = data_view.shape[:-1]
+    ncol = int(np.prod(lead_shape, dtype=np.int64)) if lead_shape else 1
+
+    data_columns = np.asfortranarray(
+        np.asarray(data_view.data, dtype=np.float64).reshape(ncol, nlevi).T
+    )
+    ps_columns = np.asarray(
+        ps.broadcast_like(base_template).transpose(*lead_dims).data,
+        dtype=np.float64,
+    ).reshape(ncol)
+    ps_columns = np.where(np.isfinite(ps_columns), ps_columns, _VINTH2P_SPVL)
+
+    hyam_values = np.asarray(hyam.data, dtype=np.float64).reshape(nlevi)
+    hybm_values = np.asarray(hybm.data, dtype=np.float64).reshape(nlevi)
+    new_level_values = np.asarray(new_levels, dtype=np.float64).reshape(nlevo)
+    intyp = _vinth2p_intyp(method)
+    output_columns = np.empty((nlevo, ncol), dtype=np.float64, order="F")
+
+    if extrapolate:
+        varflg = _vinth2p_varflg(variable)
+        if varflg == 0:
+            t_bot_columns = np.zeros(ncol, dtype=np.float64)
+            phi_columns = np.zeros(ncol, dtype=np.float64)
+        else:
+            t_bot_columns = np.asarray(
+                t_bot.broadcast_like(base_template).transpose(*lead_dims).data,
+                dtype=np.float64,
+            ).reshape(ncol)
+            phi_columns = np.asarray(
+                phi_sfc.broadcast_like(base_template).transpose(*lead_dims).data,
+                dtype=np.float64,
+            ).reshape(ncol)
+        if _dvinth2p_ecmwf_nodes_pa_into is not None:
+            _dvinth2p_ecmwf_nodes_pa_into(
+                data_columns,
+                output_columns,
+                hyam_values,
+                hybm_values,
+                float(p0),
+                new_level_values,
+                intyp,
+                ps_columns,
+                _VINTH2P_SPVL,
+                1,
+                varflg,
+                t_bot_columns,
+                phi_columns,
+            )
+        else:
+            output_columns = _dvinth2p_ecmwf_nodes_pa(
+                data_columns,
+                hyam_values,
+                hybm_values,
+                float(p0),
+                new_level_values,
+                intyp,
+                ps_columns,
+                _VINTH2P_SPVL,
+                1,
+                varflg,
+                t_bot_columns,
+                phi_columns,
+            )
+    else:
+        if _dvinth2p_nodes_pa_into is not None:
+            _dvinth2p_nodes_pa_into(
+                data_columns,
+                output_columns,
+                hyam_values,
+                hybm_values,
+                float(p0),
+                new_level_values,
+                intyp,
+                ps_columns,
+                _VINTH2P_SPVL,
+                0,
+            )
+        else:
+            output_columns = _dvinth2p_nodes_pa(
+                data_columns,
+                hyam_values,
+                hybm_values,
+                float(p0),
+                new_level_values,
+                intyp,
+                ps_columns,
+                _VINTH2P_SPVL,
+                0,
+            )
+
+    output_values = np.asarray(output_columns, dtype=np.float64).T.reshape(
+        (*lead_shape, nlevo)
+    )
+    output_values[output_values == _VINTH2P_SPVL] = np.nan
+
+    coords = {k: v for k, v in base_template.coords.items()}
+    coords["plev"] = new_levels
+    output = xr.DataArray(
+        output_values,
+        dims=(*lead_dims, "plev"),
+        coords=coords,
+        name=data.name,
+        attrs=data.attrs,
+    )
+
+    dims = [data.dims[i] if i != interp_axis else "plev" for i in range(data.ndim)]
+    return output.transpose(*dims)
+
+
 def interp_hybrid_to_pressure(
     data: xr.DataArray,
     ps: xr.DataArray,
@@ -735,6 +912,27 @@ def interp_hybrid_to_pressure(
         func_interpolate = _func_interpolate(method)
     except ValueError as vexc:
         raise ValueError(vexc.args[0])
+
+    if (
+        not in_dask
+        and not in_pint
+        and _dvinth2p_nodes_pa is not None
+        and method in {"linear", "log"}
+    ):
+        return _interp_hybrid_to_pressure_fortran(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=p0,
+            new_levels=new_levels,
+            lev_dim=lev_dim,
+            method=method,
+            extrapolate=extrapolate,
+            variable=variable,
+            t_bot=t_bot,
+            phi_sfc=phi_sfc,
+        )
 
     interp_axis = data.dims.index(lev_dim)
 
