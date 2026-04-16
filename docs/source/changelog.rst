@@ -17,6 +17,22 @@ Troposphere
 * Added focused regression coverage for the new NumPy-core and xarray wrapper
   paths.
 
+Interpolation
+
+* Added a modern Fortran ``vinth2p`` backend for
+  ``skyborn.interp.interp_hybrid_to_pressure`` and preserved legacy F77
+  numerical behavior for the validated node-oriented interpolation and ECMWF
+  below-ground extrapolation paths.
+* Accelerated the eager in-memory hybrid-to-pressure workflow by adding
+  reusable output-buffer wrappers and a dedicated C-order NumPy path that
+  avoids the old Python-side transpose/packing overhead.
+* Reduced the eager hybrid-to-pressure workflow peak working-memory overhead
+  substantially relative to the Python / MetPy remap path by reusing output
+  buffers and removing unnecessary intermediate array copies.
+* Added focused regression coverage for the new Fortran dispatch, C-order
+  fallback guards, and Python remap / extrapolation fallback branches in
+  ``skyborn.interp.interpolation``.
+
 Scatter Stippling
 
 * Improved ``skyborn.plot.scatter`` so masked rectilinear grids now default to
