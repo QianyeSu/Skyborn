@@ -3,6 +3,8 @@ module vinth2p_backend_core
     implicit none
     private
 
+    ! Keep the scalar interpolation and extrapolation formulas in one module so
+    ! the column-major and flat C-order entry points share identical arithmetic.
     real(real64), parameter :: rd = 287.04_real64
     real(real64), parameter :: ginv = 1.0_real64 / 9.80616_real64
     real(real64), parameter :: alpha = 0.0065_real64 * rd * ginv
@@ -44,6 +46,7 @@ contains
     pure logical function levels_ascending(plevi) result(is_ascending)
         real(real64), intent(in) :: plevi(:)
 
+        ! Some tests and callers hand us the vertical axis in descending order.
         is_ascending = plevi(1) <= plevi(size(plevi))
     end function levels_ascending
 
@@ -101,6 +104,8 @@ contains
             return
         end if
 
+        ! Guard the top and bottom boundary pairs explicitly before the binary
+        ! search so exact legacy edge behavior is preserved.
         if (is_ascending) then
             if (plev_out <= plevi(1)) then
                 kp = 1
@@ -194,11 +199,15 @@ contains
         integer :: bottom_idx, bottom_pair_idx, k, kp
         logical :: is_ascending
 
+        ! The Python bridge writes the exact sentinel value, so direct equality
+        ! is intentional here.
         if (psfc == spvl) then
             dato_col = spvl
             return
         end if
 
+        ! Build hybrid pressures once per column, then reuse them for every
+        ! requested output pressure level.
         psfc_mb = psfc * 0.01_real64
         call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
         is_ascending = levels_ascending(plevi)
@@ -207,6 +216,8 @@ contains
         bottom_pressure = plevi(bottom_idx)
 
         do k = 1, size(plevo_mb)
+            ! Below-ground requests either return the sentinel or use the same
+            ! lowest bracketing pair as the legacy node kernel.
             if (plevo_mb(k) > bottom_pressure) then
                 if (kxtrp == 0) then
                     dato_col(k) = spvl
@@ -245,11 +256,16 @@ contains
         integer :: bottom_idx, k, kp
         logical :: is_ascending
 
+        ! The Python bridge writes the exact sentinel value, so direct equality
+        ! is intentional here.
         if (psfc == spvl) then
             dato_col = spvl
             return
         end if
 
+        ! ECMWF extrapolation uses the lowest physical model level of the
+        ! current column, but interior interpolation still follows the same
+        ! bracketing logic as the plain node kernel.
         psfc_mb = psfc * 0.01_real64
         call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
         is_ascending = levels_ascending(plevi)
@@ -373,6 +389,8 @@ subroutine dvinth2p_nodes_pa( &
     real(real64) :: plevo_mb(nlevo), p0_mb
     integer :: j
 
+    ! This is the generic column-major entry point used by the fallback Python
+    ! bridge and by the explicit output-buffer wrapper below.
     p0_mb = p0 * 0.01_real64
     call convert_levels_to_mb(plevo, plevo_mb)
 
@@ -402,6 +420,8 @@ subroutine dvinth2p_ecmwf_nodes_pa( &
     real(real64) :: plevo_mb(nlevo), p0_mb
     integer :: j
 
+    ! This is the generic column-major ECMWF entry point used by the fallback
+    ! Python bridge and by the explicit output-buffer wrapper below.
     p0_mb = p0 * 0.01_real64
     call convert_levels_to_mb(plevo, plevo_mb)
 
@@ -465,6 +485,9 @@ subroutine dvinth2p_nodes_corder_pa_into( &
     real(real64), intent(in) :: hbcofa(nlevi), hbcofb(nlevi)
     real(real64), intent(in) :: p0, plevo(nlevo), psfc(nouter * ninner), spvl
 
+    ! This flat-array entry point exists purely to avoid Python-side
+    ! transpose/packing when the caller already has NumPy C-order data with the
+    ! interpolation axis in place.
     real(real64) :: dati_col(nlevi), dato_col(nlevo), plevo_mb(nlevo), p0_mb
     integer :: base_in, base_out, col_idx, inner, k, outer
 
@@ -476,6 +499,8 @@ subroutine dvinth2p_nodes_corder_pa_into( &
         base_out = outer * nlevo * ninner
         do inner = 1, ninner
             col_idx = outer * ninner + inner
+            ! Flattened indexing corresponds to [outer, level, inner] in the
+            ! original C-order NumPy array.
             do k = 1, nlevi
                 dati_col(k) = dati_flat(base_in + (k - 1) * ninner + inner)
             end do
@@ -504,6 +529,8 @@ subroutine dvinth2p_ecmwf_nodes_corder_pa_into( &
     real(real64), intent(in) :: p0, plevo(nlevo), psfc(nouter * ninner), spvl
     real(real64), intent(in) :: tbot(nouter * ninner), phis(nouter * ninner)
 
+    ! This flat-array ECMWF entry point mirrors the generic column-major kernel
+    ! but keeps the data in its original NumPy C-order layout.
     real(real64) :: dati_col(nlevi), dato_col(nlevo), plevo_mb(nlevo), p0_mb
     integer :: base_in, base_out, col_idx, inner, k, outer
 
