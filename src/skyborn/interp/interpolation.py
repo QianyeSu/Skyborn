@@ -21,10 +21,16 @@ import xarray as xr
 
 try:
     from .fortran.vinth2p_backend import (
+        dvinth2p_ecmwf_nodes_corder_pa_into as _dvinth2p_ecmwf_nodes_corder_pa_into,
+    )
+    from .fortran.vinth2p_backend import (
         dvinth2p_ecmwf_nodes_pa as _dvinth2p_ecmwf_nodes_pa,
     )
     from .fortran.vinth2p_backend import (
         dvinth2p_ecmwf_nodes_pa_into as _dvinth2p_ecmwf_nodes_pa_into,
+    )
+    from .fortran.vinth2p_backend import (
+        dvinth2p_nodes_corder_pa_into as _dvinth2p_nodes_corder_pa_into,
     )
     from .fortran.vinth2p_backend import dvinth2p_nodes_pa as _dvinth2p_nodes_pa
     from .fortran.vinth2p_backend import (
@@ -35,6 +41,8 @@ except Exception:
     _dvinth2p_ecmwf_nodes_pa = None
     _dvinth2p_nodes_pa_into = None
     _dvinth2p_ecmwf_nodes_pa_into = None
+    _dvinth2p_nodes_corder_pa_into = None
+    _dvinth2p_ecmwf_nodes_corder_pa_into = None
 
 __all__ = [
     "pressure_at_hybrid_levels",
@@ -624,6 +632,146 @@ def _vinth2p_varflg(variable: str) -> int:
     return 0
 
 
+def _as_c_contiguous_float64_view(array: xr.DataArray, dims, shape):
+    """Return a zero-copy 1D float64 view when the DataArray matches the fast path."""
+
+    if array is None or not isinstance(array, xr.DataArray):
+        return None
+
+    if tuple(array.dims) != tuple(dims) or tuple(array.shape) != tuple(shape):
+        return None
+
+    values = array.data
+    if not isinstance(values, np.ndarray):
+        return None
+    if values.dtype != np.float64 or not values.flags.c_contiguous:
+        return None
+
+    return values.reshape(-1)
+
+
+def _build_vinth2p_output(data, interp_axis, new_levels, output_values, base_template):
+    """Wrap a NumPy output array in the public xarray result."""
+
+    coords = {k: v for k, v in base_template.coords.items()}
+    coords["plev"] = new_levels
+    output_dims = tuple(
+        dim if idx != interp_axis else "plev" for idx, dim in enumerate(data.dims)
+    )
+    return xr.DataArray(
+        output_values,
+        dims=output_dims,
+        coords=coords,
+        name=data.name,
+        attrs=data.attrs,
+    )
+
+
+def _interp_hybrid_to_pressure_fortran_corder_fastpath(
+    data: xr.DataArray,
+    ps: xr.DataArray,
+    hyam: xr.DataArray,
+    hybm: xr.DataArray,
+    p0: float,
+    new_levels: np.ndarray,
+    lev_dim: str,
+    method: str,
+    extrapolate: bool,
+    variable: str,
+    t_bot: xr.DataArray,
+    phi_sfc: xr.DataArray,
+) -> xr.DataArray | None:
+    """Use a no-transpose fast path for NumPy C-order arrays with aligned dims."""
+
+    if _dvinth2p_nodes_corder_pa_into is None:
+        return None
+
+    interp_axis = data.dims.index(lev_dim)
+    raw_data = data.data
+    if not isinstance(raw_data, np.ndarray):
+        return None
+    if raw_data.dtype != np.float64 or not raw_data.flags.c_contiguous:
+        return None
+
+    shape_before = data.shape[:interp_axis]
+    shape_after = data.shape[interp_axis + 1 :]
+    lead_dims = data.dims[:interp_axis] + data.dims[interp_axis + 1 :]
+    lead_shape = shape_before + shape_after
+    nouter = int(np.prod(shape_before, dtype=np.int64)) if shape_before else 1
+    ninner = int(np.prod(shape_after, dtype=np.int64)) if shape_after else 1
+    nlevi = data.shape[interp_axis]
+    nlevo = new_levels.size
+
+    ps_flat = _as_c_contiguous_float64_view(ps, lead_dims, lead_shape)
+    if ps_flat is None or not np.isfinite(ps_flat).all():
+        return None
+
+    hyam_values = np.asarray(hyam.data, dtype=np.float64).reshape(nlevi)
+    hybm_values = np.asarray(hybm.data, dtype=np.float64).reshape(nlevi)
+    new_level_values = np.asarray(new_levels, dtype=np.float64).reshape(nlevo)
+    intyp = _vinth2p_intyp(method)
+    base_template = data.isel({lev_dim: 0}, drop=True)
+
+    output_values = np.empty(
+        (*shape_before, nlevo, *shape_after), dtype=np.float64, order="C"
+    )
+    output_flat = output_values.reshape(-1)
+
+    if extrapolate:
+        varflg = _vinth2p_varflg(variable)
+        if _dvinth2p_ecmwf_nodes_corder_pa_into is None:
+            return None
+        if varflg == 0:
+            tbot_flat = np.zeros(nouter * ninner, dtype=np.float64)
+            phi_flat = np.zeros(nouter * ninner, dtype=np.float64)
+        else:
+            tbot_flat = _as_c_contiguous_float64_view(t_bot, lead_dims, lead_shape)
+            phi_flat = _as_c_contiguous_float64_view(phi_sfc, lead_dims, lead_shape)
+            if tbot_flat is None or phi_flat is None:
+                return None
+        _dvinth2p_ecmwf_nodes_corder_pa_into(
+            raw_data.reshape(-1),
+            output_flat,
+            hyam_values,
+            hybm_values,
+            float(p0),
+            new_level_values,
+            intyp,
+            ps_flat,
+            _VINTH2P_SPVL,
+            1,
+            nouter,
+            ninner,
+            varflg,
+            tbot_flat,
+            phi_flat,
+        )
+    else:
+        _dvinth2p_nodes_corder_pa_into(
+            raw_data.reshape(-1),
+            output_flat,
+            hyam_values,
+            hybm_values,
+            float(p0),
+            new_level_values,
+            intyp,
+            ps_flat,
+            _VINTH2P_SPVL,
+            0,
+            nouter,
+            ninner,
+        )
+
+    output_values[output_values == _VINTH2P_SPVL] = np.nan
+    return _build_vinth2p_output(
+        data=data,
+        interp_axis=interp_axis,
+        new_levels=new_levels,
+        output_values=output_values,
+        base_template=base_template,
+    )
+
+
 def _interp_hybrid_to_pressure_fortran(
     data: xr.DataArray,
     ps: xr.DataArray,
@@ -642,6 +790,23 @@ def _interp_hybrid_to_pressure_fortran(
 
     if _dvinth2p_nodes_pa is None:
         raise RuntimeError("vinth2p backend is not available")
+
+    fast_output = _interp_hybrid_to_pressure_fortran_corder_fastpath(
+        data=data,
+        ps=ps,
+        hyam=hyam,
+        hybm=hybm,
+        p0=p0,
+        new_levels=new_levels,
+        lev_dim=lev_dim,
+        method=method,
+        extrapolate=extrapolate,
+        variable=variable,
+        t_bot=t_bot,
+        phi_sfc=phi_sfc,
+    )
+    if fast_output is not None:
+        return fast_output
 
     base_template = data.isel({lev_dim: 0}, drop=True)
     lead_dims = base_template.dims
