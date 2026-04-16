@@ -156,6 +156,7 @@ try_f2py = run_command(py, '-c', 'import numpy.f2py; print("OK")', check: false)
 
 if try_f2py.returncode() == 0
     inc_np = include_directories(incdir_numpy, incdir_f2py)
+    f2py_runner = files('../../../build_tools/run_f2py.py')
 
     # Get fortranobject.c path with extensive fallbacks
     fortranobject_cmd = run_command(
@@ -218,7 +219,7 @@ else:
         output: ['rcm2pointsmodule.c', 'rcm2points-f2pywrappers.f'],
         command: [
             py,
-            '-m', 'numpy.f2py',
+            f2py_runner,
             '--lower', '@INPUT@',
             '--build-dir', '@OUTDIR@',
         ],
@@ -235,7 +236,7 @@ else:
         output: ['rcm2rgridmodule.c', 'rcm2rgrid-f2pywrappers.f'],
         command: [
             py,
-            '-m', 'numpy.f2py',
+            f2py_runner,
             '--lower', '@INPUT@',
             '--build-dir', '@OUTDIR@',
         ],
@@ -252,7 +253,7 @@ else:
         output: ['triple2gridmodule.c', 'triple2grid-f2pywrappers.f'],
         command: [
             py,
-            '-m', 'numpy.f2py',
+            f2py_runner,
             '--lower', '@INPUT@',
             '--build-dir', '@OUTDIR@',
         ],
@@ -269,7 +270,7 @@ else:
         output: ['grid2triplemodule.c', 'grid2triple-f2pywrappers.f'],
         command: [
             py,
-            '-m', 'numpy.f2py',
+            f2py_runner,
             '--lower', '@INPUT@',
             '--build-dir', '@OUTDIR@',
         ],
@@ -277,6 +278,23 @@ else:
         install: false,
     )
     grid2triple_sources += grid2triple_source
+
+    # Build VINTH2P backend extension
+    vinth2p_backend_sources = []
+    vinth2p_backend_source = custom_target(
+        'vinth2p_backendmodule.c',
+        input: ['fortran/vinth2p_backend.pyf'],
+        output: ['vinth2p_backendmodule.c', 'vinth2p_backend-f2pywrappers.f'],
+        command: [
+            py,
+            f2py_runner,
+            '--lower', '@INPUT@',
+            '--build-dir', '@OUTDIR@',
+        ],
+        build_by_default: true,
+        install: false,
+    )
+    vinth2p_backend_sources += vinth2p_backend_source
 
     # Add fortranobject.c if found
     if fortranobject_c != ''
@@ -293,6 +311,7 @@ else:
             rcm2rgrid_sources += files(fortranobject_c)
             triple2grid_sources += files(fortranobject_c)
             grid2triple_sources += files(fortranobject_c)
+            vinth2p_backend_sources += files(fortranobject_c)
             message('Added fortranobject.c to build')
         else
             warning(
@@ -375,10 +394,26 @@ else:
         build_by_default: true,
     )
 
+    # Build the vinth2p backend extension module
+    vinth2p_backend_ext = py.extension_module(
+        'vinth2p_backend',
+        [
+            'fortran/vinth2p_backend.f90',
+            vinth2p_backend_sources,
+        ],
+        include_directories: inc_np,
+        dependencies: [py_dep],
+        fortran_args: fortran_args,
+        c_args: c_args,
+        install: true,
+        install_dir: get_option('python.purelibdir') / 'skyborn' / 'interp' / 'fortran',
+        build_by_default: true,
+    )
+
     # Copy to source directory for inplace builds
     custom_target(
         'copy_interp_to_source',
-        input: [rcm2points_ext, rcm2rgrid_ext, triple2grid_ext, grid2triple_ext],
+        input: [rcm2points_ext, rcm2rgrid_ext, triple2grid_ext, grid2triple_ext, vinth2p_backend_ext],
         output: 'interp_copy_marker.txt',
         command: [
             py,
@@ -426,8 +461,9 @@ with open(sys.argv[1], 'w') as f:
     f.write('from .rcm2rgrid import drcm2rgrid, drgrid2rcm' + chr(10))
     f.write('from .triple2grid import triple2grid1' + chr(10))
     f.write('from .grid2triple import grid2triple' + chr(10))
+    f.write('from .vinth2p_backend import dvinth2p_nodes_pa, dvinth2p_nodes_pa_into, dvinth2p_nodes_corder_pa_into, dvinth2p_ecmwf_nodes_pa, dvinth2p_ecmwf_nodes_pa_into, dvinth2p_ecmwf_nodes_corder_pa_into' + chr(10))
     f.write(chr(10))
-    f.write('__all__ = [' + chr(39) + 'drcm2points' + chr(39) + ', ' + chr(39) + 'drcm2rgrid' + chr(39) + ', ' + chr(39) + 'drgrid2rcm' + chr(39) + ', ' + chr(39) + 'triple2grid1' + chr(39) + ', ' + chr(39) + 'grid2triple' + chr(39) + ']' + chr(10))
+    f.write('__all__ = [' + chr(39) + 'drcm2points' + chr(39) + ', ' + chr(39) + 'drcm2rgrid' + chr(39) + ', ' + chr(39) + 'drgrid2rcm' + chr(39) + ', ' + chr(39) + 'triple2grid1' + chr(39) + ', ' + chr(39) + 'grid2triple' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_pa' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_corder_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_pa' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_corder_pa_into' + chr(39) + ']' + chr(10))
 ''',
             '@OUTPUT@',
         ],
