@@ -15,6 +15,7 @@ module vinth2p_backend_core
     public :: extrapolate_geopotential
     public :: extrapolate_temperature
     public :: interpolate_column_ecmwf
+    public :: interpolate_column_sigma
     public :: interpolate_flat_column_ecmwf
     public :: interpolate_flat_column_nodes
     public :: interpolate_column_nodes
@@ -28,6 +29,8 @@ module vinth2p_backend_core
 
 contains
 
+    ! Convert public pressure levels from Pa to the legacy mb arithmetic used
+    ! by the original vinth2p kernels.
     pure subroutine convert_levels_to_mb(plevo, plevo_mb)
         real(real64), intent(in) :: plevo(:)
         real(real64), intent(out) :: plevo_mb(size(plevo))
@@ -36,6 +39,8 @@ contains
     end subroutine convert_levels_to_mb
 
 
+    ! Build the hybrid pressure profile for one column from the A/B
+    ! coefficients, reference pressure, and surface pressure.
     pure subroutine build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
         real(real64), intent(in) :: hbcofa(:), hbcofb(:)
         real(real64), intent(in) :: p0_mb, psfc_mb
@@ -45,6 +50,7 @@ contains
     end subroutine build_input_pressures
 
 
+    ! Return whether the source coordinate increases from top to bottom.
     pure logical function levels_ascending(plevi) result(is_ascending)
         real(real64), intent(in) :: plevi(:)
 
@@ -53,6 +59,8 @@ contains
     end function levels_ascending
 
 
+    ! Return the index of the physically lowest model level for either
+    ! ascending or descending source-coordinate order.
     pure integer function lowest_model_level_index(plevi) result(idx)
         real(real64), intent(in) :: plevi(:)
 
@@ -64,6 +72,7 @@ contains
     end function lowest_model_level_index
 
 
+    ! Return the upper index of the lowest usable bracketing pair.
     pure integer function lowest_bracketing_level_index(plevi) result(idx)
         real(real64), intent(in) :: plevi(:)
 
@@ -75,6 +84,7 @@ contains
     end function lowest_bracketing_level_index
 
 
+    ! Check whether a requested pressure lies below the lowest model level.
     pure logical function is_below_lowest_model_level(plev_out, plevi) result(is_below)
         real(real64), intent(in) :: plev_out
         real(real64), intent(in) :: plevi(:)
@@ -83,6 +93,8 @@ contains
     end function is_below_lowest_model_level
 
 
+    ! Convenience wrapper that detects source-coordinate order before calling
+    ! the ordered binary-search helper.
     pure integer function locate_bracketing_level(plev_out, plevi) result(kp)
         real(real64), intent(in) :: plev_out
         real(real64), intent(in) :: plevi(:)
@@ -91,6 +103,8 @@ contains
     end function locate_bracketing_level
 
 
+    ! Locate the upper index of the bracketing source interval for one target
+    ! coordinate value, assuming the caller already knows the source order.
     pure integer function locate_bracketing_level_ordered( &
         plev_out, plevi, is_ascending &
     ) result(kp)
@@ -153,6 +167,7 @@ contains
     end function locate_bracketing_level_ordered
 
 
+    ! Legacy double-log transform used by vinth2p "log-log" interpolation.
     pure real(real64) function double_log_pressure(pressure_mb) result(value)
         real(real64), intent(in) :: pressure_mb
 
@@ -160,6 +175,7 @@ contains
     end function double_log_pressure
 
 
+    ! Apply the legacy vinth2p interpolation formula for one bracketing pair.
     pure real(real64) function interpolate_value( &
         lower_value, upper_value, plev_out, plev_lower, plev_upper, intyp, spvl &
     ) result(value)
@@ -189,6 +205,8 @@ contains
     end function interpolate_value
 
 
+    ! Interpolate one vertical column from hybrid levels to requested pressure
+    ! levels without ECMWF below-ground extrapolation.
     subroutine interpolate_column_nodes( &
         dati_col, dato_col, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp &
     )
@@ -245,6 +263,8 @@ contains
     end subroutine interpolate_column_nodes
 
 
+    ! Interpolate one vertical column from hybrid levels to requested pressure
+    ! levels with ECMWF below-ground extrapolation when requested.
     subroutine interpolate_column_ecmwf( &
         dati_col, dato_col, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp, &
         varflg, tbot, phis &
@@ -308,6 +328,57 @@ contains
     end subroutine interpolate_column_ecmwf
 
 
+    ! Interpolate one vertical column from sigma levels to target sigma values.
+    ! This keeps the same linear/log formulas as the Python/MetPy path but
+    ! executes the per-column loop in Fortran.
+    subroutine interpolate_column_sigma( &
+        dati_col, dato_col, sigmai, sigmao_col, intyp, spvl &
+    )
+        real(real64), intent(in) :: dati_col(:), sigmai(:), sigmao_col(:)
+        real(real64), intent(out) :: dato_col(size(sigmao_col))
+        real(real64), intent(in) :: spvl
+        integer, intent(in) :: intyp
+
+        logical :: is_ascending
+        integer :: k, kp, nlevi
+
+        nlevi = size(sigmai)
+        if (nlevi < 2) then
+            dato_col = spvl
+            return
+        end if
+
+        is_ascending = levels_ascending(sigmai)
+        do k = 1, size(sigmao_col)
+            if (is_ascending) then
+                if (sigmao_col(k) < sigmai(1) .or. sigmao_col(k) > sigmai(nlevi)) then
+                    dato_col(k) = spvl
+                    cycle
+                end if
+            else
+                if (sigmao_col(k) > sigmai(1) .or. sigmao_col(k) < sigmai(nlevi)) then
+                    dato_col(k) = spvl
+                    cycle
+                end if
+            end if
+
+            kp = locate_bracketing_level_ordered(sigmao_col(k), sigmai, is_ascending)
+            if (kp < 1) then
+                dato_col(k) = spvl
+            else if (intyp == 2 .and. &
+                (sigmao_col(k) <= 0.0_real64 .or. sigmai(kp) <= 0.0_real64 .or. sigmai(kp + 1) <= 0.0_real64)) then
+                dato_col(k) = spvl
+            else
+                dato_col(k) = interpolate_value( &
+                    dati_col(kp), dati_col(kp + 1), &
+                    sigmao_col(k), sigmai(kp), sigmai(kp + 1), intyp, spvl &
+                )
+            end if
+        end do
+    end subroutine interpolate_column_sigma
+
+
+    ! Flat-buffer helper for the C-order hybrid->pressure path.
     subroutine interpolate_flat_column_nodes( &
         dati_flat, dato_flat, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp, &
         base_in, base_out, inner, ninner, nlevi, nlevo &
@@ -366,6 +437,7 @@ contains
     end subroutine interpolate_flat_column_nodes
 
 
+    ! Flat-buffer helper for the C-order ECMWF hybrid->pressure path.
     subroutine interpolate_flat_column_ecmwf( &
         dati_flat, dato_flat, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp, &
         varflg, tbot, phis, base_in, base_out, inner, ninner, nlevi, nlevo &
@@ -431,6 +503,7 @@ contains
     end subroutine interpolate_flat_column_ecmwf
 
 
+    ! ECMWF below-ground temperature extrapolation for one target pressure.
     pure real(real64) function extrapolate_temperature( &
         tbot, plev_bottom, plev_out, psfc_mb, phi_sfc &
     ) result(value)
@@ -466,6 +539,7 @@ contains
     end function extrapolate_temperature
 
 
+    ! ECMWF below-ground geopotential extrapolation for one target pressure.
     pure real(real64) function extrapolate_geopotential( &
         tbot, plev_bottom, plev_out, psfc_mb, phi_sfc &
     ) result(value)
@@ -682,6 +756,60 @@ subroutine dvinth2p_ecmwf_nodes_pa_into( &
         nlevi, ncol, nlevo, varflg, tbot, phis &
     )
 end subroutine dvinth2p_ecmwf_nodes_pa_into
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    GENERIC COLUMN-MAJOR ENTRY POINT FOR INTERPOLATION FROM SOURCE
+!    SIGMA LEVELS TO TARGET HYBRID-IMPLIED SIGMA LEVELS.
+!
+! EXPECTED INPUT SHAPES
+!    DATI(NLEVI,NCOL)   - INPUT FIELD ON SIGMA LEVELS
+!    DATO(NLEVO,NCOL)   - OUTPUT FIELD ON TARGET HYBRID LEVELS
+!    SIGMAI(NLEVI)      - SOURCE SIGMA COORDINATES
+!    SIGMAO(NLEVO,NCOL) - TARGET SIGMA COORDINATES FOR EACH COLUMN
+!
+! FLAGS
+!    INTYP  - 1: LINEAR, 2: LOG
+!    SPVL   - MISSING VALUE SENTINEL
+subroutine dsigma2hybrid_nodes( &
+    dati, dato, sigmai, sigmao, intyp, spvl, nlevi, ncol, nlevo)
+    use vinth2p_backend_core, only : real64, interpolate_column_sigma
+    implicit none
+
+    integer, intent(in) :: intyp, nlevi, ncol, nlevo
+    real(real64), intent(in) :: dati(nlevi, ncol)
+    real(real64), intent(out) :: dato(nlevo, ncol)
+    real(real64), intent(in) :: sigmai(nlevi), sigmao(nlevo, ncol), spvl
+
+    integer :: j
+
+    do j = 1, ncol
+        call interpolate_column_sigma( &
+            dati(:, j), dato(:, j), sigmai, sigmao(:, j), intyp, spvl &
+        )
+    end do
+end subroutine dsigma2hybrid_nodes
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    THIN F2PY-FRIENDLY WRAPPER THAT WRITES SIGMA->HYBRID RESULTS INTO
+!    A CALLER-PROVIDED COLUMN-MAJOR OUTPUT BUFFER.
+subroutine dsigma2hybrid_nodes_into( &
+    dati, dato, sigmai, sigmao, intyp, spvl, nlevi, ncol, nlevo)
+    use vinth2p_backend_core, only : real64
+    implicit none
+
+    integer, intent(in) :: intyp, nlevi, ncol, nlevo
+    real(real64), intent(in) :: dati(nlevi, ncol)
+    real(real64), intent(inout) :: dato(nlevo, ncol)
+    real(real64), intent(in) :: sigmai(nlevi), sigmao(nlevo, ncol), spvl
+
+    call dsigma2hybrid_nodes( &
+        dati, dato, sigmai, sigmao, intyp, spvl, nlevi, ncol, nlevo &
+    )
+end subroutine dsigma2hybrid_nodes_into
 
 
 ! QUICK REFERENCE
