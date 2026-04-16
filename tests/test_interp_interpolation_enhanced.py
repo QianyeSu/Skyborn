@@ -13,6 +13,7 @@ import pytest
 import xarray as xr
 from numpy.testing import assert_allclose, assert_array_almost_equal, assert_array_equal
 
+import skyborn.interp.interpolation as interpolation_mod
 from skyborn.interp.interpolation import (
     __pres_lev_mandatory__,
     _align_hybrid_level_dimension,
@@ -241,6 +242,77 @@ class TestInterpolationEdgeCases:
         assert result.shape == (1, 3, 1)
         # Geopotential should increase with altitude (decrease with pressure)
         assert result[0, 0, 0] <= result[0, 1, 0] <= result[0, 2, 0]
+
+    def test_fortran_path_prefers_preallocated_output_buffer(self, monkeypatch):
+        """Test that the Fortran fast path reuses a caller-allocated output buffer."""
+        data = xr.DataArray(
+            [
+                [[280.0, 285.0]],
+                [[240.0, 245.0]],
+            ],
+            dims=["lev", "lat", "lon"],
+            coords={"lat": [0], "lon": [0, 90]},
+        )
+        ps = xr.DataArray(
+            [[100000.0, 100000.0]],
+            dims=["lat", "lon"],
+            coords={"lat": [0], "lon": [0, 90]},
+        )
+        hyam = xr.DataArray([0.0, 0.2], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
+        new_levels = np.array([90000.0, 80000.0], dtype=np.float64)
+
+        captured = {}
+
+        def fake_nodes_into(
+            dati,
+            dato,
+            hbcofa,
+            hbcofb,
+            p0,
+            plevo,
+            intyp,
+            psfc,
+            spvl,
+            kxtrp,
+        ):
+            captured["dato_shape"] = dato.shape
+            captured["dato_f"] = dato.flags.f_contiguous
+            captured["psfc_shape"] = psfc.shape
+            dato[:, :] = 123.0
+
+        def fail_return_allocating_nodes(*args, **kwargs):
+            raise AssertionError("return-allocating vinth2p wrapper should not be used")
+
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_nodes_pa_into", fake_nodes_into
+        )
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dvinth2p_nodes_pa",
+            fail_return_allocating_nodes,
+        )
+
+        result = interpolation_mod._interp_hybrid_to_pressure_fortran(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=new_levels,
+            lev_dim="lev",
+            method="linear",
+            extrapolate=False,
+            variable=None,
+            t_bot=None,
+            phi_sfc=None,
+        )
+
+        assert captured["dato_shape"] == (2, 2)
+        assert captured["dato_f"] is True
+        assert captured["psfc_shape"] == (2,)
+        assert result.shape == (2, 1, 2)
+        assert_array_equal(result.values, np.full((2, 1, 2), 123.0))
 
     @pytest.mark.skipif(
         not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
