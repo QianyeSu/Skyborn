@@ -373,6 +373,33 @@ contains
 end module vinth2p_backend_core
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    GENERIC COLUMN-MAJOR ENTRY POINT FOR HYBRID-TO-PRESSURE
+!    INTERPOLATION WITHOUT ECMWF BELOW-GROUND EXTRAPOLATION.
+!
+! EXPECTED INPUT SHAPES
+!    DATI(NLEVI,NCOL)   - INPUT FIELD ON HYBRID LEVELS
+!    DATO(NLEVO,NCOL)   - OUTPUT FIELD ON PRESSURE LEVELS
+!    HBCOFA(NLEVI)      - HYBRID "A" COEFFICIENTS
+!    HBCOFB(NLEVI)      - HYBRID "B" COEFFICIENTS
+!    PLEVO(NLEVO)       - TARGET PRESSURE LEVELS
+!    PSFC(NCOL)         - SURFACE PRESSURE FOR EACH COLUMN
+!
+! UNITS
+!    P0     - PA ON ENTRY, CONVERTED TO MB INTERNALLY
+!    PLEVO  - PA ON ENTRY, CONVERTED TO MB INTERNALLY
+!    PSFC   - PA
+!    DATI   - CALLER'S FIELD UNITS, PRESERVED IN DATO
+!
+! FLAGS
+!    INTYP  - 1: LINEAR, 2: LOG, 3: LOG-LOG
+!    KXTRP  - 0: RETURN SPVL BELOW GROUND
+!             1: EXTRAPOLATE USING THE LOWEST BRACKETING PAIR
+!    SPVL   - MISSING VALUE SENTINEL
+!
+! OUTPUT
+!    DATO HOLDS THE INTERPOLATED PRESSURE-LEVEL FIELD FOR EACH COLUMN.
 subroutine dvinth2p_nodes_pa( &
     dati, dato, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
     nlevi, ncol, nlevo)
@@ -403,6 +430,39 @@ subroutine dvinth2p_nodes_pa( &
 end subroutine dvinth2p_nodes_pa
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    GENERIC COLUMN-MAJOR ENTRY POINT FOR HYBRID-TO-PRESSURE
+!    INTERPOLATION WITH ECMWF BELOW-GROUND EXTRAPOLATION.
+!
+! EXPECTED INPUT SHAPES
+!    DATI(NLEVI,NCOL)   - INPUT FIELD ON HYBRID LEVELS
+!    DATO(NLEVO,NCOL)   - OUTPUT FIELD ON PRESSURE LEVELS
+!    HBCOFA(NLEVI)      - HYBRID "A" COEFFICIENTS
+!    HBCOFB(NLEVI)      - HYBRID "B" COEFFICIENTS
+!    PLEVO(NLEVO)       - TARGET PRESSURE LEVELS
+!    PSFC(NCOL)         - SURFACE PRESSURE FOR EACH COLUMN
+!    TBOT(NCOL)         - TEMPERATURE AT THE LOWEST MODEL LEVEL
+!    PHIS(NCOL)         - SURFACE GEOPOTENTIAL
+!
+! UNITS
+!    P0     - PA ON ENTRY, CONVERTED TO MB INTERNALLY
+!    PLEVO  - PA ON ENTRY, CONVERTED TO MB INTERNALLY
+!    PSFC   - PA
+!    TBOT   - K
+!    PHIS   - M2 S-2
+!
+! FLAGS
+!    INTYP  - 1: LINEAR, 2: LOG, 3: LOG-LOG
+!    KXTRP  - 0: RETURN SPVL BELOW GROUND
+!             1: APPLY ECMWF BELOW-GROUND EXTRAPOLATION
+!    VARFLG - +1: TEMPERATURE, -1: GEOPOTENTIAL, 0: OTHER
+!             VARIABLES USE THE LOWEST MODEL LEVEL BELOW GROUND
+!    SPVL   - MISSING VALUE SENTINEL
+!
+! OUTPUT
+!    DATO HOLDS THE INTERPOLATED OR EXTRAPOLATED PRESSURE-LEVEL FIELD
+!    FOR EACH COLUMN.
 subroutine dvinth2p_ecmwf_nodes_pa( &
     dati, dato, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
     nlevi, ncol, nlevo, varflg, tbot, phis)
@@ -434,6 +494,18 @@ subroutine dvinth2p_ecmwf_nodes_pa( &
 end subroutine dvinth2p_ecmwf_nodes_pa
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    THIN F2PY-FRIENDLY WRAPPER THAT WRITES INTO A CALLER-PROVIDED
+!    COLUMN-MAJOR OUTPUT BUFFER TO AVOID RETURN-ARRAY ALLOCATION.
+!
+! EXPECTED INPUT SHAPES
+!    DATI(NLEVI,NCOL)   - INPUT FIELD ON HYBRID LEVELS
+!    DATO(NLEVO,NCOL)   - PREALLOCATED OUTPUT BUFFER
+!    HBCOFA(NLEVI)      - HYBRID "A" COEFFICIENTS
+!    HBCOFB(NLEVI)      - HYBRID "B" COEFFICIENTS
+!    PLEVO(NLEVO)       - TARGET PRESSURE LEVELS
+!    PSFC(NCOL)         - SURFACE PRESSURE FOR EACH COLUMN
 subroutine dvinth2p_nodes_pa_into( &
     dati, dato, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
     nlevi, ncol, nlevo)
@@ -453,6 +525,20 @@ subroutine dvinth2p_nodes_pa_into( &
 end subroutine dvinth2p_nodes_pa_into
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    THIN F2PY-FRIENDLY WRAPPER THAT WRITES INTO A CALLER-PROVIDED
+!    COLUMN-MAJOR OUTPUT BUFFER FOR THE ECMWF EXTRAPOLATION PATH.
+!
+! EXPECTED INPUT SHAPES
+!    DATI(NLEVI,NCOL)   - INPUT FIELD ON HYBRID LEVELS
+!    DATO(NLEVO,NCOL)   - PREALLOCATED OUTPUT BUFFER
+!    HBCOFA(NLEVI)      - HYBRID "A" COEFFICIENTS
+!    HBCOFB(NLEVI)      - HYBRID "B" COEFFICIENTS
+!    PLEVO(NLEVO)       - TARGET PRESSURE LEVELS
+!    PSFC(NCOL)         - SURFACE PRESSURE FOR EACH COLUMN
+!    TBOT(NCOL)         - TEMPERATURE AT THE LOWEST MODEL LEVEL
+!    PHIS(NCOL)         - SURFACE GEOPOTENTIAL
 subroutine dvinth2p_ecmwf_nodes_pa_into( &
     dati, dato, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
     nlevi, ncol, nlevo, varflg, tbot, phis)
@@ -473,6 +559,23 @@ subroutine dvinth2p_ecmwf_nodes_pa_into( &
 end subroutine dvinth2p_ecmwf_nodes_pa_into
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    FAST PATH FOR NUMPY C-ORDER INPUTS. DATA IS PASSED AS A FLAT 1-D
+!    BUFFER REPRESENTING [NOUTER, NLEVI, NINNER] IN C ORDER SO PYTHON
+!    DOES NOT NEED TO TRANSPOSE INTO COLUMN-MAJOR STORAGE.
+!
+! EXPECTED INPUT SHAPES
+!    DATI_FLAT(NOUTER*NLEVI*NINNER) - FLAT INPUT BUFFER
+!    DATO_FLAT(NOUTER*NLEVO*NINNER) - FLAT OUTPUT BUFFER
+!    HBCOFA(NLEVI)                  - HYBRID "A" COEFFICIENTS
+!    HBCOFB(NLEVI)                  - HYBRID "B" COEFFICIENTS
+!    PLEVO(NLEVO)                   - TARGET PRESSURE LEVELS
+!    PSFC(NOUTER*NINNER)            - SURFACE PRESSURE FOR EACH COLUMN
+!
+! INDEXING NOTE
+!    FOR A GIVEN OUTER INDEX AND INNER INDEX, ONE PHYSICAL COLUMN IS
+!    FORMED BY WALKING THROUGH THE NLEVI LEVELS IN THE FLAT BUFFER.
 subroutine dvinth2p_nodes_corder_pa_into( &
     dati_flat, dato_flat, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
     nouter, nlevi, ninner, nlevo)
@@ -516,6 +619,25 @@ subroutine dvinth2p_nodes_corder_pa_into( &
 end subroutine dvinth2p_nodes_corder_pa_into
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    FAST C-ORDER ECMWF ENTRY POINT. THIS MATCHES THE GENERIC ECMWF
+!    KERNEL BUT KEEPS INPUT AND OUTPUT IN FLAT NUMPY C-ORDER BUFFERS.
+!
+! EXPECTED INPUT SHAPES
+!    DATI_FLAT(NOUTER*NLEVI*NINNER) - FLAT INPUT BUFFER
+!    DATO_FLAT(NOUTER*NLEVO*NINNER) - FLAT OUTPUT BUFFER
+!    HBCOFA(NLEVI)                  - HYBRID "A" COEFFICIENTS
+!    HBCOFB(NLEVI)                  - HYBRID "B" COEFFICIENTS
+!    PLEVO(NLEVO)                   - TARGET PRESSURE LEVELS
+!    PSFC(NOUTER*NINNER)            - SURFACE PRESSURE FOR EACH COLUMN
+!    TBOT(NOUTER*NINNER)            - TEMPERATURE AT THE LOWEST MODEL
+!                                     LEVEL
+!    PHIS(NOUTER*NINNER)            - SURFACE GEOPOTENTIAL
+!
+! FLAGS
+!    VARFLG - +1: TEMPERATURE, -1: GEOPOTENTIAL, 0: OTHER
+!             VARIABLES USE THE LOWEST MODEL LEVEL BELOW GROUND
 subroutine dvinth2p_ecmwf_nodes_corder_pa_into( &
     dati_flat, dato_flat, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
     nouter, nlevi, ninner, nlevo, varflg, tbot, phis)
