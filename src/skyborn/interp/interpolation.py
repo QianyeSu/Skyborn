@@ -667,7 +667,7 @@ def _build_vinth2p_output(data, interp_axis, new_levels, output_values, base_tem
     )
 
 
-def _interp_hybrid_to_pressure_fortran_corder_fastpath(
+def _interp_hybrid_to_pressure_fortran_corder(
     data: xr.DataArray,
     ps: xr.DataArray,
     hyam: xr.DataArray,
@@ -791,7 +791,7 @@ def _interp_hybrid_to_pressure_fortran(
     if _dvinth2p_nodes_pa is None:
         raise RuntimeError("vinth2p backend is not available")
 
-    fast_output = _interp_hybrid_to_pressure_fortran_corder_fastpath(
+    corder_output = _interp_hybrid_to_pressure_fortran_corder(
         data=data,
         ps=ps,
         hyam=hyam,
@@ -805,8 +805,8 @@ def _interp_hybrid_to_pressure_fortran(
         t_bot=t_bot,
         phi_sfc=phi_sfc,
     )
-    if fast_output is not None:
-        return fast_output
+    if corder_output is not None:
+        return corder_output
 
     base_template = data.isel({lev_dim: 0}, drop=True)
     lead_dims = base_template.dims
