@@ -1,0 +1,41 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module vinth2p_ecmwf ! in
+    interface  ! in :vinth2p_ecmwf
+        subroutine vinth2pecmwf(dati,dato,hbcofa,hbcofb,p0,plevi,plevo,intyp,ilev,psfc,spvl,kxtrp,imax,nlat,nlevi,nlevip1,nlevo,varflg,tbot,phis) ! in :vinth2p_ecmwf:vinth2p_ecmwf.f
+            double precision dimension(imax,nlat,nlevi) :: dati
+            double precision dimension(imax,nlat,nlevo),depend(imax,nlat) :: dato
+            double precision dimension(nlevip1) :: hbcofa
+            double precision dimension(nlevip1),depend(nlevip1) :: hbcofb
+            double precision :: p0
+            double precision dimension(nlevip1),depend(nlevip1) :: plevi
+            double precision dimension(nlevo),depend(nlevo) :: plevo
+            integer :: intyp
+            integer :: ilev
+            double precision dimension(imax,nlat),depend(imax,nlat) :: psfc
+            double precision :: spvl
+            integer :: kxtrp
+            integer, optional,check(shape(dati,0)==imax),depend(dati) :: imax=shape(dati,0)
+            integer, optional,check(shape(dati,1)==nlat),depend(dati) :: nlat=shape(dati,1)
+            integer, optional,check(shape(dati,2)==nlevi),depend(dati) :: nevi=shape(dati,2)
+            integer, optional,check(len(hbcofa)>=nlevip1),depend(hbcofa) :: nlevip1=len(hbcofa)
+            integer, optional,check(shape(dato,2)==nlevo),depend(dato) :: nlevo=shape(dato,2)
+            integer :: varflg
+            double precision dimension(imax,nlat),depend(imax,nlat) :: tbot
+            double precision dimension(imax,nlat),depend(imax,nlat) :: phis
+        end subroutine vinth2pecmwf
+        subroutine dprnt(ifld,a,im,jm,is,js) ! in :vinth2p_ecmwf:vinth2p_ecmwf.f
+            character*(*) :: ifld
+            double precision dimension(im,jm) :: a
+            integer, optional,check(shape(a,0)==im),depend(a) :: im=shape(a,0)
+            integer, optional,check(shape(a,1)==jm),depend(a) :: jm=shape(a,1)
+            integer :: is
+            integer :: js
+        end subroutine dprnt
+    end interface
+end python module vinth2p_ecmwf
+
+! This file was auto-generated with f2py (version:2).
+! See http://cens.ioc.ee/projects/f2py2e/
+l
