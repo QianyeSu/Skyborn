@@ -12,6 +12,8 @@ module vinth2p_backend_core
     public :: convert_levels_to_mb
     public :: extrapolate_geopotential
     public :: extrapolate_temperature
+    public :: interpolate_column_ecmwf
+    public :: interpolate_column_nodes
     public :: interpolate_value
     public :: is_below_lowest_model_level
     public :: levels_ascending
@@ -180,6 +182,114 @@ contains
     end function interpolate_value
 
 
+    subroutine interpolate_column_nodes( &
+        dati_col, dato_col, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp &
+    )
+        real(real64), intent(in) :: dati_col(:), hbcofa(:), hbcofb(:), plevo_mb(:)
+        real(real64), intent(in) :: p0_mb, psfc, spvl
+        real(real64), intent(out) :: dato_col(size(plevo_mb))
+        integer, intent(in) :: intyp, kxtrp
+
+        real(real64) :: bottom_pressure, plevi(size(dati_col)), psfc_mb
+        integer :: bottom_idx, bottom_pair_idx, k, kp
+        logical :: is_ascending
+
+        if (psfc == spvl) then
+            dato_col = spvl
+            return
+        end if
+
+        psfc_mb = psfc * 0.01_real64
+        call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
+        is_ascending = levels_ascending(plevi)
+        bottom_idx = lowest_model_level_index(plevi)
+        bottom_pair_idx = lowest_bracketing_level_index(plevi)
+        bottom_pressure = plevi(bottom_idx)
+
+        do k = 1, size(plevo_mb)
+            if (plevo_mb(k) > bottom_pressure) then
+                if (kxtrp == 0) then
+                    dato_col(k) = spvl
+                else
+                    kp = bottom_pair_idx
+                    dato_col(k) = interpolate_value( &
+                        dati_col(kp), dati_col(kp + 1), &
+                        plevo_mb(k), plevi(kp), plevi(kp + 1), intyp, spvl &
+                    )
+                end if
+            else
+                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                if (kp < 1) then
+                    dato_col(k) = spvl
+                else
+                    dato_col(k) = interpolate_value( &
+                        dati_col(kp), dati_col(kp + 1), &
+                        plevo_mb(k), plevi(kp), plevi(kp + 1), intyp, spvl &
+                    )
+                end if
+            end if
+        end do
+    end subroutine interpolate_column_nodes
+
+
+    subroutine interpolate_column_ecmwf( &
+        dati_col, dato_col, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp, &
+        varflg, tbot, phis &
+    )
+        real(real64), intent(in) :: dati_col(:), hbcofa(:), hbcofb(:), plevo_mb(:)
+        real(real64), intent(in) :: p0_mb, psfc, spvl, tbot, phis
+        real(real64), intent(out) :: dato_col(size(plevo_mb))
+        integer, intent(in) :: intyp, kxtrp, varflg
+
+        real(real64) :: bottom_pressure, plevi(size(dati_col)), psfc_mb
+        integer :: bottom_idx, k, kp
+        logical :: is_ascending
+
+        if (psfc == spvl) then
+            dato_col = spvl
+            return
+        end if
+
+        psfc_mb = psfc * 0.01_real64
+        call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
+        is_ascending = levels_ascending(plevi)
+        bottom_idx = lowest_model_level_index(plevi)
+        bottom_pressure = plevi(bottom_idx)
+
+        do k = 1, size(plevo_mb)
+            if (plevo_mb(k) > bottom_pressure) then
+                if (kxtrp == 0) then
+                    dato_col(k) = spvl
+                else
+                    select case (varflg)
+                    case (1)
+                        dato_col(k) = extrapolate_temperature( &
+                            dati_col(bottom_idx), plevi(bottom_idx), &
+                            plevo_mb(k), psfc_mb, phis &
+                        )
+                    case (-1)
+                        dato_col(k) = extrapolate_geopotential( &
+                            tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
+                        )
+                    case default
+                        dato_col(k) = dati_col(bottom_idx)
+                    end select
+                end if
+            else
+                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                if (kp < 1) then
+                    dato_col(k) = spvl
+                else
+                    dato_col(k) = interpolate_value( &
+                        dati_col(kp), dati_col(kp + 1), &
+                        plevo_mb(k), plevi(kp), plevi(kp + 1), intyp, spvl &
+                    )
+                end if
+            end if
+        end do
+    end subroutine interpolate_column_ecmwf
+
+
     pure real(real64) function extrapolate_temperature( &
         tbot, plev_bottom, plev_out, psfc_mb, phi_sfc &
     ) result(value)
@@ -251,9 +361,7 @@ subroutine dvinth2p_nodes_pa( &
     dati, dato, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
     nlevi, ncol, nlevo)
     use vinth2p_backend_core, only : &
-        real64, build_input_pressures, convert_levels_to_mb, &
-        interpolate_value, levels_ascending, locate_bracketing_level_ordered, &
-        lowest_bracketing_level_index, lowest_model_level_index
+        real64, convert_levels_to_mb, interpolate_column_nodes
     implicit none
 
     integer, intent(in) :: intyp, kxtrp, nlevi, ncol, nlevo
@@ -262,49 +370,17 @@ subroutine dvinth2p_nodes_pa( &
     real(real64), intent(in) :: hbcofa(nlevi), hbcofb(nlevi)
     real(real64), intent(in) :: p0, plevo(nlevo), psfc(ncol), spvl
 
-    real(real64) :: bottom_pressure, plevi(nlevi), plevo_mb(nlevo)
-    real(real64) :: p0_mb, psfc_mb
-    integer :: bottom_idx, bottom_pair_idx, j, k, kp
-    logical :: is_ascending
+    real(real64) :: plevo_mb(nlevo), p0_mb
+    integer :: j
 
     p0_mb = p0 * 0.01_real64
     call convert_levels_to_mb(plevo, plevo_mb)
 
     do j = 1, ncol
-        if (psfc(j) == spvl) then
-            dato(:, j) = spvl
-        else
-            psfc_mb = psfc(j) * 0.01_real64
-            call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
-            is_ascending = levels_ascending(plevi)
-            bottom_idx = lowest_model_level_index(plevi)
-            bottom_pair_idx = lowest_bracketing_level_index(plevi)
-            bottom_pressure = plevi(bottom_idx)
-
-            do k = 1, nlevo
-                if (plevo_mb(k) > bottom_pressure) then
-                    if (kxtrp == 0) then
-                        dato(k, j) = spvl
-                    else
-                        kp = bottom_pair_idx
-                        dato(k, j) = interpolate_value( &
-                            dati(kp, j), dati(kp + 1, j), &
-                            plevo_mb(k), plevi(kp), plevi(kp + 1), intyp, spvl &
-                        )
-                    end if
-                else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
-                    if (kp < 1) then
-                        dato(k, j) = spvl
-                    else
-                        dato(k, j) = interpolate_value( &
-                            dati(kp, j), dati(kp + 1, j), &
-                            plevo_mb(k), plevi(kp), plevi(kp + 1), intyp, spvl &
-                        )
-                    end if
-                end if
-            end do
-        end if
+        call interpolate_column_nodes( &
+            dati(:, j), dato(:, j), hbcofa, hbcofb, p0_mb, plevo_mb, &
+            intyp, psfc(j), spvl, kxtrp &
+        )
     end do
 end subroutine dvinth2p_nodes_pa
 
@@ -313,11 +389,7 @@ subroutine dvinth2p_ecmwf_nodes_pa( &
     dati, dato, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
     nlevi, ncol, nlevo, varflg, tbot, phis)
     use vinth2p_backend_core, only : &
-        real64, build_input_pressures, convert_levels_to_mb, &
-        extrapolate_geopotential, extrapolate_temperature, &
-        interpolate_value, levels_ascending, locate_bracketing_level_ordered, &
-        lowest_bracketing_level_index, &
-        lowest_model_level_index
+        real64, convert_levels_to_mb, interpolate_column_ecmwf
     implicit none
 
     integer, intent(in) :: intyp, kxtrp, nlevi, ncol, nlevo, varflg
@@ -327,58 +399,17 @@ subroutine dvinth2p_ecmwf_nodes_pa( &
     real(real64), intent(in) :: p0, plevo(nlevo), psfc(ncol), spvl
     real(real64), intent(in) :: tbot(ncol), phis(ncol)
 
-    real(real64) :: bottom_pressure, plevi(nlevi), plevo_mb(nlevo)
-    real(real64) :: p0_mb, psfc_mb
-    integer :: bottom_idx, bottom_pair_idx, j, k, kp
-    logical :: is_ascending
+    real(real64) :: plevo_mb(nlevo), p0_mb
+    integer :: j
 
     p0_mb = p0 * 0.01_real64
     call convert_levels_to_mb(plevo, plevo_mb)
 
     do j = 1, ncol
-        if (psfc(j) == spvl) then
-            dato(:, j) = spvl
-        else
-            psfc_mb = psfc(j) * 0.01_real64
-            call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
-            is_ascending = levels_ascending(plevi)
-            bottom_idx = lowest_model_level_index(plevi)
-            bottom_pair_idx = lowest_bracketing_level_index(plevi)
-            bottom_pressure = plevi(bottom_idx)
-
-            do k = 1, nlevo
-                if (plevo_mb(k) > bottom_pressure) then
-                    if (kxtrp == 0) then
-                        dato(k, j) = spvl
-                    else
-                        select case (varflg)
-                        case (1)
-                            dato(k, j) = extrapolate_temperature( &
-                                dati(bottom_idx, j), plevi(bottom_idx), &
-                                plevo_mb(k), psfc_mb, phis(j) &
-                            )
-                        case (-1)
-                            dato(k, j) = extrapolate_geopotential( &
-                                tbot(j), plevi(bottom_idx), &
-                                plevo_mb(k), psfc_mb, phis(j) &
-                            )
-                        case default
-                            dato(k, j) = dati(bottom_idx, j)
-                        end select
-                    end if
-                else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
-                    if (kp < 1) then
-                        dato(k, j) = spvl
-                    else
-                        dato(k, j) = interpolate_value( &
-                            dati(kp, j), dati(kp + 1, j), &
-                            plevo_mb(k), plevi(kp), plevi(kp + 1), intyp, spvl &
-                        )
-                    end if
-                end if
-            end do
-        end if
+        call interpolate_column_ecmwf( &
+            dati(:, j), dato(:, j), hbcofa, hbcofb, p0_mb, plevo_mb, &
+            intyp, psfc(j), spvl, kxtrp, varflg, tbot(j), phis(j) &
+        )
     end do
 end subroutine dvinth2p_ecmwf_nodes_pa
 
@@ -420,3 +451,80 @@ subroutine dvinth2p_ecmwf_nodes_pa_into( &
         nlevi, ncol, nlevo, varflg, tbot, phis &
     )
 end subroutine dvinth2p_ecmwf_nodes_pa_into
+
+
+subroutine dvinth2p_nodes_corder_pa_into( &
+    dati_flat, dato_flat, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
+    nouter, nlevi, ninner, nlevo)
+    use vinth2p_backend_core, only : real64, convert_levels_to_mb, interpolate_column_nodes
+    implicit none
+
+    integer, intent(in) :: intyp, kxtrp, nouter, nlevi, ninner, nlevo
+    real(real64), intent(in) :: dati_flat(nouter * nlevi * ninner)
+    real(real64), intent(inout) :: dato_flat(nouter * nlevo * ninner)
+    real(real64), intent(in) :: hbcofa(nlevi), hbcofb(nlevi)
+    real(real64), intent(in) :: p0, plevo(nlevo), psfc(nouter * ninner), spvl
+
+    real(real64) :: dati_col(nlevi), dato_col(nlevo), plevo_mb(nlevo), p0_mb
+    integer :: base_in, base_out, col_idx, inner, k, outer
+
+    p0_mb = p0 * 0.01_real64
+    call convert_levels_to_mb(plevo, plevo_mb)
+
+    do outer = 0, nouter - 1
+        base_in = outer * nlevi * ninner
+        base_out = outer * nlevo * ninner
+        do inner = 1, ninner
+            col_idx = outer * ninner + inner
+            do k = 1, nlevi
+                dati_col(k) = dati_flat(base_in + (k - 1) * ninner + inner)
+            end do
+            call interpolate_column_nodes( &
+                dati_col, dato_col, hbcofa, hbcofb, p0_mb, plevo_mb, &
+                intyp, psfc(col_idx), spvl, kxtrp &
+            )
+            do k = 1, nlevo
+                dato_flat(base_out + (k - 1) * ninner + inner) = dato_col(k)
+            end do
+        end do
+    end do
+end subroutine dvinth2p_nodes_corder_pa_into
+
+
+subroutine dvinth2p_ecmwf_nodes_corder_pa_into( &
+    dati_flat, dato_flat, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
+    nouter, nlevi, ninner, nlevo, varflg, tbot, phis)
+    use vinth2p_backend_core, only : real64, convert_levels_to_mb, interpolate_column_ecmwf
+    implicit none
+
+    integer, intent(in) :: intyp, kxtrp, nouter, nlevi, ninner, nlevo, varflg
+    real(real64), intent(in) :: dati_flat(nouter * nlevi * ninner)
+    real(real64), intent(inout) :: dato_flat(nouter * nlevo * ninner)
+    real(real64), intent(in) :: hbcofa(nlevi), hbcofb(nlevi)
+    real(real64), intent(in) :: p0, plevo(nlevo), psfc(nouter * ninner), spvl
+    real(real64), intent(in) :: tbot(nouter * ninner), phis(nouter * ninner)
+
+    real(real64) :: dati_col(nlevi), dato_col(nlevo), plevo_mb(nlevo), p0_mb
+    integer :: base_in, base_out, col_idx, inner, k, outer
+
+    p0_mb = p0 * 0.01_real64
+    call convert_levels_to_mb(plevo, plevo_mb)
+
+    do outer = 0, nouter - 1
+        base_in = outer * nlevi * ninner
+        base_out = outer * nlevo * ninner
+        do inner = 1, ninner
+            col_idx = outer * ninner + inner
+            do k = 1, nlevi
+                dati_col(k) = dati_flat(base_in + (k - 1) * ninner + inner)
+            end do
+            call interpolate_column_ecmwf( &
+                dati_col, dato_col, hbcofa, hbcofb, p0_mb, plevo_mb, &
+                intyp, psfc(col_idx), spvl, kxtrp, varflg, tbot(col_idx), phis(col_idx) &
+            )
+            do k = 1, nlevo
+                dato_flat(base_out + (k - 1) * ninner + inner) = dato_col(k)
+            end do
+        end do
+    end do
+end subroutine dvinth2p_ecmwf_nodes_corder_pa_into
