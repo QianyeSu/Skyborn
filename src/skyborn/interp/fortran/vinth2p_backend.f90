@@ -15,6 +15,8 @@ module vinth2p_backend_core
     public :: extrapolate_geopotential
     public :: extrapolate_temperature
     public :: interpolate_column_ecmwf
+    public :: interpolate_flat_column_ecmwf
+    public :: interpolate_flat_column_nodes
     public :: interpolate_column_nodes
     public :: interpolate_value
     public :: is_below_lowest_model_level
@@ -306,6 +308,129 @@ contains
     end subroutine interpolate_column_ecmwf
 
 
+    subroutine interpolate_flat_column_nodes( &
+        dati_flat, dato_flat, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp, &
+        base_in, base_out, inner, ninner, nlevi, nlevo &
+    )
+        real(real64), intent(in) :: dati_flat(:), hbcofa(:), hbcofb(:), plevo_mb(:)
+        real(real64), intent(inout) :: dato_flat(:)
+        real(real64), intent(in) :: p0_mb, psfc, spvl
+        integer, intent(in) :: intyp, kxtrp, base_in, base_out, inner
+        integer, intent(in) :: ninner, nlevi, nlevo
+
+        real(real64) :: bottom_pressure, plevi(nlevi), psfc_mb
+        integer :: bottom_idx, bottom_pair_idx, input_idx, k, kp, output_idx
+        logical :: is_ascending
+
+        if (psfc == spvl) then
+            do k = 1, nlevo
+                output_idx = base_out + (k - 1) * ninner + inner
+                dato_flat(output_idx) = spvl
+            end do
+            return
+        end if
+
+        psfc_mb = psfc * 0.01_real64
+        call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
+        is_ascending = levels_ascending(plevi)
+        bottom_idx = lowest_model_level_index(plevi)
+        bottom_pair_idx = lowest_bracketing_level_index(plevi)
+        bottom_pressure = plevi(bottom_idx)
+
+        do k = 1, nlevo
+            output_idx = base_out + (k - 1) * ninner + inner
+            if (plevo_mb(k) > bottom_pressure) then
+                if (kxtrp == 0) then
+                    dato_flat(output_idx) = spvl
+                else
+                    input_idx = base_in + (bottom_pair_idx - 1) * ninner + inner
+                    dato_flat(output_idx) = interpolate_value( &
+                        dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                        plevo_mb(k), plevi(bottom_pair_idx), plevi(bottom_pair_idx + 1), &
+                        intyp, spvl &
+                    )
+                end if
+            else
+                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                if (kp < 1) then
+                    dato_flat(output_idx) = spvl
+                else
+                    input_idx = base_in + (kp - 1) * ninner + inner
+                    dato_flat(output_idx) = interpolate_value( &
+                        dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                        plevo_mb(k), plevi(kp), plevi(kp + 1), intyp, spvl &
+                    )
+                end if
+            end if
+        end do
+    end subroutine interpolate_flat_column_nodes
+
+
+    subroutine interpolate_flat_column_ecmwf( &
+        dati_flat, dato_flat, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp, &
+        varflg, tbot, phis, base_in, base_out, inner, ninner, nlevi, nlevo &
+    )
+        real(real64), intent(in) :: dati_flat(:), hbcofa(:), hbcofb(:), plevo_mb(:)
+        real(real64), intent(inout) :: dato_flat(:)
+        real(real64), intent(in) :: p0_mb, psfc, spvl, tbot, phis
+        integer, intent(in) :: intyp, kxtrp, varflg, base_in, base_out, inner
+        integer, intent(in) :: ninner, nlevi, nlevo
+
+        real(real64) :: bottom_pressure, plevi(nlevi), psfc_mb
+        integer :: bottom_idx, input_idx, k, kp, output_idx
+        logical :: is_ascending
+
+        if (psfc == spvl) then
+            do k = 1, nlevo
+                output_idx = base_out + (k - 1) * ninner + inner
+                dato_flat(output_idx) = spvl
+            end do
+            return
+        end if
+
+        psfc_mb = psfc * 0.01_real64
+        call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
+        is_ascending = levels_ascending(plevi)
+        bottom_idx = lowest_model_level_index(plevi)
+        bottom_pressure = plevi(bottom_idx)
+
+        do k = 1, nlevo
+            output_idx = base_out + (k - 1) * ninner + inner
+            if (plevo_mb(k) > bottom_pressure) then
+                if (kxtrp == 0) then
+                    dato_flat(output_idx) = spvl
+                else
+                    select case (varflg)
+                    case (1)
+                        input_idx = base_in + (bottom_idx - 1) * ninner + inner
+                        dato_flat(output_idx) = extrapolate_temperature( &
+                            dati_flat(input_idx), plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
+                        )
+                    case (-1)
+                        dato_flat(output_idx) = extrapolate_geopotential( &
+                            tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
+                        )
+                    case default
+                        input_idx = base_in + (bottom_idx - 1) * ninner + inner
+                        dato_flat(output_idx) = dati_flat(input_idx)
+                    end select
+                end if
+            else
+                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                if (kp < 1) then
+                    dato_flat(output_idx) = spvl
+                else
+                    input_idx = base_in + (kp - 1) * ninner + inner
+                    dato_flat(output_idx) = interpolate_value( &
+                        dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                        plevo_mb(k), plevi(kp), plevi(kp + 1), intyp, spvl &
+                    )
+                end if
+            end if
+        end do
+    end subroutine interpolate_flat_column_ecmwf
+
+
     pure real(real64) function extrapolate_temperature( &
         tbot, plev_bottom, plev_out, psfc_mb, phi_sfc &
     ) result(value)
@@ -579,7 +704,7 @@ end subroutine dvinth2p_ecmwf_nodes_pa_into
 subroutine dvinth2p_nodes_corder_pa_into( &
     dati_flat, dato_flat, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
     nouter, nlevi, ninner, nlevo)
-    use vinth2p_backend_core, only : real64, convert_levels_to_mb, interpolate_column_nodes
+    use vinth2p_backend_core, only : real64, convert_levels_to_mb, interpolate_flat_column_nodes
     implicit none
 
     integer, intent(in) :: intyp, kxtrp, nouter, nlevi, ninner, nlevo
@@ -591,8 +716,8 @@ subroutine dvinth2p_nodes_corder_pa_into( &
     ! This flat-array entry point exists purely to avoid Python-side
     ! transpose/packing when the caller already has NumPy C-order data with the
     ! interpolation axis in place.
-    real(real64) :: dati_col(nlevi), dato_col(nlevo), plevo_mb(nlevo), p0_mb
-    integer :: base_in, base_out, col_idx, inner, k, outer
+    real(real64) :: plevo_mb(nlevo), p0_mb
+    integer :: base_in, base_out, col_idx, inner, outer
 
     p0_mb = p0 * 0.01_real64
     call convert_levels_to_mb(plevo, plevo_mb)
@@ -602,18 +727,11 @@ subroutine dvinth2p_nodes_corder_pa_into( &
         base_out = outer * nlevo * ninner
         do inner = 1, ninner
             col_idx = outer * ninner + inner
-            ! Flattened indexing corresponds to [outer, level, inner] in the
-            ! original C-order NumPy array.
-            do k = 1, nlevi
-                dati_col(k) = dati_flat(base_in + (k - 1) * ninner + inner)
-            end do
-            call interpolate_column_nodes( &
-                dati_col, dato_col, hbcofa, hbcofb, p0_mb, plevo_mb, &
-                intyp, psfc(col_idx), spvl, kxtrp &
+            call interpolate_flat_column_nodes( &
+                dati_flat, dato_flat, hbcofa, hbcofb, p0_mb, plevo_mb, &
+                intyp, psfc(col_idx), spvl, kxtrp, &
+                base_in, base_out, inner, ninner, nlevi, nlevo &
             )
-            do k = 1, nlevo
-                dato_flat(base_out + (k - 1) * ninner + inner) = dato_col(k)
-            end do
         end do
     end do
 end subroutine dvinth2p_nodes_corder_pa_into
@@ -641,7 +759,7 @@ end subroutine dvinth2p_nodes_corder_pa_into
 subroutine dvinth2p_ecmwf_nodes_corder_pa_into( &
     dati_flat, dato_flat, hbcofa, hbcofb, p0, plevo, intyp, psfc, spvl, kxtrp, &
     nouter, nlevi, ninner, nlevo, varflg, tbot, phis)
-    use vinth2p_backend_core, only : real64, convert_levels_to_mb, interpolate_column_ecmwf
+    use vinth2p_backend_core, only : real64, convert_levels_to_mb, interpolate_flat_column_ecmwf
     implicit none
 
     integer, intent(in) :: intyp, kxtrp, nouter, nlevi, ninner, nlevo, varflg
@@ -653,8 +771,8 @@ subroutine dvinth2p_ecmwf_nodes_corder_pa_into( &
 
     ! This flat-array ECMWF entry point mirrors the generic column-major kernel
     ! but keeps the data in its original NumPy C-order layout.
-    real(real64) :: dati_col(nlevi), dato_col(nlevo), plevo_mb(nlevo), p0_mb
-    integer :: base_in, base_out, col_idx, inner, k, outer
+    real(real64) :: plevo_mb(nlevo), p0_mb
+    integer :: base_in, base_out, col_idx, inner, outer
 
     p0_mb = p0 * 0.01_real64
     call convert_levels_to_mb(plevo, plevo_mb)
@@ -664,16 +782,11 @@ subroutine dvinth2p_ecmwf_nodes_corder_pa_into( &
         base_out = outer * nlevo * ninner
         do inner = 1, ninner
             col_idx = outer * ninner + inner
-            do k = 1, nlevi
-                dati_col(k) = dati_flat(base_in + (k - 1) * ninner + inner)
-            end do
-            call interpolate_column_ecmwf( &
-                dati_col, dato_col, hbcofa, hbcofb, p0_mb, plevo_mb, &
-                intyp, psfc(col_idx), spvl, kxtrp, varflg, tbot(col_idx), phis(col_idx) &
+            call interpolate_flat_column_ecmwf( &
+                dati_flat, dato_flat, hbcofa, hbcofb, p0_mb, plevo_mb, &
+                intyp, psfc(col_idx), spvl, kxtrp, varflg, tbot(col_idx), phis(col_idx), &
+                base_in, base_out, inner, ninner, nlevi, nlevo &
             )
-            do k = 1, nlevo
-                dato_flat(base_out + (k - 1) * ninner + inner) = dato_col(k)
-            end do
         end do
     end do
 end subroutine dvinth2p_ecmwf_nodes_corder_pa_into
