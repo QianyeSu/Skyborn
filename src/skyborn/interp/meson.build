@@ -477,9 +477,9 @@ with open(sys.argv[1], 'w') as f:
     f.write('from .rcm2rgrid import drcm2rgrid, drgrid2rcm' + chr(10))
     f.write('from .triple2grid import triple2grid1' + chr(10))
     f.write('from .grid2triple import grid2triple' + chr(10))
-    f.write('from .vinth2p_backend import dvinth2p_nodes_pa, dvinth2p_nodes_pa_into, dvinth2p_nodes_corder_pa_into, dvinth2p_ecmwf_nodes_pa, dvinth2p_ecmwf_nodes_pa_into, dvinth2p_ecmwf_nodes_corder_pa_into' + chr(10))
+    f.write('from .vinth2p_backend import dvinth2p_nodes_pa, dvinth2p_nodes_pa_into, dsigma2hybrid_nodes, dsigma2hybrid_nodes_into, dvinth2p_nodes_corder_pa_into, dvinth2p_ecmwf_nodes_pa, dvinth2p_ecmwf_nodes_pa_into, dvinth2p_ecmwf_nodes_corder_pa_into' + chr(10))
     f.write(chr(10))
-    f.write('__all__ = [' + chr(39) + 'drcm2points' + chr(39) + ', ' + chr(39) + 'drcm2rgrid' + chr(39) + ', ' + chr(39) + 'drgrid2rcm' + chr(39) + ', ' + chr(39) + 'triple2grid1' + chr(39) + ', ' + chr(39) + 'grid2triple' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_pa' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_corder_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_pa' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_corder_pa_into' + chr(39) + ']' + chr(10))
+    f.write('__all__ = [' + chr(39) + 'drcm2points' + chr(39) + ', ' + chr(39) + 'drcm2rgrid' + chr(39) + ', ' + chr(39) + 'drgrid2rcm' + chr(39) + ', ' + chr(39) + 'triple2grid1' + chr(39) + ', ' + chr(39) + 'grid2triple' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_pa' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_pa_into' + chr(39) + ', ' + chr(39) + 'dsigma2hybrid_nodes' + chr(39) + ', ' + chr(39) + 'dsigma2hybrid_nodes_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_corder_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_pa' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_corder_pa_into' + chr(39) + ']' + chr(10))
 ''',
             '@OUTPUT@',
         ],
