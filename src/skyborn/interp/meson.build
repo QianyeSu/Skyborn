@@ -156,7 +156,28 @@ try_f2py = run_command(py, '-c', 'import numpy.f2py; print("OK")', check: false)
 
 if try_f2py.returncode() == 0
     inc_np = include_directories(incdir_numpy, incdir_f2py)
-    f2py_runner = files('../../../build_tools/run_f2py.py')
+    f2py_inline_cmd = [
+        py,
+        '-c',
+        '''import builtins
+import sys
+from numpy.f2py import crackfortran, f2py2e
+
+def _safe_openhook(filename, mode):
+    if "b" in mode:
+        return builtins.open(filename, mode)
+    for encoding in ("utf-8", "latin-1"):
+        try:
+            return builtins.open(filename, mode, encoding=encoding)
+        except UnicodeDecodeError:
+            continue
+    return builtins.open(filename, mode, encoding="utf-8", errors="replace")
+
+crackfortran.openhook = _safe_openhook
+sys.argv = ["f2py"] + sys.argv[1:]
+f2py2e.main()
+''',
+    ]
 
     # Get fortranobject.c path with extensive fallbacks
     fortranobject_cmd = run_command(
@@ -218,8 +239,7 @@ else:
         input: ['fortran/rcm2points.pyf'],
         output: ['rcm2pointsmodule.c', 'rcm2points-f2pywrappers.f'],
         command: [
-            py,
-            f2py_runner,
+            f2py_inline_cmd,
             '--lower', '@INPUT@',
             '--build-dir', '@OUTDIR@',
         ],
@@ -235,8 +255,7 @@ else:
         input: ['fortran/rcm2rgrid.pyf'],
         output: ['rcm2rgridmodule.c', 'rcm2rgrid-f2pywrappers.f'],
         command: [
-            py,
-            f2py_runner,
+            f2py_inline_cmd,
             '--lower', '@INPUT@',
             '--build-dir', '@OUTDIR@',
         ],
@@ -252,8 +271,7 @@ else:
         input: ['fortran/triple2grid.pyf'],
         output: ['triple2gridmodule.c', 'triple2grid-f2pywrappers.f'],
         command: [
-            py,
-            f2py_runner,
+            f2py_inline_cmd,
             '--lower', '@INPUT@',
             '--build-dir', '@OUTDIR@',
         ],
@@ -269,8 +287,7 @@ else:
         input: ['fortran/grid2triple.pyf'],
         output: ['grid2triplemodule.c', 'grid2triple-f2pywrappers.f'],
         command: [
-            py,
-            f2py_runner,
+            f2py_inline_cmd,
             '--lower', '@INPUT@',
             '--build-dir', '@OUTDIR@',
         ],
@@ -286,8 +303,7 @@ else:
         input: ['fortran/vinth2p_backend.pyf'],
         output: ['vinth2p_backendmodule.c', 'vinth2p_backend-f2pywrappers.f'],
         command: [
-            py,
-            f2py_runner,
+            f2py_inline_cmd,
             '--lower', '@INPUT@',
             '--build-dir', '@OUTDIR@',
         ],
