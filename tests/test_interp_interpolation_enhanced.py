@@ -287,6 +287,7 @@ class TestInterpolationEdgeCases:
         monkeypatch.setattr(
             interpolation_mod, "_dvinth2p_nodes_pa_into", fake_nodes_into
         )
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_corder_pa_into", None)
         monkeypatch.setattr(
             interpolation_mod,
             "_dvinth2p_nodes_pa",
@@ -313,6 +314,88 @@ class TestInterpolationEdgeCases:
         assert captured["psfc_shape"] == (2,)
         assert result.shape == (2, 1, 2)
         assert_array_equal(result.values, np.full((2, 1, 2), 123.0))
+
+    def test_fortran_corder_fast_path_avoids_transpose_copy(self, monkeypatch):
+        """Test that aligned C-order arrays use the flat fast path."""
+        data = xr.DataArray(
+            np.array(
+                [
+                    [[280.0, 285.0], [275.0, 290.0]],
+                    [[240.0, 245.0], [235.0, 250.0]],
+                ],
+                dtype=np.float64,
+                order="C",
+            ),
+            dims=["lev", "lat", "lon"],
+            coords={"lat": [0, 30], "lon": [0, 90]},
+        )
+        ps = xr.DataArray(
+            np.array([[100000.0, 100000.0], [95000.0, 95000.0]], dtype=np.float64),
+            dims=["lat", "lon"],
+            coords={"lat": [0, 30], "lon": [0, 90]},
+        )
+        hyam = xr.DataArray([0.0, 0.2], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
+        new_levels = np.array([90000.0, 80000.0], dtype=np.float64)
+
+        captured = {}
+
+        def fake_nodes_corder_into(
+            dati_flat,
+            dato_flat,
+            hbcofa,
+            hbcofb,
+            p0,
+            plevo,
+            intyp,
+            psfc,
+            spvl,
+            kxtrp,
+            nouter,
+            ninner,
+        ):
+            captured["dati_shape"] = dati_flat.shape
+            captured["dato_shape"] = dato_flat.shape
+            captured["psfc_shape"] = psfc.shape
+            captured["nouter"] = nouter
+            captured["ninner"] = ninner
+            dato_flat[:] = 321.0
+
+        def fail_column_wrapper(*args, **kwargs):
+            raise AssertionError(
+                "column-major wrapper should not be used for fast path"
+            )
+
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_nodes_corder_pa_into", fake_nodes_corder_into
+        )
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_nodes_pa", fail_column_wrapper
+        )
+
+        result = interpolation_mod._interp_hybrid_to_pressure_fortran(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=new_levels,
+            lev_dim="lev",
+            method="linear",
+            extrapolate=False,
+            variable=None,
+            t_bot=None,
+            phi_sfc=None,
+        )
+
+        assert captured["dati_shape"] == (8,)
+        assert captured["dato_shape"] == (8,)
+        assert captured["psfc_shape"] == (4,)
+        assert captured["nouter"] == 1
+        assert captured["ninner"] == 4
+        assert result.shape == (2, 2, 2)
+        assert_array_equal(result.values, np.full((2, 2, 2), 321.0))
 
     @pytest.mark.skipif(
         not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
