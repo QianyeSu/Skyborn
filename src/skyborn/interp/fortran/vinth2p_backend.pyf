@@ -73,6 +73,43 @@ python module vinth2p_backend ! in
             double precision dimension(ncol), depend(ncol), intent(in) :: tbot
             double precision dimension(ncol), depend(ncol), intent(in) :: phis
         end subroutine dvinth2p_ecmwf_nodes_pa_into
+        ! signature : dato_flat = dvinth2p_nodes_corder_pa_into(dati_flat,dato_flat,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nouter,ninner)
+        subroutine dvinth2p_nodes_corder_pa_into(dati_flat,dato_flat,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nouter,nlevi,ninner,nlevo) ! in :vinth2p_backend:vinth2p_backend.f90
+            integer intent(in) :: nouter
+            integer intent(in) :: ninner
+            integer, optional, check(len(hbcofa)>=nlevi), depend(hbcofa) :: nlevi=len(hbcofa)
+            integer, optional, check(len(plevo)>=nlevo), depend(plevo) :: nlevo=len(plevo)
+            double precision dimension(nouter*nlevi*ninner), depend(nouter,nlevi,ninner), intent(in) :: dati_flat
+            double precision dimension(nouter*nlevo*ninner), check(len(dato_flat)>=nouter*nlevo*ninner), depend(nouter,nlevo,ninner), intent(in,out) :: dato_flat
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofa
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+            double precision dimension(nlevo), intent(in) :: plevo
+            integer intent(in) :: intyp
+            double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: psfc
+            double precision intent(in) :: spvl
+            integer intent(in) :: kxtrp
+        end subroutine dvinth2p_nodes_corder_pa_into
+        ! signature : dato_flat = dvinth2p_ecmwf_nodes_corder_pa_into(dati_flat,dato_flat,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nouter,ninner,varflg,tbot,phis)
+        subroutine dvinth2p_ecmwf_nodes_corder_pa_into(dati_flat,dato_flat,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nouter,nlevi,ninner,nlevo,varflg,tbot,phis) ! in :vinth2p_backend:vinth2p_backend.f90
+            integer intent(in) :: nouter
+            integer intent(in) :: ninner
+            integer, optional, check(len(hbcofa)>=nlevi), depend(hbcofa) :: nlevi=len(hbcofa)
+            integer, optional, check(len(plevo)>=nlevo), depend(plevo) :: nlevo=len(plevo)
+            double precision dimension(nouter*nlevi*ninner), depend(nouter,nlevi,ninner), intent(in) :: dati_flat
+            double precision dimension(nouter*nlevo*ninner), check(len(dato_flat)>=nouter*nlevo*ninner), depend(nouter,nlevo,ninner), intent(in,out) :: dato_flat
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofa
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+            double precision dimension(nlevo), intent(in) :: plevo
+            integer intent(in) :: intyp
+            double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: psfc
+            double precision intent(in) :: spvl
+            integer intent(in) :: kxtrp
+            integer intent(in) :: varflg
+            double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: tbot
+            double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: phis
+        end subroutine dvinth2p_ecmwf_nodes_corder_pa_into
     end interface
 end python module vinth2p_backend
 
