@@ -650,6 +650,21 @@ def _as_c_contiguous_float64_view(array: xr.DataArray, dims, shape):
     return values.reshape(-1)
 
 
+def _as_broadcast_float64_flat(array: xr.DataArray, template: xr.DataArray):
+    """Return a flattened float64 array after lightweight xarray broadcasting."""
+
+    if array is None or not isinstance(array, xr.DataArray):
+        return None
+
+    try:
+        broadcast = array.broadcast_like(template)
+    except Exception:
+        return None
+
+    values = np.asarray(broadcast.data, dtype=np.float64)
+    return np.ascontiguousarray(values).reshape(-1)
+
+
 def _build_vinth2p_output(data, interp_axis, new_levels, output_values, base_template):
     """Wrap a NumPy output array in the public xarray result."""
 
@@ -726,7 +741,11 @@ def _interp_hybrid_to_pressure_fortran_corder(
             phi_flat = np.zeros(nouter * ninner, dtype=np.float64)
         else:
             tbot_flat = _as_c_contiguous_float64_view(t_bot, lead_dims, lead_shape)
+            if tbot_flat is None:
+                tbot_flat = _as_broadcast_float64_flat(t_bot, base_template)
             phi_flat = _as_c_contiguous_float64_view(phi_sfc, lead_dims, lead_shape)
+            if phi_flat is None:
+                phi_flat = _as_broadcast_float64_flat(phi_sfc, base_template)
             if tbot_flat is None or phi_flat is None:
                 return None
         _dvinth2p_ecmwf_nodes_corder_pa_into(
