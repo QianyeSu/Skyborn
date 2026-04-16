@@ -20,6 +20,10 @@ import numpy as np
 import xarray as xr
 
 try:
+    from .fortran.vinth2p_backend import dsigma2hybrid_nodes as _dsigma2hybrid_nodes
+    from .fortran.vinth2p_backend import (
+        dsigma2hybrid_nodes_into as _dsigma2hybrid_nodes_into,
+    )
     from .fortran.vinth2p_backend import (
         dvinth2p_ecmwf_nodes_corder_pa_into as _dvinth2p_ecmwf_nodes_corder_pa_into,
     )
@@ -37,6 +41,8 @@ try:
         dvinth2p_nodes_pa_into as _dvinth2p_nodes_pa_into,
     )
 except Exception:
+    _dsigma2hybrid_nodes = None
+    _dsigma2hybrid_nodes_into = None
     _dvinth2p_nodes_pa = None
     _dvinth2p_ecmwf_nodes_pa = None
     _dvinth2p_nodes_pa_into = None
@@ -943,6 +949,97 @@ def _interp_hybrid_to_pressure_fortran(
     return output.transpose(*dims)
 
 
+def _interp_sigma_to_hybrid_fortran(
+    data: xr.DataArray,
+    sig_coords: xr.DataArray,
+    ps: xr.DataArray,
+    hyam: xr.DataArray,
+    hybm: xr.DataArray,
+    p0: float,
+    lev_dim: str,
+    method: str,
+) -> xr.DataArray:
+    """Run eager sigma-to-hybrid interpolation through the compiled backend."""
+
+    if _dsigma2hybrid_nodes is None:
+        raise RuntimeError("sigma2hybrid backend is not available")
+
+    sigma_source_values = np.asarray(
+        sig_coords.data if isinstance(sig_coords, xr.DataArray) else sig_coords,
+        dtype=np.float64,
+    ).reshape(-1)
+    sigma_diffs = np.diff(sigma_source_values)
+    if not (
+        np.all(sigma_diffs >= 0.0)
+        or np.all(sigma_diffs <= 0.0)
+        or sigma_source_values.size <= 1
+    ):
+        raise ValueError("sigma2hybrid backend requires monotonic sigma coordinates")
+
+    sigma_target = _sigma_from_hybrid(ps, hyam, hybm, p0)
+    target_dim = sigma_target.dims[0]
+    base_template = data.isel({lev_dim: 0}, drop=True)
+    lead_dims = base_template.dims
+    interp_axis = data.dims.index(lev_dim)
+
+    data_view = data.transpose(*lead_dims, lev_dim)
+    sigma_target_view = sigma_target.transpose(target_dim, *lead_dims)
+
+    nlevi = data_view.shape[-1]
+    nlevo = sigma_target_view.shape[0]
+    lead_shape = data_view.shape[:-1]
+    ncol = int(np.prod(lead_shape, dtype=np.int64)) if lead_shape else 1
+
+    data_columns = np.asfortranarray(
+        np.asarray(data_view.data, dtype=np.float64).reshape(ncol, nlevi).T
+    )
+    sigma_target_columns = np.asfortranarray(
+        np.asarray(sigma_target_view.data, dtype=np.float64).reshape(nlevo, ncol)
+    )
+
+    intyp = _vinth2p_intyp(method)
+    output_columns = np.empty((nlevo, ncol), dtype=np.float64, order="F")
+
+    if _dsigma2hybrid_nodes_into is not None:
+        _dsigma2hybrid_nodes_into(
+            data_columns,
+            output_columns,
+            sigma_source_values,
+            sigma_target_columns,
+            intyp,
+            _VINTH2P_SPVL,
+        )
+    else:
+        output_columns = _dsigma2hybrid_nodes(
+            data_columns,
+            sigma_source_values,
+            sigma_target_columns,
+            intyp,
+            _VINTH2P_SPVL,
+        )
+
+    output_values = np.asarray(output_columns, dtype=np.float64).T.reshape(
+        (*lead_shape, nlevo)
+    )
+    output_values[output_values == _VINTH2P_SPVL] = np.nan
+
+    h_coords = (
+        sigma_target_columns[:, 0].copy() if ncol else np.asarray([], dtype=np.float64)
+    )
+    coords = {k: v for k, v in base_template.coords.items()}
+    coords["hlev"] = h_coords
+    output = xr.DataArray(
+        output_values,
+        dims=(*lead_dims, "hlev"),
+        coords=coords,
+        name=data.name,
+        attrs=data.attrs,
+    )
+
+    dims = [data.dims[i] if i != interp_axis else "hlev" for i in range(data.ndim)]
+    return output.transpose(*dims)
+
+
 def interp_hybrid_to_pressure(
     data: xr.DataArray,
     ps: xr.DataArray,
@@ -1292,8 +1389,41 @@ def interp_sigma_to_hybrid(
     except ValueError as vexc:
         raise ValueError(vexc.args[0])
 
+    in_dask = _is_dask_backed(data) or _is_dask_backed(ps)
+    in_pint = _is_pint_backed(data) or _is_pint_backed(ps)
+
+    if (
+        not in_dask
+        and not in_pint
+        and _dsigma2hybrid_nodes is not None
+        and method in {"linear", "log"}
+    ):
+        sigma_source_values = np.asarray(
+            sig_coords.data if isinstance(sig_coords, xr.DataArray) else sig_coords,
+            dtype=np.float64,
+        ).reshape(-1)
+        sigma_diffs = np.diff(sigma_source_values)
+        if (
+            np.all(sigma_diffs >= 0.0)
+            or np.all(sigma_diffs <= 0.0)
+            or sigma_diffs.size == 0
+        ):
+            return _interp_sigma_to_hybrid_fortran(
+                data=data,
+                sig_coords=sig_coords,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                p0=p0,
+                lev_dim=lev_dim,
+                method=method,
+            )
+
     # Calculate sigma levels at the hybrid levels
     sigma = _sigma_from_hybrid(ps, hyam, hybm, p0)  # Pa
+    sig_coord_values = (
+        sig_coords.data if isinstance(sig_coords, xr.DataArray) else sig_coords
+    )
 
     non_lev_dims = list(data.dims)
     if data.ndim > 1:
@@ -1307,7 +1437,7 @@ def interp_sigma_to_hybrid(
 
         for idx, (d, s) in enumerate(zip(data_stacked, sigma_stacked)):
             output[idx, :] = xr.DataArray(
-                _vertical_remap(func_interpolate, s.data, sig_coords.data, d.data),
+                _vertical_remap(func_interpolate, s.data, sig_coord_values, d.data),
                 dims=[lev_dim],
             )
 
@@ -1318,7 +1448,7 @@ def interp_sigma_to_hybrid(
 
         output = data[: len(hyam)].copy()
         output[: len(hyam)] = xr.DataArray(
-            _vertical_remap(func_interpolate, sigma.data, sig_coords.data, data.data),
+            _vertical_remap(func_interpolate, sigma.data, sig_coord_values, data.data),
             dims=[lev_dim],
         )
 
