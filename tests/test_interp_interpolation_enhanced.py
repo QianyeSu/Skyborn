@@ -397,6 +397,89 @@ class TestInterpolationEdgeCases:
         assert result.shape == (2, 2, 2)
         assert_array_equal(result.values, np.full((2, 2, 2), 321.0))
 
+    def test_fortran_corder_fast_path_broadcasts_ecmwf_aux_fields(self, monkeypatch):
+        """Broadcastable auxiliary fields should still use the C-order ECMWF path."""
+        data = xr.DataArray(
+            np.ones((2, 2, 2, 2), dtype=np.float64, order="C"),
+            dims=["time", "lev", "lat", "lon"],
+        )
+        ps = xr.DataArray(
+            np.full((2, 2, 2), 100000.0, dtype=np.float64),
+            dims=["time", "lat", "lon"],
+        )
+        t_bot = xr.DataArray(
+            np.full((2, 2, 2), 280.0, dtype=np.float64),
+            dims=["time", "lat", "lon"],
+        )
+        # Deliberately omit time so the helper has to broadcast this field.
+        phi_sfc = xr.DataArray(
+            np.zeros((2, 2), dtype=np.float64),
+            dims=["lat", "lon"],
+        )
+        hyam = xr.DataArray([0.0, 0.2], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
+        new_levels = np.array([90000.0, 80000.0], dtype=np.float64)
+
+        captured = {}
+
+        def fake_ecmwf_corder_into(
+            dati_flat,
+            dato_flat,
+            hbcofa,
+            hbcofb,
+            p0,
+            plevo,
+            intyp,
+            psfc,
+            spvl,
+            kxtrp,
+            nouter,
+            ninner,
+            varflg,
+            tbot_flat,
+            phi_flat,
+        ):
+            captured["nouter"] = nouter
+            captured["ninner"] = ninner
+            captured["tbot_shape"] = tbot_flat.shape
+            captured["phi_shape"] = phi_flat.shape
+            dato_flat[:] = 456.0
+
+        def fail_generic_ecmwf(*args, **kwargs):
+            raise AssertionError("generic ECMWF bridge should not be used")
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dvinth2p_ecmwf_nodes_corder_pa_into",
+            fake_ecmwf_corder_into,
+        )
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_ecmwf_nodes_pa_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_ecmwf_nodes_pa", fail_generic_ecmwf
+        )
+
+        result = interpolation_mod._interp_hybrid_to_pressure_fortran(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=new_levels,
+            lev_dim="lev",
+            method="linear",
+            extrapolate=True,
+            variable="geopotential",
+            t_bot=t_bot,
+            phi_sfc=phi_sfc,
+        )
+
+        assert captured["nouter"] == 2
+        assert captured["ninner"] == 4
+        assert captured["tbot_shape"] == (8,)
+        assert captured["phi_shape"] == (8,)
+        assert result.shape == (2, 2, 2, 2)
+        assert_array_equal(result.values, np.full((2, 2, 2, 2), 456.0))
+
     def test_vinth2p_private_helpers_cover_guard_paths(self):
         """Private vinth helpers should reject unsupported methods and array layouts."""
         with pytest.raises(ValueError, match="Unknown interpolation method"):
