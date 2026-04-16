@@ -397,6 +397,313 @@ class TestInterpolationEdgeCases:
         assert result.shape == (2, 2, 2)
         assert_array_equal(result.values, np.full((2, 2, 2), 321.0))
 
+    def test_vinth2p_private_helpers_cover_guard_paths(self):
+        """Private vinth helpers should reject unsupported methods and array layouts."""
+        with pytest.raises(ValueError, match="Unknown interpolation method"):
+            interpolation_mod._vinth2p_intyp("cubic")
+
+        assert (
+            interpolation_mod._as_c_contiguous_float64_view(
+                None, ("lat", "lon"), (2, 2)
+            )
+            is None
+        )
+
+        arr = xr.DataArray(np.ones((2, 2), dtype=np.float64), dims=["lat", "lon"])
+        assert (
+            interpolation_mod._as_c_contiguous_float64_view(
+                arr, ("time", "lat"), (2, 2)
+            )
+            is None
+        )
+
+        dask_array = pytest.importorskip("dask.array")
+        dask_backed = xr.DataArray(
+            dask_array.ones((2, 2), dtype=np.float64), dims=["lat", "lon"]
+        )
+        assert (
+            interpolation_mod._as_c_contiguous_float64_view(
+                dask_backed, ("lat", "lon"), (2, 2)
+            )
+            is None
+        )
+
+        float32_arr = xr.DataArray(
+            np.ones((2, 2), dtype=np.float32), dims=["lat", "lon"]
+        )
+        assert (
+            interpolation_mod._as_c_contiguous_float64_view(
+                float32_arr, ("lat", "lon"), (2, 2)
+            )
+            is None
+        )
+
+    def test_fortran_corder_helper_rejects_unsupported_inputs(self, monkeypatch):
+        """C-order helper should return None when guards reject the input layout."""
+        hyam = xr.DataArray([0.0, 0.2], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
+        plevs = np.array([90000.0, 80000.0], dtype=np.float64)
+
+        data_float32 = xr.DataArray(
+            np.ones((2, 1, 2), dtype=np.float32), dims=["lev", "lat", "lon"]
+        )
+        ps = xr.DataArray(
+            np.ones((1, 2), dtype=np.float64) * 100000.0, dims=["lat", "lon"]
+        )
+        assert (
+            interpolation_mod._interp_hybrid_to_pressure_fortran_corder(
+                data=data_float32,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                p0=100000.0,
+                new_levels=plevs,
+                lev_dim="lev",
+                method="linear",
+                extrapolate=False,
+                variable=None,
+                t_bot=None,
+                phi_sfc=None,
+            )
+            is None
+        )
+
+        dask_array = pytest.importorskip("dask.array")
+        data_dask = xr.DataArray(
+            dask_array.ones((2, 1, 2), dtype=np.float64), dims=["lev", "lat", "lon"]
+        )
+        assert (
+            interpolation_mod._interp_hybrid_to_pressure_fortran_corder(
+                data=data_dask,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                p0=100000.0,
+                new_levels=plevs,
+                lev_dim="lev",
+                method="linear",
+                extrapolate=False,
+                variable=None,
+                t_bot=None,
+                phi_sfc=None,
+            )
+            is None
+        )
+
+        data = xr.DataArray(
+            np.ones((2, 1, 2), dtype=np.float64), dims=["lev", "lat", "lon"]
+        )
+        ps_nan = xr.DataArray(
+            np.array([[100000.0, np.nan]], dtype=np.float64), dims=["lat", "lon"]
+        )
+        assert (
+            interpolation_mod._interp_hybrid_to_pressure_fortran_corder(
+                data=data,
+                ps=ps_nan,
+                hyam=hyam,
+                hybm=hybm,
+                p0=100000.0,
+                new_levels=plevs,
+                lev_dim="lev",
+                method="linear",
+                extrapolate=False,
+                variable=None,
+                t_bot=None,
+                phi_sfc=None,
+            )
+            is None
+        )
+
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_ecmwf_nodes_corder_pa_into", None
+        )
+        assert (
+            interpolation_mod._interp_hybrid_to_pressure_fortran_corder(
+                data=data,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                p0=100000.0,
+                new_levels=plevs,
+                lev_dim="lev",
+                method="linear",
+                extrapolate=True,
+                variable="temperature",
+                t_bot=xr.DataArray(
+                    np.ones((1, 2), dtype=np.float64) * 280.0, dims=["lat", "lon"]
+                ),
+                phi_sfc=xr.DataArray(
+                    np.zeros((1, 2), dtype=np.float64), dims=["lat", "lon"]
+                ),
+            )
+            is None
+        )
+
+    def test_fortran_helper_requires_backend(self, monkeypatch):
+        """Fortran helper should fail clearly when the compiled backend is unavailable."""
+        data = xr.DataArray(
+            np.ones((2, 1, 1), dtype=np.float64), dims=["lev", "lat", "lon"]
+        )
+        ps = xr.DataArray(
+            np.ones((1, 1), dtype=np.float64) * 100000.0, dims=["lat", "lon"]
+        )
+        hyam = xr.DataArray([0.0, 0.2], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
+
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", None)
+
+        with pytest.raises(RuntimeError, match="backend is not available"):
+            interpolation_mod._interp_hybrid_to_pressure_fortran(
+                data=data,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                p0=100000.0,
+                new_levels=np.array([90000.0], dtype=np.float64),
+                lev_dim="lev",
+                method="linear",
+                extrapolate=False,
+                variable=None,
+                t_bot=None,
+                phi_sfc=None,
+            )
+
+    def test_fortran_helper_falls_back_to_return_allocating_wrappers(self, monkeypatch):
+        """When the in-place wrappers are unavailable, the helper should use return arrays."""
+        data = xr.DataArray(
+            np.array([[[280.0, 285.0]], [[240.0, 245.0]]], dtype=np.float64),
+            dims=["lev", "lat", "lon"],
+            coords={"lat": [0], "lon": [0, 90]},
+        )
+        ps = xr.DataArray(
+            np.array([[100000.0, 100000.0]], dtype=np.float64),
+            dims=["lat", "lon"],
+            coords={"lat": [0], "lon": [0, 90]},
+        )
+        hyam = xr.DataArray([0.0, 0.2], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
+        new_levels = np.array([90000.0, 80000.0], dtype=np.float64)
+
+        captured = {}
+
+        def fake_nodes_returning(*args):
+            captured["nodes_args"] = args
+            return np.full((2, 2), 11.0, dtype=np.float64)
+
+        def fake_ecmwf_returning(*args):
+            captured["ecmwf_args"] = args
+            return np.full((2, 2), 22.0, dtype=np.float64)
+
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_corder_pa_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_ecmwf_nodes_corder_pa_into", None
+        )
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_ecmwf_nodes_pa_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_nodes_pa", fake_nodes_returning
+        )
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_ecmwf_nodes_pa", fake_ecmwf_returning
+        )
+
+        out_nodes = interpolation_mod._interp_hybrid_to_pressure_fortran(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=new_levels,
+            lev_dim="lev",
+            method="linear",
+            extrapolate=False,
+            variable=None,
+            t_bot=None,
+            phi_sfc=None,
+        )
+        assert captured["nodes_args"][0].shape == (2, 2)
+        assert out_nodes.shape == (2, 1, 2)
+        assert_array_equal(out_nodes.values, np.full((2, 1, 2), 11.0))
+
+        out_ecmwf = interpolation_mod._interp_hybrid_to_pressure_fortran(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=new_levels,
+            lev_dim="lev",
+            method="linear",
+            extrapolate=True,
+            variable="other",
+            t_bot=None,
+            phi_sfc=None,
+        )
+        tbot_cols = captured["ecmwf_args"][-2]
+        phi_cols = captured["ecmwf_args"][-1]
+        assert_array_equal(tbot_cols, np.zeros(2, dtype=np.float64))
+        assert_array_equal(phi_cols, np.zeros(2, dtype=np.float64))
+        assert_array_equal(out_ecmwf.values, np.full((2, 1, 2), 22.0))
+
+    def test_interp_hybrid_to_pressure_python_fallback_extrapolation(self, monkeypatch):
+        """Public helper should still use the Python remap and extrapolation path."""
+        data = xr.DataArray(
+            np.array([[[280.0, 285.0]], [[240.0, 245.0]]], dtype=np.float64),
+            dims=["lev", "lat", "lon"],
+            coords={"lat": [0], "lon": [0, 90]},
+        )
+        ps = xr.DataArray(
+            np.array([[100000.0, 100000.0]], dtype=np.float64),
+            dims=["lat", "lon"],
+            coords={"lat": [0], "lon": [0, 90]},
+        )
+        hyam = xr.DataArray([0.0, 0.2], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
+        captured = {}
+
+        def fake_vertical_remap(
+            func, new_levels, pressure_data, data_data, interp_axis
+        ):
+            captured["vertical_interp_axis"] = interp_axis
+            captured["vertical_shape"] = pressure_data.shape
+            return np.zeros((2, 1, 2), dtype=np.float64)
+
+        def fake_vertical_remap_extrap(
+            new_levels, lev_dim, data, output, pressure, ps, variable, t_bot, phi_sfc
+        ):
+            captured["extrap_variable"] = variable
+            return output + 5.0
+
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_corder_pa_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_ecmwf_nodes_pa", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_ecmwf_nodes_pa_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_ecmwf_nodes_corder_pa_into", None
+        )
+        monkeypatch.setattr(interpolation_mod, "_vertical_remap", fake_vertical_remap)
+        monkeypatch.setattr(
+            interpolation_mod, "_vertical_remap_extrap", fake_vertical_remap_extrap
+        )
+
+        result = interp_hybrid_to_pressure(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            new_levels=np.array([90000.0, 80000.0], dtype=np.float64),
+            lev_dim="lev",
+            method="linear",
+            extrapolate=True,
+            variable="other",
+        )
+
+        assert captured["vertical_interp_axis"] == 0
+        assert captured["vertical_shape"] == (2, 1, 2)
+        assert captured["extrap_variable"] == "other"
+        assert_array_equal(result.values, np.full((2, 1, 2), 5.0))
+
     @pytest.mark.skipif(
         not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
     )
