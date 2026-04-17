@@ -16,6 +16,8 @@ module rcm2rgrid_kernels_core
     end interface
 contains
 
+    ! Check whether a 1-D coordinate is strictly increasing so the caller can
+    ! safely enable the monotonic-grid anchor fast path.
     pure logical function is_strictly_increasing(x) result(ok)
         real(real64), intent(in) :: x(:)
         integer :: idx
@@ -31,6 +33,8 @@ contains
         end do
     end function is_strictly_increasing
 
+    ! Return the lower bracketing index for a value on a strictly increasing
+    ! coordinate using a binary search.
     pure integer function lower_bracket_increasing(x, value) result(idx)
         real(real64), intent(in) :: x(:)
         real(real64), intent(in) :: value
@@ -66,6 +70,8 @@ contains
         idx = lo
     end function lower_bracket_increasing
 
+    ! Shift the lower-bracket guess back to the earliest cell corner that can
+    ! still span a stride-k curvilinear interpolation box.
     pure integer function earliest_stride_candidate(x, value, stride) result(idx)
         real(real64), intent(in) :: x(:)
         real(real64), intent(in) :: value
@@ -82,6 +88,8 @@ contains
         idx = max(1, min(n - stride, base - stride + 1))
     end function earliest_stride_candidate
 
+    ! Search a small local curvilinear neighborhood for an exact source-grid
+    ! point match before falling back to the global scan.
     subroutine find_exact_curv_local(xi, yi, xo, yo, eps, ix_anchor, iy_anchor, k, found, ix_hit, iy_hit)
         real(real64), intent(in) :: xi(:, :)
         real(real64), intent(in) :: yi(:, :)
@@ -113,6 +121,8 @@ contains
         end do
     end subroutine find_exact_curv_local
 
+    ! Full-grid exact-match scan for curvilinear source coordinates. This is
+    ! only used when the fast-path local search does not succeed.
     subroutine find_exact_curv_full(xi, yi, xo, yo, eps, found, ix_hit, iy_hit)
         real(real64), intent(in) :: xi(:, :)
         real(real64), intent(in) :: yi(:, :)
@@ -138,6 +148,8 @@ contains
         end do
     end subroutine find_exact_curv_full
 
+    ! Search a small local window for the curvilinear source cell whose
+    ! corners bracket the requested output point.
     subroutine find_curv_cell_local(xi, yi, xo, yo, ix_anchor, iy_anchor, k, found, ix_hit, iy_hit)
         real(real64), intent(in) :: xi(:, :)
         real(real64), intent(in) :: yi(:, :)
@@ -169,6 +181,8 @@ contains
         end do
     end subroutine find_curv_cell_local
 
+    ! Full-grid curvilinear cell search used as the robust fallback when the
+    ! monotonic anchor heuristic cannot identify a local candidate.
     subroutine find_curv_cell_full(xi, yi, xo, yo, k, found, ix_hit, iy_hit)
         real(real64), intent(in) :: xi(:, :)
         real(real64), intent(in) :: yi(:, :)
@@ -195,6 +209,9 @@ contains
         end do
     end subroutine find_curv_cell_full
 
+    ! Interpolate one output point from the four corners of a curvilinear cell.
+    ! When all corners are present the kernel uses inverse-distance-squared
+    ! weights on the spherical distances; exact hits short-circuit immediately.
     subroutine interpolate_curv_cell(fi, xi, yi, xo, yo, ix, iy, k, xmsg, ncrit, out)
         real(real64), intent(in) :: fi(:, :, :)
         real(real64), intent(in) :: xi(:, :)
@@ -260,6 +277,8 @@ contains
         end do
     end subroutine interpolate_curv_cell
 
+    ! Fill unresolved holes along each output row using the same linear-missing
+    ! helper as the original kernel family.
     subroutine fill_missing_rows(fo, xmsg)
         real(real64), intent(inout) :: fo(:, :, :)
         real(real64), intent(in) :: xmsg
@@ -275,6 +294,7 @@ contains
         end do
     end subroutine fill_missing_rows
 
+    ! Search the local regular-grid neighborhood for an exact coordinate hit.
     subroutine find_exact_regular_local(xi, yi, xo, yo, eps, ix_anchor, iy_anchor, found, ix_hit, iy_hit)
         real(real64), intent(in) :: xi(:)
         real(real64), intent(in) :: yi(:)
@@ -306,6 +326,7 @@ contains
         end do
     end subroutine find_exact_regular_local
 
+    ! Full-grid exact-match search for the regular-grid source path.
     subroutine find_exact_regular_full(xi, yi, xo, yo, eps, found, ix_hit, iy_hit)
         real(real64), intent(in) :: xi(:)
         real(real64), intent(in) :: yi(:)
@@ -331,6 +352,8 @@ contains
         end do
     end subroutine find_exact_regular_full
 
+    ! Brute-force search for the regular-grid cell that contains one output
+    ! point. This only runs when the monotonic fast path cannot resolve it.
     subroutine find_regular_cell_full(xi, yi, xo, yo, found, ix_hit, iy_hit)
         real(real64), intent(in) :: xi(:)
         real(real64), intent(in) :: yi(:)
@@ -356,6 +379,9 @@ contains
         end do
     end subroutine find_regular_cell_full
 
+    ! Interpolate one regular-grid cell. The complete-data case uses bilinear
+    ! interpolation; missing-corner cases fall back to inverse-distance
+    ! weighting so the historical missing-value behavior is preserved.
     subroutine interpolate_regular_cell(fi, xi, yi, xo, yo, ix, iy, xmsg, ncrit, out)
         real(real64), intent(in) :: fi(:, :, :)
         real(real64), intent(in) :: xi(:)
@@ -418,6 +444,28 @@ contains
 end module rcm2rgrid_kernels_core
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    INTERPOLATE A CURVILINEAR SOURCE GRID TO A RECTILINEAR TARGET GRID.
+!    THIS IS THE MODERN FREE-FORM REPLACEMENT FOR THE HISTORICAL
+!    `rcm2rgrid.f` KERNEL, WHILE PRESERVING ITS PUBLIC ENTRY POINT NAME.
+!
+! EXPECTED INPUT SHAPES
+!    YI(NXI,NYI)      - SOURCE LATITUDES ON THE CURVILINEAR GRID
+!    XI(NXI,NYI)      - SOURCE LONGITUDES ON THE CURVILINEAR GRID
+!    FI(NXI,NYI,NGRD) - SOURCE DATA FIELDS
+!    YO(NYO)          - TARGET LATITUDES ON THE RECTILINEAR GRID
+!    XO(NXO)          - TARGET LONGITUDES ON THE RECTILINEAR GRID
+!
+! FLAGS
+!    NCRIT  - MINIMUM NUMBER OF VALID CELL CORNERS REQUIRED FOR A VALUE
+!             1 THROUGH 4, CLIPPED INTERNALLY TO THAT RANGE
+!    OPT    - RESERVED FOR LEGACY API COMPATIBILITY
+!    XMSG   - MISSING VALUE SENTINEL
+!
+! OUTPUT
+!    FO(NXO,NYO,NGRD) HOLDS THE INTERPOLATED RECTILINEAR RESULT.
+!    IER=0 ON SUCCESS, IER=1 WHEN AN INPUT GRID IS TOO SMALL.
 subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, ncrit, opt, ier)
     use rcm2rgrid_kernels_core, only : real64, is_strictly_increasing, earliest_stride_candidate, &
         find_exact_curv_local, find_exact_curv_full, find_curv_cell_local, find_curv_cell_full, &
@@ -446,6 +494,8 @@ subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, nc
     ncrit_use = max(1, min(4, ncrit))
     fo = xmsg
 
+    ! The fast path uses monotonic reference slices from the first row/column
+    ! to seed a narrow local search window around each output point.
     x_ref = xi(:, 1)
     y_ref = yi(1, :)
     use_fast_path = is_strictly_increasing(x_ref) .and. is_strictly_increasing(y_ref) .and. &
@@ -501,6 +551,27 @@ subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, nc
 end subroutine drcm2rgrid
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    INTERPOLATE A RECTILINEAR SOURCE GRID TO A CURVILINEAR TARGET GRID.
+!    THIS KEEPS THE LEGACY `drgrid2rcm` ENTRY POINT WHILE USING MODERN
+!    FREE-FORM FORTRAN AND A MONOTONIC-GRID ANCHOR FAST PATH.
+!
+! EXPECTED INPUT SHAPES
+!    YI(NYI)          - SOURCE LATITUDES ON THE RECTILINEAR GRID
+!    XI(NXI)          - SOURCE LONGITUDES ON THE RECTILINEAR GRID
+!    FI(NXI,NYI,NGRD) - SOURCE DATA FIELDS
+!    YO(NXO,NYO)      - TARGET LATITUDES ON THE CURVILINEAR GRID
+!    XO(NXO,NYO)      - TARGET LONGITUDES ON THE CURVILINEAR GRID
+!
+! FLAGS
+!    NCRIT  - MINIMUM NUMBER OF VALID CELL CORNERS REQUIRED FOR A VALUE
+!    OPT    - RESERVED FOR LEGACY API COMPATIBILITY
+!    XMSG   - MISSING VALUE SENTINEL
+!
+! OUTPUT
+!    FO(NXO,NYO,NGRD) HOLDS THE INTERPOLATED CURVILINEAR RESULT.
+!    IER=0 ON SUCCESS, IER=1 WHEN AN INPUT GRID IS TOO SMALL.
 subroutine drgrid2rcm(ngrd, nyi, nxi, yi, xi, fi, nyo, nxo, yo, xo, fo, xmsg, ncrit, opt, ier)
     use rcm2rgrid_kernels_core, only : real64, is_strictly_increasing, lower_bracket_increasing, &
         find_exact_regular_local, find_exact_regular_full, find_regular_cell_full, interpolate_regular_cell
