@@ -53,6 +53,23 @@ Interpolation
 * Renamed the internal compiled ``vinth2p`` acceleration module from
   ``vinth2p_backend`` to ``vinth2p_kernels`` so the import name describes the
   exported computation kernels rather than an implementation suffix.
+* Modernized the compiled ``skyborn.interp.rcm2rgrid`` kernel to a free-form
+  Fortran ``rcm2rgrid.f90`` implementation and added a monotonic curvilinear
+  fast path for common regional and ocean-grid subsets while preserving the
+  public ``drcm2rgrid`` and ``drgrid2rcm`` entry points.
+* Reduced duplicate Fortran compilation in ``src/skyborn/interp/meson.build``
+  by extracting shared ``rcm2rgrid`` / ``rcm2points`` support code into a
+  reusable static library instead of compiling the same helper sources into
+  each extension separately.
+* Fixed ``skyborn.interp.rcm2rgrid`` xarray output construction so regridding
+  arrays with 2D auxiliary curvilinear coordinates such as ``TLAT`` /
+  ``TLONG`` now drops incompatible remapped-grid coordinates instead of
+  raising an xarray coordinate-size conflict.
+* Benchmarked the retained old ``rcm2rgrid`` binary against the new build-dir
+  ``rcm2rgrid.f90`` kernel on a monotonic POP ``TEMP`` curvilinear subset and
+  measured about ``16x`` speedup for a single-field plot-like case and about
+  ``20x`` speedup for a three-field batch case with identical results on the
+  tested subset.
 * Added focused regression coverage for the new Fortran dispatch, C-order
   fallback guards, and Python remap / extrapolation fallback branches in
   ``skyborn.interp.interpolation``.
