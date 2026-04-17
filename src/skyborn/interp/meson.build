@@ -391,7 +391,7 @@ else:
     triple2grid_ext = py.extension_module(
         'triple2grid',
         [
-            'fortran/triple2grid.f',
+            'fortran/triple2grid.f90',
             triple2grid_sources,
         ],
         include_directories: inc_np,
