@@ -1,34 +1,32 @@
+! QUICK REFERENCE
+! PURPOSE
+!    MAP AN IRREGULAR (X, Y, Z) TRIPLE LIST ONTO A TARGET RECTILINEAR
+!    GRID USING THE HISTORICAL NCL `triple2grid` ENTRY POINTS.
+!    THIS IS THE MODERN FREE-FORM REPLACEMENT FOR
+!    `archive/triple2grid.f`, WHILE PRESERVING THE LEGACY PUBLIC API.
+!
+! EXPECTED INPUT SHAPES
+!    XI(KZ), YI(KZ), ZI(KZ)
+!                 INPUT TRIPLE COORDINATES AND VALUES
+!    GX(MX), GY(NY)
+!                 TARGET GRID X / Y AXES
+!
+! FLAGS
+!    ZMSG       - MISSING VALUE SENTINEL
+!    DOMAIN     - OUTLIER PADDING SCALE FOR THE OVERSIZED "BIG GRID"
+!    LOOP       - 0: PREFER `trip2grd2`
+!                 1: USE `trip2grd3`
+!    METHOD     - 0: PLANE DISTANCE
+!                 1: GREAT-CIRCLE DISTANCE
+!    DISTMX     - MAXIMUM ALLOWED ASSIGNMENT DISTANCE
+!
+! OUTPUT
+!    GRID(MX, NY) HOLDS THE NEAREST-POINT RESULT.
+!    IER=0 ON SUCCESS.
+!    IER=-1 / -11 WHEN ONLY THE EXACT-MATCH PREPASS WAS NEEDED.
 subroutine triple2grid1(kz, xi, yi, zi, zmsg, mx, ny, gx, gy, grid, domain, loop, method, distmx, mx2, ny2, &
                         x, y, z, gbigx, gbigy, gbigxy, ier)
     implicit none
-
-    ! QUICK REFERENCE
-    ! PURPOSE
-    !    MAP AN IRREGULAR (X, Y, Z) TRIPLE LIST ONTO A TARGET 2-D GRID.
-    !    THIS ENTRY POINT STRIPS MISSING INPUTS, DETECTS WHETHER THE TARGET
-    !    GRID IS EVENLY SPACED, AND THEN DISPATCHES TO ONE OF THE HISTORICAL
-    !    NEAREST-GRID-POINT KERNELS.
-    !
-    ! INPUTS
-    !    XI(KZ), YI(KZ), ZI(KZ)
-    !                 INPUT TRIPLE COORDINATES AND VALUES
-    !    GX(MX), GY(NY)
-    !                 TARGET GRID X / Y AXES
-    !    ZMSG       - MISSING VALUE SENTINEL
-    !    DOMAIN     - OUTLIER PADDING SCALE FOR THE OVERSIZED "BIG GRID"
-    !    LOOP       - SELECTOR FOR THE HISTORICAL KERNEL CHOICE
-    !                 0: TRIP2GRD2
-    !                 1: TRIP2GRD3
-    !    METHOD     - 0: PLANE DISTANCE
-    !                 1: GREAT-CIRCLE DISTANCE
-    !    DISTMX     - MAXIMUM ALLOWED ASSIGNMENT DISTANCE
-    !
-    ! OUTPUTS
-    !    GRID(MX, NY)
-    !                 TARGET GRID AFTER NEAREST-POINT ASSIGNMENT
-    !    IER        - 0 ON SUCCESS
-    !                 -1 / -11 FROM THE CALLED KERNELS WHEN ONLY EXACT MATCHES
-    !                 WERE NEEDED
 
     integer, intent(in) :: mx, ny, kz, mx2, ny2, loop, method
     integer, intent(out) :: ier
@@ -39,7 +37,6 @@ subroutine triple2grid1(kz, xi, yi, zi, zmsg, mx, ny, gx, gy, grid, domain, loop
     double precision, intent(inout) :: gbigx(mx2), gbigy(ny2), gbigxy(mx2, ny2)
     double precision, intent(out) :: grid(mx, ny)
     double precision :: dd, ddeps, ddcrit
-    logical :: debug
 
     ier = 0
     ddeps = 1.0d-3
@@ -48,8 +45,6 @@ subroutine triple2grid1(kz, xi, yi, zi, zmsg, mx, ny, gx, gy, grid, domain, loop
     else
         ddcrit = distmx
     end if
-
-    debug = .false.
 
     ! Strip missing inputs while counting values that lie outside the target
     ! grid bounds.
@@ -101,11 +96,15 @@ subroutine triple2grid1(kz, xi, yi, zi, zmsg, mx, ny, gx, gy, grid, domain, loop
     ! direct F2PY interface exposes both paths.
     if (kout == 0) then
         if (loop == 0) then
-            call trip2grd2(kpts, x, y, z, zmsg, mx, ny, gx, gy, grid, mflag, nflag, method, ddcrit, ier)
+            call trip2grd2(kpts, x, y, z, zmsg, mx, ny, gx, gy, grid, &
+                           mflag, nflag, method, ddcrit, ier)
         else
-            call trip2grd3(kpts, x, y, z, zmsg, mx, ny, gx, gy, grid, mflag, nflag, method, ddcrit, ier)
+            call trip2grd3(kpts, x, y, z, zmsg, mx, ny, gx, gy, grid, &
+                           mflag, nflag, method, ddcrit, ier)
         end if
     else
+        ! Expand the target domain by one extra ring so out-of-bounds input
+        ! points can still influence the edge cells, matching the legacy path.
         do n = 1, ny
             gbigy(n + 1) = gy(n)
         end do
@@ -120,11 +119,14 @@ subroutine triple2grid1(kz, xi, yi, zi, zmsg, mx, ny, gx, gy, grid, domain, loop
         gbigx(mx2) = gx(mx) + domain * (gx(mx) - gx(mx - 1))
 
         if (loop == 0) then
-            call trip2grd2(kpts, x, y, z, zmsg, mx2, ny2, gbigx, gbigy, gbigxy, mflag, nflag, method, ddcrit, ier)
+            call trip2grd2(kpts, x, y, z, zmsg, mx2, ny2, gbigx, gbigy, gbigxy, &
+                           mflag, nflag, method, ddcrit, ier)
         else
-            call trip2grd3(kpts, x, y, z, zmsg, mx2, ny2, gbigx, gbigy, gbigxy, mflag, nflag, method, ddcrit, ier)
+            call trip2grd3(kpts, x, y, z, zmsg, mx2, ny2, gbigx, gbigy, gbigxy, &
+                           mflag, nflag, method, ddcrit, ier)
         end if
 
+        ! Copy the interior of the oversized grid back to the requested domain.
         do n = 1, ny
             do m = 1, mx
                 grid(m, n) = gbigxy(m + 1, n + 1)
@@ -134,12 +136,24 @@ subroutine triple2grid1(kz, xi, yi, zi, zmsg, mx, ny, gx, gy, grid, domain, loop
 end subroutine triple2grid1
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    ASSIGN EACH OBSERVATION TO THE NEAREST ELIGIBLE TARGET GRID POINT.
+!    THIS IS THE HISTORICAL `TRIP2GRD2` PATH THAT NCL PREFERS OVER
+!    `TRIP2GRD3` BECAUSE OF A LONG-STANDING CORRECTNESS ISSUE IN THAT
+!    ALTERNATIVE KERNEL.
+!
+! FLAGS
+!    MFLAG/NFLAG - APPROXIMATE EQUAL-SPACING FLAGS FOR GXOUT / GYOUT
+!    METHOD      - 0: PLANE DISTANCE
+!                  1: GREAT-CIRCLE DISTANCE
+!    DDCRIT      - MAXIMUM ALLOWED ASSIGNMENT DISTANCE
+!
+! OUTPUT
+!    GOUT(MX, NY) HOLDS THE NEAREST-POINT RESULT.
+!    IER=-1 WHEN THE EXACT-MATCH PREPASS ASSIGNED EVERY INPUT POINT.
 subroutine trip2grd2(kz, x, y, z, zmsg, mx, ny, gxout, gyout, gout, mflag, nflag, method, ddcrit, ier)
     implicit none
-
-    ! Assign each observation to the nearest eligible target grid point.
-    ! When multiple observations compete for the same point, keep the one with
-    ! the smallest computed distance.
 
     integer, intent(in) :: mx, ny, kz, mflag, nflag, method
     integer, intent(out) :: ier
@@ -148,15 +162,13 @@ subroutine trip2grd2(kz, x, y, z, zmsg, mx, ny, gxout, gyout, gout, mflag, nflag
     double precision, intent(out) :: gout(mx, ny)
     double precision :: dout(mx, ny)
     double precision :: dd, xx, yy, slpy, slpx, dx, dy, atmp, ylat, re, rad
-    logical :: debug, found_exact
+    logical :: found_exact
 
     ier = 0
-    debug = .false.
 
     re = 6371.2200d0
     rad = 4.0d0 * atan(1.0d0) / 180.0d0
 
-    ier = 0
     kpts = kz
     dx = abs(gxout(3) - gxout(2))
     dy = abs(gyout(3) - gyout(2))
@@ -194,6 +206,7 @@ subroutine trip2grd2(kz, x, y, z, zmsg, mx, ny, gxout, gyout, gout, mflag, nflag
     end if
 
     ! Otherwise assign each observation to the nearest eligible grid point.
+    ! When multiple observations compete for one cell, keep the closest one.
     ksum = 0
     do k = 1, kpts
         nn = -1
@@ -246,6 +259,21 @@ subroutine trip2grd2(kz, x, y, z, zmsg, mx, ny, gxout, gyout, gout, mflag, nflag
 end subroutine trip2grd2
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    HISTORICAL ALTERNATIVE TO `TRIP2GRD2` THAT LOOPS OVER TARGET GRID
+!    CELLS AND SEARCHES ALL OBSERVATIONS FOR THE CLOSEST MATCH.
+!    THIS ENTRY POINT IS RETAINED FOR COMPATIBILITY WITH THE LEGACY
+!    INTERFACE EVEN THOUGH NCL USUALLY FORCES `LOOP=0`.
+!
+! FLAGS
+!    METHOD  - 0: PLANE DISTANCE
+!              1: GREAT-CIRCLE DISTANCE
+!    DDCRIT  - MAXIMUM ALLOWED ASSIGNMENT DISTANCE
+!
+! OUTPUT
+!    GOUT(MX, NY) HOLDS THE NEAREST-POINT RESULT.
+!    IER=-11 WHEN THE EXACT-MATCH PREPASS ASSIGNED EVERY INPUT POINT.
 subroutine trip2grd3(kz, x, y, z, zmsg, mx, ny, gxout, gyout, gout, mflag, nflag, method, ddcrit, ier)
     implicit none
 
@@ -255,9 +283,7 @@ subroutine trip2grd3(kz, x, y, z, zmsg, mx, ny, gxout, gyout, gout, mflag, nflag
     double precision, intent(in) :: gxout(mx), gyout(ny), x(kz), y(kz), z(kz), zmsg, ddcrit
     double precision, intent(out) :: gout(mx, ny)
     double precision :: dout(mx, ny), dist(kz), re, rad, rlat, atmp
-    logical :: debug, found_exact
-
-    debug = .true.
+    logical :: found_exact
 
     ier = 0
     kpts = kz
@@ -296,6 +322,8 @@ subroutine trip2grd3(kz, x, y, z, zmsg, mx, ny, gxout, gyout, gout, mflag, nflag
     re = 6371.2200d0
     rad = 4.0d0 * atan(1.0d0) / 180.0d0
 
+    ! For every target cell that did not already receive an exact match,
+    ! search the full observation list for the closest eligible input point.
     do n = 1, ny
         do m = 1, mx
             if (dout(m, n) /= 0.0d0) then
@@ -306,7 +334,11 @@ subroutine trip2grd3(kz, x, y, z, zmsg, mx, ny, gxout, gyout, gout, mflag, nflag
                 else
                     rlat = gyout(n) * rad
                     do k = 1, kpts
-                        atmp = sin(rlat) * sin(y(k) * rad) + cos(rlat) * cos(y(k) * rad) * cos((x(k) - gxout(m)) * rad)
+                        ! Clamp the cosine argument so round-off does not
+                        ! push ACOS outside [-1, 1].
+                        atmp = sin(rlat) * sin(y(k) * rad) + &
+                               cos(rlat) * cos(y(k) * rad) * &
+                               cos((x(k) - gxout(m)) * rad)
                         atmp = min(1.0d0, max(-1.0d0, atmp))
                         dist(k) = acos(atmp) * re
                     end do
