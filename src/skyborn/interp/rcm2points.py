@@ -5,9 +5,24 @@ import xarray as xr
 
 from .errors import ChunkError, CoordinateError, DimensionError
 from .fortran.rcm2points import drcm2points
-from .missing_values import fort2py_msg, py2fort_msg
+from .missing_values import (
+    complex_dtypes,
+    float_dtypes,
+    fort2py_msg,
+    msg_dtype,
+    py2fort_msg,
+)
 
 supported_types = typing.Union[xr.DataArray, np.ndarray]
+
+
+def _default_missing_value_for_dtype(ndtype):
+    if ndtype in float_dtypes:
+        return np.nan
+    if ndtype in complex_dtypes:
+        return np.nan + np.nan * 1j
+    return msg_dtype[ndtype]
+
 
 # Fortran Wrapper _<funcname>()
 # This wrapper is executed within dask processes (if any), and could/should
@@ -19,13 +34,36 @@ def _rcm2points(lat2d, lon2d, fi, lat1d, lon1d, msg_py, opt):
     lat2d = np.transpose(lat2d, axes=(1, 0))
     lon2d = np.transpose(lon2d, axes=(1, 0))
 
-    fi, msg_py, msg_fort = py2fort_msg(fi, msg_py=msg_py)
+    ndtype = fi.dtype.type
+    msg_fort = msg_dtype[ndtype]
+    if msg_py is None:
+        msg_py = _default_missing_value_for_dtype(ndtype)
+
+    needs_restore = False
+    if ndtype in float_dtypes or ndtype in complex_dtypes:
+        msg_is_nan = bool(np.isnan(msg_py))
+    else:
+        msg_is_nan = False
+
+    # Skip the generic missing-value conversion when the transposed source
+    # field already matches the Fortran-side sentinel contract. This avoids an
+    # extra full scan plus the restore pass on the input cube.
+    if msg_is_nan:
+        if np.isnan(fi).any():
+            fi, msg_py, msg_fort = py2fort_msg(fi, msg_py=msg_py, msg_fort=msg_fort)
+            needs_restore = True
+    elif msg_py != msg_fort:
+        # For explicit custom sentinels, fall back to the historical single-pass
+        # conversion path instead of pre-scanning for `.any()`, which would add
+        # a second full read of the input cube.
+        fi, msg_py, msg_fort = py2fort_msg(fi, msg_py=msg_py, msg_fort=msg_fort)
+        needs_restore = True
 
     fo = drcm2points(lat2d, lon2d, fi, lat1d, lon1d, xmsg=msg_fort, opt=opt)
-    fo = np.asarray(fo)
-    fo = np.transpose(fo, axes=(1, 0))
+    fo = np.asarray(fo).T
 
-    fort2py_msg(fi, msg_fort=msg_fort, msg_py=msg_py)
+    if needs_restore:
+        fort2py_msg(fi, msg_fort=msg_fort, msg_py=msg_py)
     fort2py_msg(fo, msg_fort=msg_fort, msg_py=msg_py)
 
     return fo
@@ -147,32 +185,23 @@ def rcm2points(
     # Basic validity checks
     _validity_check(lat2d, lon2d, fi, lat1d, lon1d)
 
-    # ''' Start of boilerplate
-    is_input_xr = True
-
-    # If the input is numpy.ndarray, convert it to xarray.DataArray
-    if not isinstance(fi, xr.DataArray):
-        is_input_xr = False
-
-        fi = xr.DataArray(fi)
-
-    # Convert 2d arrays to Xarray for inner wrapper call below if they are numpy
-    lon2d = xr.DataArray(lon2d)
-    lat2d = xr.DataArray(lat2d)
-    lon1d = xr.DataArray(lon1d)
-    lat1d = xr.DataArray(lat1d)
+    is_input_xr = isinstance(fi, xr.DataArray)
+    fi_data = fi.data if is_input_xr else np.asarray(fi)
+    lat2d_data = lat2d.data if isinstance(lat2d, xr.DataArray) else np.asarray(lat2d)
+    lon2d_data = lon2d.data if isinstance(lon2d, xr.DataArray) else np.asarray(lon2d)
+    lat1d_data = lat1d.data if isinstance(lat1d, xr.DataArray) else np.asarray(lat1d)
+    lon1d_data = lon1d.data if isinstance(lon1d, xr.DataArray) else np.asarray(lon1d)
 
     # If input data is already chunked
-    if fi.chunks is not None:
+    if is_input_xr and fi.chunks is not None:
         # Ensure last two dimensions of `fi` are not chunked
         if list(fi.chunks)[-2:] != [(lat2d.shape[0],), (lat2d.shape[1],)]:
             # [(lon2d.shape[0]), (lon2d.shape[1])] could also be used
             raise ChunkError(
                 "rcm2points: fi must be unchunked along the rightmost two dimensions"
             )
-    # ''' end of boilerplate
 
-    fo = _rcm2points(lat2d.data, lon2d.data, fi.data, lat1d.data, lon1d.data, msg, opt)
+    fo = _rcm2points(lat2d_data, lon2d_data, fi_data, lat1d_data, lon1d_data, msg, opt)
 
     # If input was xarray.DataArray, convert output to xarray.DataArray as well
     if is_input_xr:
