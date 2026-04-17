@@ -7,6 +7,7 @@ to pressure level interpolation and multidimensional spatial interpolation.
 
 import builtins
 import importlib
+import sys
 
 import numpy as np
 import pytest
@@ -993,10 +994,13 @@ class TestInterpolationFortranFallbacks:
         real_import = builtins.__import__
 
         def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-            if name.endswith("skyborn.interp.fortran.vinth2p_kernels"):
+            if "vinth2p_kernels" in name:
                 raise ImportError("forced test import failure")
             return real_import(name, globals, locals, fromlist, level)
 
+        monkeypatch.delitem(
+            sys.modules, "skyborn.interp.fortran.vinth2p_kernels", raising=False
+        )
         monkeypatch.setattr(builtins, "__import__", fake_import)
         reloaded = importlib.reload(interpolation_module)
 
