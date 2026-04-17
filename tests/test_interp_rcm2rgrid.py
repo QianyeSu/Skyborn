@@ -77,6 +77,73 @@ class TestRcm2rgridBasic:
             rcm2rgrid(lat2d, None, fi, lat1d, lon1d)
 
 
+class TestRcm2rgridCurvilinearRegression:
+    """Regression coverage for nontrivial curvilinear source grids."""
+
+    @staticmethod
+    def _build_small_curvilinear_case():
+        lat_base = np.array([-20.0, -5.0, 10.0, 25.0], dtype=np.float64)
+        lon_base = np.array([100.0, 112.0, 124.0, 136.0, 148.0], dtype=np.float64)
+        lon2d, lat2d = np.meshgrid(lon_base, lat_base)
+        lat2d = lat2d + 0.3 * np.sin(np.deg2rad(lon2d))
+        lon2d = lon2d + 0.4 * np.cos(np.deg2rad(lat2d * 2.0))
+
+        lat1d = np.array(
+            [-19.841024220730038, 2.7272090525868116, 25.29544232590366],
+            dtype=np.float64,
+        )
+        lon1d = np.array(
+            [
+                100.25394137661866,
+                116.30072841251312,
+                132.3475154484076,
+                148.39430248430205,
+            ],
+            dtype=np.float64,
+        )
+        return lat2d, lon2d, lat1d, lon1d
+
+    def test_curvilinear_reference_values(self):
+        lat2d, lon2d, lat1d, lon1d = self._build_small_curvilinear_case()
+        field = (lat2d * 0.5 + lon2d * 0.1)[None, :, :]
+
+        result = rcm2rgrid(lat2d, lon2d, field, lat1d, lon1d, msg=np.nan, meta=False)
+        actual = np.asarray(result, dtype=np.float64)[0]
+        expected = np.array(
+            [
+                [np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 13.639274397667, 15.949704892774, 14.152416471702],
+                [22.673115300614, 23.431433237108, np.nan, np.nan],
+            ],
+            dtype=np.float64,
+        )
+
+        np.testing.assert_allclose(
+            actual, expected, rtol=0.0, atol=1e-12, equal_nan=True
+        )
+
+    def test_curvilinear_reference_values_with_missing_corners(self):
+        lat2d, lon2d, lat1d, lon1d = self._build_small_curvilinear_case()
+        field = (lat2d * 0.5 + lon2d * 0.1)[None, :, :]
+        field[0, 1, 2] = np.nan
+        field[0, 2, 1] = np.nan
+
+        result = rcm2rgrid(lat2d, lon2d, field, lat1d, lon1d, msg=np.nan, meta=False)
+        actual = np.asarray(result, dtype=np.float64)[0]
+        expected = np.array(
+            [
+                [np.nan, np.nan, np.nan, np.nan],
+                [np.nan, 13.639274397667, 15.893714435523, 14.470068853634],
+                [22.673115300614, 23.986410962138, np.nan, np.nan],
+            ],
+            dtype=np.float64,
+        )
+
+        np.testing.assert_allclose(
+            actual, expected, rtol=0.0, atol=1e-12, equal_nan=True
+        )
+
+
 class TestRgrid2rcmBasic:
     """Basic behavior and identity cases for rgrid2rcm."""
 
