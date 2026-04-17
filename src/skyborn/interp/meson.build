@@ -407,7 +407,7 @@ else:
     grid2triple_ext = py.extension_module(
         'grid2triple',
         [
-            'fortran/grid2triple.f',
+            'fortran/grid2triple.f90',
             grid2triple_sources,
         ],
         include_directories: inc_np,
