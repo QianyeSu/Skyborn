@@ -226,15 +226,21 @@ function injectChangelogModalStyles() {
         }
 
         .changelog-section-content {
-            overflow: hidden;
-            max-height: 0;
+            display: grid;
+            grid-template-rows: 0fr;
             opacity: 0;
             transform: translateY(-6px);
             padding: 0 0.3rem 0.1rem;
-            transition: max-height 0.3s ease, opacity 0.2s ease, transform 0.3s ease;
+            transition: grid-template-rows 0.28s ease, opacity 0.2s ease, transform 0.28s ease;
+        }
+
+        .changelog-section-content-inner {
+            overflow: hidden;
+            min-height: 0;
         }
 
         .changelog-modal-section.is-expanded .changelog-section-content {
+            grid-template-rows: 1fr;
             opacity: 1;
             transform: translateY(0);
         }
@@ -495,7 +501,7 @@ function injectChangelogModalStyles() {
 function addChangelogHint(changelogRoot, firstSection) {
     const hint = document.createElement('div');
     hint.className = 'changelog-modal-tip';
-    hint.textContent = 'This page records the changelog for each release.';
+    hint.textContent = 'This page records the changelog for each released version.';
     changelogRoot.insertBefore(hint, firstSection);
 }
 
@@ -534,6 +540,10 @@ function getSectionContent(section) {
     return section.querySelector(':scope > .changelog-section-content');
 }
 
+function getSectionContentInner(section) {
+    return section.querySelector(':scope > .changelog-section-content > .changelog-section-content-inner');
+}
+
 function ensureSectionContent(section, heading) {
     const existingContent = getSectionContent(section);
     if (existingContent) {
@@ -542,13 +552,16 @@ function ensureSectionContent(section, heading) {
 
     const content = document.createElement('div');
     content.className = 'changelog-section-content';
+    const inner = document.createElement('div');
+    inner.className = 'changelog-section-content-inner';
 
     Array.from(section.children).forEach(function (child) {
         if (child !== heading) {
-            content.appendChild(child);
+            inner.appendChild(child);
         }
     });
 
+    content.appendChild(inner);
     section.appendChild(content);
     return content;
 }
@@ -586,51 +599,6 @@ function createModalButton(section, titleText) {
     return button;
 }
 
-function animateSectionContent(content, expanded, animate) {
-    content.style.overflow = 'hidden';
-
-    if (!animate) {
-        content.style.transition = 'none';
-        content.style.maxHeight = expanded ? 'none' : '0px';
-        content.style.opacity = expanded ? '1' : '0';
-        content.style.transform = expanded ? 'translateY(0)' : 'translateY(-6px)';
-        content.offsetHeight;
-        content.style.transition = '';
-        return;
-    }
-
-    if (expanded) {
-        content.style.maxHeight = '0px';
-        content.style.opacity = '0';
-        content.style.transform = 'translateY(-6px)';
-        content.offsetHeight;
-
-        const targetHeight = content.scrollHeight;
-        content.style.maxHeight = targetHeight + 'px';
-        content.style.opacity = '1';
-        content.style.transform = 'translateY(0)';
-
-        const onExpandEnd = function (event) {
-            if (event.propertyName !== 'max-height') {
-                return;
-            }
-
-            content.style.maxHeight = 'none';
-            content.removeEventListener('transitionend', onExpandEnd);
-        };
-
-        content.addEventListener('transitionend', onExpandEnd);
-        return;
-    }
-
-    const currentHeight = content.scrollHeight;
-    content.style.maxHeight = currentHeight + 'px';
-    content.offsetHeight;
-    content.style.maxHeight = '0px';
-    content.style.opacity = '0';
-    content.style.transform = 'translateY(-6px)';
-}
-
 function setSectionExpanded(section, expanded, animate) {
     const heading = getDirectHeading(section);
     const content = getSectionContent(section);
@@ -644,7 +612,20 @@ function setSectionExpanded(section, expanded, animate) {
     }
 
     if (content) {
-        animateSectionContent(content, expanded, shouldAnimate);
+        if (!shouldAnimate) {
+            content.style.transition = 'none';
+        }
+
+        content.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+
+        if ('inert' in content) {
+            content.inert = !expanded;
+        }
+
+        if (!shouldAnimate) {
+            content.offsetHeight;
+            content.style.transition = '';
+        }
     }
 }
 
@@ -668,12 +649,12 @@ function expandSectionAndScroll(section, targetId) {
 }
 
 function getTopicLabels(section) {
-    const content = getSectionContent(section);
-    if (!content) {
+    const inner = getSectionContentInner(section);
+    if (!inner) {
         return [];
     }
 
-    return Array.from(content.children)
+    return Array.from(inner.children)
         .filter(function (child) {
             return child.tagName === 'P' &&
                 child.nextElementSibling &&
@@ -695,7 +676,8 @@ function openChangelogModal(section, opener) {
 
     const heading = getDirectHeading(section);
     const content = getSectionContent(section);
-    if (!heading || !content) {
+    const inner = getSectionContentInner(section);
+    if (!heading || !content || !inner) {
         return;
     }
 
@@ -762,7 +744,7 @@ function openChangelogModal(section, opener) {
     const contentClone = document.createElement('div');
     contentClone.className = 'changelog-modal-content';
 
-    Array.from(content.children).forEach(function (child) {
+    Array.from(inner.children).forEach(function (child) {
         contentClone.appendChild(child.cloneNode(true));
     });
 
