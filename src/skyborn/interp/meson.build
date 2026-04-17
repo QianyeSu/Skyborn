@@ -357,7 +357,7 @@ else:
     rcm2points_ext = py.extension_module(
         'rcm2points',
         [
-            'fortran/rcm2points.f',
+            'fortran/rcm2points.f90',
             rcm2points_sources,
         ],
         include_directories: inc_np,
