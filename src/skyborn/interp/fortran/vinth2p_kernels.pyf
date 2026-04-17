@@ -1,0 +1,156 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module vinth2p_kernels ! in
+    interface ! in :vinth2p_kernels
+        ! signature : dato = dvinth2p_nodes_pa(dati,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp)
+        subroutine dvinth2p_nodes_pa(dati,dato,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nlevi,ncol,nlevo) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer, optional, check(shape(dati,0)==nlevi), depend(dati) :: nlevi=shape(dati,0)
+            integer, optional, check(shape(dati,1)==ncol), depend(dati) :: ncol=shape(dati,1)
+            double precision dimension(nlevi,ncol), intent(in) :: dati
+            double precision dimension(nlevo,ncol), depend(nlevo,ncol), intent(out) :: dato
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofa
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+            integer, optional, check(len(plevo)>=nlevo), depend(plevo) :: nlevo=len(plevo)
+            double precision dimension(nlevo), intent(in) :: plevo
+            integer intent(in) :: intyp
+            double precision dimension(ncol), depend(ncol), intent(in) :: psfc
+            double precision intent(in) :: spvl
+            integer intent(in) :: kxtrp
+        end subroutine dvinth2p_nodes_pa
+        ! signature : dvinth2p_nodes_pa_into(dati,dato,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp)
+        subroutine dvinth2p_nodes_pa_into(dati,dato,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nlevi,ncol,nlevo) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer, optional, check(shape(dati,0)==nlevi), depend(dati) :: nlevi=shape(dati,0)
+            integer, optional, check(shape(dati,1)==ncol), depend(dati) :: ncol=shape(dati,1)
+            double precision dimension(nlevi,ncol), intent(in) :: dati
+            integer, optional, check(len(plevo)>=nlevo), depend(plevo) :: nlevo=len(plevo)
+            double precision dimension(nlevo,ncol), check(shape(dato,0)==nlevo), check(shape(dato,1)==ncol), depend(nlevo,ncol), intent(in,out) :: dato
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofa
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+            double precision dimension(nlevo), intent(in) :: plevo
+            integer intent(in) :: intyp
+            double precision dimension(ncol), depend(ncol), intent(in) :: psfc
+            double precision intent(in) :: spvl
+            integer intent(in) :: kxtrp
+        end subroutine dvinth2p_nodes_pa_into
+        ! signature : dato = dvinth2p_ecmwf_nodes_pa(dati,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,varflg,tbot,phis)
+        subroutine dvinth2p_ecmwf_nodes_pa(dati,dato,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nlevi,ncol,nlevo,varflg,tbot,phis) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer, optional, check(shape(dati,0)==nlevi), depend(dati) :: nlevi=shape(dati,0)
+            integer, optional, check(shape(dati,1)==ncol), depend(dati) :: ncol=shape(dati,1)
+            double precision dimension(nlevi,ncol), intent(in) :: dati
+            double precision dimension(nlevo,ncol), depend(nlevo,ncol), intent(out) :: dato
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofa
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+            integer, optional, check(len(plevo)>=nlevo), depend(plevo) :: nlevo=len(plevo)
+            double precision dimension(nlevo), intent(in) :: plevo
+            integer intent(in) :: intyp
+            double precision dimension(ncol), depend(ncol), intent(in) :: psfc
+            double precision intent(in) :: spvl
+            integer intent(in) :: kxtrp
+            integer intent(in) :: varflg
+            double precision dimension(ncol), depend(ncol), intent(in) :: tbot
+            double precision dimension(ncol), depend(ncol), intent(in) :: phis
+        end subroutine dvinth2p_ecmwf_nodes_pa
+        ! signature : dvinth2p_ecmwf_nodes_pa_into(dati,dato,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,varflg,tbot,phis)
+        subroutine dvinth2p_ecmwf_nodes_pa_into(dati,dato,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nlevi,ncol,nlevo,varflg,tbot,phis) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer, optional, check(shape(dati,0)==nlevi), depend(dati) :: nlevi=shape(dati,0)
+            integer, optional, check(shape(dati,1)==ncol), depend(dati) :: ncol=shape(dati,1)
+            double precision dimension(nlevi,ncol), intent(in) :: dati
+            integer, optional, check(len(plevo)>=nlevo), depend(plevo) :: nlevo=len(plevo)
+            double precision dimension(nlevo,ncol), check(shape(dato,0)==nlevo), check(shape(dato,1)==ncol), depend(nlevo,ncol), intent(in,out) :: dato
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofa
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+            double precision dimension(nlevo), intent(in) :: plevo
+            integer intent(in) :: intyp
+            double precision dimension(ncol), depend(ncol), intent(in) :: psfc
+            double precision intent(in) :: spvl
+            integer intent(in) :: kxtrp
+            integer intent(in) :: varflg
+            double precision dimension(ncol), depend(ncol), intent(in) :: tbot
+            double precision dimension(ncol), depend(ncol), intent(in) :: phis
+        end subroutine dvinth2p_ecmwf_nodes_pa_into
+        ! signature : dato = dsigma2hybrid_nodes(dati,sigmai,sigmao,intyp,spvl)
+        subroutine dsigma2hybrid_nodes(dati,dato,sigmai,sigmao,intyp,spvl,nlevi,ncol,nlevo) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer, optional, check(shape(dati,0)==nlevi), depend(dati) :: nlevi=shape(dati,0)
+            integer, optional, check(shape(dati,1)==ncol), depend(dati) :: ncol=shape(dati,1)
+            integer intent(in) :: nlevo
+            double precision dimension(nlevi,ncol), intent(in) :: dati
+            double precision dimension(nlevo,ncol), depend(nlevo,ncol), intent(out) :: dato
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: sigmai
+            double precision dimension(nlevo,ncol), depend(nlevo,ncol), intent(in) :: sigmao
+            integer intent(in) :: intyp
+            double precision intent(in) :: spvl
+        end subroutine dsigma2hybrid_nodes
+        ! signature : dsigma2hybrid_nodes_into(dati,dato,sigmai,sigmao,intyp,spvl)
+        subroutine dsigma2hybrid_nodes_into(dati,dato,sigmai,sigmao,intyp,spvl,nlevi,ncol,nlevo) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer, optional, check(shape(dati,0)==nlevi), depend(dati) :: nlevi=shape(dati,0)
+            integer, optional, check(shape(dati,1)==ncol), depend(dati) :: ncol=shape(dati,1)
+            integer intent(in) :: nlevo
+            double precision dimension(nlevi,ncol), intent(in) :: dati
+            double precision dimension(nlevo,ncol), check(shape(dato,0)==nlevo), check(shape(dato,1)==ncol), depend(nlevo,ncol), intent(in,out) :: dato
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: sigmai
+            double precision dimension(nlevo,ncol), depend(nlevo,ncol), intent(in) :: sigmao
+            integer intent(in) :: intyp
+            double precision intent(in) :: spvl
+        end subroutine dsigma2hybrid_nodes_into
+        ! signature : dsigma2hybrid_nodes_corder_into(dati_flat,dato_flat,sigmai,hyam,hybm,p0,psfc,intyp,spvl,nouter,ninner,nlevo)
+        subroutine dsigma2hybrid_nodes_corder_into(dati_flat,dato_flat,sigmai,hyam,hybm,p0,psfc,intyp,spvl,nouter,nlevi,ninner,nlevo) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer intent(in) :: nouter
+            integer intent(in) :: ninner
+            integer, optional, check(len(sigmai)>=nlevi), depend(sigmai) :: nlevi=len(sigmai)
+            integer intent(in) :: nlevo
+            double precision dimension(nouter*nlevi*ninner), depend(nouter,nlevi,ninner), intent(in) :: dati_flat
+            double precision dimension(nouter*nlevo*ninner), check(len(dato_flat)>=nouter*nlevo*ninner), depend(nouter,nlevo,ninner), intent(in,out) :: dato_flat
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: sigmai
+            double precision dimension(nlevo), depend(nlevo), intent(in) :: hyam
+            double precision dimension(nlevo), depend(nlevo), intent(in) :: hybm
+            double precision intent(in) :: p0
+            double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: psfc
+            integer intent(in) :: intyp
+            double precision intent(in) :: spvl
+        end subroutine dsigma2hybrid_nodes_corder_into
+        ! signature : dato_flat = dvinth2p_nodes_corder_pa_into(dati_flat,dato_flat,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nouter,ninner)
+        subroutine dvinth2p_nodes_corder_pa_into(dati_flat,dato_flat,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nouter,nlevi,ninner,nlevo) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer intent(in) :: nouter
+            integer intent(in) :: ninner
+            integer, optional, check(len(hbcofa)>=nlevi), depend(hbcofa) :: nlevi=len(hbcofa)
+            integer, optional, check(len(plevo)>=nlevo), depend(plevo) :: nlevo=len(plevo)
+            double precision dimension(nouter*nlevi*ninner), depend(nouter,nlevi,ninner), intent(in) :: dati_flat
+            double precision dimension(nouter*nlevo*ninner), check(len(dato_flat)>=nouter*nlevo*ninner), depend(nouter,nlevo,ninner), intent(in,out) :: dato_flat
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofa
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+            double precision dimension(nlevo), intent(in) :: plevo
+            integer intent(in) :: intyp
+            double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: psfc
+            double precision intent(in) :: spvl
+            integer intent(in) :: kxtrp
+        end subroutine dvinth2p_nodes_corder_pa_into
+        ! signature : dato_flat = dvinth2p_ecmwf_nodes_corder_pa_into(dati_flat,dato_flat,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nouter,ninner,varflg,tbot,phis)
+        subroutine dvinth2p_ecmwf_nodes_corder_pa_into(dati_flat,dato_flat,hbcofa,hbcofb,p0,plevo,intyp,psfc,spvl,kxtrp,nouter,nlevi,ninner,nlevo,varflg,tbot,phis) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer intent(in) :: nouter
+            integer intent(in) :: ninner
+            integer, optional, check(len(hbcofa)>=nlevi), depend(hbcofa) :: nlevi=len(hbcofa)
+            integer, optional, check(len(plevo)>=nlevo), depend(plevo) :: nlevo=len(plevo)
+            double precision dimension(nouter*nlevi*ninner), depend(nouter,nlevi,ninner), intent(in) :: dati_flat
+            double precision dimension(nouter*nlevo*ninner), check(len(dato_flat)>=nouter*nlevo*ninner), depend(nouter,nlevo,ninner), intent(in,out) :: dato_flat
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofa
+            double precision dimension(nlevi), depend(nlevi), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+            double precision dimension(nlevo), intent(in) :: plevo
+            integer intent(in) :: intyp
+            double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: psfc
+            double precision intent(in) :: spvl
+            integer intent(in) :: kxtrp
+            integer intent(in) :: varflg
+            double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: tbot
+            double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: phis
+        end subroutine dvinth2p_ecmwf_nodes_corder_pa_into
+    end interface
+end python module vinth2p_kernels
+
+! This file was auto-generated manually for f2py compatibility.
