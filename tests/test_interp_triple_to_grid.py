@@ -10,6 +10,7 @@ import importlib
 import warnings
 from types import SimpleNamespace
 
+import dask.array as da
 import numpy as np
 import pytest
 import xarray as xr
@@ -17,6 +18,9 @@ import xarray as xr
 from skyborn.interp import grid_to_triple, triple_to_grid
 from skyborn.interp.errors import ChunkError, CoordinateError, DimensionError
 from skyborn.interp.triple_to_grid import (
+    _default_missing_value_for_dtype,
+    _grid_to_triple,
+    _triple_to_grid,
     _triple_to_grid_2d,
     grid2triple,
     triple2grid,
@@ -222,6 +226,110 @@ class TestTripleToGridBasic:
         z = da.values.ravel()
         with pytest.raises(DimensionError):
             triple_to_grid(z, x_in=x_in, y_in=y_in, x_out=x_out, y_out=y_out)
+
+
+class TestPrivateWrapperBranches:
+    """Cover dtype and dask-specific wrapper branches."""
+
+    def test_default_missing_value_for_dtype_handles_complex_and_integer(self):
+        complex_missing = _default_missing_value_for_dtype(np.complex128)
+        integer_missing = _default_missing_value_for_dtype(np.int32)
+
+        assert np.isnan(complex_missing.real)
+        assert np.isnan(complex_missing.imag)
+        assert integer_missing == triple_to_grid_module.msg_dtype[np.int32]
+
+    def test_grid_to_triple_integer_wrapper_uses_non_nan_missing_path(
+        self, small_rect_grid
+    ):
+        x_out, y_out, grid_da = small_rect_grid
+        msg = np.int32(-9999)
+        data = grid_da.values.astype(np.int32)
+        data[1, 1] = msg
+        original = data.copy()
+
+        triple = _grid_to_triple(x_out, y_out, data, msg_py=None)
+
+        assert triple.shape[1] == data.size - 1
+        np.testing.assert_array_equal(data, original)
+
+    def test_triple_to_grid_integer_wrapper_uses_non_nan_missing_path(
+        self, small_rect_grid
+    ):
+        x_out, y_out, grid_da = small_rect_grid
+        X, Y = np.meshgrid(x_out, y_out, indexing="xy")
+        x_in = X.ravel()
+        y_in = Y.ravel()
+        msg = np.int32(-9999)
+        values = grid_da.values.astype(np.int32).ravel()
+        values[4] = msg
+        original = values.copy()
+
+        grid = _triple_to_grid(
+            values,
+            x_in=x_in,
+            y_in=y_in,
+            x_out=x_out,
+            y_out=y_out,
+            shape=(y_out.size, x_out.size),
+            method=1,
+            domain=1.0,
+            msg_py=msg,
+        )
+
+        assert grid.shape == (y_out.size, x_out.size)
+        np.testing.assert_array_equal(values, original)
+
+    def test_triple_to_grid_chunked_multidim_warns_and_preserves_dask(
+        self, small_rect_grid
+    ):
+        x_out, y_out, grid_da = small_rect_grid
+        X, Y = np.meshgrid(x_out, y_out, indexing="xy")
+        x_in = X.ravel()
+        y_in = Y.ravel()
+        points = x_in.size
+
+        data_da = xr.DataArray(
+            np.stack([grid_da.values.ravel(), grid_da.values.ravel() + 100.0], axis=0),
+            dims=("time", "points"),
+        ).chunk({"time": 1, "points": points})
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            grid = triple_to_grid(
+                data_da,
+                x_in,
+                y_in,
+                x_out,
+                y_out,
+                method=1,
+                meta=True,
+            )
+
+        assert any("metadata is not yet supported" in str(w.message) for w in caught)
+        assert isinstance(grid, xr.DataArray)
+        assert hasattr(grid.data, "chunks")
+        assert grid.shape == (2, y_out.size, x_out.size)
+
+    def test_triple_to_grid_dask_array_input_materializes_numpy(self, small_rect_grid):
+        x_out, y_out, grid_da = small_rect_grid
+        X, Y = np.meshgrid(x_out, y_out, indexing="xy")
+        x_in = X.ravel()
+        y_in = Y.ravel()
+        values = da.from_array(grid_da.values.ravel(), chunks=(x_in.size,))
+
+        grid = triple_to_grid(
+            values,
+            x_in=x_in,
+            y_in=y_in,
+            x_out=x_out,
+            y_out=y_out,
+            method=1,
+            domain=1.0,
+        )
+
+        assert isinstance(grid, np.ndarray)
+        assert grid.shape == (y_out.size, x_out.size)
 
 
 class TestValidation:
