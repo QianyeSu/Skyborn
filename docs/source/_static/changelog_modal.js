@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const statusText = getStatusText(titleText);
         const content = ensureSectionContent(section, heading);
         const modalButton = createModalButton(section, titleText);
+        const headingParts = rebuildHeadingContent(heading, titleText);
 
         versionMap[section.id] = section;
         section.classList.add('changelog-modal-section');
@@ -40,7 +41,7 @@ document.addEventListener('DOMContentLoaded', function () {
         heading.tabIndex = 0;
         heading.setAttribute('role', 'button');
         heading.setAttribute('aria-label', 'Toggle release notes for ' + titleText);
-        heading.appendChild(modalButton);
+        headingParts.actions.prepend(modalButton);
         content.classList.add('changelog-section-content');
 
         setSectionExpanded(section, isDefaultExpanded(statusText));
@@ -123,10 +124,12 @@ function injectChangelogModalStyles() {
 
         .changelog-section-toggle {
             position: relative;
-            display: block;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
             cursor: pointer;
             margin: 0.25rem 0 0.85rem;
-            padding: 0.95rem 9rem 0.95rem 3rem;
+            padding: 0.95rem 1rem 0.95rem 2.9rem;
             border-radius: 16px;
             background: linear-gradient(135deg, rgba(37, 99, 235, 0.14), rgba(59, 130, 246, 0.08));
             transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
@@ -134,22 +137,27 @@ function injectChangelogModalStyles() {
         }
 
         .changelog-section-toggle::before {
-            content: '';
+            content: '-';
             position: absolute;
             top: 50%;
-            left: 1rem;
-            width: 0;
-            height: 0;
-            border-top: 0.34rem solid transparent;
-            border-bottom: 0.34rem solid transparent;
-            border-left: 0.5rem solid #1d4ed8;
-            transform: translateY(-50%) rotate(90deg);
-            transform-origin: 35% 50%;
-            transition: transform 0.2s ease;
+            left: 0.95rem;
+            width: 1.05rem;
+            height: 1.05rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: rgba(37, 99, 235, 0.14);
+            box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+            color: #1d4ed8;
+            font-size: 0.9rem;
+            font-weight: 700;
+            line-height: 1;
+            transform: translateY(-50%);
         }
 
         .changelog-modal-section.is-collapsed .changelog-section-toggle::before {
-            transform: translateY(-50%) rotate(0deg);
+            content: '+';
         }
 
         .changelog-section-toggle:hover,
@@ -159,15 +167,25 @@ function injectChangelogModalStyles() {
             background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(59, 130, 246, 0.12));
         }
 
+        .changelog-section-title {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .changelog-section-actions {
+            display: inline-flex;
+            flex: 0 0 auto;
+            align-items: center;
+            gap: 0.55rem;
+            margin-left: auto;
+            padding-left: 0.5rem;
+        }
+
         .changelog-modal-open-button {
-            position: absolute;
-            top: 50%;
-            right: 1rem;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             min-width: 7.25rem;
-            transform: translateY(-50%);
             padding: 0.32rem 0.72rem;
             border: none;
             border-radius: 999px;
@@ -184,9 +202,27 @@ function injectChangelogModalStyles() {
 
         .changelog-modal-open-button:hover,
         .changelog-modal-open-button:focus {
-            transform: translateY(-50%) scale(1.03);
+            transform: scale(1.03);
             background: rgba(37, 99, 235, 0.2);
             outline: none;
+        }
+
+        .changelog-section-anchor {
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+            margin: 0 !important;
+            color: #1d4ed8 !important;
+            font-size: 0.95rem;
+            font-weight: 700;
+            line-height: 1;
+            opacity: 0.85;
+            text-decoration: none !important;
+        }
+
+        .changelog-section-anchor:hover,
+        .changelog-section-anchor:focus {
+            opacity: 1;
         }
 
         .changelog-section-content {
@@ -362,12 +398,18 @@ function injectChangelogModalStyles() {
         }
 
         [data-theme="dark"] .changelog-section-toggle::before {
-            border-left-color: #bfdbfe;
+            background: rgba(96, 165, 250, 0.16);
+            box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.18);
+            color: #bfdbfe;
         }
 
         [data-theme="dark"] .changelog-modal-open-button {
             background: rgba(96, 165, 250, 0.18);
             color: #bfdbfe;
+        }
+
+        [data-theme="dark"] .changelog-section-anchor {
+            color: #bfdbfe !important;
         }
 
         [data-theme="dark"] .changelog-modal-open-button:hover,
@@ -415,14 +457,15 @@ function injectChangelogModalStyles() {
             }
 
             .changelog-section-toggle {
-                padding: 0.95rem 1rem 3.1rem 3rem;
+                flex-wrap: wrap;
+                align-items: flex-start;
+                padding: 0.95rem 1rem 0.95rem 2.9rem;
             }
 
-            .changelog-modal-open-button {
-                top: auto;
-                bottom: 0.85rem;
-                right: 1rem;
-                transform: none;
+            .changelog-section-actions {
+                width: 100%;
+                justify-content: flex-end;
+                padding-left: 0;
             }
 
             .changelog-modal-open-button:hover,
@@ -446,7 +489,7 @@ function injectChangelogModalStyles() {
 function addChangelogHint(changelogRoot, firstSection) {
     const hint = document.createElement('div');
     hint.className = 'changelog-modal-tip';
-    hint.textContent = 'Planned and Current stay expanded by default. Click any version heading to expand or collapse it, and use Open modal for the popup view.';
+    hint.textContent = 'This page records the changelog for each release.';
     changelogRoot.insertBefore(hint, firstSection);
 }
 
@@ -454,6 +497,31 @@ function getDirectHeading(section) {
     return Array.from(section.children).find(function (child) {
         return child.tagName === 'H2';
     }) || null;
+}
+
+function rebuildHeadingContent(heading, titleText) {
+    const headerLinks = Array.from(heading.querySelectorAll('.headerlink'));
+    heading.replaceChildren();
+
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'changelog-section-title';
+    titleSpan.textContent = titleText;
+
+    const actions = document.createElement('span');
+    actions.className = 'changelog-section-actions';
+
+    headerLinks.forEach(function (link) {
+        link.classList.add('changelog-section-anchor');
+        actions.appendChild(link);
+    });
+
+    heading.appendChild(titleSpan);
+    heading.appendChild(actions);
+
+    return {
+        title: titleSpan,
+        actions: actions
+    };
 }
 
 function getSectionContent(section) {
@@ -481,7 +549,7 @@ function ensureSectionContent(section, heading) {
 
 function getHeadingText(heading) {
     const clone = heading.cloneNode(true);
-    clone.querySelectorAll('.headerlink, .changelog-modal-open-button').forEach(function (node) {
+    clone.querySelectorAll('.headerlink, .changelog-modal-open-button, .changelog-section-actions').forEach(function (node) {
         node.remove();
     });
     return clone.textContent.replace(/\s+/g, ' ').trim();
