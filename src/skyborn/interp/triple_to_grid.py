@@ -86,9 +86,27 @@ def _triple_to_grid(
     domain=None,
     msg_py=None,
 ):
+    ndtype = data.dtype.type
+    msg_fort = msg_dtype[ndtype]
+    if msg_py is None:
+        msg_py = _default_missing_value_for_dtype(ndtype)
 
-    # Handle Python2Fortran missing value conversion
-    data, msg_py, msg_fort = py2fort_msg(data, msg_py=msg_py)
+    # Avoid the generic missing-value conversion path when the input already
+    # matches the Fortran sentinel contract.
+    needs_restore = False
+    if ndtype in float_dtypes or ndtype in complex_dtypes:
+        msg_is_nan = bool(np.isnan(msg_py))
+    else:
+        msg_is_nan = False
+
+    if msg_is_nan:
+        if np.isnan(data).any():
+            data, msg_py, msg_fort = py2fort_msg(data, msg_py=msg_py, msg_fort=msg_fort)
+            needs_restore = True
+    elif msg_py != msg_fort:
+        if (data == msg_py).any():
+            data, msg_py, msg_fort = py2fort_msg(data, msg_py=msg_py, msg_fort=msg_fort)
+            needs_restore = True
 
     # Fortran function call
     grid = triple2grid1(
@@ -107,11 +125,63 @@ def _triple_to_grid(
     grid = np.asarray(grid)
     grid = grid.reshape(shape)
 
-    # Handle Fortran2Python missing value conversion back
-    fort2py_msg(data, msg_fort=msg_fort, msg_py=msg_py)
-    fort2py_msg(grid, msg_fort=msg_fort, msg_py=msg_py)
+    # Only restore the input when a temporary sentinel rewrite happened.
+    if needs_restore:
+        fort2py_msg(data, msg_fort=msg_fort, msg_py=msg_py)
+
+    # Output arrays can legitimately contain the temporary Fortran sentinel.
+    if msg_py != msg_fort:
+        fort2py_msg(grid, msg_fort=msg_fort, msg_py=msg_py)
 
     return grid
+
+
+def _triple_to_grid_eager(
+    data,
+    x_in,
+    y_in,
+    x_out,
+    y_out,
+    method=None,
+    distmx=None,
+    domain=None,
+    msg_py=None,
+):
+    grid_size = y_out.shape[0] * x_out.shape[0]
+    out_shape = data.shape[:-1] + (y_out.shape[0], x_out.shape[0])
+    flat_data = data.reshape((-1, data.shape[-1]))
+
+    first = _triple_to_grid(
+        flat_data[0],
+        x_in,
+        y_in,
+        x_out,
+        y_out,
+        (grid_size,),
+        method=method,
+        distmx=distmx,
+        domain=domain,
+        msg_py=msg_py,
+    )
+
+    flat_grid = np.empty((flat_data.shape[0], grid_size), dtype=first.dtype)
+    flat_grid[0] = first
+
+    for idx in range(1, flat_data.shape[0]):
+        flat_grid[idx] = _triple_to_grid(
+            flat_data[idx],
+            x_in,
+            y_in,
+            x_out,
+            y_out,
+            (grid_size,),
+            method=method,
+            distmx=distmx,
+            domain=domain,
+            msg_py=msg_py,
+        )
+
+    return flat_grid.reshape(out_shape)
 
 
 # TODO: Revisit for implementing this function after deprecating legacy ncomp-style aliases
@@ -446,6 +516,11 @@ def triple_to_grid(
     if np.asarray(domain).size != 1:
         raise ValueError("triple_to_grid: Provide a scalar value for `domain`!")
 
+    x_in_values = x_in.data if hasattr(x_in, "data") else np.asarray(x_in)
+    y_in_values = y_in.data if hasattr(y_in, "data") else np.asarray(y_in)
+    x_out_values = x_out.data if hasattr(x_out, "data") else np.asarray(x_out)
+    y_out_values = y_out.data if hasattr(y_out, "data") else np.asarray(y_out)
+
     # If input data is already chunked
     if data.chunks is not None:
         is_input_dask = True
@@ -455,6 +530,28 @@ def triple_to_grid(
             raise ChunkError(
                 "triple_to_grid: Data must be unchunked along the rightmost dimension!"
             )
+    else:
+        grid = _triple_to_grid_eager(
+            data.data,
+            x_in_values,
+            y_in_values,
+            x_out_values,
+            y_out_values,
+            method=method,
+            distmx=distmx,
+            domain=domain,
+            msg_py=missing_value,
+        )
+
+        if meta:
+            warnings.warn(
+                "WARNING triple_to_grid: Retention of metadata is not yet supported; "
+                "it will thus be ignored in the output!"
+            )
+
+        if is_input_xr:
+            return xr.DataArray(grid)
+        return grid
 
     # NOTE: Auto-chunking, regardless of what chunk sizes were given by the user, seems
     # to be explicitly needed in this function because:
@@ -490,10 +587,10 @@ def triple_to_grid(
     grid = map_blocks(
         _triple_to_grid,
         data.data,
-        x_in,
-        y_in,
-        x_out,
-        y_out,
+        x_in_values,
+        y_in_values,
+        x_out_values,
+        y_out_values,
         dask_grid_shape,
         method=method,
         distmx=distmx,
@@ -511,8 +608,6 @@ def triple_to_grid(
 
     if meta:
         # grid = xr.DataArray(grid, attrs=data.attrs, dims=data.dims, coords=grid_coords)
-        import warnings
-
         warnings.warn(
             "WARNING triple_to_grid: Retention of metadata is not yet supported; "
             "it will thus be ignored in the output!"
