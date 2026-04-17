@@ -92,6 +92,7 @@ html_css_files = [
 
 html_js_files = [
     'interactive.js',
+    'changelog_modal.js',
     'copybutton_fix.js',
     'latex_formula_manager.js',
     'table_responsive.js',
