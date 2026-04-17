@@ -76,6 +76,35 @@ class TestRcm2rgridBasic:
         with pytest.raises(CoordinateError):
             rcm2rgrid(lat2d, None, fi, lat1d, lon1d)
 
+    def test_xarray_auxiliary_2d_coords_do_not_conflict(self, rect_grid):
+        lat1d, lon1d, lat2d, lon2d = rect_grid
+        base = (
+            np.arange(lat2d.shape[0])[:, None] * 10 + np.arange(lat2d.shape[1])[None, :]
+        ).astype(np.float64)
+        fi = xr.DataArray(
+            np.stack([base, base + 100.0], axis=0),
+            dims=("time", "nlat", "nlon"),
+            coords={
+                "time": np.array([0, 1]),
+                "member": xr.DataArray("r1i1p1f1"),
+                "TLAT": (("nlat", "nlon"), lat2d),
+                "TLONG": (("nlat", "nlon"), lon2d),
+            },
+            attrs={"units": "degC"},
+        )
+
+        fo = rcm2rgrid(lat2d, lon2d, fi, lat1d, lon1d, meta=False)
+
+        assert isinstance(fo, xr.DataArray)
+        assert fo.dims == ("time", "nlat", "nlon")
+        assert fo.attrs == fi.attrs
+        np.testing.assert_allclose(fo.coords["time"], np.array([0, 1]))
+        np.testing.assert_allclose(fo.coords["nlat"], lat1d)
+        np.testing.assert_allclose(fo.coords["nlon"], lon1d)
+        assert fo.coords["member"].item() == "r1i1p1f1"
+        assert "TLAT" not in fo.coords
+        assert "TLONG" not in fo.coords
+
 
 class TestRcm2rgridCurvilinearRegression:
     """Regression coverage for nontrivial curvilinear source grids."""
