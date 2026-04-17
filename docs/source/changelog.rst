@@ -96,6 +96,20 @@ Interpolation
   ``triple2grid`` interpolation kernels to free-form Fortran ``.f90`` sources,
   retained the public entry point names, and archived the historical fixed-form
   sources under ``src/skyborn/interp/fortran/archive/`` for reference.
+* Modernized the shared interpolation support source ``linint2`` to
+  free-form ``linint2.f90`` and archived the historical fixed-form source as
+  ``src/skyborn/interp/fortran/archive/linint2.f`` while keeping the legacy
+  ``dlinint1`` / ``dlinint2`` / ``dlinint2pts`` entry points and current
+  shared-library wiring unchanged.
+* Optimized the modernized ``linint2.f90`` hot paths without changing legacy
+  semantics: ``dlin2int1`` now uses monotonic forward sweeps for ordered
+  coordinates, and ``dlint2xy`` now locates enclosing cells with inlined
+  binary searches while preserving the historical half-open interval rule.
+  Standalone old/new comparisons on representative cases remained exactly
+  equal (``max_abs=0``) and showed fresh-process median speedups of about
+  ``486.7x`` for ``dlinint1`` monotonic no-missing, ``91.6x`` for cyclic
+  missing-aware ``dlinint1``, ``33.9x`` for ``dlinint2``, and ``1.43x`` for
+  ``dlinint2pts`` weighted missing-value fallback.
 * Added NCL-style quick-reference comments to ``triple2grid.f90`` so the
   modernized source now documents expected shapes, control flags, and outputs
   in the same style as the newer ``rcm2rgrid.f90`` kernel.
