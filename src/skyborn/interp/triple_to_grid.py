@@ -8,7 +8,13 @@ from dask.array.core import map_blocks
 from .errors import ChunkError, CoordinateError, DimensionError
 from .fortran.grid2triple import grid2triple as grid2triple_fort
 from .fortran.triple2grid import triple2grid1
-from .missing_values import fort2py_msg, py2fort_msg
+from .missing_values import (
+    complex_dtypes,
+    float_dtypes,
+    fort2py_msg,
+    msg_dtype,
+    py2fort_msg,
+)
 
 supported_types = typing.Union[xr.DataArray, np.ndarray]
 
@@ -17,12 +23,39 @@ supported_types = typing.Union[xr.DataArray, np.ndarray]
 # do anything that can benefit from parallel execution.
 
 
+def _default_missing_value_for_dtype(ndtype):
+    if ndtype in float_dtypes:
+        return np.nan
+    if ndtype in complex_dtypes:
+        return np.nan + np.nan * 1j
+    return msg_dtype[ndtype]
+
+
 def _grid_to_triple(x, y, z, msg_py):
     # Transpose z before Fortran function call
     z = np.transpose(z, axes=(1, 0))
+    ndtype = z.dtype.type
+    msg_fort = msg_dtype[ndtype]
+    if msg_py is None:
+        msg_py = _default_missing_value_for_dtype(ndtype)
 
-    # Handle Python2Fortran missing value conversion
-    z, msg_py, msg_fort = py2fort_msg(z, msg_py=msg_py)
+    # Avoid the generic missing-value conversion path when the data is already
+    # compatible with the Fortran sentinel contract. This saves an extra full
+    # scan plus the restore pass on the transposed input.
+    needs_restore = False
+    if ndtype in float_dtypes or ndtype in complex_dtypes:
+        msg_is_nan = bool(np.isnan(msg_py))
+    else:
+        msg_is_nan = False
+
+    if msg_is_nan:
+        if np.isnan(z).any():
+            z, msg_py, msg_fort = py2fort_msg(z, msg_py=msg_py, msg_fort=msg_fort)
+            needs_restore = True
+    elif msg_py != msg_fort:
+        if (z == msg_py).any():
+            z, msg_py, msg_fort = py2fort_msg(z, msg_py=msg_py, msg_fort=msg_fort)
+            needs_restore = True
 
     # Fortran call
     # num_elem is the total number of elements from beginning of each column in the array,
@@ -31,13 +64,12 @@ def _grid_to_triple(x, y, z, msg_py):
 
     # Transpose output to correct dimension order before returning it to outer wrapper
     # As well as get rid of indices corresponding to missing values
-    out = np.asarray(out)
-    out = np.transpose(out, axes=(1, 0))
-    out = out[:, :num_elem]
+    out = np.asarray(out)[:num_elem, :].T
 
-    # Handle Fortran2Python missing value conversion back
-    fort2py_msg(z, msg_fort=msg_fort, msg_py=msg_py)
-    fort2py_msg(out, msg_fort=msg_fort, msg_py=msg_py)
+    # Only the input grid can contain the temporary Fortran sentinel. The packed
+    # triple output excludes missing cells, so restoring `out` is unnecessary.
+    if needs_restore:
+        fort2py_msg(z, msg_fort=msg_fort, msg_py=msg_py)
 
     return out
 
