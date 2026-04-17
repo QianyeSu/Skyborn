@@ -345,7 +345,7 @@ else:
         'rcm_shared_support',
         [
             'fortran/linmsg_dp.f90',
-            'fortran/linint2.f',
+            'fortran/linint2.f90',
             'fortran/rcm_geodesy.f90',
         ],
         fortran_args: fortran_args,
