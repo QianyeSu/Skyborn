@@ -77,4 +77,53 @@ contains
         end if
     end subroutine dlinmsg
 
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    FAST PATH FOR THE `rcm2rgrid` ROW CLEANUP STEP. THIS ONLY FILLS
+    !    INTERIOR GAPS OF LENGTH 1 OR 2 AND LEAVES LEADING / TRAILING GAPS
+    !    MISSING, WHICH MATCHES THE EFFECT OF
+    !    DLINMSG(X, NPTS, XMSG, MFLAG=0, MPTCRT=2).
+    !
+    ! NOTE
+    !    THIS IS AN ADDITIVE OPTIMIZATION HELPER. IT DOES NOT REPLACE THE
+    !    FULL LEGACY-COMPATIBLE `dlinmsg(...)` ROUTINE ABOVE.
+    subroutine dlinmsg_interior_short_gaps(x, npts, xmsg)
+        integer, intent(in) :: npts
+        real(real64), intent(inout) :: x(npts)
+        real(real64), intent(in) :: xmsg
+
+        integer :: gap_len, gap_start, n
+        real(real64) :: left, right, step
+
+        if (npts <= 2) return
+
+        n = 2
+        do while (n <= npts - 1)
+            if (x(n) /= xmsg) then
+                n = n + 1
+                cycle
+            end if
+
+            gap_start = n
+            do while (n <= npts .and. x(n) == xmsg)
+                n = n + 1
+            end do
+
+            gap_len = n - gap_start
+            if (n > npts .or. gap_len > 2) cycle
+            if (x(gap_start - 1) == xmsg .or. x(n) == xmsg) cycle
+
+            left = x(gap_start - 1)
+            right = x(n)
+
+            if (gap_len == 1) then
+                x(gap_start) = 0.5_real64 * (left + right)
+            else
+                step = (right - left) / 3.0_real64
+                x(gap_start) = left + step
+                x(gap_start + 1) = left + 2.0_real64 * step
+            end if
+        end do
+    end subroutine dlinmsg_interior_short_gaps
+
 end module linmsg_core
