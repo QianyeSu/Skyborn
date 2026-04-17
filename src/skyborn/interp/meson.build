@@ -344,7 +344,7 @@ else:
     rcm_shared_support = static_library(
         'rcm_shared_support',
         [
-            'fortran/linmsg_dp.f',
+            'fortran/linmsg_dp.f90',
             'fortran/linint2.f',
             'fortran/rcm_geodesy.f90',
         ],
