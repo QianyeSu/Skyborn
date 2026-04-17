@@ -5,12 +5,16 @@ Tests rcm2points function with various input types and edge cases.
 Target: 95%+ coverage for rcm2points.py
 """
 
+import importlib
+
 import numpy as np
 import pytest
 import xarray as xr
 
 from skyborn.interp import rcm2points
 from skyborn.interp.errors import ChunkError, CoordinateError, DimensionError
+
+rcm2points_module = importlib.import_module("skyborn.interp.rcm2points")
 
 
 @pytest.fixture
@@ -148,6 +152,51 @@ class TestRcm2pointsBasic:
         result = rcm2points(lat2d, lon2d, sample_field_3d, lat1d, lon1d)
 
         assert result.shape == (sample_field_3d.shape[0], npts)
+
+    def test_default_missing_value_helper_for_complex_and_integer_types(self):
+        """Cover helper branches for complex and non-floating dtypes."""
+        complex_msg = rcm2points_module._default_missing_value_for_dtype(np.complex128)
+        int_msg = rcm2points_module._default_missing_value_for_dtype(np.int32)
+
+        assert np.isnan(complex_msg.real)
+        assert np.isnan(complex_msg.imag)
+        assert int_msg == rcm2points_module.msg_dtype[np.int32]
+
+    def test_internal_wrapper_integer_fast_path_skips_missing_conversion(
+        self, monkeypatch
+    ):
+        """Integer inputs with the default sentinel should not call py2fort_msg."""
+        lat2d = np.arange(12, dtype=np.int32).reshape(3, 4)
+        lon2d = (np.arange(12, dtype=np.int32).reshape(3, 4) + 100).astype(np.int32)
+        fi = np.arange(24, dtype=np.int32).reshape(2, 3, 4)
+        lat1d = np.array([1, 2], dtype=np.int32)
+        lon1d = np.array([101, 102], dtype=np.int32)
+
+        def fail_py2fort(*args, **kwargs):
+            raise AssertionError("py2fort_msg should not be called for int fast path")
+
+        def noop_fort2py(arr, **kwargs):
+            return arr, kwargs.get("msg_fort"), kwargs.get("msg_py")
+
+        def fake_drcm2points(
+            lat2d_f, lon2d_f, fi_f, lat1d_f, lon1d_f, xmsg=None, opt=None
+        ):
+            assert fi_f.dtype == np.int32
+            assert xmsg == rcm2points_module.msg_dtype[np.int32]
+            assert opt == 1
+            return np.array([[11, 12], [13, 14]], dtype=np.int32)
+
+        monkeypatch.setattr(rcm2points_module, "py2fort_msg", fail_py2fort)
+        monkeypatch.setattr(rcm2points_module, "fort2py_msg", noop_fort2py)
+        monkeypatch.setattr(rcm2points_module, "drcm2points", fake_drcm2points)
+
+        result = rcm2points_module._rcm2points(
+            lat2d, lon2d, fi, lat1d, lon1d, msg_py=None, opt=1
+        )
+
+        np.testing.assert_array_equal(
+            result, np.array([[11, 13], [12, 14]], dtype=np.int32)
+        )
 
 
 class TestRcm2pointsWithMissingValues:
