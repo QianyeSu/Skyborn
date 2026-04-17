@@ -61,9 +61,10 @@ Interpolation
   ``rcm_geodesy.f90`` so the modern Fortran entry points now document their
   expected input shapes, units, flags, and outputs directly in the source.
 * Reduced duplicate Fortran compilation in ``src/skyborn/interp/meson.build``
-  by extracting shared ``rcm2rgrid`` / ``rcm2points`` support code into a
-  reusable static library instead of compiling the same helper sources into
-  each extension separately.
+  by extracting interpolation support into targeted static libraries instead of
+  compiling the same helper sources into each extension separately. The current
+  build graph now keeps ``rcm_geodesy`` shared, while ``linint2`` only links
+  into ``rcm2points`` and ``linmsg_dp`` only links into ``rcm2rgrid``.
 * Fixed ``skyborn.interp.rcm2rgrid`` xarray output construction so regridding
   arrays with 2D auxiliary curvilinear coordinates such as ``TLAT`` /
   ``TLONG`` now drops incompatible remapped-grid coordinates instead of
