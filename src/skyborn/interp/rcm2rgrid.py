@@ -48,6 +48,28 @@ def _rgrid2rcm(lat1d, lon1d, fi, lat2d, lon2d, msg_py):
     return fo
 
 
+def _regridded_rectilinear_coords(
+    fi: xr.DataArray, lat1d: xr.DataArray, lon1d: xr.DataArray
+) -> dict[str, xr.DataArray | np.ndarray]:
+    """Preserve only coordinates that remain shape-compatible after regridding."""
+
+    lat_dim = fi.dims[-2]
+    lon_dim = fi.dims[-1]
+    remapped_dims = {lat_dim, lon_dim}
+    coords: dict[str, xr.DataArray | np.ndarray] = {}
+
+    for name, coord in fi.coords.items():
+        if name in remapped_dims:
+            continue
+        if any(dim in remapped_dims for dim in coord.dims):
+            continue
+        coords[name] = coord
+
+    coords[lat_dim] = lat1d.data
+    coords[lon_dim] = lon1d.data
+    return coords
+
+
 # Outer Wrappers <funcname>()
 # These wrappers are executed in the __main__ python process, and should be
 # used for any tasks which would not benefit from parallel execution.
@@ -193,12 +215,12 @@ def rcm2rgrid(
 
     # If input was xarray.DataArray, convert output to xarray.DataArray as well
     if is_input_xr:
-        # Determine the output coordinates
-        fo_coords = {k: v for (k, v) in fi.coords.items()}
-        fo_coords[fi.dims[-1]] = lon1d.data
-        fo_coords[fi.dims[-2]] = lat1d.data
-
-        fo = xr.DataArray(fo, attrs=fi.attrs, dims=fi.dims, coords=fo_coords)
+        fo = xr.DataArray(
+            fo,
+            attrs=fi.attrs,
+            dims=fi.dims,
+            coords=_regridded_rectilinear_coords(fi, lat1d, lon1d),
+        )
 
     return fo
 
