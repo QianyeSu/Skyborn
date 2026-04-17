@@ -263,6 +263,37 @@ class TestRcm2pointsWithMissingValues:
             np.asarray(result, dtype=np.float64), expected, rtol=0.0, atol=1e-12
         )
 
+    def test_exact_hit_missing_value_keeps_legacy_local_cell_result(self):
+        """Exact source-point hits with a missing value should still follow the F77 local-cell path."""
+        lat_vals = np.array([0.0, 1.0, 2.0], dtype=np.float64)
+        lon_vals = np.array([0.0, 1.0, 2.0], dtype=np.float64)
+        lon2d, lat2d = np.meshgrid(lon_vals, lat_vals)
+
+        fi2d = np.array(
+            [
+                [10.0, 20.0, 30.0],
+                [40.0, np.nan, 60.0],
+                [70.0, 80.0, 90.0],
+            ],
+            dtype=np.float64,
+        )
+        fi = fi2d[np.newaxis, :, :]
+
+        result = rcm2points(
+            lat2d,
+            lon2d,
+            fi,
+            np.array([1.0], dtype=np.float64),
+            np.array([1.0], dtype=np.float64),
+            msg=np.nan,
+            opt=0,
+        )
+
+        expected = np.array([[26.001543566054103]], dtype=np.float64)
+        np.testing.assert_allclose(
+            np.asarray(result, dtype=np.float64), expected, rtol=0.0, atol=1e-12
+        )
+
 
 class TestRcm2pointsValidation:
     """Test input validation."""
