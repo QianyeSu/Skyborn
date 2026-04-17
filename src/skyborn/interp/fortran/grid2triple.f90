@@ -34,6 +34,8 @@ subroutine grid2triple(x, y, z, mx, ny, d, ldmax, ld, zmsg, ier)
     do n = 1, ny
         y_n = y(n)
         do m = 1, mx
+            ! Preserve the historical exact sentinel comparison so missing-cell
+            ! detection stays bit-for-bit compatible with the legacy routine.
             if (z(m, n) /= zmsg) then
                 ld = ld + 1
                 d(ld, 1) = x(m)
