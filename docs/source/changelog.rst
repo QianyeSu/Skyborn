@@ -1,7 +1,7 @@
 Changelog
 =========
 
-Version 0.3.20 (Planned)
+Version 0.3.20 (Current)
 ------------------------
 
 Troposphere
@@ -61,7 +61,7 @@ Scatter Stippling
   supports true curvilinear 2D ``x/y`` grids when cell geometry can be
   inferred from the provided center coordinates.
 
-Version 0.3.19 (Current)
+Version 0.3.19
 ------------------------
 
 Scatter Stippling
