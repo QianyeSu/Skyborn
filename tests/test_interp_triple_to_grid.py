@@ -248,7 +248,7 @@ class TestPrivateWrapperBranches:
         data[1, 1] = msg
         original = data.copy()
 
-        triple = _grid_to_triple(x_out, y_out, data, msg_py=None)
+        triple = _grid_to_triple(x_out, y_out, data, msg_py=msg)
 
         assert triple.shape[1] == data.size - 1
         np.testing.assert_array_equal(data, original)
@@ -314,16 +314,18 @@ class TestPrivateWrapperBranches:
     def test_triple_to_grid_dask_array_input_materializes_numpy(self, small_rect_grid):
         x_out, y_out, grid_da = small_rect_grid
         X, Y = np.meshgrid(x_out, y_out, indexing="xy")
-        x_in = X.ravel()
-        y_in = Y.ravel()
+        x_in = xr.DataArray(X.ravel(), dims=("points",))
+        y_in = xr.DataArray(Y.ravel(), dims=("points",))
+        x_out_da = xr.DataArray(x_out, dims=("x",))
+        y_out_da = xr.DataArray(y_out, dims=("y",))
         values = da.from_array(grid_da.values.ravel(), chunks=(x_in.size,))
 
         grid = triple_to_grid(
             values,
             x_in=x_in,
             y_in=y_in,
-            x_out=x_out,
-            y_out=y_out,
+            x_out=x_out_da,
+            y_out=y_out_da,
             method=1,
             domain=1.0,
         )
