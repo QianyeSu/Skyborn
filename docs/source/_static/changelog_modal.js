@@ -123,6 +123,7 @@ function injectChangelogModalStyles() {
 
         .changelog-section-toggle {
             position: relative;
+            display: block;
             cursor: pointer;
             margin: 0.25rem 0 0.85rem;
             padding: 0.95rem 9rem 0.95rem 3rem;
@@ -133,19 +134,22 @@ function injectChangelogModalStyles() {
         }
 
         .changelog-section-toggle::before {
-            content: '▾';
+            content: '';
             position: absolute;
             top: 50%;
             left: 1rem;
-            transform: translateY(-50%) rotate(0deg);
-            color: #1d4ed8;
-            font-size: 1rem;
-            font-weight: 700;
+            width: 0;
+            height: 0;
+            border-top: 0.34rem solid transparent;
+            border-bottom: 0.34rem solid transparent;
+            border-left: 0.5rem solid #1d4ed8;
+            transform: translateY(-50%) rotate(90deg);
+            transform-origin: 35% 50%;
             transition: transform 0.2s ease;
         }
 
         .changelog-modal-section.is-collapsed .changelog-section-toggle::before {
-            transform: translateY(-50%) rotate(-90deg);
+            transform: translateY(-50%) rotate(0deg);
         }
 
         .changelog-section-toggle:hover,
@@ -159,6 +163,10 @@ function injectChangelogModalStyles() {
             position: absolute;
             top: 50%;
             right: 1rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 7.25rem;
             transform: translateY(-50%);
             padding: 0.32rem 0.72rem;
             border: none;
@@ -169,6 +177,7 @@ function injectChangelogModalStyles() {
             font-weight: 700;
             letter-spacing: 0.02em;
             text-transform: uppercase;
+            white-space: nowrap;
             cursor: pointer;
             transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
         }
@@ -353,7 +362,7 @@ function injectChangelogModalStyles() {
         }
 
         [data-theme="dark"] .changelog-section-toggle::before {
-            color: #bfdbfe;
+            border-left-color: #bfdbfe;
         }
 
         [data-theme="dark"] .changelog-modal-open-button {
