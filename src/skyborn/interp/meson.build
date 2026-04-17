@@ -341,13 +341,28 @@ else:
         )
     endif
 
-    rcm_shared_support = static_library(
-        'rcm_shared_support',
-        [
-            'fortran/linmsg_dp.f90',
-            'fortran/linint2.f90',
-            'fortran/rcm_geodesy.f90',
-        ],
+    # Keep shared support libraries aligned with the real dependency graph so
+    # edits to one helper do not force unrelated interpolation extensions to
+    # relink. `rcm_geodesy` is the only helper shared by both kernels.
+    rcm_geodesy_support = static_library(
+        'rcm_geodesy_support',
+        ['fortran/rcm_geodesy.f90'],
+        fortran_args: fortran_args,
+        build_by_default: true,
+        install: false,
+    )
+
+    rcm2points_support = static_library(
+        'rcm2points_support',
+        ['fortran/linint2.f90'],
+        fortran_args: fortran_args,
+        build_by_default: true,
+        install: false,
+    )
+
+    rcm2rgrid_support = static_library(
+        'rcm2rgrid_support',
+        ['fortran/linmsg_dp.f90'],
         fortran_args: fortran_args,
         build_by_default: true,
         install: false,
@@ -362,7 +377,7 @@ else:
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
-        link_with: [rcm_shared_support],
+        link_with: [rcm2points_support, rcm_geodesy_support],
         fortran_args: fortran_args,
         c_args: c_args,
         install: true,
@@ -379,7 +394,7 @@ else:
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
-        link_with: [rcm_shared_support],
+        link_with: [rcm2rgrid_support, rcm_geodesy_support],
         fortran_args: fortran_args,
         c_args: c_args,
         install: true,
