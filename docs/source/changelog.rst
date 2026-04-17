@@ -92,6 +92,33 @@ Interpolation
   coordinates exactly, preserves compatible non-spatial coordinates such as
   ``z_t``, and drops incompatible 2D auxiliary source-grid coordinates such as
   ``TLAT`` / ``TLONG`` after remapping.
+* Modernized the fixed-form ``grid2triple``, ``rcm2points``, and
+  ``triple2grid`` interpolation kernels to free-form Fortran ``.f90`` sources,
+  retained the public entry point names, and archived the historical fixed-form
+  sources under ``src/skyborn/interp/fortran/archive/`` for reference.
+* Added NCL-style quick-reference comments to ``triple2grid.f90`` so the
+  modernized source now documents expected shapes, control flags, and outputs
+  in the same style as the newer ``rcm2rgrid.f90`` kernel.
+* Optimized the direct ``triple2grid`` Fortran exact-match hot path for evenly
+  spaced target grids. On repeated fresh-process benchmarks against the
+  retained archived F77 binary, the rebuilt ``cp312`` kernel preserved exact
+  output parity (``max_abs = 0``) and measured about ``3.58x`` faster on an
+  exact-placement case, about ``1.54x`` faster on a jittered-observation case,
+  and about ``1.32x`` faster on an outlier-extended case.
+* Reduced eager ``skyborn.interp.triple_to_grid`` Python wrapper overhead by
+  bypassing Dask ``map_blocks`` for non-Dask inputs and trimming unnecessary
+  missing-value conversions/restoration work. On repeated fresh-process
+  benchmarks using the same optimized Fortran ``triple2grid`` extension for
+  both old and new wrappers, outputs still matched exactly (``max_abs = 0``)
+  while median wrapper speedups measured about ``23.66x`` for eager NumPy
+  no-missing inputs, about ``42.70x`` for eager NumPy inputs with ``NaN``
+  missing values, and about ``11.43x`` for eager xarray inputs. These larger
+  gains come primarily from removing eager Dask scheduling overhead rather than
+  from the Fortran kernel alone.
+* Added focused regression coverage for the modernized ``triple_to_grid`` eager
+  path, including NumPy input non-mutation with ``NaN`` and custom missing
+  sentinels, the non-chunked eager xarray path, and the ``meta=True`` warning
+  branch.
 * Audited the reverse ``skyborn.interp.rgrid2rcm`` kernel so exact source-node
   hits now mirror the forward curvilinear path: non-missing exact fields stay
   untouched while exact hits on missing fields can still fall through to the
