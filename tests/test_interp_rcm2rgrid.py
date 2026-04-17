@@ -172,6 +172,23 @@ class TestRcm2rgridCurvilinearRegression:
             actual, expected, rtol=0.0, atol=1e-12, equal_nan=True
         )
 
+    def test_exact_curvilinear_missing_field_can_still_interpolate(self):
+        lat1d = np.array([0.0, 1.0, 2.0], dtype=np.float64)
+        lon1d = np.array([10.0, 11.0, 12.0], dtype=np.float64)
+        lat2d, lon2d = np.meshgrid(lat1d, lon1d, indexing="ij")
+
+        field = np.full((2, 3, 3), np.nan, dtype=np.float64)
+        field[0, 2, 2] = 42.0
+        field[1, 0, 0] = 7.0
+        field[1, 2, 2] = 99.0
+
+        result = rcm2rgrid(lat2d, lon2d, field, lat1d, lon1d, msg=np.nan, meta=False)
+        actual = np.asarray(result, dtype=np.float64)
+
+        assert actual.shape == (2, 3, 3)
+        assert actual[0, 0, 0] == 42.0
+        assert actual[1, 0, 0] == 7.0
+
 
 class TestRgrid2rcmBasic:
     """Basic behavior and identity cases for rgrid2rcm."""
@@ -202,6 +219,23 @@ class TestRgrid2rcmBasic:
         fo_curv = rgrid2rcm(lat1d, lon1d, fi_rect, lat2d, lon2d)
         assert isinstance(fo_curv, np.ndarray)
         np.testing.assert_allclose(fo_curv, fi_rect, rtol=0, atol=0)
+
+    def test_exact_regular_missing_field_can_still_interpolate(self):
+        lat1d = np.array([0.0, 1.0], dtype=np.float64)
+        lon1d = np.array([10.0, 11.0], dtype=np.float64)
+        lat2d, lon2d = np.meshgrid(lat1d, lon1d, indexing="ij")
+
+        field = np.full((2, 2, 2), np.nan, dtype=np.float64)
+        field[0, 1, 1] = 42.0
+        field[1, 0, 0] = 7.0
+        field[1, 1, 1] = 99.0
+
+        result = rgrid2rcm(lat1d, lon1d, field, lat2d, lon2d, msg=np.nan, meta=False)
+        actual = np.asarray(result, dtype=np.float64)
+
+        assert actual.shape == (2, 2, 2)
+        assert actual[0, 0, 0] == 42.0
+        assert actual[1, 0, 0] == 7.0
 
 
 class TestRgrid2rcmValidation:
