@@ -179,8 +179,9 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
     double precision, intent(in) :: xo(nxyo), yo(nxyo), xmsg
     double precision, intent(out) :: fo(nxyo, ngrd)
     double precision :: fw(2, 2), w(2, 2), sumf, sumw, chklat(nyi), chklon(nxi)
+    double precision :: row_min_lat(nyi), row_max_lat(nyi), col_min_lon(nxi), col_max_lon(nxi)
     double precision, allocatable :: candidate_weight(:)
-    double precision :: wx, wy, rearth, dlat, pi, rad, dkm, dist, xo_n, yo_n
+    double precision :: wx, wy, rearth, dlat, pi, dkm, dist, xo_n, yo_n, y_lower, y_upper
     double precision :: dgcdist
 
     external dmonoinc
@@ -214,6 +215,15 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
     else
         k = kval
     end if
+
+    do iy = 1, nyi
+        row_min_lat(iy) = minval(yi(:, iy))
+        row_max_lat(iy) = maxval(yi(:, iy))
+    end do
+    do ix = 1, nxi
+        col_min_lon(ix) = minval(xi(ix, :))
+        col_max_lon(ix) = maxval(xi(ix, :))
+    end do
 
     ! Start with every output set to missing. Later passes only overwrite a
     ! field once a compatible exact hit or interpolation path succeeds.
@@ -250,15 +260,19 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
         exact_found = .false.
 
         do iy = 1, nyi
-            do ix = 1, nxi
-                if (xo_n == xi(ix, iy) .and. yo_n == yi(ix, iy)) then
-                    do ng = 1, ngrd
-                        fo(nxy, ng) = fi(ix, iy, ng)
-                    end do
-                    exact_found = .true.
-                    exit
-                end if
-            end do
+            if (yo_n >= row_min_lat(iy) .and. yo_n <= row_max_lat(iy)) then
+                do ix = 1, nxi
+                    if (xo_n >= col_min_lon(ix) .and. xo_n <= col_max_lon(ix)) then
+                        if (xo_n == xi(ix, iy) .and. yo_n == yi(ix, iy)) then
+                            do ng = 1, ngrd
+                                fo(nxy, ng) = fi(ix, iy, ng)
+                            end do
+                            exact_found = .true.
+                            exit
+                        end if
+                    end if
+                end do
+            end if
             if (exact_found) exit
         end do
     end do
@@ -349,7 +363,6 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
     rearth = 6371.0d0
     dlat = 5.0d0
     pi = 4.0d0 * atan(1.0d0)
-    rad = pi / 180.0d0
     dkm = dlat * (2.0d0 * pi * rearth) / 360.0d0
 
     allocate(candidate_ix(nxi * nyi), candidate_iy(nxi * nyi), candidate_weight(nxi * nyi))
@@ -368,23 +381,28 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
         if (point_has_missing) then
             xo_n = xo(nxy)
             yo_n = yo(nxy)
+            y_lower = yo_n - dlat
+            y_upper = yo_n + dlat
             ncand = 0
 
             ! Build the candidate list once for this output point using the
             ! same fixed-radius latitude window and great-circle cutoff as the
-            ! historical fallback branch.
+            ! historical fallback branch. Rows whose latitude span cannot
+            ! overlap the requested band are skipped entirely.
             do iy = 1, nyi
-                do ix = 1, nxi
-                    if (yi(ix, iy) >= yo_n - dlat .and. yi(ix, iy) <= yo_n + dlat) then
-                        dist = dgcdist(yo_n, xo_n, yi(ix, iy), xi(ix, iy), 2)
-                        if (dist <= dkm .and. dist > 0.0d0) then
-                            ncand = ncand + 1
-                            candidate_ix(ncand) = ix
-                            candidate_iy(ncand) = iy
-                            candidate_weight(ncand) = 1.0d0 / dist ** 2
+                if (row_max_lat(iy) >= y_lower .and. row_min_lat(iy) <= y_upper) then
+                    do ix = 1, nxi
+                        if (yi(ix, iy) >= y_lower .and. yi(ix, iy) <= y_upper) then
+                            dist = dgcdist(yo_n, xo_n, yi(ix, iy), xi(ix, iy), 2)
+                            if (dist <= dkm .and. dist > 0.0d0) then
+                                ncand = ncand + 1
+                                candidate_ix(ncand) = ix
+                                candidate_iy(ncand) = iy
+                                candidate_weight(ncand) = 1.0d0 / dist ** 2
+                            end if
                         end if
-                    end if
-                end do
+                    end do
+                end if
             end do
 
             if (ncand > 0) then
