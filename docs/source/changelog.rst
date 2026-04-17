@@ -19,149 +19,35 @@ Troposphere
 
 Interpolation
 
-* Enhanced model-level interpolation in
-  ``skyborn.interp.interpolation``.
-* Added a modern Fortran ``vinth2p`` kernels module for
-  ``skyborn.interp.interp_hybrid_to_pressure`` and preserved legacy F77
-  numerical behavior for the validated node-oriented interpolation and ECMWF
-  below-ground extrapolation paths.
-* Added a modern Fortran kernels path for
-  ``skyborn.interp.interp_sigma_to_hybrid`` so eager monotonic sigma-coordinate
-  remapping no longer has to loop through columns in Python.
-* Accelerated the eager in-memory hybrid-to-pressure workflow by adding
-  reusable output-buffer wrappers and a dedicated C-order NumPy path that
-  avoids the old Python-side transpose/packing overhead.
-* Accelerated eager sigma-to-hybrid remapping further with a dedicated
-  C-order NumPy path that computes the target hybrid-implied sigma values
-  inside the Fortran kernel instead of materializing a full target-sigma
-  volume in Python.
-* Reduced the eager hybrid-to-pressure workflow peak working-memory overhead
-  substantially relative to the Python / MetPy remap path by reusing output
-  buffers and removing unnecessary intermediate array copies.
-* Improved ``skyborn.interp.interp_hybrid_to_pressure`` so hybrid-sigma to
-  pressure remapping now chooses a more suitable execution path for ordinary
-  in-memory arrays and Dask-backed arrays instead of always forcing the older
-  chunked workaround.
+* Added modern Fortran kernels for ``interp_hybrid_to_pressure`` and
+  ``interp_sigma_to_hybrid``, improved eager in-memory execution paths, and
+  reduced temporary-array overhead for validated NumPy and xarray workflows.
 * Added public hybrid-level diagnostics:
-
-  - ``skyborn.interp.pressure_at_hybrid_levels``
-  - ``skyborn.interp.delta_pressure_hybrid``
-
-* Improved below-ground temperature extrapolation support in the hybrid-level
-  interpolation workflow while keeping compatibility with the older Skyborn
-  helper calling pattern.
-* Renamed the internal compiled ``vinth2p`` acceleration module from
-  ``vinth2p_backend`` to ``vinth2p_kernels`` so the import name describes the
-  exported computation kernels rather than an implementation suffix.
-* Modernized the compiled ``skyborn.interp.rcm2rgrid`` kernel to a free-form
-  Fortran ``rcm2rgrid.f90`` implementation and added a monotonic curvilinear
-  fast path for common regional and ocean-grid subsets while preserving the
-  public ``drcm2rgrid`` and ``drgrid2rcm`` entry points.
-* Added NCL-style quick-reference comments to ``rcm2rgrid.f90`` and
-  ``rcm_geodesy.f90`` so the modern Fortran entry points now document their
-  expected input shapes, units, flags, and outputs directly in the source.
+  ``skyborn.interp.pressure_at_hybrid_levels`` and
+  ``skyborn.interp.delta_pressure_hybrid``.
+* Renamed the internal ``vinth2p`` acceleration module from
+  ``vinth2p_backend`` to ``vinth2p_kernels``.
+* Modernized the compiled ``rcm2rgrid``, ``rcm2points``, ``triple2grid``,
+  ``grid2triple``, and shared ``linint2`` interpolation sources to free-form
+  Fortran ``.f90`` files, kept the public entry point names unchanged, and
+  archived the historical fixed-form sources under
+  ``src/skyborn/interp/fortran/archive/``.
+* Optimized the modernized ``rcm2rgrid``, ``rcm2points``, ``triple2grid``, and
+  ``linint2`` kernels while preserving validated legacy-compatible results.
+* Improved ``rcm2rgrid`` xarray output handling so incompatible 2D auxiliary
+  source-grid coordinates such as ``TLAT`` and ``TLONG`` are dropped after
+  remapping instead of raising coordinate-size conflicts.
 * Reduced duplicate Fortran compilation in ``src/skyborn/interp/meson.build``
-  by extracting interpolation support into targeted static libraries instead of
-  compiling the same helper sources into each extension separately. The current
-  build graph now keeps ``rcm_geodesy`` shared, while ``linint2`` only links
-  into ``rcm2points`` and ``linmsg_dp`` only links into ``rcm2rgrid``.
-* Fixed ``skyborn.interp.rcm2rgrid`` xarray output construction so regridding
-  arrays with 2D auxiliary curvilinear coordinates such as ``TLAT`` /
-  ``TLONG`` now drops incompatible remapped-grid coordinates instead of
-  raising an xarray coordinate-size conflict.
-* Benchmarked the retained old ``rcm2rgrid`` binary against the new build-dir
-  ``rcm2rgrid.f90`` kernel on a monotonic POP ``TEMP`` curvilinear subset and
-  measured about ``16x`` speedup for a single-field plot-like case and about
-  ``20x`` speedup for a three-field batch case with identical results on the
-  tested subset.
-* Re-validated the modern ``rcm2rgrid`` kernel on the user's real POP
-  ``TEMP`` dataset across multiple rectilinear target sizes from ``48x48`` to
-  ``120x120`` using the same missing-value conversion as the public Python
-  wrapper. The retained old binary and the modern build-dir binary matched with
-  ``max_abs = 0`` across the tested cases, while the new kernel delivered about
-  ``8.6x`` to ``21.9x`` speedups depending on target size.
-* Re-benchmarked the retained safe ``drcm2rgrid`` local-window precompute
-  refinement against both the retained old binary and the earlier
-  ``rcm2rgrid_precache`` build on the user's real POP ``TEMP`` dataset. The
-  old and current kernels still matched with ``max_abs = 0`` on tested
-  regional and global cases, while the retained refinement delivered modest
-  additional gains only on some monotonic regional subsets, roughly ``1x`` to
-  ``1.14x`` versus ``precache`` on the re-tested medium/large regional cases,
-  and did not claim a universal speedup on seam/fold-heavy global cases.
-* Verified that ``skyborn.interp.rcm2rgrid`` keeps the Python-layer API stable:
-  the xarray wrapper still returns the requested 1D ``nlat`` / ``nlon``
-  coordinates exactly, preserves compatible non-spatial coordinates such as
-  ``z_t``, and drops incompatible 2D auxiliary source-grid coordinates such as
-  ``TLAT`` / ``TLONG`` after remapping.
-* Modernized the fixed-form ``grid2triple``, ``rcm2points``, and
-  ``triple2grid`` interpolation kernels to free-form Fortran ``.f90`` sources,
-  retained the public entry point names, and archived the historical fixed-form
-  sources under ``src/skyborn/interp/fortran/archive/`` for reference.
-* Optimized the modernized ``rcm2points.f90`` kernel by adding a monotonic
-  curvilinear local-cell fast path with a full-grid fallback, then further
-  pruned the exact-hit scan using per-row latitude spans and per-column
-  longitude spans before the retained exact equality checks. Direct old/new
-  kernel checks stayed exactly equal on representative no-missing,
-  missing-hole, and exact-hit missing-value cases (``max_abs=0``), and fresh
-  process median timings improved from about ``0.00780 s`` to ``0.00091 s``
-  on a 4-field no-missing batch, from ``0.00869 s`` to ``0.00199 s`` on a
-  16-field no-missing batch, and from ``0.958 s`` to ``0.131 s`` on a 4-field
-  missing-hole batch.
-* Restored the historical ``rcm2points`` exact-hit missing-value behavior for
-  ``opt=0/1``: if an output point lands exactly on a missing source-grid point,
-  unresolved fields now continue through the same local-cell interpolation step
-  used by the original F77 kernel before the broader radius fallback. Added a
-  focused regression test that locks the retained legacy result.
-* Expanded ``skyborn.interp.rcm2points`` test coverage to exercise the
-  internal default-missing-value helper branches and the integer fast path that
-  skips Python-to-Fortran missing-value conversion when the dtype already uses
-  the native sentinel contract. Focused coverage for ``rcm2points.py`` is now
-  ``100%`` on the targeted test run.
-* Modernized the shared interpolation support source ``linint2`` to
-  free-form ``linint2.f90`` and archived the historical fixed-form source as
-  ``src/skyborn/interp/fortran/archive/linint2.f`` while keeping the legacy
-  ``dlinint1`` / ``dlinint2`` / ``dlinint2pts`` entry points and current
-  shared-library wiring unchanged.
-* Optimized the modernized ``linint2.f90`` hot paths without changing legacy
-  semantics: ``dlin2int1`` now uses monotonic forward sweeps for ordered
-  coordinates, and ``dlint2xy`` now locates enclosing cells with inlined
-  binary searches while preserving the historical half-open interval rule.
-  Standalone old/new comparisons on representative cases remained exactly
-  equal (``max_abs=0``) and showed fresh-process median speedups of about
-  ``486.7x`` for ``dlinint1`` monotonic no-missing, ``91.6x`` for cyclic
-  missing-aware ``dlinint1``, ``33.9x`` for ``dlinint2``, and ``1.43x`` for
-  ``dlinint2pts`` weighted missing-value fallback.
-* Added NCL-style quick-reference comments to ``triple2grid.f90`` so the
-  modernized source now documents expected shapes, control flags, and outputs
-  in the same style as the newer ``rcm2rgrid.f90`` kernel.
-* Optimized the direct ``triple2grid`` Fortran exact-match hot path for evenly
-  spaced target grids. On repeated fresh-process benchmarks against the
-  retained archived F77 binary, the rebuilt ``cp312`` kernel preserved exact
-  output parity (``max_abs = 0``) and measured about ``3.58x`` faster on an
-  exact-placement case, about ``1.54x`` faster on a jittered-observation case,
-  and about ``1.32x`` faster on an outlier-extended case.
-* Reduced eager ``skyborn.interp.triple_to_grid`` Python wrapper overhead by
-  bypassing Dask ``map_blocks`` for non-Dask inputs and trimming unnecessary
-  missing-value conversions/restoration work. On repeated fresh-process
-  benchmarks using the same optimized Fortran ``triple2grid`` extension for
-  both old and new wrappers, outputs still matched exactly (``max_abs = 0``)
-  while median wrapper speedups measured about ``23.66x`` for eager NumPy
-  no-missing inputs, about ``42.70x`` for eager NumPy inputs with ``NaN``
-  missing values, and about ``11.43x`` for eager xarray inputs. These larger
-  gains come primarily from removing eager Dask scheduling overhead rather than
-  from the Fortran kernel alone.
-* Added focused regression coverage for the modernized ``triple_to_grid`` eager
-  path, including NumPy input non-mutation with ``NaN`` and custom missing
-  sentinels, the non-chunked eager xarray path, and the ``meta=True`` warning
-  branch.
-* Audited the reverse ``skyborn.interp.rgrid2rcm`` kernel so exact source-node
-  hits now mirror the forward curvilinear path: non-missing exact fields stay
-  untouched while exact hits on missing fields can still fall through to the
-  legacy interpolation logic. Added focused regression coverage for both
-  forward and reverse exact-hit missing-value cases.
-* Added focused regression coverage for the new Fortran dispatch, C-order
-  fallback guards, and Python remap / extrapolation fallback branches in
-  ``skyborn.interp.interpolation``.
+  by splitting interpolation support into smaller static libraries that match
+  the actual dependency graph.
+* Reduced eager ``triple_to_grid`` wrapper overhead for non-Dask inputs and
+  improved missing-value handling without changing validated results.
+* Restored legacy exact-hit missing-value behavior in ``rcm2points`` and
+  ``rgrid2rcm`` so unresolved fields can still fall through to the historical
+  interpolation logic when appropriate.
+* Added focused regression coverage for the updated Fortran dispatch,
+  eager-wrapper branches, exact-hit missing-value cases, and
+  ``rcm2points.py`` internal missing-value fast paths.
 
 Scatter Stippling
 
