@@ -88,25 +88,55 @@ contains
         idx = max(1, min(n - stride, base - stride + 1))
     end function earliest_stride_candidate
 
+    ! Build earliest stride-k anchors for a monotonic batch of target
+    ! coordinates by walking the source coordinate once instead of binary
+    ! searching every target independently.
+    pure subroutine build_stride_candidates_increasing(x, values, stride, idx)
+        real(real64), intent(in) :: x(:), values(:)
+        integer, intent(in) :: stride
+        integer, intent(out) :: idx(size(values))
+        integer :: base, cursor, j, n
+
+        n = size(x)
+        if (size(values) == 0) return
+
+        if (n <= stride) then
+            idx = 1
+            return
+        end if
+
+        cursor = 1
+        do j = 1, size(values)
+            if (values(j) <= x(1)) then
+                base = 1
+            else if (values(j) >= x(n)) then
+                base = n - 1
+                cursor = n - 1
+            else
+                do while (cursor < n - 1 .and. x(cursor + 1) <= values(j))
+                    cursor = cursor + 1
+                end do
+                base = cursor
+            end if
+
+            idx(j) = max(1, min(n - stride, base - stride + 1))
+        end do
+    end subroutine build_stride_candidates_increasing
+
     ! Search a small local curvilinear neighborhood for an exact source-grid
     ! point match before falling back to the global scan.
-    subroutine find_exact_curv_local(xi, yi, xo, yo, eps, ix_anchor, iy_anchor, k, found, ix_hit, iy_hit)
+    subroutine find_exact_curv_local(xi, yi, xo, yo, eps, ix_lo, ix_hi, iy_lo, iy_hi, found, ix_hit, iy_hit)
         real(real64), intent(in) :: xi(:, :)
         real(real64), intent(in) :: yi(:, :)
         real(real64), intent(in) :: xo, yo, eps
-        integer, intent(in) :: ix_anchor, iy_anchor, k
+        integer, intent(in) :: ix_lo, ix_hi, iy_lo, iy_hi
         logical, intent(out) :: found
         integer, intent(out) :: ix_hit, iy_hit
-        integer :: ix, iy, ix_lo, ix_hi, iy_lo, iy_hi
+        integer :: ix, iy
 
         found = .false.
         ix_hit = 1
         iy_hit = 1
-
-        ix_lo = max(1, ix_anchor - k)
-        ix_hi = min(size(xi, 1), ix_anchor + 2 * k)
-        iy_lo = max(1, iy_anchor - k)
-        iy_hi = min(size(yi, 2), iy_anchor + 2 * k)
 
         do iy = iy_lo, iy_hi
             do ix = ix_lo, ix_hi
@@ -150,23 +180,18 @@ contains
 
     ! Search a small local window for the curvilinear source cell whose
     ! corners bracket the requested output point.
-    subroutine find_curv_cell_local(xi, yi, xo, yo, ix_anchor, iy_anchor, k, found, ix_hit, iy_hit)
+    subroutine find_curv_cell_local(xi, yi, xo, yo, ix_lo, ix_hi, iy_lo, iy_hi, k, found, ix_hit, iy_hit)
         real(real64), intent(in) :: xi(:, :)
         real(real64), intent(in) :: yi(:, :)
         real(real64), intent(in) :: xo, yo
-        integer, intent(in) :: ix_anchor, iy_anchor, k
+        integer, intent(in) :: ix_lo, ix_hi, iy_lo, iy_hi, k
         logical, intent(out) :: found
         integer, intent(out) :: ix_hit, iy_hit
-        integer :: ix, iy, ix_lo, ix_hi, iy_lo, iy_hi
+        integer :: ix, iy
 
         found = .false.
         ix_hit = 1
         iy_hit = 1
-
-        ix_lo = max(1, ix_anchor - 1)
-        ix_hi = min(size(xi, 1) - k, ix_anchor + 2)
-        iy_lo = max(1, iy_anchor - 1)
-        iy_hi = min(size(yi, 2) - k, iy_anchor + 2)
 
         do iy = iy_lo, iy_hi
             do ix = ix_lo, ix_hi
@@ -389,15 +414,15 @@ contains
         real(real64), intent(in) :: yi(:)
         real(real64), intent(in) :: xo, yo, xmsg
         integer, intent(in) :: ix, iy, ncrit
-        real(real64), intent(out) :: out(size(fi, 3))
+        real(real64), intent(inout) :: out(size(fi, 3))
         real(real64) :: fw(2, 2), weights(2, 2), sumf, sumw
         real(real64) :: slope_x, slope_y
         real(real64) :: dist11, dist21, dist12, dist22
         integer :: ng, m, n, nw
 
-        out = xmsg
-
         do ng = 1, size(fi, 3)
+            if (out(ng) /= xmsg) cycle
+
             fw(1, 1) = fi(ix, iy, ng)
             fw(2, 1) = fi(ix + 1, iy, ng)
             fw(1, 2) = fi(ix, iy + 1, ng)
@@ -468,7 +493,7 @@ end module rcm2rgrid_kernels_core
 !    FO(NXO,NYO,NGRD) HOLDS THE INTERPOLATED RECTILINEAR RESULT.
 !    IER=0 ON SUCCESS, IER=1 WHEN AN INPUT GRID IS TOO SMALL.
 subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, ncrit, opt, ier)
-    use rcm2rgrid_kernels_core, only : real64, is_strictly_increasing, earliest_stride_candidate, &
+    use rcm2rgrid_kernels_core, only : real64, is_strictly_increasing, build_stride_candidates_increasing, &
         find_exact_curv_local, find_exact_curv_full, find_curv_cell_local, find_curv_cell_full, &
         interpolate_curv_cell, fill_missing_rows
     implicit none
@@ -479,8 +504,9 @@ subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, nc
     real(real64), intent(in) :: yo(nyo), xo(nxo), xmsg
     real(real64), intent(out) :: fo(nxo, nyo, ngrd)
 
-    integer :: nx, ny, ix_hit, iy_hit, k, ncrit_use
-    integer :: x_anchor(nxo), y_anchor(nyo)
+    integer :: ix_hit, iy_hit, k, ncrit_use, nx, ny
+    integer :: x_anchor(nxo), x_cell_hi(nxo), x_cell_lo(nxo), x_exact_hi(nxo), x_exact_lo(nxo)
+    integer :: y_anchor(nyo), y_cell_hi(nyo), y_cell_lo(nyo), y_exact_hi(nyo), y_exact_lo(nyo)
     real(real64) :: x_ref(nxi), y_ref(nyi)
     real(real64), parameter :: eps = 1.0e-4_real64
     logical :: exact_found, found, use_fast_path
@@ -503,23 +529,42 @@ subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, nc
                     is_strictly_increasing(xo) .and. is_strictly_increasing(yo)
 
     if (use_fast_path) then
+        call build_stride_candidates_increasing(x_ref, xo, k, x_anchor)
+        call build_stride_candidates_increasing(y_ref, yo, k, y_anchor)
         do nx = 1, nxo
-            x_anchor(nx) = earliest_stride_candidate(x_ref, xo(nx), k)
+            x_exact_lo(nx) = max(1, x_anchor(nx) - k)
+            x_exact_hi(nx) = min(nxi, x_anchor(nx) + 2 * k)
+            x_cell_lo(nx) = max(1, x_anchor(nx) - 1)
+            x_cell_hi(nx) = min(nxi - k, x_anchor(nx) + 2)
         end do
         do ny = 1, nyo
-            y_anchor(ny) = earliest_stride_candidate(y_ref, yo(ny), k)
+            y_exact_lo(ny) = max(1, y_anchor(ny) - k)
+            y_exact_hi(ny) = min(nyi, y_anchor(ny) + 2 * k)
+            y_cell_lo(ny) = max(1, y_anchor(ny) - 1)
+            y_cell_hi(ny) = min(nyi - k, y_anchor(ny) + 2)
         end do
     else
         x_anchor = 1
         y_anchor = 1
+        x_exact_lo = 1
+        x_exact_hi = 1
+        x_cell_lo = 1
+        x_cell_hi = 1
+        y_exact_lo = 1
+        y_exact_hi = 1
+        y_cell_lo = 1
+        y_cell_hi = 1
     end if
 
-        do ny = 1, nyo
+    do ny = 1, nyo
         do nx = 1, nxo
             exact_found = .false.
             if (use_fast_path) then
-                call find_exact_curv_local(xi, yi, xo(nx), yo(ny), eps, x_anchor(nx), y_anchor(ny), k, &
-                                           exact_found, ix_hit, iy_hit)
+                call find_exact_curv_local( &
+                    xi, yi, xo(nx), yo(ny), eps, &
+                    x_exact_lo(nx), x_exact_hi(nx), y_exact_lo(ny), y_exact_hi(ny), &
+                    exact_found, ix_hit, iy_hit &
+                )
             end if
 
             if (exact_found) then
@@ -529,16 +574,20 @@ subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, nc
 
             found = .false.
             if (use_fast_path) then
-                call find_curv_cell_local(xi, yi, xo(nx), yo(ny), x_anchor(nx), y_anchor(ny), k, &
-                                          found, ix_hit, iy_hit)
+                call find_curv_cell_local( &
+                    xi, yi, xo(nx), yo(ny), &
+                    x_cell_lo(nx), x_cell_hi(nx), y_cell_lo(ny), y_cell_hi(ny), k, &
+                    found, ix_hit, iy_hit &
+                )
             end if
 
             if (.not. found) then
-                exact_found = .false.
-                call find_exact_curv_full(xi, yi, xo(nx), yo(ny), eps, exact_found, ix_hit, iy_hit)
-                if (exact_found) then
-                    fo(nx, ny, :) = fi(ix_hit, iy_hit, :)
-                    if (all(fo(nx, ny, :) /= xmsg)) cycle
+                if (.not. exact_found) then
+                    call find_exact_curv_full(xi, yi, xo(nx), yo(ny), eps, exact_found, ix_hit, iy_hit)
+                    if (exact_found) then
+                        fo(nx, ny, :) = fi(ix_hit, iy_hit, :)
+                        if (all(fo(nx, ny, :) /= xmsg)) cycle
+                    end if
                 end if
 
                 call find_curv_cell_full(xi, yi, xo(nx), yo(ny), k, found, ix_hit, iy_hit)
@@ -589,7 +638,7 @@ subroutine drgrid2rcm(ngrd, nyi, nxi, yi, xi, fi, nyo, nxo, yo, xo, fo, xmsg, nc
 
     integer :: nx, ny, ix_hit, iy_hit, ix_anchor, iy_anchor
     real(real64), parameter :: eps = 1.0e-3_real64
-    logical :: found, use_fast_path
+    logical :: exact_found, found, use_fast_path
 
     ier = 0
     if (nxi <= 1 .or. nyi <= 1 .or. nxo <= 1 .or. nyo <= 1) then
@@ -602,40 +651,42 @@ subroutine drgrid2rcm(ngrd, nyi, nxi, yi, xi, fi, nyo, nxo, yo, xo, fo, xmsg, nc
 
     do ny = 1, nyo
         do nx = 1, nxo
+            exact_found = .false.
             found = .false.
 
             if (use_fast_path) then
                 ix_anchor = lower_bracket_increasing(xi, xo(nx, ny))
                 iy_anchor = lower_bracket_increasing(yi, yo(nx, ny))
                 call find_exact_regular_local(xi, yi, xo(nx, ny), yo(nx, ny), eps, ix_anchor, iy_anchor, &
-                                              found, ix_hit, iy_hit)
-                if (.not. found) then
-                    if (xo(nx, ny) >= xi(ix_anchor) .and. xo(nx, ny) < xi(ix_anchor + 1) .and. &
-                        yo(nx, ny) >= yi(iy_anchor) .and. yo(nx, ny) < yi(iy_anchor + 1)) then
-                        found = .true.
-                        ix_hit = ix_anchor
-                        iy_hit = iy_anchor
-                    end if
+                                              exact_found, ix_hit, iy_hit)
+                if (exact_found) then
+                    fo(nx, ny, :) = fi(ix_hit, iy_hit, :)
+                    if (all(fo(nx, ny, :) /= xmsg)) cycle
+                end if
+
+                if (xo(nx, ny) >= xi(ix_anchor) .and. xo(nx, ny) < xi(ix_anchor + 1) .and. &
+                    yo(nx, ny) >= yi(iy_anchor) .and. yo(nx, ny) < yi(iy_anchor + 1)) then
+                    found = .true.
+                    ix_hit = ix_anchor
+                    iy_hit = iy_anchor
                 end if
             end if
 
             if (.not. found) then
-                call find_exact_regular_full(xi, yi, xo(nx, ny), yo(nx, ny), eps, found, ix_hit, iy_hit)
-                if (found) then
-                    fo(nx, ny, :) = fi(ix_hit, iy_hit, :)
-                    cycle
+                if (.not. exact_found) then
+                    call find_exact_regular_full(xi, yi, xo(nx, ny), yo(nx, ny), eps, exact_found, ix_hit, iy_hit)
+                    if (exact_found) then
+                        fo(nx, ny, :) = fi(ix_hit, iy_hit, :)
+                        if (all(fo(nx, ny, :) /= xmsg)) cycle
+                    end if
                 end if
+
                 call find_regular_cell_full(xi, yi, xo(nx, ny), yo(nx, ny), found, ix_hit, iy_hit)
             end if
 
             if (found) then
-                if (xo(nx, ny) >= (xi(ix_hit) - eps) .and. xo(nx, ny) <= (xi(ix_hit) + eps) .and. &
-                    yo(nx, ny) >= (yi(iy_hit) - eps) .and. yo(nx, ny) <= (yi(iy_hit) + eps)) then
-                    fo(nx, ny, :) = fi(ix_hit, iy_hit, :)
-                else
-                    call interpolate_regular_cell(fi, xi, yi, xo(nx, ny), yo(nx, ny), ix_hit, iy_hit, xmsg, ncrit, &
-                                                  fo(nx, ny, :))
-                end if
+                call interpolate_regular_cell(fi, xi, yi, xo(nx, ny), yo(nx, ny), ix_hit, iy_hit, xmsg, ncrit, &
+                                              fo(nx, ny, :))
             end if
         end do
     end do
