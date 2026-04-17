@@ -4,7 +4,7 @@
 python module grid2triple ! in
     interface  ! in :grid2triple
         ! signature : d = grid2triple(x,y,z,ld,[mx,ny,ldmax,zmsg])
-        subroutine grid2triple(x,y,z,mx,ny,d,ldmax,ld,zmsg,ier) ! in :grid2triple:grid2triple.f
+        subroutine grid2triple(x,y,z,mx,ny,d,ldmax,ld,zmsg,ier) ! in :grid2triple:grid2triple.f90
             double precision,   dimension(mx),                      intent(in)      :: x
             double precision,   dimension(ny),                      intent(in)      :: y
             double precision,   dimension(mx,ny), depend(mx,ny),    intent(in)      :: z
