@@ -29,22 +29,40 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        const titleText = getHeadingText(heading);
+        const statusText = getStatusText(titleText);
+        const content = ensureSectionContent(section, heading);
+        const modalButton = createModalButton(section, titleText);
+
         versionMap[section.id] = section;
         section.classList.add('changelog-modal-section');
-        heading.classList.add('changelog-modal-trigger');
+        heading.classList.add('changelog-section-toggle');
         heading.tabIndex = 0;
         heading.setAttribute('role', 'button');
-        heading.setAttribute('aria-label', 'Open release notes for ' + getHeadingText(heading));
+        heading.setAttribute('aria-label', 'Toggle release notes for ' + titleText);
+        heading.appendChild(modalButton);
+        content.classList.add('changelog-section-content');
+
+        setSectionExpanded(section, isDefaultExpanded(statusText));
 
         heading.addEventListener('click', function (event) {
+            if (event.target.closest('.changelog-modal-open-button') ||
+                event.target.closest('.headerlink')) {
+                return;
+            }
+
             event.preventDefault();
-            openChangelogModal(section, heading);
+            toggleSection(section);
         });
 
         heading.addEventListener('keydown', function (event) {
+            if (event.target !== heading) {
+                return;
+            }
+
             if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                openChangelogModal(section, heading);
+                toggleSection(section);
             }
         });
     });
@@ -66,12 +84,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         event.preventDefault();
-        openChangelogModal(targetSection, link);
+        expandSectionAndScroll(targetSection, targetId);
     });
 
     const hashTarget = window.location.hash ? window.location.hash.slice(1) : '';
     if (hashTarget && versionMap[hashTarget]) {
-        openChangelogModal(versionMap[hashTarget], null);
+        setSectionExpanded(versionMap[hashTarget], true);
     }
 });
 
@@ -103,38 +121,71 @@ function injectChangelogModalStyles() {
             box-shadow: 0 10px 28px rgba(37, 99, 235, 0.08);
         }
 
-        .changelog-modal-trigger {
+        .changelog-section-toggle {
             position: relative;
             cursor: pointer;
-            margin: 0.25rem 0 1rem;
-            padding: 0.9rem 7.8rem 0.9rem 1rem;
+            margin: 0.25rem 0 0.85rem;
+            padding: 0.95rem 9rem 0.95rem 3rem;
             border-radius: 16px;
             background: linear-gradient(135deg, rgba(37, 99, 235, 0.14), rgba(59, 130, 246, 0.08));
             transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
             outline: none;
         }
 
-        .changelog-modal-trigger::after {
-            content: 'Open modal';
+        .changelog-section-toggle::before {
+            content: '▾';
+            position: absolute;
+            top: 50%;
+            left: 1rem;
+            transform: translateY(-50%) rotate(0deg);
+            color: #1d4ed8;
+            font-size: 1rem;
+            font-weight: 700;
+            transition: transform 0.2s ease;
+        }
+
+        .changelog-modal-section.is-collapsed .changelog-section-toggle::before {
+            transform: translateY(-50%) rotate(-90deg);
+        }
+
+        .changelog-section-toggle:hover,
+        .changelog-section-toggle:focus {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(37, 99, 235, 0.14);
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(59, 130, 246, 0.12));
+        }
+
+        .changelog-modal-open-button {
             position: absolute;
             top: 50%;
             right: 1rem;
             transform: translateY(-50%);
-            padding: 0.28rem 0.7rem;
+            padding: 0.32rem 0.72rem;
+            border: none;
             border-radius: 999px;
             background: rgba(37, 99, 235, 0.12);
             color: #1d4ed8;
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             font-weight: 700;
             letter-spacing: 0.02em;
             text-transform: uppercase;
+            cursor: pointer;
+            transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
         }
 
-        .changelog-modal-trigger:hover,
-        .changelog-modal-trigger:focus {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 28px rgba(37, 99, 235, 0.14);
-            background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(59, 130, 246, 0.12));
+        .changelog-modal-open-button:hover,
+        .changelog-modal-open-button:focus {
+            transform: translateY(-50%) scale(1.03);
+            background: rgba(37, 99, 235, 0.2);
+            outline: none;
+        }
+
+        .changelog-section-content {
+            padding: 0 0.3rem 0.1rem;
+        }
+
+        .changelog-modal-section.is-collapsed .changelog-section-content {
+            display: none;
         }
 
         .changelog-modal-overlay {
@@ -296,14 +347,23 @@ function injectChangelogModalStyles() {
             box-shadow: 0 14px 32px rgba(2, 6, 23, 0.35);
         }
 
-        [data-theme="dark"] .changelog-modal-trigger {
+        [data-theme="dark"] .changelog-section-toggle {
             background: linear-gradient(135deg, rgba(37, 99, 235, 0.26), rgba(59, 130, 246, 0.14));
             color: #eff6ff !important;
         }
 
-        [data-theme="dark"] .changelog-modal-trigger::after {
+        [data-theme="dark"] .changelog-section-toggle::before {
+            color: #bfdbfe;
+        }
+
+        [data-theme="dark"] .changelog-modal-open-button {
             background: rgba(96, 165, 250, 0.18);
             color: #bfdbfe;
+        }
+
+        [data-theme="dark"] .changelog-modal-open-button:hover,
+        [data-theme="dark"] .changelog-modal-open-button:focus {
+            background: rgba(96, 165, 250, 0.26);
         }
 
         [data-theme="dark"] .changelog-modal {
@@ -345,15 +405,20 @@ function injectChangelogModalStyles() {
                 padding: 1rem;
             }
 
-            .changelog-modal-trigger {
-                padding-right: 1rem;
+            .changelog-section-toggle {
+                padding: 0.95rem 1rem 3.1rem 3rem;
             }
 
-            .changelog-modal-trigger::after {
-                position: static;
-                display: inline-flex;
+            .changelog-modal-open-button {
+                top: auto;
+                bottom: 0.85rem;
+                right: 1rem;
                 transform: none;
-                margin-top: 0.7rem;
+            }
+
+            .changelog-modal-open-button:hover,
+            .changelog-modal-open-button:focus {
+                transform: scale(1.03);
             }
 
             .changelog-modal-header {
@@ -372,7 +437,7 @@ function injectChangelogModalStyles() {
 function addChangelogHint(changelogRoot, firstSection) {
     const hint = document.createElement('div');
     hint.className = 'changelog-modal-tip';
-    hint.textContent = 'Tip: click a version heading to open that release note in a modal window.';
+    hint.textContent = 'Planned and Current stay expanded by default. Click any version heading to expand or collapse it, and use Open modal for the popup view.';
     changelogRoot.insertBefore(hint, firstSection);
 }
 
@@ -382,10 +447,33 @@ function getDirectHeading(section) {
     }) || null;
 }
 
+function getSectionContent(section) {
+    return section.querySelector(':scope > .changelog-section-content');
+}
+
+function ensureSectionContent(section, heading) {
+    const existingContent = getSectionContent(section);
+    if (existingContent) {
+        return existingContent;
+    }
+
+    const content = document.createElement('div');
+    content.className = 'changelog-section-content';
+
+    Array.from(section.children).forEach(function (child) {
+        if (child !== heading) {
+            content.appendChild(child);
+        }
+    });
+
+    section.appendChild(content);
+    return content;
+}
+
 function getHeadingText(heading) {
     const clone = heading.cloneNode(true);
-    clone.querySelectorAll('.headerlink').forEach(function (link) {
-        link.remove();
+    clone.querySelectorAll('.headerlink, .changelog-modal-open-button').forEach(function (node) {
+        node.remove();
     });
     return clone.textContent.replace(/\s+/g, ' ').trim();
 }
@@ -395,8 +483,68 @@ function getStatusText(titleText) {
     return match ? match[1] : 'Release';
 }
 
+function isDefaultExpanded(statusText) {
+    return statusText === 'Planned' || statusText === 'Current';
+}
+
+function createModalButton(section, titleText) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'changelog-modal-open-button';
+    button.textContent = 'Open modal';
+    button.setAttribute('aria-label', 'Open modal for ' + titleText);
+
+    button.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        openChangelogModal(section, button);
+    });
+
+    return button;
+}
+
+function setSectionExpanded(section, expanded) {
+    const heading = getDirectHeading(section);
+    const content = getSectionContent(section);
+
+    section.classList.toggle('is-expanded', expanded);
+    section.classList.toggle('is-collapsed', !expanded);
+
+    if (heading) {
+        heading.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    }
+
+    if (content) {
+        content.hidden = !expanded;
+    }
+}
+
+function toggleSection(section) {
+    setSectionExpanded(section, !section.classList.contains('is-expanded'));
+}
+
+function expandSectionAndScroll(section, targetId) {
+    setSectionExpanded(section, true);
+
+    if (history.replaceState) {
+        history.replaceState(null, '', '#' + targetId);
+    } else {
+        window.location.hash = targetId;
+    }
+
+    section.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+    });
+}
+
 function getTopicLabels(section) {
-    return Array.from(section.children)
+    const content = getSectionContent(section);
+    if (!content) {
+        return [];
+    }
+
+    return Array.from(content.children)
         .filter(function (child) {
             return child.tagName === 'P' &&
                 child.nextElementSibling &&
@@ -417,13 +565,14 @@ function openChangelogModal(section, opener) {
     }
 
     const heading = getDirectHeading(section);
-    if (!heading) {
+    const content = getSectionContent(section);
+    if (!heading || !content) {
         return;
     }
 
     const titleText = getHeadingText(heading);
     const statusText = getStatusText(titleText);
-    const detailCount = section.querySelectorAll('li').length;
+    const detailCount = content.querySelectorAll('li').length;
 
     const overlay = document.createElement('div');
     overlay.className = 'changelog-modal-overlay';
@@ -481,18 +630,14 @@ function openChangelogModal(section, opener) {
         body.appendChild(topicContainer);
     }
 
-    const content = document.createElement('div');
-    content.className = 'changelog-modal-content';
+    const contentClone = document.createElement('div');
+    contentClone.className = 'changelog-modal-content';
 
-    Array.from(section.children).forEach(function (child) {
-        if (child === heading) {
-            return;
-        }
-
-        content.appendChild(child.cloneNode(true));
+    Array.from(content.children).forEach(function (child) {
+        contentClone.appendChild(child.cloneNode(true));
     });
 
-    body.appendChild(content);
+    body.appendChild(contentClone);
     modal.appendChild(header);
     modal.appendChild(body);
     overlay.appendChild(modal);
