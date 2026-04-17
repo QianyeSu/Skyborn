@@ -341,18 +341,28 @@ else:
         )
     endif
 
+    rcm_shared_support = static_library(
+        'rcm_shared_support',
+        [
+            'fortran/linmsg_dp.f',
+            'fortran/linint2.f',
+            'fortran/rcm_geodesy.f90',
+        ],
+        fortran_args: fortran_args,
+        build_by_default: true,
+        install: false,
+    )
+
     # Build the rcm2points extension module
     rcm2points_ext = py.extension_module(
         'rcm2points',
         [
             'fortran/rcm2points.f',
-            'fortran/rcm2rgrid.f',
-            'fortran/linmsg_dp.f',
-            'fortran/linint2.f',
             rcm2points_sources,
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
+        link_with: [rcm_shared_support],
         fortran_args: fortran_args,
         c_args: c_args,
         install: true,
@@ -364,13 +374,12 @@ else:
     rcm2rgrid_ext = py.extension_module(
         'rcm2rgrid',
         [
-            'fortran/rcm2rgrid.f',
-            'fortran/linmsg_dp.f',
-            'fortran/linint2.f',
+            'fortran/rcm2rgrid.f90',
             rcm2rgrid_sources,
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
+        link_with: [rcm_shared_support],
         fortran_args: fortran_args,
         c_args: c_args,
         install: true,
