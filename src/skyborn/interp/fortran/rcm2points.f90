@@ -49,12 +49,16 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
 
     external dmonoinc
 
+    ! Match the historical input-size guard before any monotonicity or
+    ! interpolation work begins.
     ier = 0
     if (nxi <= 1 .or. nyi <= 1 .or. nxyo <= 0) then
         ier = 1
         return
     end if
 
+    ! The legacy kernel validates monotonicity using the first latitude row and
+    ! first longitude column as representative 1-D coordinates.
     do ny = 1, nyi
         chklat(ny) = yi(1, ny)
     end do
@@ -75,10 +79,14 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
         k = kval
     end if
 
+    ! Start with every output set to missing. Later passes only overwrite a
+    ! point once a compatible exact hit or interpolation path succeeds.
     fo = xmsg
     exact_hit = .false.
 
-    ! First preserve any exact source-point matches.
+    ! Exact-match pass:
+    ! If an output point lands exactly on a source-grid coordinate, copy every
+    ! field directly and skip later interpolation for that output point.
     do nxy = 1, nxyo
         xo_n = xo(nxy)
         yo_n = yo(nxy)
@@ -99,7 +107,10 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
         end do
     end do
 
-    ! Then try the local containing-cell interpolation.
+    ! Local cell pass:
+    ! Search the first stride-k source box whose corner coordinates bracket the
+    ! requested output point, then interpolate within that 2 x 2 cell using
+    ! either bilinear weights or inverse-distance weights.
     do nxy = 1, nxyo
         if (.not. exact_hit(nxy)) then
             xo_n = xo(nxy)
@@ -160,6 +171,8 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
         end if
     end do
 
+    ! If every field at every output point has already been filled, the
+    ! expensive radius-search fallback is unnecessary.
     do ng = 1, ngrd
         do nxy = 1, nxyo
             if (fo(nxy, ng) == xmsg) exit
@@ -192,6 +205,9 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
             yo_n = yo(nxy)
             ncand = 0
 
+            ! Build the candidate list once for this output point using the
+            ! same fixed-radius latitude window and great-circle cutoff as the
+            ! historical fallback branch.
             do iy = 1, nyi
                 do ix = 1, nxi
                     if (yi(ix, iy) >= yo_n - dlat .and. yi(ix, iy) <= yo_n + dlat) then
@@ -207,6 +223,9 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
             end do
 
             if (ncand > 0) then
+                ! Each field still applies its own missing-value mask to the
+                ! shared geometry candidates, so per-field results remain
+                ! identical to the legacy NG -> NXY -> IX/IY traversal.
                 do ng = 1, ngrd
                     if (fo(nxy, ng) == xmsg) then
                         nw = 0
