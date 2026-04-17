@@ -79,11 +79,24 @@ Interpolation
   wrapper. The retained old binary and the modern build-dir binary matched with
   ``max_abs = 0`` across the tested cases, while the new kernel delivered about
   ``8.6x`` to ``21.9x`` speedups depending on target size.
+* Re-benchmarked the retained safe ``drcm2rgrid`` local-window precompute
+  refinement against both the retained old binary and the earlier
+  ``rcm2rgrid_precache`` build on the user's real POP ``TEMP`` dataset. The
+  old and current kernels still matched with ``max_abs = 0`` on tested
+  regional and global cases, while the retained refinement delivered modest
+  additional gains only on some monotonic regional subsets, roughly ``1x`` to
+  ``1.14x`` versus ``precache`` on the re-tested medium/large regional cases,
+  and did not claim a universal speedup on seam/fold-heavy global cases.
 * Verified that ``skyborn.interp.rcm2rgrid`` keeps the Python-layer API stable:
   the xarray wrapper still returns the requested 1D ``nlat`` / ``nlon``
   coordinates exactly, preserves compatible non-spatial coordinates such as
   ``z_t``, and drops incompatible 2D auxiliary source-grid coordinates such as
   ``TLAT`` / ``TLONG`` after remapping.
+* Audited the reverse ``skyborn.interp.rgrid2rcm`` kernel so exact source-node
+  hits now mirror the forward curvilinear path: non-missing exact fields stay
+  untouched while exact hits on missing fields can still fall through to the
+  legacy interpolation logic. Added focused regression coverage for both
+  forward and reverse exact-hit missing-value cases.
 * Added focused regression coverage for the new Fortran dispatch, C-order
   fallback guards, and Python remap / extrapolation fallback branches in
   ``skyborn.interp.interpolation``.
