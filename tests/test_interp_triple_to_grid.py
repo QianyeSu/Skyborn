@@ -100,6 +100,31 @@ class TestGridToTripleBasic:
             np.sort(grid_arr.ravel()), np.sort(da.values.ravel())
         )
 
+    def test_numpy_nan_missing_input_not_mutated(self, small_rect_grid):
+        x_out, y_out, da = small_rect_grid
+        data = da.values.copy()
+        data[1, 1] = np.nan
+        original = data.copy()
+
+        triple = grid_to_triple(data, x_in=x_out, y_in=y_out)
+
+        assert isinstance(triple, np.ndarray)
+        np.testing.assert_allclose(data, original, rtol=0.0, atol=0.0, equal_nan=True)
+        assert triple.shape[1] == data.size - 1
+
+    def test_numpy_custom_missing_input_not_mutated(self, small_rect_grid):
+        x_out, y_out, da = small_rect_grid
+        msg = np.float64(-9999.0)
+        data = da.values.copy()
+        data[2, 1] = msg
+        original = data.copy()
+
+        triple = grid_to_triple(data, x_in=x_out, y_in=y_out, msg_py=msg)
+
+        assert isinstance(triple, np.ndarray)
+        np.testing.assert_array_equal(data, original)
+        assert triple.shape[1] == data.size - 1
+
 
 class TestTripleToGridBasic:
     """Test triple_to_grid with multiple leftmost dims and correctness."""
