@@ -4,7 +4,7 @@
 python module triple2grid ! in
     interface  ! in :triple2grid
         ! signature: grid = triple2grid1(xi,yi,zi,gx,gy,[zmsg,domain,method,distmx])
-        subroutine triple2grid1(kz,xi,yi,zi,zmsg,mx,ny,gx,gy,grid,domain,loop,method,distmx,mx2,ny2,x,y,z,gbigx,gbigy,gbigxy,ier) ! in :triple2grid:triple2grid.f
+        subroutine triple2grid1(kz,xi,yi,zi,zmsg,mx,ny,gx,gy,grid,domain,loop,method,distmx,mx2,ny2,x,y,z,gbigx,gbigy,gbigxy,ier) ! in :triple2grid:triple2grid.f90
             integer,            depend(xi),                             intent(hide)    :: kz=len(xi)
             double precision,   dimension(kz),                          intent(in)      :: xi
             double precision,   dimension(kz),depend(kz),               intent(in)      :: yi
@@ -30,7 +30,7 @@ python module triple2grid ! in
             integer,            optional,                               intent(hide)    :: ier
         end subroutine triple2grid1
 
-        subroutine trip2grd2(kz,x,y,z,zmsg,mx,ny,gxout,gyout,gout,mflag,nflag,method,ddcrit,ier) ! in :triple2grid:triple2grid.f
+        subroutine trip2grd2(kz,x,y,z,zmsg,mx,ny,gxout,gyout,gout,mflag,nflag,method,ddcrit,ier) ! in :triple2grid:triple2grid.f90
             integer, optional,check(len(x)>=kz),depend(x) :: kz=len(x)
             double precision dimension(kz) :: x
             double precision dimension(kz),depend(kz) :: y
@@ -48,7 +48,7 @@ python module triple2grid ! in
             integer :: ier
         end subroutine trip2grd2
 
-        subroutine trip2grd3(kz,x,y,z,zmsg,mx,ny,gxout,gyout,gout,mflag,nflag,method,ddcrit,ier) ! in :triple2grid:triple2grid.f
+        subroutine trip2grd3(kz,x,y,z,zmsg,mx,ny,gxout,gyout,gout,mflag,nflag,method,ddcrit,ier) ! in :triple2grid:triple2grid.f90
             integer, optional,check(len(x)>=kz),depend(x) :: kz=len(x)
             double precision dimension(kz) :: x
             double precision dimension(kz),depend(kz) :: y
