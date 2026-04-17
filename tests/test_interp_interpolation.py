@@ -5,11 +5,15 @@ This module tests the interpolation functionality including hybrid-sigma
 to pressure level interpolation and multidimensional spatial interpolation.
 """
 
+import builtins
+import importlib
+
 import numpy as np
 import pytest
 import xarray as xr
 from numpy.testing import assert_array_almost_equal, assert_array_equal
 
+import skyborn.interp.interpolation as interpolation_module
 from skyborn.interp.interpolation import (
     __pres_lev_mandatory__,
     _func_interpolate,
@@ -978,6 +982,299 @@ class TestSigmaToHybridInterpolation:
                 lev_dim="sigma",
                 method="invalid_method",
             )
+
+
+class TestInterpolationFortranFallbacks:
+    """Exercise rarely hit Fortran-accelerated fallback branches."""
+
+    def test_import_fallback_sets_fortran_handles_to_none(self, monkeypatch):
+        """Reload the module with a forced kernel import failure."""
+
+        real_import = builtins.__import__
+
+        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name.endswith("skyborn.interp.fortran.vinth2p_kernels"):
+                raise ImportError("forced test import failure")
+            return real_import(name, globals, locals, fromlist, level)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        reloaded = importlib.reload(interpolation_module)
+
+        assert reloaded._dsigma2hybrid_nodes is None
+        assert reloaded._dvinth2p_nodes_pa is None
+        assert reloaded._dvinth2p_ecmwf_nodes_corder_pa_into is None
+
+        monkeypatch.setattr(builtins, "__import__", real_import)
+        importlib.reload(interpolation_module)
+
+    def test_as_broadcast_float64_flat_handles_none_and_broadcast_errors(
+        self, monkeypatch
+    ):
+        """Return None for unsupported inputs or broadcast failures."""
+
+        template = xr.DataArray(np.ones(3, dtype=np.float64), dims=["x"])
+        assert interpolation_module._as_broadcast_float64_flat(None, template) is None
+
+        array = xr.DataArray(np.array([1.0], dtype=np.float64), dims=["x"])
+
+        def raise_broadcast(self, other, exclude=None):
+            raise ValueError("boom")
+
+        monkeypatch.setattr(xr.DataArray, "broadcast_like", raise_broadcast)
+        assert interpolation_module._as_broadcast_float64_flat(array, template) is None
+
+    def test_interp_hybrid_to_pressure_corder_returns_none_when_aux_inputs_missing(
+        self, monkeypatch
+    ):
+        """ECMWF c-order fast path should bail out when aux fields cannot flatten."""
+
+        data = xr.DataArray(
+            np.arange(12, dtype=np.float64).reshape(2, 2, 3),
+            dims=["lev", "lat", "lon"],
+        )
+        ps = xr.DataArray(
+            np.full((2, 3), 90000.0, dtype=np.float64),
+            dims=["lat", "lon"],
+        )
+        hyam = xr.DataArray(np.array([0.1, 0.0], dtype=np.float64), dims=["lev"])
+        hybm = xr.DataArray(np.array([0.9, 1.0], dtype=np.float64), dims=["lev"])
+
+        monkeypatch.setattr(
+            interpolation_module, "_dvinth2p_nodes_corder_pa_into", lambda *a, **k: None
+        )
+        monkeypatch.setattr(
+            interpolation_module,
+            "_dvinth2p_ecmwf_nodes_corder_pa_into",
+            lambda *a, **k: None,
+        )
+
+        result = interpolation_module._interp_hybrid_to_pressure_fortran_corder(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=np.array([85000.0], dtype=np.float64),
+            lev_dim="lev",
+            method="linear",
+            extrapolate=True,
+            variable="temperature",
+            t_bot=None,
+            phi_sfc=None,
+        )
+
+        assert result is None
+
+    def test_interp_hybrid_to_pressure_fortran_fallback_broadcasts_ecmwf_inputs(
+        self, monkeypatch
+    ):
+        """Fallback Fortran path should accept broadcasted ECMWF auxiliaries."""
+
+        captured = {}
+
+        data = xr.DataArray(
+            np.array([[280.0, 281.0, 282.0], [270.0, 271.0, 272.0]], dtype=np.float64),
+            dims=["lev", "x"],
+        )
+        ps = xr.DataArray(np.full(3, 95000.0, dtype=np.float64), dims=["x"])
+        hyam = xr.DataArray(np.array([0.2, 0.0], dtype=np.float64), dims=["lev"])
+        hybm = xr.DataArray(np.array([0.8, 1.0], dtype=np.float64), dims=["lev"])
+        t_bot = xr.DataArray(np.array(290.0, dtype=np.float64))
+        phi_sfc = xr.DataArray(np.array(50.0, dtype=np.float64))
+
+        def fake_ecmwf_into(
+            data_columns,
+            output_columns,
+            hyam_values,
+            hybm_values,
+            p0,
+            new_level_values,
+            intyp,
+            ps_columns,
+            spvl,
+            ixtrp,
+            varflg,
+            t_bot_columns,
+            phi_columns,
+        ):
+            captured["t_bot"] = t_bot_columns.copy()
+            captured["phi"] = phi_columns.copy()
+            output_columns[:] = 42.0
+
+        monkeypatch.setattr(interpolation_module, "_dvinth2p_nodes_pa", object())
+        monkeypatch.setattr(
+            interpolation_module,
+            "_interp_hybrid_to_pressure_fortran_corder",
+            lambda **kwargs: None,
+        )
+        monkeypatch.setattr(
+            interpolation_module, "_dvinth2p_ecmwf_nodes_pa_into", fake_ecmwf_into
+        )
+
+        result = interpolation_module._interp_hybrid_to_pressure_fortran(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=np.array([85000.0], dtype=np.float64),
+            lev_dim="lev",
+            method="linear",
+            extrapolate=True,
+            variable="temperature",
+            t_bot=t_bot,
+            phi_sfc=phi_sfc,
+        )
+
+        assert result.dims == ("plev", "x")
+        assert np.all(result.values == 42.0)
+        assert np.array_equal(captured["t_bot"], np.full(3, 290.0))
+        assert np.array_equal(captured["phi"], np.full(3, 50.0))
+
+    def test_interp_sigma_to_hybrid_fortran_requires_backend(self, monkeypatch):
+        """Private eager helper should fail clearly when backend is absent."""
+
+        data = xr.DataArray(np.array([280.0, 275.0], dtype=np.float64), dims=["sigma"])
+        sig_coords = xr.DataArray(
+            np.array([0.2, 1.0], dtype=np.float64), dims=["sigma"]
+        )
+        ps = xr.DataArray(np.array(100000.0, dtype=np.float64))
+        hyam = xr.DataArray(np.array([0.0, 0.1], dtype=np.float64), dims=["hlev"])
+        hybm = xr.DataArray(np.array([1.0, 0.8], dtype=np.float64), dims=["hlev"])
+
+        monkeypatch.setattr(interpolation_module, "_dsigma2hybrid_nodes", None)
+
+        with pytest.raises(RuntimeError, match="sigma2hybrid backend is not available"):
+            interpolation_module._interp_sigma_to_hybrid_fortran(
+                data=data,
+                sig_coords=sig_coords,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                p0=100000.0,
+                lev_dim="sigma",
+                method="linear",
+            )
+
+    def test_interp_sigma_to_hybrid_fortran_requires_monotonic_sigma(self, monkeypatch):
+        """Non-monotonic sigma coordinates should be rejected before backend use."""
+
+        data = xr.DataArray(
+            np.array([280.0, 275.0, 270.0], dtype=np.float64),
+            dims=["sigma"],
+        )
+        sig_coords = xr.DataArray(
+            np.array([0.2, 0.9, 0.5], dtype=np.float64), dims=["sigma"]
+        )
+        ps = xr.DataArray(np.array(100000.0, dtype=np.float64))
+        hyam = xr.DataArray(np.array([0.0, 0.1], dtype=np.float64), dims=["hlev"])
+        hybm = xr.DataArray(np.array([1.0, 0.8], dtype=np.float64), dims=["hlev"])
+
+        monkeypatch.setattr(interpolation_module, "_dsigma2hybrid_nodes", object())
+
+        with pytest.raises(ValueError, match="requires monotonic sigma coordinates"):
+            interpolation_module._interp_sigma_to_hybrid_fortran(
+                data=data,
+                sig_coords=sig_coords,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                p0=100000.0,
+                lev_dim="sigma",
+                method="linear",
+            )
+
+    def test_interp_sigma_to_hybrid_corder_rejects_non_numpy_data(self, monkeypatch):
+        """Fast path should reject non-NumPy raw data cleanly."""
+
+        sigma_values = np.array([0.2, 1.0], dtype=np.float64)
+        data = xr.DataArray(
+            np.array([280.0, 275.0], dtype=np.float64),
+            dims=["sigma"],
+        ).chunk({"sigma": 2})
+        ps = xr.DataArray(np.array(100000.0, dtype=np.float64))
+        hyam = xr.DataArray(np.array([0.0, 0.1], dtype=np.float64), dims=["hlev"])
+        hybm = xr.DataArray(np.array([1.0, 0.8], dtype=np.float64), dims=["hlev"])
+
+        monkeypatch.setattr(
+            interpolation_module,
+            "_dsigma2hybrid_nodes_corder_into",
+            lambda *a, **k: None,
+        )
+
+        result = interpolation_module._interp_sigma_to_hybrid_fortran_corder(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            lev_dim="sigma",
+            method="linear",
+            sigma_source_values=sigma_values,
+        )
+
+        assert result is None
+
+    def test_interp_sigma_to_hybrid_corder_rejects_nonfinite_broadcast_ps(
+        self, monkeypatch
+    ):
+        """Broadcast fallback should reject non-finite surface pressure values."""
+
+        sigma_values = np.array([0.2, 1.0], dtype=np.float64)
+        data = xr.DataArray(
+            np.array([280.0, 275.0], dtype=np.float64),
+            dims=["sigma"],
+        )
+        ps = xr.DataArray(np.array(np.nan, dtype=np.float64))
+        hyam = xr.DataArray(np.array([0.0, 0.1], dtype=np.float64), dims=["hlev"])
+        hybm = xr.DataArray(np.array([1.0, 0.8], dtype=np.float64), dims=["hlev"])
+
+        monkeypatch.setattr(
+            interpolation_module,
+            "_dsigma2hybrid_nodes_corder_into",
+            lambda *a, **k: None,
+        )
+
+        result = interpolation_module._interp_sigma_to_hybrid_fortran_corder(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            lev_dim="sigma",
+            method="linear",
+            sigma_source_values=sigma_values,
+        )
+
+        assert result is None
+
+    def test_interp_sigma_to_hybrid_1d_python_fallback(self, monkeypatch):
+        """Cover the 1D pure-Python fallback branch when Fortran is unavailable."""
+
+        sigma_coords = np.array([0.2, 0.5, 0.8, 1.0], dtype=np.float64)
+        data = xr.DataArray(
+            np.array([220.0, 250.0, 280.0, 290.0], dtype=np.float64),
+            dims=["sigma"],
+            coords={"sigma": sigma_coords},
+        )
+        ps = xr.DataArray(np.array(101325.0, dtype=np.float64))
+        hya = xr.DataArray(np.array([0.0, 0.1], dtype=np.float64), dims=["hlev"])
+        hyb = xr.DataArray(np.array([0.8, 0.4], dtype=np.float64), dims=["hlev"])
+
+        monkeypatch.setattr(interpolation_module, "_dsigma2hybrid_nodes", None)
+
+        result = interp_sigma_to_hybrid(
+            data=data,
+            sig_coords=sigma_coords,
+            ps=ps,
+            hyam=hya,
+            hybm=hyb,
+            lev_dim="sigma",
+        )
+
+        assert result.dims == ("hlev",)
+        assert result.shape == (2,)
+        assert np.all(np.isfinite(result.values))
 
 
 class TestMultidimensionalInterpolation:
