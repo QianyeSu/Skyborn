@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', function () {
         headingParts.actions.prepend(modalButton);
         content.classList.add('changelog-section-content');
 
-        setSectionExpanded(section, isDefaultExpanded(statusText));
+        setSectionExpanded(section, isDefaultExpanded(statusText), false);
 
         heading.addEventListener('click', function (event) {
             if (event.target.closest('.changelog-modal-open-button') ||
@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const hashTarget = window.location.hash ? window.location.hash.slice(1) : '';
     if (hashTarget && versionMap[hashTarget]) {
-        setSectionExpanded(versionMap[hashTarget], true);
+        setSectionExpanded(versionMap[hashTarget], true, false);
     }
 });
 
@@ -226,11 +226,17 @@ function injectChangelogModalStyles() {
         }
 
         .changelog-section-content {
+            overflow: hidden;
+            max-height: 0;
+            opacity: 0;
+            transform: translateY(-6px);
             padding: 0 0.3rem 0.1rem;
+            transition: max-height 0.3s ease, opacity 0.2s ease, transform 0.3s ease;
         }
 
-        .changelog-modal-section.is-collapsed .changelog-section-content {
-            display: none;
+        .changelog-modal-section.is-expanded .changelog-section-content {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         .changelog-modal-overlay {
@@ -580,9 +586,55 @@ function createModalButton(section, titleText) {
     return button;
 }
 
-function setSectionExpanded(section, expanded) {
+function animateSectionContent(content, expanded, animate) {
+    content.style.overflow = 'hidden';
+
+    if (!animate) {
+        content.style.transition = 'none';
+        content.style.maxHeight = expanded ? 'none' : '0px';
+        content.style.opacity = expanded ? '1' : '0';
+        content.style.transform = expanded ? 'translateY(0)' : 'translateY(-6px)';
+        content.offsetHeight;
+        content.style.transition = '';
+        return;
+    }
+
+    if (expanded) {
+        content.style.maxHeight = '0px';
+        content.style.opacity = '0';
+        content.style.transform = 'translateY(-6px)';
+        content.offsetHeight;
+
+        const targetHeight = content.scrollHeight;
+        content.style.maxHeight = targetHeight + 'px';
+        content.style.opacity = '1';
+        content.style.transform = 'translateY(0)';
+
+        const onExpandEnd = function (event) {
+            if (event.propertyName !== 'max-height') {
+                return;
+            }
+
+            content.style.maxHeight = 'none';
+            content.removeEventListener('transitionend', onExpandEnd);
+        };
+
+        content.addEventListener('transitionend', onExpandEnd);
+        return;
+    }
+
+    const currentHeight = content.scrollHeight;
+    content.style.maxHeight = currentHeight + 'px';
+    content.offsetHeight;
+    content.style.maxHeight = '0px';
+    content.style.opacity = '0';
+    content.style.transform = 'translateY(-6px)';
+}
+
+function setSectionExpanded(section, expanded, animate) {
     const heading = getDirectHeading(section);
     const content = getSectionContent(section);
+    const shouldAnimate = animate !== false;
 
     section.classList.toggle('is-expanded', expanded);
     section.classList.toggle('is-collapsed', !expanded);
@@ -592,7 +644,7 @@ function setSectionExpanded(section, expanded) {
     }
 
     if (content) {
-        content.hidden = !expanded;
+        animateSectionContent(content, expanded, shouldAnimate);
     }
 }
 
