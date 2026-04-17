@@ -169,6 +169,21 @@ class TestRcm2pointsWithMissingValues:
         # Result may have NaN where interpolation failed
         assert np.any(np.isfinite(result))
 
+    def test_numpy_nan_missing_input_not_mutated(
+        self, sample_curvilinear_grid, sample_field_3d, sample_points
+    ):
+        """NaN conversion should not leave caller-owned numpy inputs modified."""
+        lat2d, lon2d = sample_curvilinear_grid
+        lat1d, lon1d = sample_points
+        fi = sample_field_3d.copy()
+        fi[:, 3:5, 4:6] = np.nan
+        original = fi.copy()
+
+        result = rcm2points(lat2d, lon2d, fi, lat1d, lon1d, msg=np.nan)
+
+        assert result.shape == (fi.shape[0], len(lat1d))
+        np.testing.assert_allclose(fi, original, rtol=0.0, atol=0.0, equal_nan=True)
+
     def test_custom_missing_value(
         self, sample_curvilinear_grid, sample_field_3d, sample_points
     ):
@@ -182,6 +197,21 @@ class TestRcm2pointsWithMissingValues:
         result = rcm2points(lat2d, lon2d, fi, lat1d, lon1d, msg=-999.0)
 
         assert result.shape == (fi.shape[0], len(lat1d))
+
+    def test_custom_missing_input_not_mutated(
+        self, sample_curvilinear_grid, sample_field_3d, sample_points
+    ):
+        """Custom missing sentinels should also restore caller-owned input arrays."""
+        lat2d, lon2d = sample_curvilinear_grid
+        lat1d, lon1d = sample_points
+        fi = sample_field_3d.copy()
+        fi[:, 3:5, 4:6] = -999.0
+        original = fi.copy()
+
+        result = rcm2points(lat2d, lon2d, fi, lat1d, lon1d, msg=-999.0)
+
+        assert result.shape == (fi.shape[0], len(lat1d))
+        np.testing.assert_array_equal(fi, original)
 
     def test_multifield_missing_hole_fallback_regression(self):
         """Lock a multi-field missing-hole case that relies on fallback filling."""
