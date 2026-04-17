@@ -12,6 +12,7 @@ import xarray as xr
 
 from skyborn.interp import rcm2rgrid, rgrid2rcm
 from skyborn.interp.errors import ChunkError, CoordinateError
+from skyborn.interp.fortran.rcm2rgrid import drcm2rgrid
 
 
 @pytest.fixture
@@ -188,6 +189,29 @@ class TestRcm2rgridCurvilinearRegression:
         assert actual.shape == (2, 3, 3)
         assert actual[0, 0, 0] == 42.0
         assert actual[1, 0, 0] == 7.0
+
+    def test_exact_curvilinear_short_interior_gaps_are_linearly_filled(self):
+        lat1d = np.arange(5.0, dtype=np.float64)
+        lon1d = np.arange(10.0, 15.0, dtype=np.float64)
+        lat2d, lon2d = np.meshgrid(lat1d, lon1d, indexing="ij")
+
+        expected = np.tile(np.arange(5.0, dtype=np.float64), (5, 1))
+        xmsg = np.float64(-9.96921e36)
+        field = expected.copy()
+        field[2, 1:3] = xmsg
+
+        result = drcm2rgrid(
+            np.transpose(lat2d, (1, 0)),
+            np.transpose(lon2d, (1, 0)),
+            field.T[:, :, None],
+            lat1d,
+            lon1d,
+            xmsg=xmsg,
+            ncrit=4,
+        )
+        actual = np.asarray(result, dtype=np.float64)[:, :, 0].T
+
+        np.testing.assert_allclose(actual, expected, rtol=0.0, atol=0.0)
 
 
 class TestRgrid2rcmBasic:
