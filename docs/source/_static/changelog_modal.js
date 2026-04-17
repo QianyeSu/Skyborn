@@ -114,6 +114,8 @@ function injectChangelogModalStyles() {
         }
 
         .changelog-modal-section {
+            --changelog-fold-duration: 0.42s;
+            --changelog-fold-fade-duration: 0.3s;
             margin: 0 0 1.5rem;
             padding: 0.45rem 1.1rem 1.15rem;
             border-radius: 18px;
@@ -226,23 +228,17 @@ function injectChangelogModalStyles() {
         }
 
         .changelog-section-content {
-            display: grid;
-            grid-template-rows: 0fr;
+            height: 0;
             opacity: 0;
-            transform: translateY(-6px);
+            transform: translate3d(0, -6px, 0);
+            overflow: hidden;
             padding: 0 0.3rem 0.1rem;
-            transition: grid-template-rows 0.28s ease, opacity 0.2s ease, transform 0.28s ease;
+            will-change: height, opacity, transform;
         }
 
         .changelog-section-content-inner {
-            overflow: hidden;
             min-height: 0;
-        }
-
-        .changelog-modal-section.is-expanded .changelog-section-content {
-            grid-template-rows: 1fr;
-            opacity: 1;
-            transform: translateY(0);
+            transform: translateZ(0);
         }
 
         .changelog-modal-overlay {
@@ -599,33 +595,180 @@ function createModalButton(section, titleText) {
     return button;
 }
 
-function setSectionExpanded(section, expanded, animate) {
-    const heading = getDirectHeading(section);
-    const content = getSectionContent(section);
-    const shouldAnimate = animate !== false;
+function parseDurationToMs(value, fallbackMs) {
+    const text = String(value || '').trim();
+    if (!text) {
+        return fallbackMs;
+    }
 
+    if (text.endsWith('ms')) {
+        const msValue = parseFloat(text);
+        return Number.isFinite(msValue) ? msValue : fallbackMs;
+    }
+
+    if (text.endsWith('s')) {
+        const secondsValue = parseFloat(text);
+        return Number.isFinite(secondsValue) ? secondsValue * 1000 : fallbackMs;
+    }
+
+    const numericValue = parseFloat(text);
+    return Number.isFinite(numericValue) ? numericValue : fallbackMs;
+}
+
+function getSectionMotionSetting(section, variableName, fallbackMs) {
+    return parseDurationToMs(
+        getComputedStyle(section).getPropertyValue(variableName),
+        fallbackMs
+    );
+}
+
+function prefersReducedMotion() {
+    return typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function easeOutCubic(progress) {
+    return 1 - Math.pow(1 - progress, 3);
+}
+
+function getTranslateY(element) {
+    const transform = window.getComputedStyle(element).transform;
+    if (!transform || transform === 'none') {
+        return 0;
+    }
+
+    if (typeof DOMMatrixReadOnly !== 'undefined') {
+        try {
+            return new DOMMatrixReadOnly(transform).m42 || 0;
+        } catch (error) {
+            // Fall through to string parsing for older engines.
+        }
+    }
+
+    const matrix3dMatch = transform.match(/^matrix3d\((.+)\)$/);
+    if (matrix3dMatch) {
+        const values = matrix3dMatch[1].split(',').map(Number);
+        return Number.isFinite(values[13]) ? values[13] : 0;
+    }
+
+    const matrixMatch = transform.match(/^matrix\((.+)\)$/);
+    if (matrixMatch) {
+        const values = matrixMatch[1].split(',').map(Number);
+        return Number.isFinite(values[5]) ? values[5] : 0;
+    }
+
+    return 0;
+}
+
+function applySectionState(section, heading, expanded) {
     section.classList.toggle('is-expanded', expanded);
     section.classList.toggle('is-collapsed', !expanded);
 
     if (heading) {
         heading.setAttribute('aria-expanded', expanded ? 'true' : 'false');
     }
+}
+
+function cancelSectionAnimation(content) {
+    if (content._changelogAnimationFrame) {
+        cancelAnimationFrame(content._changelogAnimationFrame);
+        content._changelogAnimationFrame = 0;
+    }
+}
+
+function finalizeSectionContent(content, expanded) {
+    cancelSectionAnimation(content);
+    content.style.height = expanded ? 'auto' : '0px';
+    content.style.opacity = expanded ? '1' : '0';
+    content.style.transform = expanded ? 'translate3d(0, 0, 0)' : 'translate3d(0, -6px, 0)';
+    content.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+    content.style.pointerEvents = expanded ? '' : 'none';
+
+    if ('inert' in content) {
+        content.inert = !expanded;
+    }
+}
+
+function animateSectionContent(section, content, expanded) {
+    const inner = getSectionContentInner(section);
+    if (!inner) {
+        finalizeSectionContent(content, expanded);
+        return;
+    }
+
+    cancelSectionAnimation(content);
+
+    const durationMs = getSectionMotionSetting(section, '--changelog-fold-duration', 420);
+    const fadeDurationMs = getSectionMotionSetting(section, '--changelog-fold-fade-duration', 300);
+    const startHeight = content.getBoundingClientRect().height;
+    const targetHeight = expanded ? inner.scrollHeight : 0;
+    const startOpacity = parseFloat(window.getComputedStyle(content).opacity) || (expanded ? 0 : 1);
+    const endOpacity = expanded ? 1 : 0;
+    const startTranslate = getTranslateY(content);
+    const endTranslate = expanded ? 0 : -6;
+
+    if (Math.abs(targetHeight - startHeight) < 1 &&
+        Math.abs(endOpacity - startOpacity) < 0.01 &&
+        Math.abs(endTranslate - startTranslate) < 0.1) {
+        finalizeSectionContent(content, expanded);
+        return;
+    }
+
+    content.style.height = startHeight + 'px';
+    content.style.opacity = String(startOpacity);
+    content.style.transform = 'translate3d(0, ' + startTranslate.toFixed(2) + 'px, 0)';
+    content.style.pointerEvents = 'none';
+    content.setAttribute('aria-hidden', 'false');
+
+    if ('inert' in content) {
+        content.inert = false;
+    }
+
+    let startTime = 0;
+
+    function frame(timestamp) {
+        if (!startTime) {
+            startTime = timestamp;
+        }
+
+        const elapsed = timestamp - startTime;
+        const sizeProgress = Math.min(elapsed / durationMs, 1);
+        const fadeProgress = Math.min(elapsed / fadeDurationMs, 1);
+        const easedSize = easeOutCubic(sizeProgress);
+        const easedFade = easeOutCubic(fadeProgress);
+        const currentHeight = startHeight + ((targetHeight - startHeight) * easedSize);
+        const currentOpacity = startOpacity + ((endOpacity - startOpacity) * easedFade);
+        const currentTranslate = startTranslate + ((endTranslate - startTranslate) * easedSize);
+
+        content.style.height = currentHeight.toFixed(2) + 'px';
+        content.style.opacity = currentOpacity.toFixed(3);
+        content.style.transform = 'translate3d(0, ' + currentTranslate.toFixed(2) + 'px, 0)';
+
+        if (sizeProgress < 1 || fadeProgress < 1) {
+            content._changelogAnimationFrame = requestAnimationFrame(frame);
+            return;
+        }
+
+        finalizeSectionContent(content, expanded);
+    }
+
+    content._changelogAnimationFrame = requestAnimationFrame(frame);
+}
+
+function setSectionExpanded(section, expanded, animate) {
+    const heading = getDirectHeading(section);
+    const content = getSectionContent(section);
+    const shouldAnimate = animate !== false;
+
+    applySectionState(section, heading, expanded);
 
     if (content) {
-        if (!shouldAnimate) {
-            content.style.transition = 'none';
+        if (!shouldAnimate || prefersReducedMotion()) {
+            finalizeSectionContent(content, expanded);
+            return;
         }
 
-        content.setAttribute('aria-hidden', expanded ? 'false' : 'true');
-
-        if ('inert' in content) {
-            content.inert = !expanded;
-        }
-
-        if (!shouldAnimate) {
-            content.offsetHeight;
-            content.style.transition = '';
-        }
+        animateSectionContent(section, content, expanded);
     }
 }
 
