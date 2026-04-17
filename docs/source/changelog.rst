@@ -57,6 +57,9 @@ Interpolation
   Fortran ``rcm2rgrid.f90`` implementation and added a monotonic curvilinear
   fast path for common regional and ocean-grid subsets while preserving the
   public ``drcm2rgrid`` and ``drgrid2rcm`` entry points.
+* Added NCL-style quick-reference comments to ``rcm2rgrid.f90`` and
+  ``rcm_geodesy.f90`` so the modern Fortran entry points now document their
+  expected input shapes, units, flags, and outputs directly in the source.
 * Reduced duplicate Fortran compilation in ``src/skyborn/interp/meson.build``
   by extracting shared ``rcm2rgrid`` / ``rcm2points`` support code into a
   reusable static library instead of compiling the same helper sources into
@@ -70,6 +73,17 @@ Interpolation
   measured about ``16x`` speedup for a single-field plot-like case and about
   ``20x`` speedup for a three-field batch case with identical results on the
   tested subset.
+* Re-validated the modern ``rcm2rgrid`` kernel on the user's real POP
+  ``TEMP`` dataset across multiple rectilinear target sizes from ``48x48`` to
+  ``120x120`` using the same missing-value conversion as the public Python
+  wrapper. The retained old binary and the modern build-dir binary matched with
+  ``max_abs = 0`` across the tested cases, while the new kernel delivered about
+  ``8.6x`` to ``21.9x`` speedups depending on target size.
+* Verified that ``skyborn.interp.rcm2rgrid`` keeps the Python-layer API stable:
+  the xarray wrapper still returns the requested 1D ``nlat`` / ``nlon``
+  coordinates exactly, preserves compatible non-spatial coordinates such as
+  ``z_t``, and drops incompatible 2D auxiliary source-grid coordinates such as
+  ``TLAT`` / ``TLONG`` after remapping.
 * Added focused regression coverage for the new Fortran dispatch, C-order
   fallback guards, and Python remap / extrapolation fallback branches in
   ``skyborn.interp.interpolation``.
