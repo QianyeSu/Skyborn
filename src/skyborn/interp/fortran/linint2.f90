@@ -250,46 +250,51 @@ subroutine dlin2int1(nin, xi, fi, nout, xo, fo, xmsg, iflag)
     integer :: nin, nout, iflag
     double precision :: xi(nin), fi(nin), xo(nout), fo(nout), xmsg
 
-    integer :: ni, no, nistrt, nis
+    integer :: ni, no
     double precision :: slope
 
     fo = xmsg
 
-    ! Exact-match pass first, keeping the historical progressive start index.
-    nistrt = 1
-    nis = nistrt
-    do no = 1, nout
-        do ni = nistrt, nin
+    if (iflag == 1) then
+        ! Both xi and xo are monotonic here, so a single forward sweep
+        ! preserves the legacy interval/equality semantics without
+        ! restarting the search for every output point.
+        ni = 1
+        do no = 1, nout
+            do while (ni < nin - 1 .and. xo(no) > xi(ni + 1))
+                ni = ni + 1
+            end do
+
             if (xo(no) == xi(ni)) then
                 fo(no) = fi(ni)
-                nis = ni + 1
-                exit
+            else if (xo(no) == xi(ni + 1)) then
+                fo(no) = fi(ni + 1)
+            else if (xo(no) > xi(ni) .and. xo(no) < xi(ni + 1)) then
+                if (fi(ni) /= xmsg .and. fi(ni + 1) /= xmsg) then
+                    slope = (fi(ni + 1) - fi(ni)) / (xi(ni + 1) - xi(ni))
+                    fo(no) = fi(ni) + slope * (xo(no) - xi(ni))
+                end if
             end if
         end do
-        nistrt = nis
-    end do
-
-    if (iflag == 1) then
-        do no = 1, nout
-            do ni = 1, nin - 1
-                if (xo(no) > xi(ni) .and. xo(no) < xi(ni + 1)) then
-                    if (fi(ni) /= xmsg .and. fi(ni + 1) /= xmsg) then
-                        slope = (fi(ni + 1) - fi(ni)) / (xi(ni + 1) - xi(ni))
-                        fo(no) = fi(ni) + slope * (xo(no) - xi(ni))
-                    end if
-                end if
-            end do
-        end do
     else if (iflag == -1) then
+        ! Descending coordinates keep the same semantics with the mirrored
+        ! progressive sweep.
+        ni = 1
         do no = 1, nout
-            do ni = 1, nin - 1
-                if (xo(no) < xi(ni) .and. xo(no) > xi(ni + 1)) then
-                    if (fi(ni) /= xmsg .and. fi(ni + 1) /= xmsg) then
-                        slope = (fi(ni + 1) - fi(ni)) / (xi(ni + 1) - xi(ni))
-                        fo(no) = fi(ni) + slope * (xo(no) - xi(ni))
-                    end if
-                end if
+            do while (ni < nin - 1 .and. xo(no) < xi(ni + 1))
+                ni = ni + 1
             end do
+
+            if (xo(no) == xi(ni)) then
+                fo(no) = fi(ni)
+            else if (xo(no) == xi(ni + 1)) then
+                fo(no) = fi(ni + 1)
+            else if (xo(no) < xi(ni) .and. xo(no) > xi(ni + 1)) then
+                if (fi(ni) /= xmsg .and. fi(ni + 1) /= xmsg) then
+                    slope = (fi(ni + 1) - fi(ni)) / (xi(ni + 1) - xi(ni))
+                    fo(no) = fi(ni) + slope * (xo(no) - xi(ni))
+                end if
+            end if
         end do
     end if
 end subroutine dlin2int1
@@ -457,27 +462,44 @@ subroutine dlint2xy(nxi, xi, nyi, yi, fi, nxyo, xo, yo, fo, xmsg, nopt, ier)
     double precision :: xi(nxi), yi(nyi), fi(nxi, nyi), xmsg
     double precision :: xo(nxyo), yo(nxyo), fo(nxyo)
 
-    integer :: n, m, nxy, nn, mm
+    integer :: nxy, nn, mm, lo, hi, mid
     double precision :: tmp1, tmp2, slpx, slpy
 
     do nxy = 1, nxyo
         fo(nxy) = xmsg
 
         nn = 0
-        do n = 1, nxi - 1
-            if (xo(nxy) >= xi(n) .and. xo(nxy) < xi(n + 1)) then
-                nn = n
-                exit
-            end if
-        end do
+        if (xo(nxy) >= xi(1) .and. xo(nxy) < xi(nxi)) then
+            ! Preserve the historical half-open cell rule xi(lo) <= x < xi(lo+1)
+            ! while locating the bracket in logarithmic time.
+            lo = 1
+            hi = nxi
+            do while (hi - lo > 1)
+                mid = (lo + hi) / 2
+                if (xi(mid) <= xo(nxy)) then
+                    lo = mid
+                else
+                    hi = mid
+                end if
+            end do
+            nn = lo
+        end if
 
         mm = 0
-        do m = 1, nyi - 1
-            if (yo(nxy) >= yi(m) .and. yo(nxy) < yi(m + 1)) then
-                mm = m
-                exit
-            end if
-        end do
+        if (yo(nxy) >= yi(1) .and. yo(nxy) < yi(nyi)) then
+            ! Match the same half-open bracketing on the y axis.
+            lo = 1
+            hi = nyi
+            do while (hi - lo > 1)
+                mid = (lo + hi) / 2
+                if (yi(mid) <= yo(nxy)) then
+                    lo = mid
+                else
+                    hi = mid
+                end if
+            end do
+            mm = lo
+        end if
 
         if (nn /= 0 .and. mm /= 0) then
             if (xo(nxy) == xi(nn) .and. yo(nxy) == yi(mm)) then
