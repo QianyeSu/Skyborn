@@ -1,19 +1,9 @@
 module rcm2rgrid_kernels_core
     use rcm_geodesy_core, only : dgcdist_core
+    use linmsg_core, only : dlinmsg_interior_short_gaps
     implicit none
 
     integer, parameter :: real64 = selected_real_kind(15, 307)
-
-    interface
-        subroutine dlinmsg(x, npts, xmsg, mflag, mptcrt)
-            import :: real64
-            integer, intent(in) :: npts
-            integer, intent(in) :: mflag
-            integer, intent(in) :: mptcrt
-            real(real64), intent(inout) :: x(npts)
-            real(real64), intent(in) :: xmsg
-        end subroutine dlinmsg
-    end interface
 contains
 
     ! Check whether a 1-D coordinate is strictly increasing so the caller can
@@ -303,19 +293,18 @@ contains
         end do
     end subroutine interpolate_curv_cell
 
-    ! Fill unresolved holes along each output row using the same linear-missing
-    ! helper as the original kernel family.
+    ! Fill unresolved holes along each output row using the same semantics as
+    ! DLINMSG(..., MFLAG=0, MPTCRT=2), but with a dedicated short-gap kernel
+    ! because this cleanup pass only needs to patch interior runs of length
+    ! one or two.
     subroutine fill_missing_rows(fo, xmsg)
         real(real64), intent(inout) :: fo(:, :, :)
         real(real64), intent(in) :: xmsg
         integer :: ng, ny
-        integer, parameter :: mflag = 0, mptcrt = 2
 
         do ng = 1, size(fo, 3)
             do ny = 1, size(fo, 2)
-                if (any(fo(:, ny, ng) == xmsg)) then
-                    call dlinmsg(fo(:, ny, ng), size(fo, 1), xmsg, mflag, mptcrt)
-                end if
+                call dlinmsg_interior_short_gaps(fo(:, ny, ng), size(fo, 1), xmsg)
             end do
         end do
     end subroutine fill_missing_rows
