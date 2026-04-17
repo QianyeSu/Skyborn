@@ -183,6 +183,38 @@ class TestRcm2pointsWithMissingValues:
 
         assert result.shape == (fi.shape[0], len(lat1d))
 
+    def test_multifield_missing_hole_fallback_regression(self):
+        """Lock a multi-field missing-hole case that relies on fallback filling."""
+        nlat = 8
+        nlon = 9
+        ngrd = 3
+        lat_base = np.linspace(30.0, 44.0, nlat, dtype=np.float64)
+        lon_base = np.linspace(100.0, 116.0, nlon, dtype=np.float64)
+        lon2d, lat2d = np.meshgrid(lon_base, lat_base)
+        lat2d = lat2d + 0.12 * np.sin(np.deg2rad(lon2d * 1.5))
+        lon2d = lon2d + 0.18 * np.cos(np.deg2rad(lat2d * 2.5))
+
+        base = lat2d * 0.25 + lon2d * 0.05
+        fi = np.stack([base + k * 1.5 for k in range(ngrd)], axis=0)
+        fi[:, 2:6, 3:7] = np.nan
+
+        lat1d = np.array([33.4, 35.2, 36.8, 39.1, 40.3], dtype=np.float64)
+        lon1d = np.array([105.3, 107.4, 108.9, 110.6, 111.8], dtype=np.float64)
+
+        result = rcm2points(lat2d, lon2d, fi, lat1d, lon1d, msg=np.nan)
+        expected = np.array(
+            [
+                [13.46861732, 14.02438852, 14.32091024, 15.67710750, 16.06672647],
+                [14.96861732, 15.52438852, 15.82091024, 17.17710750, 17.56672647],
+                [16.46861732, 17.02438852, 17.32091024, 18.67710750, 19.06672647],
+            ],
+            dtype=np.float64,
+        )
+
+        np.testing.assert_allclose(
+            np.asarray(result, dtype=np.float64), expected, rtol=0.0, atol=1e-12
+        )
+
 
 class TestRcm2pointsValidation:
     """Test input validation."""
