@@ -96,6 +96,26 @@ Interpolation
   ``triple2grid`` interpolation kernels to free-form Fortran ``.f90`` sources,
   retained the public entry point names, and archived the historical fixed-form
   sources under ``src/skyborn/interp/fortran/archive/`` for reference.
+* Optimized the modernized ``rcm2points.f90`` kernel by adding a monotonic
+  curvilinear local-cell fast path with a full-grid fallback, then further
+  pruned the exact-hit scan using per-row latitude spans and per-column
+  longitude spans before the retained exact equality checks. Direct old/new
+  kernel checks stayed exactly equal on representative no-missing,
+  missing-hole, and exact-hit missing-value cases (``max_abs=0``), and fresh
+  process median timings improved from about ``0.00780 s`` to ``0.00091 s``
+  on a 4-field no-missing batch, from ``0.00869 s`` to ``0.00199 s`` on a
+  16-field no-missing batch, and from ``0.958 s`` to ``0.131 s`` on a 4-field
+  missing-hole batch.
+* Restored the historical ``rcm2points`` exact-hit missing-value behavior for
+  ``opt=0/1``: if an output point lands exactly on a missing source-grid point,
+  unresolved fields now continue through the same local-cell interpolation step
+  used by the original F77 kernel before the broader radius fallback. Added a
+  focused regression test that locks the retained legacy result.
+* Expanded ``skyborn.interp.rcm2points`` test coverage to exercise the
+  internal default-missing-value helper branches and the integer fast path that
+  skips Python-to-Fortran missing-value conversion when the dtype already uses
+  the native sentinel contract. Focused coverage for ``rcm2points.py`` is now
+  ``100%`` on the targeted test run.
 * Modernized the shared interpolation support source ``linint2`` to
   free-form ``linint2.f90`` and archived the historical fixed-form source as
   ``src/skyborn/interp/fortran/archive/linint2.f`` while keeping the legacy
