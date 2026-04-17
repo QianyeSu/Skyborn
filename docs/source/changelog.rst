@@ -23,9 +23,16 @@ Interpolation
   ``skyborn.interp.interp_hybrid_to_pressure`` and preserved legacy F77
   numerical behavior for the validated node-oriented interpolation and ECMWF
   below-ground extrapolation paths.
+* Added a modern Fortran backend for
+  ``skyborn.interp.interp_sigma_to_hybrid`` so eager monotonic sigma-coordinate
+  remapping no longer has to loop through columns in Python.
 * Accelerated the eager in-memory hybrid-to-pressure workflow by adding
   reusable output-buffer wrappers and a dedicated C-order NumPy path that
   avoids the old Python-side transpose/packing overhead.
+* Accelerated eager sigma-to-hybrid remapping further with a dedicated
+  C-order NumPy path that computes the target hybrid-implied sigma values
+  inside the Fortran kernel instead of materializing a full target-sigma
+  volume in Python.
 * Reduced the eager hybrid-to-pressure workflow peak working-memory overhead
   substantially relative to the Python / MetPy remap path by reusing output
   buffers and removing unnecessary intermediate array copies.
