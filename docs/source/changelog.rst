@@ -19,11 +19,13 @@ Troposphere
 
 Interpolation
 
-* Added a modern Fortran ``vinth2p`` backend for
+* Enhanced model-level interpolation in
+  ``skyborn.interp.interpolation``.
+* Added a modern Fortran ``vinth2p`` kernels module for
   ``skyborn.interp.interp_hybrid_to_pressure`` and preserved legacy F77
   numerical behavior for the validated node-oriented interpolation and ECMWF
   below-ground extrapolation paths.
-* Added a modern Fortran backend for
+* Added a modern Fortran kernels path for
   ``skyborn.interp.interp_sigma_to_hybrid`` so eager monotonic sigma-coordinate
   remapping no longer has to loop through columns in Python.
 * Accelerated the eager in-memory hybrid-to-pressure workflow by adding
@@ -36,6 +38,21 @@ Interpolation
 * Reduced the eager hybrid-to-pressure workflow peak working-memory overhead
   substantially relative to the Python / MetPy remap path by reusing output
   buffers and removing unnecessary intermediate array copies.
+* Improved ``skyborn.interp.interp_hybrid_to_pressure`` so hybrid-sigma to
+  pressure remapping now chooses a more suitable execution path for ordinary
+  in-memory arrays and Dask-backed arrays instead of always forcing the older
+  chunked workaround.
+* Added public hybrid-level diagnostics:
+
+  - ``skyborn.interp.pressure_at_hybrid_levels``
+  - ``skyborn.interp.delta_pressure_hybrid``
+
+* Improved below-ground temperature extrapolation support in the hybrid-level
+  interpolation workflow while keeping compatibility with the older Skyborn
+  helper calling pattern.
+* Renamed the internal compiled ``vinth2p`` acceleration module from
+  ``vinth2p_backend`` to ``vinth2p_kernels`` so the import name describes the
+  exported computation kernels rather than an implementation suffix.
 * Added focused regression coverage for the new Fortran dispatch, C-order
   fallback guards, and Python remap / extrapolation fallback branches in
   ``skyborn.interp.interpolation``.
@@ -51,23 +68,6 @@ Scatter Stippling
   ``placement="cells"`` and default ``placement="auto"`` path now also
   supports true curvilinear 2D ``x/y`` grids when cell geometry can be
   inferred from the provided center coordinates.
-
-Interpolation
-
-* Enhanced model-level interpolation in
-  ``skyborn.interp.interpolation``.
-* Improved ``skyborn.interp.interp_hybrid_to_pressure`` so hybrid-sigma to
-  pressure remapping now chooses a more suitable execution path for ordinary
-  in-memory arrays and Dask-backed arrays instead of always forcing the older
-  chunked workaround.
-* Added public hybrid-level diagnostics:
-
-  - ``skyborn.interp.pressure_at_hybrid_levels``
-  - ``skyborn.interp.delta_pressure_hybrid``
-
-* Improved below-ground temperature extrapolation support in the hybrid-level
-  interpolation workflow while keeping compatibility with the older Skyborn
-  helper calling pattern.
 
 Version 0.3.19 (Current)
 ------------------------
