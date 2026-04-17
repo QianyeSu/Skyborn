@@ -4,6 +4,10 @@ module rcm_geodesy_core
     integer, parameter :: real64 = selected_real_kind(15, 307)
 contains
 
+    ! Compute the great-circle separation between two latitude/longitude
+    ! points using the same spherical-Earth arithmetic as the historical
+    ! fixed-form kernels. The unit selector matches the original interface:
+    ! 1=radians, 2=degrees, 3=meters, 4=kilometers.
     real(real64) function dgcdist_core(rlat1, rlon1, rlat2, rlon2, iu) result(distance)
         real(real64), intent(in) :: rlat1, rlon1, rlat2, rlon2
         integer, intent(in) :: iu
@@ -33,6 +37,22 @@ contains
 end module rcm_geodesy_core
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    PUBLIC F2PY-FRIENDLY ENTRY POINT FOR GREAT-CIRCLE DISTANCE ON THE
+!    SAME SPHERICAL EARTH USED BY THE LEGACY RCM INTERPOLATION KERNELS.
+!
+! INPUTS
+!    RLAT1, RLON1 - FIRST POINT IN DEGREES
+!    RLAT2, RLON2 - SECOND POINT IN DEGREES
+!    IU           - OUTPUT UNIT SELECTOR
+!                   1: RADIANS
+!                   2: DEGREES
+!                   3: METERS
+!                   4: KILOMETERS
+!
+! OUTPUT
+!    DGCDIST RETURNS THE ARC DISTANCE BETWEEN THE TWO INPUT POINTS.
 real(real64) function dgcdist(rlat1, rlon1, rlat2, rlon2, iu)
     use rcm_geodesy_core, only : real64, dgcdist_core
     implicit none
