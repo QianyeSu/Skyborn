@@ -24,6 +24,7 @@
 !    GRID(MX, NY) HOLDS THE NEAREST-POINT RESULT.
 !    IER=0 ON SUCCESS.
 !    IER=-1 / -11 WHEN ONLY THE EXACT-MATCH PREPASS WAS NEEDED.
+
 subroutine triple2grid1(kz, xi, yi, zi, zmsg, mx, ny, gx, gy, grid, domain, loop, method, distmx, mx2, ny2, &
                         x, y, z, gbigx, gbigy, gbigxy, ier)
     implicit none
@@ -173,31 +174,40 @@ subroutine trip2grd2(kz, x, y, z, zmsg, mx, ny, gxout, gyout, gout, mflag, nflag
     dx = abs(gxout(3) - gxout(2))
     dy = abs(gyout(3) - gyout(2))
 
-    do n = 1, ny
-        do m = 1, mx
-            dout(m, n) = 1.0d20
-            gout(m, n) = zmsg
-        end do
-    end do
+    dout = 1.0d20
+    gout = zmsg
 
     ! First preserve exact observation-to-grid-point matches.
     ksum = 0
     do k = 1, kpts
-        found_exact = .false.
-        do n = 1, ny
-            if (y(k) == gyout(n)) then
-                do m = 1, mx
-                    if (x(k) == gxout(m)) then
-                        gout(m, n) = z(k)
-                        dout(m, n) = 0.0d0
-                        ksum = ksum + 1
-                        found_exact = .true.
-                        exit
-                    end if
-                end do
-                if (found_exact) exit
+        if (mflag == 1 .and. nflag == 1) then
+            mm = nint((x(k) - gxout(1)) / dx) + 1
+            nn = nint((y(k) - gyout(1)) / dy) + 1
+            if (mm < 1 .or. mm > mx .or. x(k) /= gxout(mm)) mm = -1
+            if (nn < 1 .or. nn > ny .or. y(k) /= gyout(nn)) nn = -1
+            if (mm >= 1 .and. nn >= 1) then
+                gout(mm, nn) = z(k)
+                dout(mm, nn) = 0.0d0
+                ksum = ksum + 1
+                cycle
             end if
-        end do
+        else
+            found_exact = .false.
+            do n = 1, ny
+                if (y(k) == gyout(n)) then
+                    do m = 1, mx
+                        if (x(k) == gxout(m)) then
+                            gout(m, n) = z(k)
+                            dout(m, n) = 0.0d0
+                            ksum = ksum + 1
+                            found_exact = .true.
+                            exit
+                        end if
+                    end do
+                    if (found_exact) exit
+                end if
+            end do
+        end if
     end do
 
     if (ksum == kpts) then
@@ -279,39 +289,50 @@ subroutine trip2grd3(kz, x, y, z, zmsg, mx, ny, gxout, gyout, gout, mflag, nflag
 
     integer, intent(in) :: mx, ny, kz, mflag, nflag, method
     integer, intent(out) :: ier
-    integer :: m, n, k, ksum, kpts
+    integer :: m, n, k, ksum, kpts, mm, nn
     double precision, intent(in) :: gxout(mx), gyout(ny), x(kz), y(kz), z(kz), zmsg, ddcrit
     double precision, intent(out) :: gout(mx, ny)
-    double precision :: dout(mx, ny), dist(kz), re, rad, rlat, atmp
+    double precision :: dout(mx, ny), dist(kz), re, rad, rlat, atmp, dx, dy
     logical :: found_exact
 
     ier = 0
     kpts = kz
+    dx = abs(gxout(3) - gxout(2))
+    dy = abs(gyout(3) - gyout(2))
 
-    do n = 1, ny
-        do m = 1, mx
-            dout(m, n) = 1.0d20
-            gout(m, n) = zmsg
-        end do
-    end do
+    dout = 1.0d20
+    gout = zmsg
 
     ksum = 0
     do k = 1, kpts
-        found_exact = .false.
-        do n = 1, ny
-            if (y(k) == gyout(n)) then
-                do m = 1, mx
-                    if (x(k) == gxout(m)) then
-                        gout(m, n) = z(k)
-                        dout(m, n) = 0.0d0
-                        ksum = ksum + 1
-                        found_exact = .true.
-                        exit
-                    end if
-                end do
-                if (found_exact) exit
+        if (mflag == 1 .and. nflag == 1) then
+            mm = nint((x(k) - gxout(1)) / dx) + 1
+            nn = nint((y(k) - gyout(1)) / dy) + 1
+            if (mm < 1 .or. mm > mx .or. x(k) /= gxout(mm)) mm = -1
+            if (nn < 1 .or. nn > ny .or. y(k) /= gyout(nn)) nn = -1
+            if (mm >= 1 .and. nn >= 1) then
+                gout(mm, nn) = z(k)
+                dout(mm, nn) = 0.0d0
+                ksum = ksum + 1
+                cycle
             end if
-        end do
+        else
+            found_exact = .false.
+            do n = 1, ny
+                if (y(k) == gyout(n)) then
+                    do m = 1, mx
+                        if (x(k) == gxout(m)) then
+                            gout(m, n) = z(k)
+                            dout(m, n) = 0.0d0
+                            ksum = ksum + 1
+                            found_exact = .true.
+                            exit
+                        end if
+                    end do
+                    if (found_exact) exit
+                end if
+            end do
+        end if
     end do
 
     if (ksum == kpts) then
