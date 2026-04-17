@@ -210,20 +210,19 @@ contains
     end subroutine find_curv_cell_full
 
     ! Interpolate one output point from the four corners of a curvilinear cell.
-    ! When all corners are present the kernel uses inverse-distance-squared
-    ! weights on the spherical distances; exact hits short-circuit immediately.
+    ! The output vector is updated only where it still holds xmsg so an earlier
+    ! exact-match pass can preserve non-missing fields while letting missing
+    ! fields fall through to interpolation, matching the historical kernel.
     subroutine interpolate_curv_cell(fi, xi, yi, xo, yo, ix, iy, k, xmsg, ncrit, out)
         real(real64), intent(in) :: fi(:, :, :)
         real(real64), intent(in) :: xi(:, :)
         real(real64), intent(in) :: yi(:, :)
         real(real64), intent(in) :: xo, yo, xmsg
         integer, intent(in) :: ix, iy, k, ncrit
-        real(real64), intent(out) :: out(size(fi, 3))
+        real(real64), intent(inout) :: out(size(fi, 3))
         real(real64) :: fw(2, 2), weights(2, 2), sumf, sumw
         real(real64) :: dist11, dist21, dist12, dist22
         integer :: ng, m, n, nw
-
-        out = xmsg
 
         dist11 = dgcdist_core(yo, xo, yi(ix, iy), xi(ix, iy), 2)
         dist21 = dgcdist_core(yo, xo, yi(ix + k, iy), xi(ix + k, iy), 2)
@@ -236,6 +235,8 @@ contains
         weights(2, 2) = merge(huge(1.0_real64), (1.0_real64 / dist22) ** 2, dist22 == 0.0_real64)
 
         do ng = 1, size(fi, 3)
+            if (out(ng) /= xmsg) cycle
+
             fw(1, 1) = fi(ix, iy, ng)
             fw(2, 1) = fi(ix + k, iy, ng)
             fw(1, 2) = fi(ix, iy + k, ng)
@@ -482,7 +483,7 @@ subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, nc
     integer :: x_anchor(nxo), y_anchor(nyo)
     real(real64) :: x_ref(nxi), y_ref(nyi)
     real(real64), parameter :: eps = 1.0e-4_real64
-    logical :: found, use_fast_path
+    logical :: exact_found, found, use_fast_path
 
     ier = 0
     if (nxi <= 1 .or. nyi <= 1 .or. nxo <= 1 .or. nyo <= 1) then
@@ -513,30 +514,33 @@ subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, nc
         y_anchor = 1
     end if
 
-    do ny = 1, nyo
+        do ny = 1, nyo
         do nx = 1, nxo
-            found = .false.
+            exact_found = .false.
             if (use_fast_path) then
                 call find_exact_curv_local(xi, yi, xo(nx), yo(ny), eps, x_anchor(nx), y_anchor(ny), k, &
-                                           found, ix_hit, iy_hit)
+                                           exact_found, ix_hit, iy_hit)
             end if
 
-            if (found) then
+            if (exact_found) then
                 fo(nx, ny, :) = fi(ix_hit, iy_hit, :)
-                cycle
+                if (all(fo(nx, ny, :) /= xmsg)) cycle
             end if
 
+            found = .false.
             if (use_fast_path) then
                 call find_curv_cell_local(xi, yi, xo(nx), yo(ny), x_anchor(nx), y_anchor(ny), k, &
                                           found, ix_hit, iy_hit)
             end if
 
             if (.not. found) then
-                call find_exact_curv_full(xi, yi, xo(nx), yo(ny), eps, found, ix_hit, iy_hit)
-                if (found) then
+                exact_found = .false.
+                call find_exact_curv_full(xi, yi, xo(nx), yo(ny), eps, exact_found, ix_hit, iy_hit)
+                if (exact_found) then
                     fo(nx, ny, :) = fi(ix_hit, iy_hit, :)
-                    cycle
+                    if (all(fo(nx, ny, :) /= xmsg)) cycle
                 end if
+
                 call find_curv_cell_full(xi, yi, xo(nx), yo(ny), k, found, ix_hit, iy_hit)
             end if
 
