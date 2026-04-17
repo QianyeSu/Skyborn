@@ -173,6 +173,46 @@ class TestTripleToGridBasic:
             np.sort(grid_arr.ravel()), np.sort(da.values.ravel())
         )
 
+    def test_numpy_nan_missing_input_not_mutated(self, small_rect_grid):
+        x_out, y_out, da = small_rect_grid
+        X, Y = np.meshgrid(x_out, y_out, indexing="xy")
+        x_in = X.ravel()
+        y_in = Y.ravel()
+        z = da.values.ravel().copy()
+        z[3] = np.nan
+        original = z.copy()
+
+        grid = triple_to_grid(
+            z, x_in=x_in, y_in=y_in, x_out=x_out, y_out=y_out, method=1, domain=1.0
+        )
+
+        assert isinstance(grid, np.ndarray)
+        np.testing.assert_allclose(z, original, rtol=0.0, atol=0.0, equal_nan=True)
+
+    def test_numpy_custom_missing_input_not_mutated(self, small_rect_grid):
+        x_out, y_out, da = small_rect_grid
+        X, Y = np.meshgrid(x_out, y_out, indexing="xy")
+        x_in = X.ravel()
+        y_in = Y.ravel()
+        msg = np.float64(-9999.0)
+        z = da.values.ravel().copy()
+        z[5] = msg
+        original = z.copy()
+
+        grid = triple_to_grid(
+            z,
+            x_in=x_in,
+            y_in=y_in,
+            x_out=x_out,
+            y_out=y_out,
+            method=1,
+            domain=1.0,
+            missing_value=msg,
+        )
+
+        assert isinstance(grid, np.ndarray)
+        np.testing.assert_array_equal(z, original)
+
     def test_ndim_check_after_len_equality(self, small_rect_grid):
         """Craft x_in as 2D with shape (N,1) so length equality passes but ndim>1 triggers."""
         x_out, y_out, da = small_rect_grid
@@ -402,6 +442,18 @@ class TestGridToTripleValidation:
 
 class TestTripleToGridDaskPath:
     """Exercise the dask chunked input branch for triple_to_grid."""
+
+    def test_non_chunked_xarray_path_returns_materialized_array(self, small_rect_grid):
+        x_out, y_out, da = small_rect_grid
+        X, Y = np.meshgrid(x_out, y_out, indexing="xy")
+        x_in = X.ravel()
+        y_in = Y.ravel()
+        data_da = xr.DataArray(da.values.ravel(), dims=("points",))
+
+        grid = triple_to_grid(data_da, x_in, y_in, x_out, y_out, method=1)
+
+        assert isinstance(grid, xr.DataArray)
+        assert not hasattr(grid.data, "chunks")
 
     def test_chunked_ok_path_returns_xarray(self, small_rect_grid):
         x_out, y_out, da = small_rect_grid
