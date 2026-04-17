@@ -813,6 +813,186 @@ class TestInterpolationEdgeCases:
         assert result.shape == (1, 2, 2)  # time, hlev, spatial
         assert np.all(np.isfinite(result.values))
 
+    def test_sigma_to_hybrid_fortran_path_prefers_preallocated_backend(
+        self, monkeypatch
+    ):
+        """Sigma-to-hybrid should use the in-place backend when it is available."""
+        data = xr.DataArray(
+            np.array(
+                [[[250.0, 260.0], [270.0, 280.0], [290.0, 300.0]]],
+                dtype=np.float64,
+            ),
+            dims=["time", "sigma", "spatial"],
+            coords={"time": [0], "sigma": [0.2, 0.6, 1.0], "spatial": [0, 1]},
+        )
+        sig_coords = xr.DataArray([0.2, 0.6, 1.0], dims=["sigma"])
+        ps = xr.DataArray([[101325.0, 100000.0]], dims=["time", "spatial"])
+        hya = xr.DataArray([0.0, 0.5], dims=["hlev"])
+        hyb = xr.DataArray([1.0, 0.0], dims=["hlev"])
+
+        captured = {}
+
+        def fake_sigma_into(
+            dati, dato, sigmai, sigmao, intyp, spvl, *shape_args, **shape_kwargs
+        ):
+            captured["dati_shape"] = dati.shape
+            captured["dato_shape"] = dato.shape
+            captured["sigmai_shape"] = sigmai.shape
+            captured["sigmao_shape"] = sigmao.shape
+            captured["shape_args"] = shape_args
+            captured["shape_kwargs"] = shape_kwargs
+            dato[:, :] = 77.0
+
+        def fail_sigma_return(*args, **kwargs):
+            raise AssertionError("return-allocating sigma backend should not be used")
+
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes_corder_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dsigma2hybrid_nodes_into", fake_sigma_into
+        )
+        monkeypatch.setattr(
+            interpolation_mod, "_dsigma2hybrid_nodes", fail_sigma_return
+        )
+
+        result = interp_sigma_to_hybrid(
+            data=data,
+            sig_coords=sig_coords,
+            ps=ps,
+            hyam=hya,
+            hybm=hyb,
+            lev_dim="sigma",
+            method="linear",
+        )
+
+        assert captured["dati_shape"] == (3, 2)
+        assert captured["dato_shape"] == (2, 2)
+        assert captured["sigmai_shape"] == (3,)
+        assert captured["sigmao_shape"] == (2, 2)
+        assert captured["shape_args"] == (2,)
+        assert captured["shape_kwargs"] == {"nlevi": 3, "ncol": 2}
+        assert result.shape == (1, 2, 2)
+        assert_array_equal(result.values, np.full((1, 2, 2), 77.0))
+
+    def test_sigma_to_hybrid_fortran_corder_fast_path(self, monkeypatch):
+        """Aligned C-order sigma input should use the flat backend path."""
+        data = xr.DataArray(
+            np.array(
+                [[[250.0, 260.0], [270.0, 280.0], [290.0, 300.0]]],
+                dtype=np.float64,
+                order="C",
+            ),
+            dims=["time", "sigma", "spatial"],
+            coords={"time": [0], "sigma": [0.2, 0.6, 1.0], "spatial": [0, 1]},
+        )
+        sig_coords = xr.DataArray([0.2, 0.6, 1.0], dims=["sigma"])
+        ps = xr.DataArray(
+            np.array([[101325.0, 100000.0]], dtype=np.float64),
+            dims=["time", "spatial"],
+        )
+        hya = xr.DataArray([0.0, 0.5], dims=["hlev"])
+        hyb = xr.DataArray([1.0, 0.0], dims=["hlev"])
+
+        captured = {}
+
+        def fake_sigma_corder_into(
+            dati_flat,
+            dato_flat,
+            sigmai,
+            hyam_vals,
+            hybm_vals,
+            p0,
+            psfc,
+            intyp,
+            spvl,
+            nouter,
+            ninner,
+            nlevo,
+            **shape_kwargs,
+        ):
+            captured["dati_shape"] = dati_flat.shape
+            captured["dato_shape"] = dato_flat.shape
+            captured["psfc_shape"] = psfc.shape
+            captured["shape_kwargs"] = shape_kwargs
+            captured["shape_args"] = (nouter, ninner, nlevo)
+            dato_flat[:] = 66.0
+
+        def fail_generic_sigma(*args, **kwargs):
+            raise AssertionError("generic sigma backend should not be used")
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dsigma2hybrid_nodes_corder_into",
+            fake_sigma_corder_into,
+        )
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dsigma2hybrid_nodes", fail_generic_sigma
+        )
+
+        result = interp_sigma_to_hybrid(
+            data=data,
+            sig_coords=sig_coords,
+            ps=ps,
+            hyam=hya,
+            hybm=hyb,
+            lev_dim="sigma",
+            method="linear",
+        )
+
+        assert captured["dati_shape"] == (6,)
+        assert captured["dato_shape"] == (4,)
+        assert captured["psfc_shape"] == (2,)
+        assert captured["shape_args"] == (1, 2, 2)
+        assert captured["shape_kwargs"] == {"nlevi": 3}
+        assert result.shape == (1, 2, 2)
+        assert_array_equal(result.values, np.full((1, 2, 2), 66.0))
+
+    def test_sigma_to_hybrid_fortran_falls_back_to_return_backend(self, monkeypatch):
+        """Sigma-to-hybrid should fall back to the return-array backend when needed."""
+        data = xr.DataArray(
+            np.array([220.0, 250.0, 290.0], dtype=np.float64),
+            dims=["sigma"],
+            coords={"sigma": [0.2, 0.6, 1.0]},
+        )
+        sig_coords = np.array([0.2, 0.6, 1.0], dtype=np.float64)
+        ps = xr.DataArray(101325.0)
+        hya = xr.DataArray([0.0, 0.2], dims=["hlev"])
+        hyb = xr.DataArray([0.8, 0.0], dims=["hlev"])
+
+        captured = {}
+
+        def fake_sigma_return(
+            dati, sigmai, sigmao, intyp, spvl, *shape_args, **shape_kwargs
+        ):
+            captured["dati_shape"] = dati.shape
+            captured["sigmao_shape"] = sigmao.shape
+            captured["shape_args"] = shape_args
+            captured["shape_kwargs"] = shape_kwargs
+            return np.full((2, 1), 88.0, dtype=np.float64)
+
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes_corder_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dsigma2hybrid_nodes", fake_sigma_return
+        )
+
+        result = interp_sigma_to_hybrid(
+            data=data,
+            sig_coords=sig_coords,
+            ps=ps,
+            hyam=hya,
+            hybm=hyb,
+            lev_dim="sigma",
+            method="linear",
+        )
+
+        assert captured["dati_shape"] == (3, 1)
+        assert captured["sigmao_shape"] == (2, 1)
+        assert captured["shape_args"] == (2,)
+        assert captured["shape_kwargs"] == {"nlevi": 3, "ncol": 1}
+        assert result.shape == (2,)
+        assert_array_equal(result.values, np.full((2,), 88.0))
+
     def test_multidim_interpolation_single_point(self):
         """Test multidimensional interpolation to single output point."""
         # 3x3 input grid
