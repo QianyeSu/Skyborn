@@ -4,7 +4,7 @@
 python module rcm2points ! in
     interface  ! in :rcm2points
 	! signature : fo = drcm2points(yi, xi, fi, yo, xo, [xmsg, opt])
-        subroutine drcm2points(ngrd,nyi,nxi,yi,xi,fi,nxyo,yo,xo,fo,xmsg,opt,ncrit,kval,ier) ! in :rcm2points:rcm2points.f
+        subroutine drcm2points(ngrd,nyi,nxi,yi,xi,fi,nxyo,yo,xo,fo,xmsg,opt,ncrit,kval,ier) ! in :rcm2points:rcm2points.f90
             integer,            depend(fi),                               intent(hide)  :: ngrd=shape(fi,2)
             integer,            depend(yi),                               intent(hide)  :: nyi=shape(yi,1)
             integer,            depend(yi),                               intent(hide)  :: nxi=shape(yi,0)
