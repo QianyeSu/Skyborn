@@ -16,6 +16,7 @@ module vinth2p_backend_core
     public :: extrapolate_temperature
     public :: interpolate_column_ecmwf
     public :: interpolate_column_sigma
+    public :: interpolate_flat_column_sigma
     public :: interpolate_flat_column_ecmwf
     public :: interpolate_flat_column_nodes
     public :: interpolate_column_nodes
@@ -376,6 +377,57 @@ contains
             end if
         end do
     end subroutine interpolate_column_sigma
+
+
+    ! Flat-buffer helper for the C-order sigma->hybrid path. The target sigma
+    ! values are computed on the fly from ps, hyam, and hybm so Python does not
+    ! need to materialize a full sigma-target volume.
+    subroutine interpolate_flat_column_sigma( &
+        dati_flat, dato_flat, sigmai, hyam, hybm, p0, psfc, intyp, spvl, &
+        base_in, base_out, inner, ninner, nlevi, nlevo &
+    )
+        real(real64), intent(in) :: dati_flat(:), sigmai(:), hyam(:), hybm(:)
+        real(real64), intent(inout) :: dato_flat(:)
+        real(real64), intent(in) :: p0, psfc, spvl
+        integer, intent(in) :: intyp, base_in, base_out, inner
+        integer, intent(in) :: ninner, nlevi, nlevo
+
+        logical :: is_ascending
+        integer :: input_idx, k, kp, output_idx
+        real(real64) :: sigma_out
+
+        is_ascending = levels_ascending(sigmai)
+        do k = 1, nlevo
+            output_idx = base_out + (k - 1) * ninner + inner
+            sigma_out = hyam(k) * p0 / psfc + hybm(k)
+
+            if (is_ascending) then
+                if (sigma_out < sigmai(1) .or. sigma_out > sigmai(nlevi)) then
+                    dato_flat(output_idx) = spvl
+                    cycle
+                end if
+            else
+                if (sigma_out > sigmai(1) .or. sigma_out < sigmai(nlevi)) then
+                    dato_flat(output_idx) = spvl
+                    cycle
+                end if
+            end if
+
+            kp = locate_bracketing_level_ordered(sigma_out, sigmai, is_ascending)
+            if (kp < 1) then
+                dato_flat(output_idx) = spvl
+            else if (intyp == 2 .and. &
+                (sigma_out <= 0.0_real64 .or. sigmai(kp) <= 0.0_real64 .or. sigmai(kp + 1) <= 0.0_real64)) then
+                dato_flat(output_idx) = spvl
+            else
+                input_idx = base_in + (kp - 1) * ninner + inner
+                dato_flat(output_idx) = interpolate_value( &
+                    dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                    sigma_out, sigmai(kp), sigmai(kp + 1), intyp, spvl &
+                )
+            end if
+        end do
+    end subroutine interpolate_flat_column_sigma
 
 
     ! Flat-buffer helper for the C-order hybrid->pressure path.
@@ -810,6 +862,41 @@ subroutine dsigma2hybrid_nodes_into( &
         dati, dato, sigmai, sigmao, intyp, spvl, nlevi, ncol, nlevo &
     )
 end subroutine dsigma2hybrid_nodes_into
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    C-ORDER FAST PATH FOR SIGMA->HYBRID INTERPOLATION. INPUT DATA IS
+!    PASSED AS A FLAT [NOUTER, NLEVI, NINNER] BUFFER, AND THE TARGET
+!    HYBRID-IMPLIED SIGMA VALUES ARE COMPUTED INSIDE FORTRAN FROM
+!    PS, HYAM, HYBM, AND P0.
+subroutine dsigma2hybrid_nodes_corder_into( &
+    dati_flat, dato_flat, sigmai, hyam, hybm, p0, psfc, intyp, spvl, &
+    nouter, nlevi, ninner, nlevo)
+    use vinth2p_backend_core, only : &
+        real64, interpolate_flat_column_sigma
+    implicit none
+
+    integer, intent(in) :: intyp, nouter, nlevi, ninner, nlevo
+    real(real64), intent(in) :: dati_flat(nouter * nlevi * ninner)
+    real(real64), intent(inout) :: dato_flat(nouter * nlevo * ninner)
+    real(real64), intent(in) :: sigmai(nlevi), hyam(nlevo), hybm(nlevo)
+    real(real64), intent(in) :: p0, psfc(nouter * ninner), spvl
+
+    integer :: base_in, base_out, col_idx, inner, outer
+
+    do outer = 0, nouter - 1
+        base_in = outer * nlevi * ninner
+        base_out = outer * nlevo * ninner
+        do inner = 1, ninner
+            col_idx = outer * ninner + inner
+            call interpolate_flat_column_sigma( &
+                dati_flat, dato_flat, sigmai, hyam, hybm, p0, psfc(col_idx), intyp, spvl, &
+                base_in, base_out, inner, ninner, nlevi, nlevo &
+            )
+        end do
+    end do
+end subroutine dsigma2hybrid_nodes_corder_into
 
 
 ! QUICK REFERENCE
