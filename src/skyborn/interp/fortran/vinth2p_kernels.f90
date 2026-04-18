@@ -24,6 +24,7 @@ module vinth2p_kernels_core
     public :: interpolate_value
     public :: is_below_lowest_model_level
     public :: levels_ascending
+    public :: legacy_ecmwf_bracketing_floor
     public :: locate_bracketing_level_ordered
     public :: lowest_bracketing_level_index
     public :: lowest_model_level_index
@@ -209,6 +210,28 @@ contains
 
         kp = low
     end function locate_bracketing_level_ordered
+
+
+    ! Match the archived ECMWF node kernel near the model top. The legacy F77
+    ! code starts the interior search with KP = 1 and increments before the
+    ! first comparison, so the first interior bracket it can return is the
+    ! second model-layer pair. Keep that quirk isolated to ECMWF paths so the
+    ! plain node kernel continues to use the mathematically direct bracket.
+    pure integer function legacy_ecmwf_bracketing_floor( &
+        kp, plev_out, plevi, is_ascending &
+    ) result(adjusted_kp)
+        integer, intent(in) :: kp
+        real(real64), intent(in) :: plev_out
+        real(real64), intent(in) :: plevi(:)
+        logical, intent(in) :: is_ascending
+
+        adjusted_kp = kp
+        if (.not. is_ascending) return
+        if (size(plevi) < 3) return
+        if (plev_out <= plevi(1)) return
+
+        if (adjusted_kp < 2) adjusted_kp = 2
+    end function legacy_ecmwf_bracketing_floor
 
 
     ! Legacy double-log transform used by vinth2p "log-log" interpolation.
@@ -531,9 +554,14 @@ contains
                             do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                 kp_hint = kp_hint - 1
                             end do
-                            kp = kp_hint
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                kp_hint, plevo_mb(k), plevi, is_ascending &
+                            )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                plevo_mb(k), plevi, is_ascending &
+                            )
                         end if
                         if (kp < 1) then
                             dato_col(k) = spvl
@@ -563,9 +591,14 @@ contains
                                 do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                     kp_hint = kp_hint - 1
                                 end do
-                                kp = kp_hint
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    kp_hint, plevo_mb(k), plevi, is_ascending &
+                                )
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                             end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
@@ -592,9 +625,14 @@ contains
                                 do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                     kp_hint = kp_hint - 1
                                 end do
-                                kp = kp_hint
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    kp_hint, plevo_mb(k), plevi, is_ascending &
+                                )
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                             end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
@@ -619,9 +657,14 @@ contains
                                 do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                     kp_hint = kp_hint - 1
                                 end do
-                                kp = kp_hint
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    kp_hint, plevo_mb(k), plevi, is_ascending &
+                                )
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                             end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
@@ -649,9 +692,14 @@ contains
                             do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                 kp_hint = kp_hint - 1
                             end do
-                            kp = kp_hint
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                kp_hint, plevo_mb(k), plevi, is_ascending &
+                            )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                plevo_mb(k), plevi, is_ascending &
+                            )
                         end if
                         if (kp < 1) then
                             dato_col(k) = spvl
@@ -681,9 +729,14 @@ contains
                                 do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                     kp_hint = kp_hint - 1
                                 end do
-                                kp = kp_hint
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    kp_hint, plevo_mb(k), plevi, is_ascending &
+                                )
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                             end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
@@ -710,9 +763,14 @@ contains
                                 do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                     kp_hint = kp_hint - 1
                                 end do
-                                kp = kp_hint
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    kp_hint, plevo_mb(k), plevi, is_ascending &
+                                )
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                             end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
@@ -737,9 +795,14 @@ contains
                                 do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                     kp_hint = kp_hint - 1
                                 end do
-                                kp = kp_hint
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    kp_hint, plevo_mb(k), plevi, is_ascending &
+                                )
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                             end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
@@ -767,9 +830,14 @@ contains
                             do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                 kp_hint = kp_hint - 1
                             end do
-                            kp = kp_hint
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                kp_hint, plevo_mb(k), plevi, is_ascending &
+                            )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                plevo_mb(k), plevi, is_ascending &
+                            )
                         end if
                         if (kp < 1) then
                             dato_col(k) = spvl
@@ -799,9 +867,14 @@ contains
                                 do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                     kp_hint = kp_hint - 1
                                 end do
-                                kp = kp_hint
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    kp_hint, plevo_mb(k), plevi, is_ascending &
+                                )
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                             end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
@@ -828,9 +901,14 @@ contains
                                 do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                     kp_hint = kp_hint - 1
                                 end do
-                                kp = kp_hint
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    kp_hint, plevo_mb(k), plevi, is_ascending &
+                                )
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                             end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
@@ -855,9 +933,14 @@ contains
                                 do while (kp_hint > 1 .and. plevo_mb(k) < plevi(kp_hint))
                                     kp_hint = kp_hint - 1
                                 end do
-                                kp = kp_hint
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    kp_hint, plevo_mb(k), plevi, is_ascending &
+                                )
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                             end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
@@ -1088,7 +1171,10 @@ contains
                             )
                         end if
                     else
-                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        kp = legacy_ecmwf_bracketing_floor( &
+                            locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                            plevo_mb(k), plevi, is_ascending &
+                        )
                         if (kp < 1) then
                             dato_flat(output_idx) = spvl
                         else
@@ -1155,7 +1241,10 @@ contains
                     if (plevo_mb(k) > bottom_pressure) then
                         dato_flat(output_idx) = spvl
                     else
-                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        kp = legacy_ecmwf_bracketing_floor( &
+                            locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                            plevo_mb(k), plevi, is_ascending &
+                        )
                         if (kp < 1) then
                             dato_flat(output_idx) = spvl
                         else
@@ -1178,7 +1267,10 @@ contains
                                 dati_flat(bottom_input_idx), plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                plevo_mb(k), plevi, is_ascending &
+                            )
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
@@ -1199,7 +1291,10 @@ contains
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                plevo_mb(k), plevi, is_ascending &
+                            )
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
@@ -1218,7 +1313,10 @@ contains
                         if (plevo_mb(k) > bottom_pressure) then
                             dato_flat(output_idx) = dati_flat(bottom_input_idx)
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                plevo_mb(k), plevi, is_ascending &
+                            )
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
@@ -1240,7 +1338,10 @@ contains
                     if (plevo_mb(k) > bottom_pressure) then
                         dato_flat(output_idx) = spvl
                     else
-                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        kp = legacy_ecmwf_bracketing_floor( &
+                            locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                            plevo_mb(k), plevi, is_ascending &
+                        )
                         if (kp < 1) then
                             dato_flat(output_idx) = spvl
                         else
@@ -1263,7 +1364,10 @@ contains
                                 dati_flat(bottom_input_idx), plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                plevo_mb(k), plevi, is_ascending &
+                            )
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
@@ -1284,7 +1388,10 @@ contains
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                plevo_mb(k), plevi, is_ascending &
+                            )
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
@@ -1303,7 +1410,10 @@ contains
                         if (plevo_mb(k) > bottom_pressure) then
                             dato_flat(output_idx) = dati_flat(bottom_input_idx)
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                plevo_mb(k), plevi, is_ascending &
+                            )
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
@@ -1329,7 +1439,10 @@ contains
                         if (plevo_mb(k) > bottom_pressure) then
                             dato_flat(output_idx) = spvl
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            kp = legacy_ecmwf_bracketing_floor( &
+                                locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                plevo_mb(k), plevi, is_ascending &
+                            )
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
@@ -1352,7 +1465,10 @@ contains
                                     dati_flat(bottom_input_idx), plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                                 )
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                                 if (kp < 1) then
                                     dato_flat(output_idx) = spvl
                                 else
@@ -1373,7 +1489,10 @@ contains
                                     tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                                 )
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                                 if (kp < 1) then
                                     dato_flat(output_idx) = spvl
                                 else
@@ -1392,7 +1511,10 @@ contains
                             if (plevo_mb(k) > bottom_pressure) then
                                 dato_flat(output_idx) = dati_flat(bottom_input_idx)
                             else
-                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                                kp = legacy_ecmwf_bracketing_floor( &
+                                    locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
+                                    plevo_mb(k), plevi, is_ascending &
+                                )
                                 if (kp < 1) then
                                     dato_flat(output_idx) = spvl
                                 else
