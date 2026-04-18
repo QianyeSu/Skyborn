@@ -73,8 +73,8 @@ __all__ = [
 ]
 
 
-def _load_mk_backend():
-    """Best-effort loader for the compiled Mann-Kendall backend."""
+def _load_core_module():
+    """Best-effort loader for the compiled Mann-Kendall core extension."""
     candidate_names = []
     if __package__:
         candidate_names.append(f"{__package__}.mann_kendall_core")
@@ -98,36 +98,34 @@ def _load_mk_backend():
             )
             if spec is None or spec.loader is None:
                 continue
-            backend = importlib_util.module_from_spec(spec)
-            spec.loader.exec_module(backend)
-            return backend
+            core = importlib_util.module_from_spec(spec)
+            spec.loader.exec_module(core)
+            return core
         except Exception:
             continue
 
     return None
 
 
-_mk_backend = _load_mk_backend()
-_mk_score_var_batch_clean_backend = getattr(
-    _mk_backend, "mk_score_var_batch_clean", None
+_core_module = _load_core_module()
+_score_variance_kernel = getattr(_core_module, "mk_score_var_batch_clean", None)
+_score_variance_slope_kernel = getattr(
+    _core_module, "mk_score_var_sen_batch_clean", None
 )
-_mk_score_var_sen_batch_clean_backend = getattr(
-    _mk_backend, "mk_score_var_sen_batch_clean", None
-)
-_sen_slope_batch_clean_backend = getattr(_mk_backend, "sen_slope_batch_clean", None)
+_sen_slope_kernel = getattr(_core_module, "sen_slope_batch_clean", None)
 
 
-def _backend_available() -> bool:
-    """Return whether all compiled clean-series kernels are available."""
+def _kernels_ready() -> bool:
+    """Return whether the compiled Mann-Kendall kernels are available."""
     return (
-        _mk_score_var_batch_clean_backend is not None
-        and _mk_score_var_sen_batch_clean_backend is not None
-        and _sen_slope_batch_clean_backend is not None
+        _score_variance_kernel is not None
+        and _score_variance_slope_kernel is not None
+        and _sen_slope_kernel is not None
     )
 
 
-def _as_fortran_float64_2d(data_2d: np.ndarray) -> np.ndarray:
-    """Convert clean 2D data to the float64 Fortran layout expected by f2py."""
+def _as_core_input_2d(data_2d: np.ndarray) -> np.ndarray:
+    """Convert 2D data to the float64 Fortran layout expected by the core."""
     array = np.asarray(data_2d, dtype=np.float64)
     if array.ndim != 2:
         raise ValueError("Expected a 2D array for Mann-Kendall clean-series kernels.")
@@ -136,8 +134,8 @@ def _as_fortran_float64_2d(data_2d: np.ndarray) -> np.ndarray:
     return np.asfortranarray(array)
 
 
-def _require_backend_function(function, function_name: str):
-    """Return a compiled backend entry point or raise a clear import error."""
+def _require_kernel(function, function_name: str):
+    """Return a compiled kernel entry point or raise a clear import error."""
     if function is None:
         raise ImportError(
             "skyborn.calc.mann_kendall requires the compiled "
@@ -147,43 +145,32 @@ def _require_backend_function(function, function_name: str):
     return function
 
 
-def _mk_score_var_batch_clean(
+def _score_variance_batch(
     data_2d: np.ndarray, modified: bool = False
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Run the compiled clean 2D score/variance kernel."""
-    clean_data = np.asarray(data_2d, dtype=np.float64)
-    backend_function = _require_backend_function(
-        _mk_score_var_batch_clean_backend, "mk_score_var_batch_clean"
-    )
-    s_values, var_values = backend_function(
-        _as_fortran_float64_2d(clean_data), int(modified)
-    )
+    """Run the compiled 2D score/variance kernel."""
+    kernel = _require_kernel(_score_variance_kernel, "mk_score_var_batch_clean")
+    s_values, var_values = kernel(_as_core_input_2d(data_2d), int(modified))
     return np.asarray(s_values, dtype=np.float64), np.asarray(
         var_values, dtype=np.float64
     )
 
 
-def _sen_slope_batch_clean(data_2d: np.ndarray) -> np.ndarray:
-    """Run the compiled clean 2D Theil-Sen slope kernel."""
-    clean_data = np.asarray(data_2d, dtype=np.float64)
-    backend_function = _require_backend_function(
-        _sen_slope_batch_clean_backend, "sen_slope_batch_clean"
-    )
-    slopes = backend_function(_as_fortran_float64_2d(clean_data))
+def _sen_slope_batch(data_2d: np.ndarray) -> np.ndarray:
+    """Run the compiled 2D Theil-Sen slope kernel."""
+    kernel = _require_kernel(_sen_slope_kernel, "sen_slope_batch_clean")
+    slopes = kernel(_as_core_input_2d(data_2d))
     return np.asarray(slopes, dtype=np.float64)
 
 
-def _mk_score_var_sen_batch_clean(
+def _score_variance_slope_batch(
     data_2d: np.ndarray, modified: bool = False
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Run the compiled clean 2D combined score/variance/slope kernel."""
-    clean_data = np.asarray(data_2d, dtype=np.float64)
-    backend_function = _require_backend_function(
-        _mk_score_var_sen_batch_clean_backend, "mk_score_var_sen_batch_clean"
+    """Run the compiled 2D combined score/variance/slope kernel."""
+    kernel = _require_kernel(
+        _score_variance_slope_kernel, "mk_score_var_sen_batch_clean"
     )
-    s_values, var_values, slopes = backend_function(
-        _as_fortran_float64_2d(clean_data), int(modified)
-    )
+    s_values, var_values, slopes = kernel(_as_core_input_2d(data_2d), int(modified))
     return (
         np.asarray(s_values, dtype=np.float64),
         np.asarray(var_values, dtype=np.float64),
@@ -298,7 +285,7 @@ def mann_kendall_test(
         }
 
     if method == "theilslopes":
-        S_values, var_values, slopes = _mk_score_var_sen_batch_clean(
+        S_values, var_values, slopes = _score_variance_slope_batch(
             y.reshape(-1, 1), modified=modified
         )
         S = int(np.rint(S_values[0]))
@@ -340,15 +327,13 @@ def mann_kendall_test(
 
 def _calculate_mk_score(y: np.ndarray) -> int:
     """Calculate Mann-Kendall score S."""
-    s_values, _ = _mk_score_var_batch_clean(
-        np.asarray(y, dtype=np.float64).reshape(-1, 1)
-    )
+    s_values, _ = _score_variance_batch(np.asarray(y, dtype=np.float64).reshape(-1, 1))
     return int(np.rint(s_values[0]))
 
 
 def _calculate_mk_variance(y: np.ndarray, n: int, modified: bool = False) -> float:
     """Calculate variance of Mann-Kendall score."""
-    _, variances = _mk_score_var_batch_clean(
+    _, variances = _score_variance_batch(
         np.asarray(y, dtype=np.float64).reshape(-1, 1), modified=modified
     )
     return float(variances[0])
@@ -455,9 +440,6 @@ def mann_kendall_multidim(
     if data.ndim == 1:
         return mann_kendall_test(data, alpha=alpha, method=method, modified=modified)
 
-    # Get original shape for result reshaping
-    original_shape = data.shape
-
     # Move time axis to the front
     data = np.moveaxis(data, actual_time_axis, 0)
     time_steps = data.shape[0]
@@ -504,7 +486,7 @@ def mann_kendall_multidim(
         chunk_data = data_2d[:, start_idx:end_idx]
 
         # Vectorized Mann-Kendall calculation for chunk
-        chunk_results = _vectorized_mk_test(
+        chunk_results = _batch_mk_test(
             chunk_data, alpha=alpha, method=method, modified=modified
         )
 
@@ -519,7 +501,7 @@ def mann_kendall_multidim(
     return results
 
 
-def _vectorized_mk_test(
+def _batch_mk_test(
     data_chunk: np.ndarray,
     alpha: float = 0.05,
     method: str = "theilslopes",
@@ -577,11 +559,11 @@ def _vectorized_mk_test(
 
         clean_data_computed = np.asarray(clean_data_computed, dtype=np.float64)
         if method == "theilslopes":
-            S_values, var_s_values, slopes = _mk_score_var_sen_batch_clean(
+            S_values, var_s_values, slopes = _score_variance_slope_batch(
                 clean_data_computed, modified=modified
             )
         else:
-            S_values, var_s_values = _mk_score_var_batch_clean(
+            S_values, var_s_values = _score_variance_batch(
                 clean_data_computed, modified=modified
             )
 
@@ -600,17 +582,15 @@ def _vectorized_mk_test(
         h_values = np.abs(z_values) > stats.norm.ppf(1 - alpha / 2)
 
         if method != "theilslopes":
-            slopes = _vectorized_linregress_slopes(clean_data_computed, x)
+            slopes = _linregress_slope_batch(clean_data_computed, x)
 
         n = time_steps
         tau_values = S_values / (0.5 * n * (n - 1))
 
         if method == "theilslopes":
-            std_errors = _vectorized_std_error_theil(clean_data_computed, x, slopes)
+            std_errors = _theil_std_error_batch(clean_data_computed, x, slopes)
         else:
-            std_errors = _vectorized_std_error_linregress(
-                clean_data_computed, x, slopes
-            )
+            std_errors = _linregress_std_error_batch(clean_data_computed, x, slopes)
 
         results["trend"][no_nan_indices] = slopes
         results["h"][no_nan_indices] = h_values
@@ -654,55 +634,37 @@ def _vectorized_mk_test(
     return results
 
 
-def _vectorized_linregress_slopes(data_2d: np.ndarray, x: np.ndarray) -> np.ndarray:
+def _linregress_slope_batch(data_2d: np.ndarray, x: np.ndarray) -> np.ndarray:
     """
     Vectorized linear regression slope calculation.
 
     Much faster than calling stats.linregress for each series individually.
     """
-    time_steps, n_series = data_2d.shape
-
     # Center the data
     x_mean = np.mean(x)
-    y_mean = np.mean(data_2d, axis=0)  # Shape: (n_series,)
-
-    # Calculate numerator and denominator for slope
-    x_centered = x - x_mean  # Shape: (time_steps,)
-    y_centered = data_2d - y_mean  # Shape: (time_steps, n_series)
-
-    # Vectorized slope calculation: sum(xy) / sum(x²)
-    numerator = np.sum(
-        x_centered[:, np.newaxis] * y_centered, axis=0
-    )  # Shape: (n_series,)
-    denominator = np.sum(x_centered**2)  # Scalar
-
-    slopes = numerator / denominator
-
-    return slopes
+    x_centered = x - x_mean
+    numerator = x_centered @ data_2d
+    denominator = np.sum(x_centered**2)
+    return numerator / denominator
 
 
-def _vectorized_std_error_theil(
+def _theil_std_error_batch(
     data_2d: np.ndarray, x: np.ndarray, slopes: np.ndarray
 ) -> np.ndarray:
     """
     Vectorized standard error calculation for Theil-Sen slopes.
     """
-    time_steps, n_series = data_2d.shape
-
-    # Calculate median intercepts
-    intercepts = np.median(data_2d - x[:, np.newaxis] * slopes, axis=0)
-
-    # Calculate residuals
-    y_pred = x[:, np.newaxis] * slopes + intercepts  # Shape: (time_steps, n_series)
-    residuals = data_2d - y_pred
-
-    # Standard error estimation
-    std_errors = np.std(residuals, axis=0) / np.sqrt(time_steps)
-
-    return std_errors
+    time_steps = data_2d.shape[0]
+    workspace = np.empty_like(data_2d, dtype=np.float64)
+    np.multiply(x[:, np.newaxis], slopes[np.newaxis, :], out=workspace)
+    workspace *= -1.0
+    workspace += data_2d
+    intercepts = np.median(workspace, axis=0)
+    workspace -= intercepts
+    return np.std(workspace, axis=0) / np.sqrt(time_steps)
 
 
-def _vectorized_std_error_linregress(
+def _linregress_std_error_batch(
     data_2d: np.ndarray, x: np.ndarray, slopes: np.ndarray
 ) -> np.ndarray:
     """
@@ -712,21 +674,19 @@ def _vectorized_std_error_linregress(
     the standard error of the detrended residuals rather than the regression
     slope standard error.
     """
-    time_steps, n_series = data_2d.shape
+    time_steps = data_2d.shape[0]
 
     # Calculate intercepts
     x_mean = np.mean(x)
     y_mean = np.mean(data_2d, axis=0)
     intercepts = y_mean - slopes * x_mean
 
-    # Calculate residuals
-    y_pred = x[:, np.newaxis] * slopes + intercepts
-    residuals = data_2d - y_pred
-
-    # Match the scalar API: residual spread scaled by sqrt(n)
-    std_errors = np.std(residuals, axis=0) / np.sqrt(time_steps)
-
-    return std_errors
+    residuals = np.empty_like(data_2d, dtype=np.float64)
+    np.multiply(x[:, np.newaxis], slopes[np.newaxis, :], out=residuals)
+    residuals += intercepts
+    residuals *= -1.0
+    residuals += data_2d
+    return np.std(residuals, axis=0) / np.sqrt(time_steps)
 
 
 def mann_kendall_xarray(
