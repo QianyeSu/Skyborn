@@ -55,12 +55,19 @@ _as_fortran_float64_2d = mann_kendall_module._as_fortran_float64_2d
 _calculate_mk_score_python = mann_kendall_module._calculate_mk_score_python
 _calculate_std_error_theil = mann_kendall_module._calculate_std_error_theil
 _calculate_mk_variance_batch = mann_kendall_module._calculate_mk_variance_batch
+_calculate_sen_slope = mann_kendall_module._calculate_sen_slope
 _load_mk_backend = mann_kendall_module._load_mk_backend
 _mk_score_var_batch_clean = mann_kendall_module._mk_score_var_batch_clean
+_mk_score_var_sen_batch_clean = mann_kendall_module._mk_score_var_sen_batch_clean
+_mk_score_var_sen_batch_clean_python = (
+    mann_kendall_module._mk_score_var_sen_batch_clean_python
+)
 _mk_score_var_batch_clean_python = mann_kendall_module._mk_score_var_batch_clean_python
 _sen_slope_batch_clean = mann_kendall_module._sen_slope_batch_clean
 _sen_slope_batch_clean_python = mann_kendall_module._sen_slope_batch_clean_python
+_vectorized_mk_score = mann_kendall_module._vectorized_mk_score
 _vectorized_mk_test = mann_kendall_module._vectorized_mk_test
+_vectorized_theil_slopes = mann_kendall_module._vectorized_theil_slopes
 
 
 def _equal_or_both_nan(left, right, atol=1e-12):
@@ -1551,6 +1558,89 @@ class TestMannKendallComprehensive:
             )
             assert _load_mk_backend() is None
 
+    def test_loader_skips_local_candidate_when_spec_has_no_loader(self, monkeypatch):
+        """Backend loader should ignore probe candidates that produce no loader."""
+        repo_tmp = os.path.join(os.path.dirname(__file__), "..", ".codex_tmp")
+        os.makedirs(repo_tmp, exist_ok=True)
+
+        with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
+            fake_source = os.path.join(tmp_dir, "mann_kendall.py")
+            backend_dir = os.path.join(tmp_dir, "mk_kernels")
+            os.makedirs(backend_dir, exist_ok=True)
+
+            with open(fake_source, "w", encoding="utf-8") as handle:
+                handle.write("# probe\n")
+            with open(
+                os.path.join(backend_dir, "mk_kernels_backend.pyd"), "wb"
+            ) as handle:
+                handle.write(b"placeholder")
+
+            class FakeSpec:
+                loader = None
+
+            monkeypatch.setattr(mann_kendall_module, "__file__", fake_source)
+            monkeypatch.setattr(
+                mann_kendall_module,
+                "import_module",
+                unittest.mock.Mock(side_effect=ImportError),
+            )
+            monkeypatch.setattr(mann_kendall_module, "EXTENSION_SUFFIXES", [".pyd"])
+            monkeypatch.setattr(
+                mann_kendall_module.importlib_util,
+                "spec_from_file_location",
+                lambda *args, **kwargs: FakeSpec(),
+            )
+
+            assert _load_mk_backend() is None
+
+    def test_loader_uses_local_extension_candidate_when_imports_fail(self, monkeypatch):
+        """Backend loader should fall through to the local extension probe path."""
+        repo_tmp = os.path.join(os.path.dirname(__file__), "..", ".codex_tmp")
+        os.makedirs(repo_tmp, exist_ok=True)
+
+        with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
+            fake_source = os.path.join(tmp_dir, "mann_kendall.py")
+            backend_dir = os.path.join(tmp_dir, "mk_kernels")
+            os.makedirs(backend_dir, exist_ok=True)
+            candidate = os.path.join(backend_dir, "mk_kernels_backend.pyd")
+
+            with open(fake_source, "w", encoding="utf-8") as handle:
+                handle.write("# probe\n")
+            with open(candidate, "wb") as handle:
+                handle.write(b"placeholder")
+
+            class FakeLoader:
+                def exec_module(self, module):
+                    module.loaded_from_local_probe = True
+
+            class FakeSpec:
+                def __init__(self):
+                    self.loader = FakeLoader()
+
+            fake_module = type("FakeModule", (), {})()
+
+            monkeypatch.setattr(mann_kendall_module, "__file__", fake_source)
+            monkeypatch.setattr(
+                mann_kendall_module,
+                "import_module",
+                unittest.mock.Mock(side_effect=ImportError),
+            )
+            monkeypatch.setattr(mann_kendall_module, "EXTENSION_SUFFIXES", [".pyd"])
+            monkeypatch.setattr(
+                mann_kendall_module.importlib_util,
+                "spec_from_file_location",
+                lambda *args, **kwargs: FakeSpec(),
+            )
+            monkeypatch.setattr(
+                mann_kendall_module.importlib_util,
+                "module_from_spec",
+                lambda spec: fake_module,
+            )
+
+            loaded = _load_mk_backend()
+            assert loaded is fake_module
+            assert loaded.loaded_from_local_probe is True
+
     def test_as_fortran_float64_2d_validation(self):
         """The backend layout helper should reject non-2D inputs."""
         with pytest.raises(ValueError, match="Expected a 2D array"):
@@ -1596,6 +1686,56 @@ class TestMannKendallComprehensive:
         np.testing.assert_allclose(var_fallback, var_python)
         np.testing.assert_allclose(slope_fallback, slope_python)
 
+    def test_combined_python_helper_matches_split_helpers(self):
+        """The pure Python combined helper should match the split helper results."""
+        data = np.array(
+            [
+                [1.0, 5.0],
+                [1.0, 5.0],
+                [2.0, 4.0],
+                [2.0, 4.0],
+                [3.0, 3.0],
+                [3.0, 3.0],
+            ],
+            dtype=np.float64,
+        )
+
+        scores, variances, slopes = _mk_score_var_sen_batch_clean_python(
+            data, modified=False
+        )
+        scores_split, variances_split = _mk_score_var_batch_clean_python(
+            data, modified=False
+        )
+        slopes_split = _sen_slope_batch_clean_python(data)
+
+        np.testing.assert_allclose(scores, scores_split)
+        np.testing.assert_allclose(variances, variances_split)
+        np.testing.assert_allclose(slopes, slopes_split)
+
+    def test_combined_dispatch_falls_back_after_backend_exception(self, monkeypatch):
+        """The combined dispatch helper should recover with the Python fallback."""
+        data = np.array(
+            [
+                [1.0, 3.0],
+                [2.0, 4.0],
+                [3.0, 5.0],
+                [4.0, 6.0],
+            ],
+            dtype=np.float64,
+        )
+
+        monkeypatch.setattr(
+            mann_kendall_module,
+            "_mk_score_var_sen_batch_clean_backend",
+            unittest.mock.Mock(side_effect=RuntimeError("fail")),
+        )
+
+        combined = _mk_score_var_sen_batch_clean(data, modified=True)
+        python_combined = _mk_score_var_sen_batch_clean_python(data, modified=True)
+
+        for left, right in zip(combined, python_combined):
+            np.testing.assert_allclose(left, right, rtol=0.0, atol=1e-12)
+
     def test_calculate_mk_variance_batch_dispatch(self):
         """Direct batch variance helper should stay aligned with scalar semantics."""
         data = np.array(
@@ -1628,6 +1768,13 @@ class TestMannKendallComprehensive:
         result_axis = mann_kendall_multidim(data, axis=0)
         np.testing.assert_allclose(result_dim["trend"], result_axis["trend"])
 
+    def test_scalar_sen_slope_helper_matches_batch_first_column(self):
+        """Scalar Sen slope helper should agree with the clean batch path."""
+        y = np.array([1.0, 1.0, 2.0, 3.0, 5.0, 8.0], dtype=np.float64)
+        scalar = _calculate_sen_slope(y)
+        batch = _sen_slope_batch_clean(y.reshape(-1, 1))[0]
+        np.testing.assert_allclose(scalar, batch, rtol=0.0, atol=0.0)
+
     def test_vectorized_nan_branch_skips_insufficient_series(self):
         """Series that drop below three finite values in the NaN path should remain NaN."""
         data = np.array(
@@ -1649,7 +1796,7 @@ class TestMannKendallComprehensive:
             [
                 [1.0, np.nan],
                 [2.0, 1.0],
-                [3.0, np.nan],
+                [3.0, 1.5],
                 [4.0, 2.0],
             ],
             dtype=np.float64,
@@ -1661,6 +1808,27 @@ class TestMannKendallComprehensive:
         monkeypatch.setattr(mann_kendall_module, "mann_kendall_test", _raise_once)
         result = _vectorized_mk_test(data, method="theilslopes", modified=False)
         assert np.isnan(result["trend"][1])
+
+    def test_vectorized_wrapper_helpers(self):
+        """Thin vectorized wrappers should forward to the clean dispatch helpers."""
+        data = np.array(
+            [
+                [1.0, 2.0],
+                [2.0, 3.0],
+                [3.0, 5.0],
+                [4.0, 7.0],
+            ],
+            dtype=np.float64,
+        )
+        x = np.arange(data.shape[0], dtype=np.float64)
+
+        score_values = _vectorized_mk_score(data)
+        slope_values = _vectorized_theil_slopes(data, x)
+
+        np.testing.assert_allclose(
+            score_values, _mk_score_var_batch_clean(data, modified=False)[0]
+        )
+        np.testing.assert_allclose(slope_values, _sen_slope_batch_clean(data))
 
     def test_dask_helper_chunks_large_numpy_input(self):
         """Large eager xarray inputs should exercise the chunk-resizing branch."""
