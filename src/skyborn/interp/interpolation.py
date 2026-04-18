@@ -409,7 +409,7 @@ def _temp_extrapolate(data_or_t_bot, *args):
         )
 
     R_d = 287.04  # dry air gas constant
-    g_inv = 1 / 9.80616  # inverse of gravity
+    g_inv = 1 / 9.80665  # inverse of gravity
     alpha = 0.0065 * R_d * g_inv
 
     tstar = t_bot * (1 + alpha * (ps / p_sfc - 1))
