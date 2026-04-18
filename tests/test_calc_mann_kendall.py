@@ -52,22 +52,11 @@ _dask_mann_kendall = mann_kendall_module._dask_mann_kendall
 mann_kendall_xarray = mann_kendall_module.mann_kendall_xarray
 _backend_available = mann_kendall_module._backend_available
 _as_fortran_float64_2d = mann_kendall_module._as_fortran_float64_2d
-_calculate_mk_score_python = mann_kendall_module._calculate_mk_score_python
-_calculate_std_error_theil = mann_kendall_module._calculate_std_error_theil
-_calculate_mk_variance_batch = mann_kendall_module._calculate_mk_variance_batch
-_calculate_sen_slope = mann_kendall_module._calculate_sen_slope
 _load_mk_backend = mann_kendall_module._load_mk_backend
 _mk_score_var_batch_clean = mann_kendall_module._mk_score_var_batch_clean
 _mk_score_var_sen_batch_clean = mann_kendall_module._mk_score_var_sen_batch_clean
-_mk_score_var_sen_batch_clean_python = (
-    mann_kendall_module._mk_score_var_sen_batch_clean_python
-)
-_mk_score_var_batch_clean_python = mann_kendall_module._mk_score_var_batch_clean_python
 _sen_slope_batch_clean = mann_kendall_module._sen_slope_batch_clean
-_sen_slope_batch_clean_python = mann_kendall_module._sen_slope_batch_clean_python
-_vectorized_mk_score = mann_kendall_module._vectorized_mk_score
 _vectorized_mk_test = mann_kendall_module._vectorized_mk_test
-_vectorized_theil_slopes = mann_kendall_module._vectorized_theil_slopes
 
 
 def _equal_or_both_nan(left, right, atol=1e-12):
@@ -1395,46 +1384,8 @@ class TestMannKendallComprehensive:
         result = mann_kendall_multidim(edge_data, axis=0)
         assert result["trend"].shape == (2, 2)
 
-    def test_backend_clean_batch_matches_python_fallback(self, monkeypatch):
-        """Compiled clean-series kernels should match the Python fallback exactly."""
-        if not _backend_available():
-            pytest.skip("Compiled mk_kernels backend not available")
-
-        data = np.array(
-            [
-                [1.0, 5.0, 2.0],
-                [1.0, 5.0, 2.0],
-                [2.0, 4.0, 2.0],
-                [2.0, 4.0, 3.0],
-                [3.0, 3.0, 3.0],
-                [3.0, 3.0, 4.0],
-                [4.0, 2.0, 4.0],
-                [4.0, 2.0, 4.0],
-                [5.0, 1.0, 5.0],
-                [5.0, 1.0, 5.0],
-            ],
-            dtype=np.float64,
-        )
-
-        score_backend, var_backend = _mk_score_var_batch_clean(data, modified=False)
-        slope_backend = _sen_slope_batch_clean(data)
-
-        monkeypatch.setattr(
-            mann_kendall_module, "_mk_score_var_batch_clean_backend", None
-        )
-        monkeypatch.setattr(mann_kendall_module, "_sen_slope_batch_clean_backend", None)
-
-        score_python, var_python = _mk_score_var_batch_clean_python(
-            data, modified=False
-        )
-        slope_python = _sen_slope_batch_clean_python(data)
-
-        np.testing.assert_allclose(score_backend, score_python, rtol=0.0, atol=0.0)
-        np.testing.assert_allclose(var_backend, var_python, rtol=0.0, atol=0.0)
-        np.testing.assert_allclose(slope_backend, slope_python, rtol=0.0, atol=0.0)
-
-    def test_backend_modified_batch_matches_python_fallback(self, monkeypatch):
-        """Modified clean-series kernels should stay aligned with the Python fallback."""
+    def test_combined_backend_matches_split_helpers(self):
+        """The combined compiled helper should agree with split compiled calls."""
         if not _backend_available():
             pytest.skip("Compiled mk_kernels backend not available")
 
@@ -1454,22 +1405,20 @@ class TestMannKendallComprehensive:
             dtype=np.float64,
         )
 
-        score_backend, var_backend = _mk_score_var_batch_clean(data, modified=True)
-
-        monkeypatch.setattr(
-            mann_kendall_module, "_mk_score_var_batch_clean_backend", None
+        scores_combined, variances_combined, slopes_combined = (
+            _mk_score_var_sen_batch_clean(data, modified=True)
         )
-        monkeypatch.setattr(mann_kendall_module, "_sen_slope_batch_clean_backend", None)
+        scores_split, variances_split = _mk_score_var_batch_clean(data, modified=True)
+        slopes_split = _sen_slope_batch_clean(data)
 
-        score_python, var_python = _mk_score_var_batch_clean_python(data, modified=True)
-
-        np.testing.assert_allclose(score_backend, score_python, rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(scores_combined, scores_split, rtol=0.0, atol=0.0)
         np.testing.assert_allclose(
-            var_backend, var_python, rtol=0.0, atol=1e-12, equal_nan=True
+            variances_combined, variances_split, rtol=0.0, atol=1e-12, equal_nan=True
         )
+        np.testing.assert_allclose(slopes_combined, slopes_split, rtol=0.0, atol=0.0)
 
-    def test_mann_kendall_test_fallback_without_backend(self, monkeypatch):
-        """Scalar public API should keep the same answers when the backend is disabled."""
+    def test_public_api_requires_backend_when_disabled(self, monkeypatch):
+        """The public API should fail clearly when the compiled backend is unavailable."""
         data = np.array(
             [
                 0.12573022,
@@ -1486,24 +1435,16 @@ class TestMannKendallComprehensive:
             dtype=float,
         )
 
-        with_backend = mann_kendall_test(data, method="theilslopes", modified=True)
-
         monkeypatch.setattr(
             mann_kendall_module, "_mk_score_var_batch_clean_backend", None
         )
+        monkeypatch.setattr(
+            mann_kendall_module, "_mk_score_var_sen_batch_clean_backend", None
+        )
         monkeypatch.setattr(mann_kendall_module, "_sen_slope_batch_clean_backend", None)
 
-        without_backend = mann_kendall_test(data, method="theilslopes", modified=True)
-
-        for key in ["trend", "p", "z", "tau", "std_error"]:
-            np.testing.assert_allclose(
-                with_backend[key],
-                without_backend[key],
-                rtol=0.0,
-                atol=1e-12,
-                equal_nan=True,
-            )
-        assert with_backend["h"] == without_backend["h"]
+        with pytest.raises(ImportError, match="compiled mk_kernels backend"):
+            mann_kendall_test(data, method="theilslopes", modified=True)
 
     def test_loader_returns_none_when_import_and_local_probe_fail(self, monkeypatch):
         """Backend loader should gracefully return None when no candidate can load."""
@@ -1646,13 +1587,8 @@ class TestMannKendallComprehensive:
         with pytest.raises(ValueError, match="Expected a 2D array"):
             _as_fortran_float64_2d(np.arange(5.0))
 
-    def test_scalar_python_fallback_helper(self):
-        """Pure Python scalar score helper should stay deterministic."""
-        y = np.array([1.0, 1.0, 2.0, 2.0, 3.0, 4.0, 5.0, 5.0], dtype=np.float64)
-        assert _calculate_mk_score_python(y) == 25
-
-    def test_backend_dispatch_falls_back_after_backend_exception(self, monkeypatch):
-        """Dispatch helpers should recover by using the Python implementation."""
+    def test_backend_dispatch_propagates_backend_exception(self, monkeypatch):
+        """Dispatch helpers should expose backend failures instead of masking them."""
         data = np.array(
             [
                 [1.0, 3.0],
@@ -1674,46 +1610,13 @@ class TestMannKendallComprehensive:
             unittest.mock.Mock(side_effect=RuntimeError("fail")),
         )
 
-        score_fallback, var_fallback = _mk_score_var_batch_clean(data, modified=False)
-        slope_fallback = _sen_slope_batch_clean(data)
+        with pytest.raises(RuntimeError, match="fail"):
+            _mk_score_var_batch_clean(data, modified=False)
+        with pytest.raises(RuntimeError, match="fail"):
+            _sen_slope_batch_clean(data)
 
-        score_python, var_python = _mk_score_var_batch_clean_python(
-            data, modified=False
-        )
-        slope_python = _sen_slope_batch_clean_python(data)
-
-        np.testing.assert_allclose(score_fallback, score_python)
-        np.testing.assert_allclose(var_fallback, var_python)
-        np.testing.assert_allclose(slope_fallback, slope_python)
-
-    def test_combined_python_helper_matches_split_helpers(self):
-        """The pure Python combined helper should match the split helper results."""
-        data = np.array(
-            [
-                [1.0, 5.0],
-                [1.0, 5.0],
-                [2.0, 4.0],
-                [2.0, 4.0],
-                [3.0, 3.0],
-                [3.0, 3.0],
-            ],
-            dtype=np.float64,
-        )
-
-        scores, variances, slopes = _mk_score_var_sen_batch_clean_python(
-            data, modified=False
-        )
-        scores_split, variances_split = _mk_score_var_batch_clean_python(
-            data, modified=False
-        )
-        slopes_split = _sen_slope_batch_clean_python(data)
-
-        np.testing.assert_allclose(scores, scores_split)
-        np.testing.assert_allclose(variances, variances_split)
-        np.testing.assert_allclose(slopes, slopes_split)
-
-    def test_combined_dispatch_falls_back_after_backend_exception(self, monkeypatch):
-        """The combined dispatch helper should recover with the Python fallback."""
+    def test_combined_dispatch_propagates_backend_exception(self, monkeypatch):
+        """The combined dispatch helper should expose backend failures directly."""
         data = np.array(
             [
                 [1.0, 3.0],
@@ -1730,14 +1633,11 @@ class TestMannKendallComprehensive:
             unittest.mock.Mock(side_effect=RuntimeError("fail")),
         )
 
-        combined = _mk_score_var_sen_batch_clean(data, modified=True)
-        python_combined = _mk_score_var_sen_batch_clean_python(data, modified=True)
+        with pytest.raises(RuntimeError, match="fail"):
+            _mk_score_var_sen_batch_clean(data, modified=True)
 
-        for left, right in zip(combined, python_combined):
-            np.testing.assert_allclose(left, right, rtol=0.0, atol=1e-12)
-
-    def test_calculate_mk_variance_batch_dispatch(self):
-        """Direct batch variance helper should stay aligned with scalar semantics."""
+    def test_batch_variance_dispatch_stays_aligned_with_scalar_semantics(self):
+        """Direct clean-batch dispatch should stay aligned with scalar semantics."""
         data = np.array(
             [
                 [1.0, 2.0],
@@ -1748,7 +1648,7 @@ class TestMannKendallComprehensive:
             dtype=np.float64,
         )
 
-        batch = _calculate_mk_variance_batch(data, modified=False)
+        batch = _mk_score_var_batch_clean(data, modified=False)[1]
         scalar = np.array(
             [
                 mann_kendall_module._calculate_mk_variance(
@@ -1769,11 +1669,13 @@ class TestMannKendallComprehensive:
         np.testing.assert_allclose(result_dim["trend"], result_axis["trend"])
 
     def test_scalar_sen_slope_helper_matches_batch_first_column(self):
-        """Scalar Sen slope helper should agree with the clean batch path."""
+        """Clean batch Sen slope should agree with SciPy on consecutive spacing."""
         y = np.array([1.0, 1.0, 2.0, 3.0, 5.0, 8.0], dtype=np.float64)
-        scalar = _calculate_sen_slope(y)
         batch = _sen_slope_batch_clean(y.reshape(-1, 1))[0]
-        np.testing.assert_allclose(scalar, batch, rtol=0.0, atol=0.0)
+        scipy_slope = scipy.stats.mstats.theilslopes(
+            y, np.arange(y.size, dtype=np.float64)
+        )[0]
+        np.testing.assert_allclose(batch, scipy_slope, rtol=0.0, atol=0.0)
 
     def test_vectorized_nan_branch_skips_insufficient_series(self):
         """Series that drop below three finite values in the NaN path should remain NaN."""
@@ -1809,8 +1711,8 @@ class TestMannKendallComprehensive:
         result = _vectorized_mk_test(data, method="theilslopes", modified=False)
         assert np.isnan(result["trend"][1])
 
-    def test_vectorized_wrapper_helpers(self):
-        """Thin vectorized wrappers should forward to the clean dispatch helpers."""
+    def test_clean_dispatch_helpers_match_split_outputs(self):
+        """Clean dispatch helpers should expose the same score and slope outputs."""
         data = np.array(
             [
                 [1.0, 2.0],
@@ -1820,10 +1722,9 @@ class TestMannKendallComprehensive:
             ],
             dtype=np.float64,
         )
-        x = np.arange(data.shape[0], dtype=np.float64)
 
-        score_values = _vectorized_mk_score(data)
-        slope_values = _vectorized_theil_slopes(data, x)
+        score_values = _mk_score_var_batch_clean(data, modified=False)[0]
+        slope_values = _sen_slope_batch_clean(data)
 
         np.testing.assert_allclose(
             score_values, _mk_score_var_batch_clean(data, modified=False)[0]
@@ -2631,19 +2532,6 @@ class TestMannKendallComprehensive:
         custom_arr = CustomArrayWithAxisNames(data_3d)
         result = trend_analysis(custom_arr, axis="x")
         assert "trend" in result
-
-        # Test _calculate_std_error_theil function (lines 723-734)
-        y_short = np.array([1, 2])
-        x_short = np.array([1, 2])
-        std_err = _calculate_std_error_theil(y_short, x_short, 1.0)
-        assert np.isnan(std_err), "Should return NaN for insufficient data"
-
-        y_3 = np.array([1, 3, 5])
-        x_3 = np.array([1, 2, 3])
-        std_err_3 = _calculate_std_error_theil(y_3, x_3, 2.0)
-        assert not np.isnan(
-            std_err_3
-        ), "Should return valid std error for sufficient data"
 
         # Test dask-specific code paths (lines 474-476, 552-555, etc.)
         try:
