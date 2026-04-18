@@ -6,7 +6,7 @@ module vinth2p_kernels_core
     ! Keep the scalar interpolation and extrapolation formulas in one module so
     ! the column-major and flat C-order entry points share identical arithmetic.
     real(real64), parameter :: rd = 287.04_real64
-    real(real64), parameter :: ginv = 1.0_real64 / 9.80616_real64
+    real(real64), parameter :: ginv = 1.0_real64 / 9.80665_real64
     real(real64), parameter :: alpha = 0.0065_real64 * rd * ginv
 
     public :: real64
