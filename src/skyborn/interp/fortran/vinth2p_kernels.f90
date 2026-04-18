@@ -1,3 +1,15 @@
+! =============================================================================
+! Author  : Qianye Su
+! Copyright (C) 2026 by Qianye Su
+! Created : 2026-04-17
+! File    : vinth2p_kernels.f90
+! Purpose : Collect the modern free-form vertical interpolation kernels used
+!           for hybrid-to-pressure and sigma-to-hybrid remapping.
+! Notes   : This file keeps the legacy interpolation formulas, below-ground
+!           extrapolation behavior, and F2PY-facing entry points while sharing
+!           arithmetic between column-major and flat C-order call paths.
+! =============================================================================
+!
 module vinth2p_kernels_core
     use, intrinsic :: iso_fortran_env, only : real64
     implicit none
