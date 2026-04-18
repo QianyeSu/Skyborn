@@ -7,6 +7,7 @@ module mk_kernels_core
     public :: real64
     public :: compute_base_variance
     public :: compute_modified_variance
+    public :: compute_modified_variance_with_slope
     public :: compute_s_value
     public :: compute_sen_slope
 
@@ -252,18 +253,20 @@ contains
     end subroutine compute_sen_slope
 
 
-    subroutine compute_modified_variance(y, sorted_work, slope_work, centered_work, detrended_work, var_s)
+    subroutine compute_modified_variance_with_slope( &
+        y, sorted_work, centered_work, detrended_work, slope, var_s &
+    )
         real(real64), intent(in) :: y(:)
-        real(real64), intent(inout) :: sorted_work(:), slope_work(:)
+        real(real64), intent(inout) :: sorted_work(:)
         real(real64), intent(inout) :: centered_work(:), detrended_work(:)
+        real(real64), intent(in) :: slope
         real(real64), intent(out) :: var_s
 
         integer :: i, lag, n
-        real(real64) :: base_var, denom, mean_value, n_star, numer, slope
+        real(real64) :: base_var, denom, mean_value, n_star, numer
 
         n = size(y)
         call compute_base_variance(y, sorted_work, base_var)
-        call compute_sen_slope(y, slope, slope_work)
 
         do i = 1, n
             detrended_work(i) = y(i) - real(i, real64) * slope
@@ -287,6 +290,21 @@ contains
         end do
 
         var_s = base_var * n_star
+    end subroutine compute_modified_variance_with_slope
+
+
+    subroutine compute_modified_variance(y, sorted_work, slope_work, centered_work, detrended_work, var_s)
+        real(real64), intent(in) :: y(:)
+        real(real64), intent(inout) :: sorted_work(:), slope_work(:)
+        real(real64), intent(inout) :: centered_work(:), detrended_work(:)
+        real(real64), intent(out) :: var_s
+
+        real(real64) :: slope
+
+        call compute_sen_slope(y, slope, slope_work)
+        call compute_modified_variance_with_slope( &
+            y, sorted_work, centered_work, detrended_work, slope, var_s &
+        )
     end subroutine compute_modified_variance
 
 end module mk_kernels_core
@@ -333,3 +351,35 @@ subroutine sen_slope_batch_clean(data, slopes, ntime, nseries)
         call compute_sen_slope(data(:, col), slopes(col), slope_work)
     end do
 end subroutine sen_slope_batch_clean
+
+
+subroutine mk_score_var_sen_batch_clean( &
+    data, s_values, var_values, slopes, modified, ntime, nseries &
+)
+    use mk_kernels_core, only : &
+        compute_base_variance, compute_modified_variance_with_slope, compute_s_value, &
+        compute_sen_slope, real64
+    implicit none
+
+    integer, intent(in) :: modified, ntime, nseries
+    real(real64), intent(in) :: data(ntime, nseries)
+    real(real64), intent(out) :: s_values(nseries), var_values(nseries), slopes(nseries)
+
+    real(real64) :: centered_work(ntime), detrended_work(ntime), sorted_work(ntime)
+    real(real64) :: slope_work(max(1, ntime * (ntime - 1) / 2))
+    integer :: col
+
+    do col = 1, nseries
+        call compute_s_value(data(:, col), s_values(col))
+        call compute_sen_slope(data(:, col), slopes(col), slope_work)
+
+        if (modified /= 0) then
+            call compute_modified_variance_with_slope( &
+                data(:, col), sorted_work, centered_work, detrended_work, slopes(col), &
+                var_values(col) &
+            )
+        else
+            call compute_base_variance(data(:, col), sorted_work, var_values(col))
+        end if
+    end do
+end subroutine mk_score_var_sen_batch_clean
