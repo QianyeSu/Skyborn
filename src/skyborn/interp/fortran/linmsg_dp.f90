@@ -1,3 +1,15 @@
+! =============================================================================
+! Author  : Qianye Su
+! Copyright (C) 2026 by Qianye Su
+! Created : 2026-04-17
+! File    : linmsg_dp.f90
+! Purpose : Preserve the legacy double-precision missing-value filling helpers
+!           used by the interp remapping kernels.
+! Notes   : The public-compatible routine keeps the historical NCL gap rules,
+!           while the internal short-gap helper is a targeted optimization for
+!           row cleanup in `rcm2rgrid`.
+! =============================================================================
+!
 module linmsg_core
     implicit none
 
