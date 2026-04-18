@@ -1,3 +1,14 @@
+! =============================================================================
+! Author  : Qianye Su
+! Copyright (C) 2026 by Qianye Su
+! Created : 2026-04-17
+! File    : rcm_geodesy.f90
+! Purpose : Provide great-circle distance helpers shared by the interp
+!           curvilinear remapping kernels.
+! Notes   : Both the internal core routine and the public wrapper keep the
+!           same spherical-Earth arithmetic as the historical fixed-form code.
+! =============================================================================
+!
 module rcm_geodesy_core
     implicit none
 
