@@ -409,7 +409,7 @@ def _temp_extrapolate(data_or_t_bot, *args):
         )
 
     R_d = 287.04  # dry air gas constant
-    g_inv = 1 / 9.80665  # inverse of standard gravity
+    g_inv = 1 / 9.80616  # inverse of standard gravity
     alpha = 0.0065 * R_d * g_inv
 
     tstar = t_bot * (1 + alpha * (ps / p_sfc - 1))
@@ -467,7 +467,7 @@ def _geo_height_extrapolate(t_bot, lev, p_sfc, ps, phi_sfc):
         The extrapolated geopotential height in geopotential meters at the provided pressure levels.
     """
     R_d = 287.04  # dry air gas constant
-    g_inv = 1 / 9.80665  # inverse of standard gravity
+    g_inv = 1 / 9.80616  # inverse of standard gravity
     alpha = 0.0065 * R_d * g_inv
 
     tstar = t_bot * (1 + alpha * (ps / p_sfc - 1))
