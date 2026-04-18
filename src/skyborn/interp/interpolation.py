@@ -642,6 +642,52 @@ def _vinth2p_varflg(variable: str) -> int:
     return 0
 
 
+def _compiled_interp_output_dtype(data: xr.DataArray) -> np.dtype:
+    """Return the public result dtype while the compiled kernels stay float64."""
+
+    dtype = np.dtype(np.asarray(data.data).dtype)
+    if np.issubdtype(dtype, np.floating):
+        if dtype.itemsize <= np.dtype(np.float32).itemsize:
+            return np.dtype(np.float32)
+        return np.dtype(np.float64)
+    return np.dtype(np.float64)
+
+
+def _restore_compiled_interp_output_dtype(
+    output_values: np.ndarray, data: xr.DataArray
+) -> np.ndarray:
+    """Cast compiled float64 output back to the public result precision."""
+
+    output_dtype = _compiled_interp_output_dtype(data)
+    if output_values.dtype == output_dtype:
+        return output_values
+    return output_values.astype(output_dtype, copy=False)
+
+
+def _compiled_float64_vector(values) -> np.ndarray:
+    """Materialize a 1D float64 array for the compiled interpolation boundary."""
+
+    return np.asarray(values, dtype=np.float64).reshape(-1)
+
+
+def _compiled_float64_flat(values) -> np.ndarray:
+    """Materialize a contiguous 1D float64 buffer for the compiled boundary."""
+
+    return np.ascontiguousarray(np.asarray(values, dtype=np.float64)).reshape(-1)
+
+
+def _compiled_float64_columns(values, ncol: int, nlev: int) -> np.ndarray:
+    """Materialize a Fortran-ordered float64 (nlev, ncol) matrix for kernels."""
+
+    return np.asfortranarray(np.asarray(values, dtype=np.float64).reshape(ncol, nlev).T)
+
+
+def _compiled_float64_output(shape, order: str = "F") -> np.ndarray:
+    """Allocate a float64 output buffer for compiled interpolation kernels."""
+
+    return np.empty(shape, dtype=np.float64, order=order)
+
+
 def _as_c_contiguous_float64_view(array: xr.DataArray, dims, shape):
     """Return a zero-copy 1D float64 view when the DataArray matches the fast path."""
 
@@ -671,13 +717,13 @@ def _as_broadcast_float64_flat(array: xr.DataArray, template: xr.DataArray):
     except Exception:
         return None
 
-    values = np.asarray(broadcast.data, dtype=np.float64)
-    return np.ascontiguousarray(values).reshape(-1)
+    return _compiled_float64_flat(broadcast.data)
 
 
 def _build_vinth2p_output(data, interp_axis, new_levels, output_values, base_template):
     """Wrap a NumPy output array in the public xarray result."""
 
+    output_values = _restore_compiled_interp_output_dtype(output_values, data)
     coords = {k: v for k, v in base_template.coords.items()}
     coords["plev"] = new_levels
     output_dims = tuple(
@@ -731,14 +777,14 @@ def _interp_hybrid_to_pressure_fortran_corder(
     if ps_flat is None or not np.isfinite(ps_flat).all():
         return None
 
-    hyam_values = np.asarray(hyam.data, dtype=np.float64).reshape(nlevi)
-    hybm_values = np.asarray(hybm.data, dtype=np.float64).reshape(nlevi)
-    new_level_values = np.asarray(new_levels, dtype=np.float64).reshape(nlevo)
+    hyam_values = _compiled_float64_vector(hyam.data)
+    hybm_values = _compiled_float64_vector(hybm.data)
+    new_level_values = _compiled_float64_vector(new_levels)
     intyp = _vinth2p_intyp(method)
     base_template = data.isel({lev_dim: 0}, drop=True)
 
-    output_values = np.empty(
-        (*shape_before, nlevo, *shape_after), dtype=np.float64, order="C"
+    output_values = _compiled_float64_output(
+        (*shape_before, nlevo, *shape_after), order="C"
     )
     output_flat = output_values.reshape(-1)
 
@@ -847,20 +893,17 @@ def _interp_hybrid_to_pressure_fortran(
     lead_shape = data_view.shape[:-1]
     ncol = int(np.prod(lead_shape, dtype=np.int64)) if lead_shape else 1
 
-    data_columns = np.asfortranarray(
-        np.asarray(data_view.data, dtype=np.float64).reshape(ncol, nlevi).T
+    data_columns = _compiled_float64_columns(data_view.data, ncol=ncol, nlev=nlevi)
+    ps_columns = _compiled_float64_flat(
+        ps.broadcast_like(base_template).transpose(*lead_dims).data
     )
-    ps_columns = np.asarray(
-        ps.broadcast_like(base_template).transpose(*lead_dims).data,
-        dtype=np.float64,
-    ).reshape(ncol)
     ps_columns = np.where(np.isfinite(ps_columns), ps_columns, _VINTH2P_SPVL)
 
-    hyam_values = np.asarray(hyam.data, dtype=np.float64).reshape(nlevi)
-    hybm_values = np.asarray(hybm.data, dtype=np.float64).reshape(nlevi)
-    new_level_values = np.asarray(new_levels, dtype=np.float64).reshape(nlevo)
+    hyam_values = _compiled_float64_vector(hyam.data)
+    hybm_values = _compiled_float64_vector(hybm.data)
+    new_level_values = _compiled_float64_vector(new_levels)
     intyp = _vinth2p_intyp(method)
-    output_columns = np.empty((nlevo, ncol), dtype=np.float64, order="F")
+    output_columns = _compiled_float64_output((nlevo, ncol), order="F")
 
     if extrapolate:
         varflg = _vinth2p_varflg(variable)
@@ -868,14 +911,12 @@ def _interp_hybrid_to_pressure_fortran(
             t_bot_columns = np.zeros(ncol, dtype=np.float64)
             phi_columns = np.zeros(ncol, dtype=np.float64)
         else:
-            t_bot_columns = np.asarray(
-                t_bot.broadcast_like(base_template).transpose(*lead_dims).data,
-                dtype=np.float64,
-            ).reshape(ncol)
-            phi_columns = np.asarray(
-                phi_sfc.broadcast_like(base_template).transpose(*lead_dims).data,
-                dtype=np.float64,
-            ).reshape(ncol)
+            t_bot_columns = _compiled_float64_flat(
+                t_bot.broadcast_like(base_template).transpose(*lead_dims).data
+            )
+            phi_columns = _compiled_float64_flat(
+                phi_sfc.broadcast_like(base_template).transpose(*lead_dims).data
+            )
         if _dvinth2p_ecmwf_nodes_pa_into is not None:
             _dvinth2p_ecmwf_nodes_pa_into(
                 data_columns,
@@ -934,10 +975,9 @@ def _interp_hybrid_to_pressure_fortran(
                 0,
             )
 
-    output_values = np.asarray(output_columns, dtype=np.float64).T.reshape(
-        (*lead_shape, nlevo)
-    )
+    output_values = output_columns.T.reshape((*lead_shape, nlevo))
     output_values[output_values == _VINTH2P_SPVL] = np.nan
+    output_values = _restore_compiled_interp_output_dtype(output_values, data)
 
     coords = {k: v for k, v in base_template.coords.items()}
     coords["plev"] = new_levels
@@ -968,10 +1008,9 @@ def _interp_sigma_to_hybrid_fortran(
     if _dsigma2hybrid_nodes is None:
         raise RuntimeError("sigma2hybrid backend is not available")
 
-    sigma_source_values = np.asarray(
-        sig_coords.data if isinstance(sig_coords, xr.DataArray) else sig_coords,
-        dtype=np.float64,
-    ).reshape(-1)
+    sigma_source_values = _compiled_float64_vector(
+        sig_coords.data if isinstance(sig_coords, xr.DataArray) else sig_coords
+    )
     sigma_diffs = np.diff(sigma_source_values)
     if not (
         np.all(sigma_diffs >= 0.0)
@@ -1007,15 +1046,13 @@ def _interp_sigma_to_hybrid_fortran(
     lead_shape = data_view.shape[:-1]
     ncol = int(np.prod(lead_shape, dtype=np.int64)) if lead_shape else 1
 
-    data_columns = np.asfortranarray(
-        np.asarray(data_view.data, dtype=np.float64).reshape(ncol, nlevi).T
-    )
+    data_columns = _compiled_float64_columns(data_view.data, ncol=ncol, nlev=nlevi)
     sigma_target_columns = np.asfortranarray(
         np.asarray(sigma_target_view.data, dtype=np.float64).reshape(nlevo, ncol)
     )
 
     intyp = _vinth2p_intyp(method)
-    output_columns = np.empty((nlevo, ncol), dtype=np.float64, order="F")
+    output_columns = _compiled_float64_output((nlevo, ncol), order="F")
 
     if _dsigma2hybrid_nodes_into is not None:
         _dsigma2hybrid_nodes_into(
@@ -1041,13 +1078,14 @@ def _interp_sigma_to_hybrid_fortran(
             ncol=ncol,
         )
 
-    output_values = np.asarray(output_columns, dtype=np.float64).T.reshape(
-        (*lead_shape, nlevo)
-    )
+    output_values = output_columns.T.reshape((*lead_shape, nlevo))
     output_values[output_values == _VINTH2P_SPVL] = np.nan
+    output_values = _restore_compiled_interp_output_dtype(output_values, data)
 
     h_coords = (
-        sigma_target_columns[:, 0].copy() if ncol else np.asarray([], dtype=np.float64)
+        _restore_compiled_interp_output_dtype(sigma_target_columns[:, 0].copy(), data)
+        if ncol
+        else np.asarray([], dtype=_compiled_interp_output_dtype(data))
     )
     coords = {k: v for k, v in base_template.coords.items()}
     coords["hlev"] = h_coords
@@ -1101,11 +1139,11 @@ def _interp_sigma_to_hybrid_fortran_corder(
     if ps_flat is None or not np.isfinite(ps_flat).all():
         return None
 
-    hyam_values = np.asarray(hyam.data, dtype=np.float64).reshape(nlevo)
-    hybm_values = np.asarray(hybm.data, dtype=np.float64).reshape(nlevo)
+    hyam_values = _compiled_float64_vector(hyam.data)
+    hybm_values = _compiled_float64_vector(hybm.data)
     intyp = _vinth2p_intyp(method)
-    output_values = np.empty(
-        (*shape_before, nlevo, *shape_after), dtype=np.float64, order="C"
+    output_values = _compiled_float64_output(
+        (*shape_before, nlevo, *shape_after), order="C"
     )
     output_flat = output_values.reshape(-1)
 
@@ -1126,7 +1164,10 @@ def _interp_sigma_to_hybrid_fortran_corder(
     )
 
     output_values[output_values == _VINTH2P_SPVL] = np.nan
-    h_coords = hyam_values * float(p0) / ps_flat[0] + hybm_values
+    output_values = _restore_compiled_interp_output_dtype(output_values, data)
+    h_coords = _restore_compiled_interp_output_dtype(
+        hyam_values * float(p0) / ps_flat[0] + hybm_values, data
+    )
     coords = {k: v for k, v in base_template.coords.items()}
     coords["hlev"] = h_coords
     output = xr.DataArray(
