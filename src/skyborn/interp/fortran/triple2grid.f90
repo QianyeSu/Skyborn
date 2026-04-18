@@ -1,3 +1,15 @@
+! =============================================================================
+! Author  : Qianye Su
+! Copyright (C) 2026 by Qianye Su
+! Created : 2026-04-17
+! File    : triple2grid.f90
+! Purpose : Map scattered triple-list observations onto a rectilinear target
+!           grid through the legacy `triple2grid` entry points.
+! Notes   : This free-form source preserves the historical `trip2grd2` and
+!           `trip2grd3` behaviors, including their exact-match prepass and
+!           nearest-point assignment semantics.
+! =============================================================================
+!
 ! QUICK REFERENCE
 ! PURPOSE
 !    MAP AN IRREGULAR (X, Y, Z) TRIPLE LIST ONTO A TARGET RECTILINEAR
