@@ -51,6 +51,19 @@ contains
     end subroutine build_input_pressures
 
 
+    ! Build the hybrid pressure profile for one column when the `A * p0`
+    ! contribution has already been precomputed by the outer entry point.
+    pure subroutine build_input_pressures_precomputed( &
+        hbcofa_p0_mb, hbcofb, psfc_mb, plevi &
+    )
+        real(real64), intent(in) :: hbcofa_p0_mb(:), hbcofb(:)
+        real(real64), intent(in) :: psfc_mb
+        real(real64), intent(out) :: plevi(size(hbcofa_p0_mb))
+
+        plevi = hbcofa_p0_mb + hbcofb * psfc_mb
+    end subroutine build_input_pressures_precomputed
+
+
     ! Return whether the source coordinate increases from top to bottom.
     pure logical function levels_ascending(plevi) result(is_ascending)
         real(real64), intent(in) :: plevi(:)
@@ -58,6 +71,35 @@ contains
         ! Some tests and callers hand us the vertical axis in descending order.
         is_ascending = plevi(1) <= plevi(size(plevi))
     end function levels_ascending
+
+
+    ! Return whether a target coordinate sequence is globally monotonic so the
+    ! caller can reuse the previous bracketing index instead of re-running a
+    ! fresh binary search for every output level.
+    pure logical function levels_monotonic(plevo) result(is_monotonic)
+        real(real64), intent(in) :: plevo(:)
+
+        integer :: i
+        logical :: saw_decrease, saw_increase
+
+        saw_decrease = .false.
+        saw_increase = .false.
+
+        do i = 2, size(plevo)
+            if (plevo(i) > plevo(i - 1)) then
+                saw_increase = .true.
+            else if (plevo(i) < plevo(i - 1)) then
+                saw_decrease = .true.
+            end if
+
+            if (saw_increase .and. saw_decrease) then
+                is_monotonic = .false.
+                return
+            end if
+        end do
+
+        is_monotonic = .true.
+    end function levels_monotonic
 
 
     ! Return the index of the physically lowest model level for either
@@ -168,6 +210,69 @@ contains
     end function locate_bracketing_level_ordered
 
 
+    ! Reuse the previous bracketing index for monotonic target levels. This
+    ! preserves the same edge semantics as the binary-search helper but walks
+    ! locally from the previous valid pair instead of restarting from scratch.
+    pure integer function locate_bracketing_level_walk_ordered( &
+        plev_out, plevi, is_ascending, kp_prev &
+    ) result(kp)
+        real(real64), intent(in) :: plev_out
+        real(real64), intent(in) :: plevi(:)
+        logical, intent(in) :: is_ascending
+        integer, intent(in) :: kp_prev
+
+        integer :: nlev
+
+        nlev = size(plevi)
+        if (nlev < 2) then
+            kp = 0
+            return
+        end if
+
+        if (is_ascending) then
+            if (plev_out <= plevi(1)) then
+                kp = 1
+                return
+            end if
+
+            if (plev_out >= plevi(nlev - 1)) then
+                kp = nlev - 1
+                return
+            end if
+        else
+            if (plev_out >= plevi(1)) then
+                kp = 1
+                return
+            end if
+
+            if (plev_out <= plevi(nlev - 1)) then
+                kp = nlev - 1
+                return
+            end if
+        end if
+
+        kp = max(1, min(kp_prev, nlev - 1))
+
+        if (is_ascending) then
+            do while (kp > 1 .and. plev_out <= plevi(kp))
+                kp = kp - 1
+            end do
+
+            do while (kp < nlev - 1 .and. plev_out > plevi(kp + 1))
+                kp = kp + 1
+            end do
+        else
+            do while (kp > 1 .and. plev_out >= plevi(kp))
+                kp = kp - 1
+            end do
+
+            do while (kp < nlev - 1 .and. plev_out < plevi(kp + 1))
+                kp = kp + 1
+            end do
+        end if
+    end function locate_bracketing_level_walk_ordered
+
+
     ! Legacy double-log transform used by vinth2p "log-log" interpolation.
     pure real(real64) function double_log_pressure(pressure_mb) result(value)
         real(real64), intent(in) :: pressure_mb
@@ -256,8 +361,8 @@ contains
         integer, intent(in) :: intyp, kxtrp
 
         real(real64) :: bottom_pressure, plevi(size(dati_col)), psfc_mb
-        integer :: bottom_idx, bottom_pair_idx, k, kp
-        logical :: is_ascending
+        integer :: bottom_idx, bottom_pair_idx, k, kp, kp_hint
+        logical :: have_kp_hint, is_ascending, target_monotonic
 
         ! The Python bridge writes the exact sentinel value, so direct equality
         ! is intentional here.
@@ -271,6 +376,9 @@ contains
         psfc_mb = psfc * 0.01_real64
         call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
         is_ascending = levels_ascending(plevi)
+        target_monotonic = levels_monotonic(plevo_mb)
+        have_kp_hint = .false.
+        kp_hint = 1
         bottom_idx = lowest_model_level_index(plevi)
         bottom_pair_idx = lowest_bracketing_level_index(plevi)
         bottom_pressure = plevi(bottom_idx)
@@ -291,10 +399,18 @@ contains
                         )
                     end if
                 else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    if (target_monotonic .and. have_kp_hint) then
+                        kp = locate_bracketing_level_walk_ordered( &
+                            plevo_mb(k), plevi, is_ascending, kp_hint &
+                        )
+                    else
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    end if
                     if (kp < 1) then
                         dato_col(k) = spvl
                     else
+                        kp_hint = kp
+                        have_kp_hint = .true.
                         dato_col(k) = interpolate_value_linear( &
                             dati_col(kp), dati_col(kp + 1), &
                             plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -315,10 +431,18 @@ contains
                         )
                     end if
                 else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    if (target_monotonic .and. have_kp_hint) then
+                        kp = locate_bracketing_level_walk_ordered( &
+                            plevo_mb(k), plevi, is_ascending, kp_hint &
+                        )
+                    else
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    end if
                     if (kp < 1) then
                         dato_col(k) = spvl
                     else
+                        kp_hint = kp
+                        have_kp_hint = .true.
                         dato_col(k) = interpolate_value_log( &
                             dati_col(kp), dati_col(kp + 1), &
                             plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -339,10 +463,18 @@ contains
                         )
                     end if
                 else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    if (target_monotonic .and. have_kp_hint) then
+                        kp = locate_bracketing_level_walk_ordered( &
+                            plevo_mb(k), plevi, is_ascending, kp_hint &
+                        )
+                    else
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    end if
                     if (kp < 1) then
                         dato_col(k) = spvl
                     else
+                        kp_hint = kp
+                        have_kp_hint = .true.
                         dato_col(k) = interpolate_value_loglog( &
                             dati_col(kp), dati_col(kp + 1), &
                             plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -368,8 +500,8 @@ contains
         integer, intent(in) :: intyp, kxtrp, varflg
 
         real(real64) :: bottom_pressure, plevi(size(dati_col)), psfc_mb
-        integer :: bottom_idx, k, kp
-        logical :: is_ascending
+        integer :: bottom_idx, k, kp, kp_hint
+        logical :: have_kp_hint, is_ascending, target_monotonic
 
         ! The Python bridge writes the exact sentinel value, so direct equality
         ! is intentional here.
@@ -384,6 +516,9 @@ contains
         psfc_mb = psfc * 0.01_real64
         call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
         is_ascending = levels_ascending(plevi)
+        target_monotonic = levels_monotonic(plevo_mb)
+        have_kp_hint = .false.
+        kp_hint = 1
         bottom_idx = lowest_model_level_index(plevi)
         bottom_pressure = plevi(bottom_idx)
 
@@ -394,10 +529,18 @@ contains
                     if (plevo_mb(k) > bottom_pressure) then
                         dato_col(k) = spvl
                     else
-                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (target_monotonic .and. have_kp_hint) then
+                            kp = locate_bracketing_level_walk_ordered( &
+                                plevo_mb(k), plevi, is_ascending, kp_hint &
+                            )
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        end if
                         if (kp < 1) then
                             dato_col(k) = spvl
                         else
+                            kp_hint = kp
+                            have_kp_hint = .true.
                             dato_col(k) = interpolate_value_linear( &
                                 dati_col(kp), dati_col(kp + 1), &
                                 plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -415,10 +558,18 @@ contains
                                 plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 dato_col(k) = interpolate_value_linear( &
                                     dati_col(kp), dati_col(kp + 1), &
                                     plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -433,10 +584,18 @@ contains
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 dato_col(k) = interpolate_value_linear( &
                                     dati_col(kp), dati_col(kp + 1), &
                                     plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -449,10 +608,18 @@ contains
                         if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = dati_col(bottom_idx)
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 dato_col(k) = interpolate_value_linear( &
                                     dati_col(kp), dati_col(kp + 1), &
                                     plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -468,10 +635,18 @@ contains
                     if (plevo_mb(k) > bottom_pressure) then
                         dato_col(k) = spvl
                     else
-                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (target_monotonic .and. have_kp_hint) then
+                            kp = locate_bracketing_level_walk_ordered( &
+                                plevo_mb(k), plevi, is_ascending, kp_hint &
+                            )
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        end if
                         if (kp < 1) then
                             dato_col(k) = spvl
                         else
+                            kp_hint = kp
+                            have_kp_hint = .true.
                             dato_col(k) = interpolate_value_log( &
                                 dati_col(kp), dati_col(kp + 1), &
                                 plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -489,10 +664,18 @@ contains
                                 plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 dato_col(k) = interpolate_value_log( &
                                     dati_col(kp), dati_col(kp + 1), &
                                     plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -507,10 +690,18 @@ contains
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 dato_col(k) = interpolate_value_log( &
                                     dati_col(kp), dati_col(kp + 1), &
                                     plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -523,10 +714,18 @@ contains
                         if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = dati_col(bottom_idx)
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 dato_col(k) = interpolate_value_log( &
                                     dati_col(kp), dati_col(kp + 1), &
                                     plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -542,10 +741,18 @@ contains
                     if (plevo_mb(k) > bottom_pressure) then
                         dato_col(k) = spvl
                     else
-                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (target_monotonic .and. have_kp_hint) then
+                            kp = locate_bracketing_level_walk_ordered( &
+                                plevo_mb(k), plevi, is_ascending, kp_hint &
+                            )
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        end if
                         if (kp < 1) then
                             dato_col(k) = spvl
                         else
+                            kp_hint = kp
+                            have_kp_hint = .true.
                             dato_col(k) = interpolate_value_loglog( &
                                 dati_col(kp), dati_col(kp + 1), &
                                 plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -563,10 +770,18 @@ contains
                                 plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 dato_col(k) = interpolate_value_loglog( &
                                     dati_col(kp), dati_col(kp + 1), &
                                     plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -581,10 +796,18 @@ contains
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 dato_col(k) = interpolate_value_loglog( &
                                     dati_col(kp), dati_col(kp + 1), &
                                     plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -597,10 +820,18 @@ contains
                         if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = dati_col(bottom_idx)
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_col(k) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 dato_col(k) = interpolate_value_loglog( &
                                     dati_col(kp), dati_col(kp + 1), &
                                     plevo_mb(k), plevi(kp), plevi(kp + 1) &
@@ -729,8 +960,8 @@ contains
         integer, intent(in) :: ninner, nlevi, nlevo
 
         real(real64) :: bottom_pressure, plevi(nlevi), psfc_mb
-        integer :: bottom_idx, bottom_pair_idx, input_idx, k, kp, output_idx
-        logical :: is_ascending
+        integer :: bottom_idx, bottom_pair_idx, input_idx, k, kp, kp_hint, output_idx
+        logical :: have_kp_hint, is_ascending, target_monotonic
 
         if (psfc == spvl) then
             do k = 1, nlevo
@@ -743,6 +974,9 @@ contains
         psfc_mb = psfc * 0.01_real64
         call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
         is_ascending = levels_ascending(plevi)
+        target_monotonic = levels_monotonic(plevo_mb)
+        have_kp_hint = .false.
+        kp_hint = 1
         bottom_idx = lowest_model_level_index(plevi)
         bottom_pair_idx = lowest_bracketing_level_index(plevi)
         bottom_pressure = plevi(bottom_idx)
@@ -762,10 +996,18 @@ contains
                         )
                     end if
                 else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    if (target_monotonic .and. have_kp_hint) then
+                        kp = locate_bracketing_level_walk_ordered( &
+                            plevo_mb(k), plevi, is_ascending, kp_hint &
+                        )
+                    else
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    end if
                     if (kp < 1) then
                         dato_flat(output_idx) = spvl
                     else
+                        kp_hint = kp
+                        have_kp_hint = .true.
                         input_idx = base_in + (kp - 1) * ninner + inner
                         dato_flat(output_idx) = interpolate_value_linear( &
                             dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -788,10 +1030,18 @@ contains
                         )
                     end if
                 else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    if (target_monotonic .and. have_kp_hint) then
+                        kp = locate_bracketing_level_walk_ordered( &
+                            plevo_mb(k), plevi, is_ascending, kp_hint &
+                        )
+                    else
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    end if
                     if (kp < 1) then
                         dato_flat(output_idx) = spvl
                     else
+                        kp_hint = kp
+                        have_kp_hint = .true.
                         input_idx = base_in + (kp - 1) * ninner + inner
                         dato_flat(output_idx) = interpolate_value_log( &
                             dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -814,10 +1064,18 @@ contains
                         )
                     end if
                 else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    if (target_monotonic .and. have_kp_hint) then
+                        kp = locate_bracketing_level_walk_ordered( &
+                            plevo_mb(k), plevi, is_ascending, kp_hint &
+                        )
+                    else
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                    end if
                     if (kp < 1) then
                         dato_flat(output_idx) = spvl
                     else
+                        kp_hint = kp
+                        have_kp_hint = .true.
                         input_idx = base_in + (kp - 1) * ninner + inner
                         dato_flat(output_idx) = interpolate_value_loglog( &
                             dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -847,8 +1105,8 @@ contains
         integer, intent(in) :: ninner, nlevi, nlevo
 
         real(real64) :: bottom_pressure, plevi(nlevi), psfc_mb
-        integer :: bottom_idx, input_idx, k, kp, output_idx
-        logical :: is_ascending
+        integer :: bottom_idx, input_idx, k, kp, kp_hint, output_idx
+        logical :: have_kp_hint, is_ascending, target_monotonic
 
         if (psfc == spvl) then
             do k = 1, nlevo
@@ -861,6 +1119,9 @@ contains
         psfc_mb = psfc * 0.01_real64
         call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
         is_ascending = levels_ascending(plevi)
+        target_monotonic = levels_monotonic(plevo_mb)
+        have_kp_hint = .false.
+        kp_hint = 1
         bottom_idx = lowest_model_level_index(plevi)
         bottom_pressure = plevi(bottom_idx)
 
@@ -872,10 +1133,18 @@ contains
                     if (plevo_mb(k) > bottom_pressure) then
                         dato_flat(output_idx) = spvl
                     else
-                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (target_monotonic .and. have_kp_hint) then
+                            kp = locate_bracketing_level_walk_ordered( &
+                                plevo_mb(k), plevi, is_ascending, kp_hint &
+                            )
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        end if
                         if (kp < 1) then
                             dato_flat(output_idx) = spvl
                         else
+                            kp_hint = kp
+                            have_kp_hint = .true.
                             input_idx = base_in + (kp - 1) * ninner + inner
                             dato_flat(output_idx) = interpolate_value_linear( &
                                 dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -895,10 +1164,18 @@ contains
                                 dati_flat(input_idx), plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 input_idx = base_in + (kp - 1) * ninner + inner
                                 dato_flat(output_idx) = interpolate_value_linear( &
                                     dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -915,10 +1192,18 @@ contains
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 input_idx = base_in + (kp - 1) * ninner + inner
                                 dato_flat(output_idx) = interpolate_value_linear( &
                                     dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -934,10 +1219,18 @@ contains
                             input_idx = base_in + (bottom_idx - 1) * ninner + inner
                             dato_flat(output_idx) = dati_flat(input_idx)
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 input_idx = base_in + (kp - 1) * ninner + inner
                                 dato_flat(output_idx) = interpolate_value_linear( &
                                     dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -955,10 +1248,18 @@ contains
                     if (plevo_mb(k) > bottom_pressure) then
                         dato_flat(output_idx) = spvl
                     else
-                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (target_monotonic .and. have_kp_hint) then
+                            kp = locate_bracketing_level_walk_ordered( &
+                                plevo_mb(k), plevi, is_ascending, kp_hint &
+                            )
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        end if
                         if (kp < 1) then
                             dato_flat(output_idx) = spvl
                         else
+                            kp_hint = kp
+                            have_kp_hint = .true.
                             input_idx = base_in + (kp - 1) * ninner + inner
                             dato_flat(output_idx) = interpolate_value_log( &
                                 dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -978,10 +1279,18 @@ contains
                                 dati_flat(input_idx), plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 input_idx = base_in + (kp - 1) * ninner + inner
                                 dato_flat(output_idx) = interpolate_value_log( &
                                     dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -998,10 +1307,18 @@ contains
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 input_idx = base_in + (kp - 1) * ninner + inner
                                 dato_flat(output_idx) = interpolate_value_log( &
                                     dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -1017,10 +1334,18 @@ contains
                             input_idx = base_in + (bottom_idx - 1) * ninner + inner
                             dato_flat(output_idx) = dati_flat(input_idx)
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 input_idx = base_in + (kp - 1) * ninner + inner
                                 dato_flat(output_idx) = interpolate_value_log( &
                                     dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -1038,10 +1363,18 @@ contains
                     if (plevo_mb(k) > bottom_pressure) then
                         dato_flat(output_idx) = spvl
                     else
-                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (target_monotonic .and. have_kp_hint) then
+                            kp = locate_bracketing_level_walk_ordered( &
+                                plevo_mb(k), plevi, is_ascending, kp_hint &
+                            )
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        end if
                         if (kp < 1) then
                             dato_flat(output_idx) = spvl
                         else
+                            kp_hint = kp
+                            have_kp_hint = .true.
                             input_idx = base_in + (kp - 1) * ninner + inner
                             dato_flat(output_idx) = interpolate_value_loglog( &
                                 dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -1061,10 +1394,18 @@ contains
                                 dati_flat(input_idx), plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 input_idx = base_in + (kp - 1) * ninner + inner
                                 dato_flat(output_idx) = interpolate_value_loglog( &
                                     dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -1081,10 +1422,18 @@ contains
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 input_idx = base_in + (kp - 1) * ninner + inner
                                 dato_flat(output_idx) = interpolate_value_loglog( &
                                     dati_flat(input_idx), dati_flat(input_idx + ninner), &
@@ -1100,10 +1449,18 @@ contains
                             input_idx = base_in + (bottom_idx - 1) * ninner + inner
                             dato_flat(output_idx) = dati_flat(input_idx)
                         else
-                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (target_monotonic .and. have_kp_hint) then
+                                kp = locate_bracketing_level_walk_ordered( &
+                                    plevo_mb(k), plevi, is_ascending, kp_hint &
+                                )
+                            else
+                                kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            end if
                             if (kp < 1) then
                                 dato_flat(output_idx) = spvl
                             else
+                                kp_hint = kp
+                                have_kp_hint = .true.
                                 input_idx = base_in + (kp - 1) * ninner + inner
                                 dato_flat(output_idx) = interpolate_value_loglog( &
                                     dati_flat(input_idx), dati_flat(input_idx + ninner), &
