@@ -389,101 +389,227 @@ contains
 
         select case (intyp)
         case (1)
-            do k = 1, size(plevo_mb)
-                if (plevo_mb(k) > bottom_pressure) then
-                    if (kxtrp == 0) then
+            if (kxtrp == 0) then
+                do k = 1, size(plevo_mb)
+                    if (plevo_mb(k) > bottom_pressure) then
                         dato_col(k) = spvl
                     else
-                        select case (varflg)
-                        case (1)
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (kp < 1) then
+                            dato_col(k) = spvl
+                        else
+                            dato_col(k) = interpolate_value_linear( &
+                                dati_col(kp), dati_col(kp + 1), &
+                                plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                            )
+                        end if
+                    end if
+                end do
+            else
+                select case (varflg)
+                case (1)
+                    do k = 1, size(plevo_mb)
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = extrapolate_temperature( &
                                 dati_col(bottom_idx), plevi(bottom_idx), &
                                 plevo_mb(k), psfc_mb, phis &
                             )
-                        case (-1)
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_col(k) = spvl
+                            else
+                                dato_col(k) = interpolate_value_linear( &
+                                    dati_col(kp), dati_col(kp + 1), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case (-1)
+                    do k = 1, size(plevo_mb)
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = extrapolate_geopotential( &
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
-                        case default
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_col(k) = spvl
+                            else
+                                dato_col(k) = interpolate_value_linear( &
+                                    dati_col(kp), dati_col(kp + 1), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case default
+                    do k = 1, size(plevo_mb)
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = dati_col(bottom_idx)
-                        end select
-                    end if
-                else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
-                    if (kp < 1) then
-                        dato_col(k) = spvl
-                    else
-                        dato_col(k) = interpolate_value_linear( &
-                            dati_col(kp), dati_col(kp + 1), &
-                            plevo_mb(k), plevi(kp), plevi(kp + 1) &
-                        )
-                    end if
-                end if
-            end do
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_col(k) = spvl
+                            else
+                                dato_col(k) = interpolate_value_linear( &
+                                    dati_col(kp), dati_col(kp + 1), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                end select
+            end if
         case (2)
-            do k = 1, size(plevo_mb)
-                if (plevo_mb(k) > bottom_pressure) then
-                    if (kxtrp == 0) then
+            if (kxtrp == 0) then
+                do k = 1, size(plevo_mb)
+                    if (plevo_mb(k) > bottom_pressure) then
                         dato_col(k) = spvl
                     else
-                        select case (varflg)
-                        case (1)
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (kp < 1) then
+                            dato_col(k) = spvl
+                        else
+                            dato_col(k) = interpolate_value_log( &
+                                dati_col(kp), dati_col(kp + 1), &
+                                plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                            )
+                        end if
+                    end if
+                end do
+            else
+                select case (varflg)
+                case (1)
+                    do k = 1, size(plevo_mb)
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = extrapolate_temperature( &
                                 dati_col(bottom_idx), plevi(bottom_idx), &
                                 plevo_mb(k), psfc_mb, phis &
                             )
-                        case (-1)
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_col(k) = spvl
+                            else
+                                dato_col(k) = interpolate_value_log( &
+                                    dati_col(kp), dati_col(kp + 1), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case (-1)
+                    do k = 1, size(plevo_mb)
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = extrapolate_geopotential( &
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
-                        case default
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_col(k) = spvl
+                            else
+                                dato_col(k) = interpolate_value_log( &
+                                    dati_col(kp), dati_col(kp + 1), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case default
+                    do k = 1, size(plevo_mb)
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = dati_col(bottom_idx)
-                        end select
-                    end if
-                else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
-                    if (kp < 1) then
-                        dato_col(k) = spvl
-                    else
-                        dato_col(k) = interpolate_value_log( &
-                            dati_col(kp), dati_col(kp + 1), &
-                            plevo_mb(k), plevi(kp), plevi(kp + 1) &
-                        )
-                    end if
-                end if
-            end do
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_col(k) = spvl
+                            else
+                                dato_col(k) = interpolate_value_log( &
+                                    dati_col(kp), dati_col(kp + 1), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                end select
+            end if
         case (3)
-            do k = 1, size(plevo_mb)
-                if (plevo_mb(k) > bottom_pressure) then
-                    if (kxtrp == 0) then
+            if (kxtrp == 0) then
+                do k = 1, size(plevo_mb)
+                    if (plevo_mb(k) > bottom_pressure) then
                         dato_col(k) = spvl
                     else
-                        select case (varflg)
-                        case (1)
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (kp < 1) then
+                            dato_col(k) = spvl
+                        else
+                            dato_col(k) = interpolate_value_loglog( &
+                                dati_col(kp), dati_col(kp + 1), &
+                                plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                            )
+                        end if
+                    end if
+                end do
+            else
+                select case (varflg)
+                case (1)
+                    do k = 1, size(plevo_mb)
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = extrapolate_temperature( &
                                 dati_col(bottom_idx), plevi(bottom_idx), &
                                 plevo_mb(k), psfc_mb, phis &
                             )
-                        case (-1)
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_col(k) = spvl
+                            else
+                                dato_col(k) = interpolate_value_loglog( &
+                                    dati_col(kp), dati_col(kp + 1), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case (-1)
+                    do k = 1, size(plevo_mb)
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = extrapolate_geopotential( &
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
-                        case default
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_col(k) = spvl
+                            else
+                                dato_col(k) = interpolate_value_loglog( &
+                                    dati_col(kp), dati_col(kp + 1), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case default
+                    do k = 1, size(plevo_mb)
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_col(k) = dati_col(bottom_idx)
-                        end select
-                    end if
-                else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
-                    if (kp < 1) then
-                        dato_col(k) = spvl
-                    else
-                        dato_col(k) = interpolate_value_loglog( &
-                            dati_col(kp), dati_col(kp + 1), &
-                            plevo_mb(k), plevi(kp), plevi(kp + 1) &
-                        )
-                    end if
-                end if
-            end do
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_col(k) = spvl
+                            else
+                                dato_col(k) = interpolate_value_loglog( &
+                                    dati_col(kp), dati_col(kp + 1), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                end select
+            end if
         case default
             dato_col = spvl
         end select
@@ -740,110 +866,254 @@ contains
 
         select case (intyp)
         case (1)
-            do k = 1, nlevo
-                output_idx = base_out + (k - 1) * ninner + inner
-                if (plevo_mb(k) > bottom_pressure) then
-                    if (kxtrp == 0) then
+            if (kxtrp == 0) then
+                do k = 1, nlevo
+                    output_idx = base_out + (k - 1) * ninner + inner
+                    if (plevo_mb(k) > bottom_pressure) then
                         dato_flat(output_idx) = spvl
                     else
-                        select case (varflg)
-                        case (1)
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (kp < 1) then
+                            dato_flat(output_idx) = spvl
+                        else
+                            input_idx = base_in + (kp - 1) * ninner + inner
+                            dato_flat(output_idx) = interpolate_value_linear( &
+                                dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                            )
+                        end if
+                    end if
+                end do
+            else
+                select case (varflg)
+                case (1)
+                    do k = 1, nlevo
+                        output_idx = base_out + (k - 1) * ninner + inner
+                        if (plevo_mb(k) > bottom_pressure) then
                             input_idx = base_in + (bottom_idx - 1) * ninner + inner
                             dato_flat(output_idx) = extrapolate_temperature( &
                                 dati_flat(input_idx), plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
-                        case (-1)
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_flat(output_idx) = spvl
+                            else
+                                input_idx = base_in + (kp - 1) * ninner + inner
+                                dato_flat(output_idx) = interpolate_value_linear( &
+                                    dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case (-1)
+                    do k = 1, nlevo
+                        output_idx = base_out + (k - 1) * ninner + inner
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_flat(output_idx) = extrapolate_geopotential( &
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
-                        case default
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_flat(output_idx) = spvl
+                            else
+                                input_idx = base_in + (kp - 1) * ninner + inner
+                                dato_flat(output_idx) = interpolate_value_linear( &
+                                    dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case default
+                    do k = 1, nlevo
+                        output_idx = base_out + (k - 1) * ninner + inner
+                        if (plevo_mb(k) > bottom_pressure) then
                             input_idx = base_in + (bottom_idx - 1) * ninner + inner
                             dato_flat(output_idx) = dati_flat(input_idx)
-                        end select
-                    end if
-                else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
-                    if (kp < 1) then
-                        dato_flat(output_idx) = spvl
-                    else
-                        input_idx = base_in + (kp - 1) * ninner + inner
-                        dato_flat(output_idx) = interpolate_value_linear( &
-                            dati_flat(input_idx), dati_flat(input_idx + ninner), &
-                            plevo_mb(k), plevi(kp), plevi(kp + 1) &
-                        )
-                    end if
-                end if
-            end do
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_flat(output_idx) = spvl
+                            else
+                                input_idx = base_in + (kp - 1) * ninner + inner
+                                dato_flat(output_idx) = interpolate_value_linear( &
+                                    dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                end select
+            end if
         case (2)
-            do k = 1, nlevo
-                output_idx = base_out + (k - 1) * ninner + inner
-                if (plevo_mb(k) > bottom_pressure) then
-                    if (kxtrp == 0) then
+            if (kxtrp == 0) then
+                do k = 1, nlevo
+                    output_idx = base_out + (k - 1) * ninner + inner
+                    if (plevo_mb(k) > bottom_pressure) then
                         dato_flat(output_idx) = spvl
                     else
-                        select case (varflg)
-                        case (1)
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (kp < 1) then
+                            dato_flat(output_idx) = spvl
+                        else
+                            input_idx = base_in + (kp - 1) * ninner + inner
+                            dato_flat(output_idx) = interpolate_value_log( &
+                                dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                            )
+                        end if
+                    end if
+                end do
+            else
+                select case (varflg)
+                case (1)
+                    do k = 1, nlevo
+                        output_idx = base_out + (k - 1) * ninner + inner
+                        if (plevo_mb(k) > bottom_pressure) then
                             input_idx = base_in + (bottom_idx - 1) * ninner + inner
                             dato_flat(output_idx) = extrapolate_temperature( &
                                 dati_flat(input_idx), plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
-                        case (-1)
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_flat(output_idx) = spvl
+                            else
+                                input_idx = base_in + (kp - 1) * ninner + inner
+                                dato_flat(output_idx) = interpolate_value_log( &
+                                    dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case (-1)
+                    do k = 1, nlevo
+                        output_idx = base_out + (k - 1) * ninner + inner
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_flat(output_idx) = extrapolate_geopotential( &
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
-                        case default
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_flat(output_idx) = spvl
+                            else
+                                input_idx = base_in + (kp - 1) * ninner + inner
+                                dato_flat(output_idx) = interpolate_value_log( &
+                                    dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case default
+                    do k = 1, nlevo
+                        output_idx = base_out + (k - 1) * ninner + inner
+                        if (plevo_mb(k) > bottom_pressure) then
                             input_idx = base_in + (bottom_idx - 1) * ninner + inner
                             dato_flat(output_idx) = dati_flat(input_idx)
-                        end select
-                    end if
-                else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
-                    if (kp < 1) then
-                        dato_flat(output_idx) = spvl
-                    else
-                        input_idx = base_in + (kp - 1) * ninner + inner
-                        dato_flat(output_idx) = interpolate_value_log( &
-                            dati_flat(input_idx), dati_flat(input_idx + ninner), &
-                            plevo_mb(k), plevi(kp), plevi(kp + 1) &
-                        )
-                    end if
-                end if
-            end do
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_flat(output_idx) = spvl
+                            else
+                                input_idx = base_in + (kp - 1) * ninner + inner
+                                dato_flat(output_idx) = interpolate_value_log( &
+                                    dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                end select
+            end if
         case (3)
-            do k = 1, nlevo
-                output_idx = base_out + (k - 1) * ninner + inner
-                if (plevo_mb(k) > bottom_pressure) then
-                    if (kxtrp == 0) then
+            if (kxtrp == 0) then
+                do k = 1, nlevo
+                    output_idx = base_out + (k - 1) * ninner + inner
+                    if (plevo_mb(k) > bottom_pressure) then
                         dato_flat(output_idx) = spvl
                     else
-                        select case (varflg)
-                        case (1)
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                        if (kp < 1) then
+                            dato_flat(output_idx) = spvl
+                        else
+                            input_idx = base_in + (kp - 1) * ninner + inner
+                            dato_flat(output_idx) = interpolate_value_loglog( &
+                                dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                            )
+                        end if
+                    end if
+                end do
+            else
+                select case (varflg)
+                case (1)
+                    do k = 1, nlevo
+                        output_idx = base_out + (k - 1) * ninner + inner
+                        if (plevo_mb(k) > bottom_pressure) then
                             input_idx = base_in + (bottom_idx - 1) * ninner + inner
                             dato_flat(output_idx) = extrapolate_temperature( &
                                 dati_flat(input_idx), plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
-                        case (-1)
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_flat(output_idx) = spvl
+                            else
+                                input_idx = base_in + (kp - 1) * ninner + inner
+                                dato_flat(output_idx) = interpolate_value_loglog( &
+                                    dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case (-1)
+                    do k = 1, nlevo
+                        output_idx = base_out + (k - 1) * ninner + inner
+                        if (plevo_mb(k) > bottom_pressure) then
                             dato_flat(output_idx) = extrapolate_geopotential( &
                                 tbot, plevi(bottom_idx), plevo_mb(k), psfc_mb, phis &
                             )
-                        case default
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_flat(output_idx) = spvl
+                            else
+                                input_idx = base_in + (kp - 1) * ninner + inner
+                                dato_flat(output_idx) = interpolate_value_loglog( &
+                                    dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                case default
+                    do k = 1, nlevo
+                        output_idx = base_out + (k - 1) * ninner + inner
+                        if (plevo_mb(k) > bottom_pressure) then
                             input_idx = base_in + (bottom_idx - 1) * ninner + inner
                             dato_flat(output_idx) = dati_flat(input_idx)
-                        end select
-                    end if
-                else
-                    kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
-                    if (kp < 1) then
-                        dato_flat(output_idx) = spvl
-                    else
-                        input_idx = base_in + (kp - 1) * ninner + inner
-                        dato_flat(output_idx) = interpolate_value_loglog( &
-                            dati_flat(input_idx), dati_flat(input_idx + ninner), &
-                            plevo_mb(k), plevi(kp), plevi(kp + 1) &
-                        )
-                    end if
-                end if
-            end do
+                        else
+                            kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
+                            if (kp < 1) then
+                                dato_flat(output_idx) = spvl
+                            else
+                                input_idx = base_in + (kp - 1) * ninner + inner
+                                dato_flat(output_idx) = interpolate_value_loglog( &
+                                    dati_flat(input_idx), dati_flat(input_idx + ninner), &
+                                    plevo_mb(k), plevi(kp), plevi(kp + 1) &
+                                )
+                            end if
+                        end if
+                    end do
+                end select
+            end if
         case default
             do k = 1, nlevo
                 output_idx = base_out + (k - 1) * ninner + inner
