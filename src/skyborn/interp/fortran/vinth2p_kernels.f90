@@ -1171,10 +1171,7 @@ contains
                             )
                         end if
                     else
-                        kp = legacy_ecmwf_bracketing_floor( &
-                            locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending), &
-                            plevo_mb(k), plevi, is_ascending &
-                        )
+                        kp = locate_bracketing_level_ordered(plevo_mb(k), plevi, is_ascending)
                         if (kp < 1) then
                             dato_flat(output_idx) = spvl
                         else
