@@ -31,9 +31,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Import mann_kendall module directly to avoid package-level imports
 mann_kendall_path = os.path.join(
-    os.path.dirname(__file__), "..", "src", "skyborn", "calc", "mann_kendall.py"
+    os.path.dirname(__file__),
+    "..",
+    "src",
+    "skyborn",
+    "calc",
+    "mann_kendall",
+    "__init__.py",
 )
-spec = importlib.util.spec_from_file_location("mann_kendall", mann_kendall_path)
+spec = importlib.util.spec_from_file_location(
+    "skyborn.calc.mann_kendall",
+    mann_kendall_path,
+    submodule_search_locations=[os.path.dirname(mann_kendall_path)],
+)
 mann_kendall_module = importlib.util.module_from_spec(spec)
 
 # Execute the module with error handling
@@ -1452,7 +1462,9 @@ class TestMannKendallComprehensive:
         os.makedirs(repo_tmp, exist_ok=True)
 
         with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
-            fake_source = os.path.join(tmp_dir, "mann_kendall.py")
+            package_dir = os.path.join(tmp_dir, "mann_kendall")
+            os.makedirs(package_dir, exist_ok=True)
+            fake_source = os.path.join(package_dir, "__init__.py")
             with open(fake_source, "w", encoding="utf-8") as handle:
                 handle.write("# probe\n")
 
@@ -1472,9 +1484,10 @@ class TestMannKendallComprehensive:
         os.makedirs(repo_tmp, exist_ok=True)
 
         with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
-            fake_source = os.path.join(tmp_dir, "mann_kendall.py")
-            backend_dir = os.path.join(tmp_dir, "mann_kendall_core")
+            package_dir = os.path.join(tmp_dir, "mann_kendall")
+            backend_dir = package_dir
             os.makedirs(backend_dir, exist_ok=True)
+            fake_source = os.path.join(package_dir, "__init__.py")
 
             with open(fake_source, "w", encoding="utf-8") as handle:
                 handle.write("# probe\n")
@@ -1505,9 +1518,10 @@ class TestMannKendallComprehensive:
         os.makedirs(repo_tmp, exist_ok=True)
 
         with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
-            fake_source = os.path.join(tmp_dir, "mann_kendall.py")
-            backend_dir = os.path.join(tmp_dir, "mann_kendall_core")
+            package_dir = os.path.join(tmp_dir, "mann_kendall")
+            backend_dir = package_dir
             os.makedirs(backend_dir, exist_ok=True)
+            fake_source = os.path.join(package_dir, "__init__.py")
 
             with open(fake_source, "w", encoding="utf-8") as handle:
                 handle.write("# probe\n")
@@ -1540,9 +1554,10 @@ class TestMannKendallComprehensive:
         os.makedirs(repo_tmp, exist_ok=True)
 
         with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
-            fake_source = os.path.join(tmp_dir, "mann_kendall.py")
-            backend_dir = os.path.join(tmp_dir, "mann_kendall_core")
+            package_dir = os.path.join(tmp_dir, "mann_kendall")
+            backend_dir = package_dir
             os.makedirs(backend_dir, exist_ok=True)
+            fake_source = os.path.join(package_dir, "__init__.py")
             candidate = os.path.join(backend_dir, "mann_kendall_core.pyd")
 
             with open(fake_source, "w", encoding="utf-8") as handle:
