@@ -1387,7 +1387,7 @@ class TestMannKendallComprehensive:
     def test_combined_backend_matches_split_helpers(self):
         """The combined compiled helper should agree with split compiled calls."""
         if not _backend_available():
-            pytest.skip("Compiled mk_kernels backend not available")
+            pytest.skip("Compiled mann_kendall_core backend not available")
 
         data = np.array(
             [
@@ -1443,7 +1443,7 @@ class TestMannKendallComprehensive:
         )
         monkeypatch.setattr(mann_kendall_module, "_sen_slope_batch_clean_backend", None)
 
-        with pytest.raises(ImportError, match="compiled mk_kernels backend"):
+        with pytest.raises(ImportError, match="compiled mann_kendall_core"):
             mann_kendall_test(data, method="theilslopes", modified=True)
 
     def test_loader_returns_none_when_import_and_local_probe_fail(self, monkeypatch):
@@ -1473,13 +1473,13 @@ class TestMannKendallComprehensive:
 
         with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
             fake_source = os.path.join(tmp_dir, "mann_kendall.py")
-            backend_dir = os.path.join(tmp_dir, "mk_kernels")
+            backend_dir = os.path.join(tmp_dir, "mann_kendall_core")
             os.makedirs(backend_dir, exist_ok=True)
 
             with open(fake_source, "w", encoding="utf-8") as handle:
                 handle.write("# probe\n")
             with open(
-                os.path.join(backend_dir, "mk_kernels_backend.pyd"), "wb"
+                os.path.join(backend_dir, "mann_kendall_core.pyd"), "wb"
             ) as handle:
                 handle.write(b"not a real extension")
 
@@ -1506,13 +1506,13 @@ class TestMannKendallComprehensive:
 
         with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
             fake_source = os.path.join(tmp_dir, "mann_kendall.py")
-            backend_dir = os.path.join(tmp_dir, "mk_kernels")
+            backend_dir = os.path.join(tmp_dir, "mann_kendall_core")
             os.makedirs(backend_dir, exist_ok=True)
 
             with open(fake_source, "w", encoding="utf-8") as handle:
                 handle.write("# probe\n")
             with open(
-                os.path.join(backend_dir, "mk_kernels_backend.pyd"), "wb"
+                os.path.join(backend_dir, "mann_kendall_core.pyd"), "wb"
             ) as handle:
                 handle.write(b"placeholder")
 
@@ -1541,9 +1541,9 @@ class TestMannKendallComprehensive:
 
         with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
             fake_source = os.path.join(tmp_dir, "mann_kendall.py")
-            backend_dir = os.path.join(tmp_dir, "mk_kernels")
+            backend_dir = os.path.join(tmp_dir, "mann_kendall_core")
             os.makedirs(backend_dir, exist_ok=True)
-            candidate = os.path.join(backend_dir, "mk_kernels_backend.pyd")
+            candidate = os.path.join(backend_dir, "mann_kendall_core.pyd")
 
             with open(fake_source, "w", encoding="utf-8") as handle:
                 handle.write("# probe\n")
