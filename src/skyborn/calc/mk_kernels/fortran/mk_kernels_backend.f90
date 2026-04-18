@@ -1,3 +1,9 @@
+!> Modern double-precision Mann-Kendall kernels for Skyborn.
+!>
+!> The public entry points in this file operate on clean columns arranged as
+!> `data(ntime, nseries)` and are called from `skyborn.calc.mann_kendall`.
+!> Inputs are assumed to contain no NaN values; missing-value handling stays on
+!> the Python side so the compiled kernels can stay focused on the hot path.
 module mk_kernels_core
     use, intrinsic :: ieee_arithmetic, only : ieee_quiet_nan, ieee_value
     use, intrinsic :: iso_fortran_env, only : real64
@@ -13,6 +19,8 @@ module mk_kernels_core
 
 contains
 
+    ! Use a small median-of-three pivot to keep the quicksort/select partition
+    ! stable on partially ordered series and slope buffers.
     pure real(real64) function median_of_three(a, b, c) result(value)
         real(real64), intent(in) :: a, b, c
 
@@ -36,6 +44,8 @@ contains
     end function median_of_three
 
 
+    ! Insertion sort is faster than a full recursive partition for the short
+    ! tails left behind by quicksort / quickselect.
     subroutine insertion_sort_real(values, left, right)
         real(real64), intent(inout) :: values(:)
         integer, intent(in) :: left, right
@@ -55,6 +65,7 @@ contains
     end subroutine insertion_sort_real
 
 
+    ! General ascending in-place quicksort used for the tied-group variance path.
     recursive subroutine quicksort_real(values, left, right)
         real(real64), intent(inout) :: values(:)
         integer, intent(in) :: left, right
@@ -94,6 +105,7 @@ contains
     end subroutine quicksort_real
 
 
+    ! Sort a full real buffer in ascending order.
     subroutine sort_real_inplace(values)
         real(real64), intent(inout) :: values(:)
 
@@ -103,6 +115,8 @@ contains
     end subroutine sort_real_inplace
 
 
+    ! Quickselect the kth order statistic in-place without fully sorting the
+    ! slope buffer. This is the key optimization for Sen slope median lookup.
     subroutine select_kth_real(values, kth_index)
         real(real64), intent(inout) :: values(:)
         integer, intent(in) :: kth_index
@@ -152,6 +166,7 @@ contains
     end subroutine select_kth_real
 
 
+    ! Compute the Mann-Kendall S statistic for one clean time series.
     subroutine compute_s_value(y, s_value)
         real(real64), intent(in) :: y(:)
         real(real64), intent(out) :: s_value
@@ -173,6 +188,9 @@ contains
     end subroutine compute_s_value
 
 
+    ! Compute the tie-corrected variance of S for one clean time series.
+    ! `sorted_work` is supplied by the caller so repeated column calls do not
+    ! reallocate temporary storage.
     subroutine compute_base_variance(y, sorted_work, var_s)
         real(real64), intent(in) :: y(:)
         real(real64), intent(inout) :: sorted_work(:)
@@ -218,6 +236,9 @@ contains
     end subroutine compute_base_variance
 
 
+    ! Compute the exact Sen / Theil-Sen slope median for one clean time series.
+    ! `slope_work` must have size `n * (n - 1) / 2` so every pairwise slope can
+    ! be stored before the median is selected in-place.
     subroutine compute_sen_slope(y, slope, slope_work)
         real(real64), intent(in) :: y(:)
         real(real64), intent(out) :: slope
@@ -253,6 +274,8 @@ contains
     end subroutine compute_sen_slope
 
 
+    ! Compute the Yue-Wang modified variance after detrending by a supplied
+    ! Sen slope. This avoids recomputing the slope when the caller already has it.
     subroutine compute_modified_variance_with_slope( &
         y, sorted_work, centered_work, detrended_work, slope, var_s &
     )
@@ -293,6 +316,7 @@ contains
     end subroutine compute_modified_variance_with_slope
 
 
+    ! Convenience wrapper for the modified variance path when only `y` is known.
     subroutine compute_modified_variance(y, sorted_work, slope_work, centered_work, detrended_work, var_s)
         real(real64), intent(in) :: y(:)
         real(real64), intent(inout) :: sorted_work(:), slope_work(:)
@@ -310,6 +334,17 @@ contains
 end module mk_kernels_core
 
 
+!> Batch kernel for the Mann-Kendall S statistic and variance.
+!>
+!> Parameters
+!> ----------
+!> data
+!>     Clean input array with shape `(ntime, nseries)`.
+!> modified
+!>     `0` for the original Mann-Kendall variance, nonzero for the Yue-Wang
+!>     modified variance.
+!> s_values, var_values
+!>     One output value per input column.
 subroutine mk_score_var_batch_clean(data, s_values, var_values, modified, ntime, nseries)
     use mk_kernels_core, only : compute_base_variance, compute_modified_variance, compute_s_value, real64
     implicit none
@@ -336,6 +371,8 @@ subroutine mk_score_var_batch_clean(data, s_values, var_values, modified, ntime,
 end subroutine mk_score_var_batch_clean
 
 
+!> Batch kernel for the exact Sen / Theil-Sen slope.
+!> Each input column is treated as a consecutive time series with unit spacing.
 subroutine sen_slope_batch_clean(data, slopes, ntime, nseries)
     use mk_kernels_core, only : compute_sen_slope, real64
     implicit none
@@ -353,6 +390,11 @@ subroutine sen_slope_batch_clean(data, slopes, ntime, nseries)
 end subroutine sen_slope_batch_clean
 
 
+!> Combined batch kernel for S, variance, and Sen slope.
+!>
+!> This entry point is used by the main `theilslopes` path so the Python layer
+!> can retrieve all three statistics from one compiled call and avoid redundant
+!> slope work when `modified /= 0`.
 subroutine mk_score_var_sen_batch_clean( &
     data, s_values, var_values, slopes, modified, ntime, nseries &
 )
