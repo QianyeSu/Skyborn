@@ -1,3 +1,14 @@
+! =============================================================================
+! Author  : Qianye Su
+! Copyright (C) 2026 by Qianye Su
+! Created : 2026-04-17
+! File    : linint2.f90
+! Purpose : Modernize the legacy NCL linear interpolation helpers while
+!           preserving their public entry points and historical edge behavior.
+! Notes   : This file keeps the original missing-value rules, cyclic-x
+!           handling, monotonicity checks, and error-code semantics.
+! =============================================================================
+!
 ! QUICK REFERENCE
 ! PURPOSE
 !    MODERN FREE-FORM REPLACEMENT FOR THE HISTORICAL
@@ -16,6 +27,10 @@
 !    AND LEGACY ERROR CODES ARE KEPT IN PLACE SO EXISTING CALLERS SEE THE
 !    SAME BEHAVIOR.
 
+! QUICK REFERENCE
+! PURPOSE
+!    1-D LINEAR INTERPOLATION DRIVER WITH OPTIONAL CYCLIC-X HANDLING AND
+!    OPTIONAL FILTERING OF INPUT MISSING VALUES BEFORE REMAPPING.
 subroutine dlinint1(nxi, xi, fi, icycx, nxo, xo, fo, xiw, fxiw, nxi2, xmsg, iopt, ier)
     implicit none
 
@@ -93,6 +108,10 @@ subroutine dlinint1(nxi, xi, fi, icycx, nxo, xo, fo, xiw, fxiw, nxi2, xmsg, iopt
 end subroutine dlinint1
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    2-D LINEAR INTERPOLATION DRIVER THAT FIRST REMAPS EACH INPUT ROW IN X
+!    AND THEN REMAPS THE INTERMEDIATE FIELD IN Y.
 subroutine dlinint2(nxi, xi, nyi, yi, fi, icycx, nxo, xo, nyo, yo, fo, xiw, fxiw, nxi2, xmsg, iopt, ier)
     implicit none
 
@@ -244,6 +263,10 @@ subroutine dlinint2(nxi, xi, nyi, yi, fi, icycx, nxo, xo, nyo, yo, fo, xiw, fxiw
 end subroutine dlinint2
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    CORE 1-D LINEAR INTERPOLATION KERNEL FOR ALREADY-VALIDATED MONOTONIC
+!    INPUT AND OUTPUT COORDINATES.
 subroutine dlin2int1(nin, xi, fi, nout, xo, fo, xmsg, iflag)
     implicit none
 
@@ -300,6 +323,10 @@ subroutine dlin2int1(nin, xi, fi, nout, xo, fo, xmsg, iflag)
 end subroutine dlin2int1
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    EXTEND A CYCLIC 1-D COORDINATE AND DATA SERIES WITH ONE WRAPPED POINT
+!    ON EACH SIDE SO THE STANDARD LINEAR KERNEL CAN REUSE THE SAME LOGIC.
 subroutine dlincyc(nxi, xi, fi, nxstrt, nxlast, iflag, xiw, fxiw, npts)
     implicit none
 
@@ -327,6 +354,10 @@ subroutine dlincyc(nxi, xi, fi, nxstrt, nxlast, iflag, xiw, fxiw, npts)
 end subroutine dlincyc
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    CHECK THAT A 1-D COORDINATE IS STRICTLY INCREASING AND RETURN THE
+!    CALLER-PROVIDED ERROR CODE WHEN THAT CONTRACT IS VIOLATED.
 subroutine dmonoinc(x, nx, ner, ier)
     implicit none
 
@@ -346,6 +377,10 @@ subroutine dmonoinc(x, nx, ner, ier)
 end subroutine dmonoinc
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    DETERMINE WHETHER A 1-D COORDINATE IS STRICTLY MONOTONIC AND RETURN
+!    THE DIRECTION FLAG EXPECTED BY THE LEGACY INTERPOLATION ROUTINES.
 subroutine dmonoid1(nin, xi, iflag, ier)
     implicit none
 
@@ -381,6 +416,10 @@ subroutine dmonoid1(nin, xi, iflag, ier)
 end subroutine dmonoid1
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    VALIDATE THAT INPUT AND OUTPUT COORDINATES ARE BOTH MONOTONIC AND
+!    THAT THEY SHARE THE SAME DIRECTION BEFORE INTERPOLATION STARTS.
 subroutine dmonoid2(nin, xi, nout, xo, iflag, ier)
     implicit none
 
@@ -406,6 +445,10 @@ subroutine dmonoid2(nin, xi, nout, xo, iflag, ier)
 end subroutine dmonoid2
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    INTERPOLATE A 2-D FIELD TO AN UNSTRUCTURED LIST OF OUTPUT POINTS,
+!    WITH AN OPTIONAL CYCLIC-X EXTENSION THAT MATCHES THE LEGACY API.
 subroutine dlinint2pts(nxi, xi, nyi, yi, fi, icycx, nxyo, xo, yo, fo, xiw, fixw, nxi2, xmsg, ier)
     implicit none
 
@@ -455,6 +498,10 @@ subroutine dlinint2pts(nxi, xi, nyi, yi, fi, icycx, nxyo, xo, yo, fo, xiw, fixw,
 end subroutine dlinint2pts
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    BILINEARLY INTERPOLATE A 2-D FIELD TO ARBITRARY (X,Y) OUTPUT POINTS
+!    AFTER THE CALLER HAS ALREADY PREPARED ANY CYCLIC-X EXTENSION.
 subroutine dlint2xy(nxi, xi, nyi, yi, fi, nxyo, xo, yo, fo, xmsg, nopt, ier)
     implicit none
 
@@ -524,6 +571,11 @@ subroutine dlint2xy(nxi, xi, nyi, yi, fi, nxyo, xo, yo, fo, xmsg, nopt, ier)
 end subroutine dlint2xy
 
 
+! QUICK REFERENCE
+! PURPOSE
+!    ESTIMATE A 2-D VALUE FROM UP TO FOUR CELL CORNERS USING
+!    INVERSE-DISTANCE WEIGHTS WHEN BILINEAR INTERPOLATION CANNOT BE
+!    APPLIED BECAUSE SOME CORNERS ARE MISSING.
 subroutine estfow(f1, f2, f3, f4, x1, x2, y1, y2, f0, x0, y0, xmsg)
     implicit none
 
