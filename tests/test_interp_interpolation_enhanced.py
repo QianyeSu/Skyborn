@@ -527,28 +527,8 @@ class TestInterpolationEdgeCases:
         hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
         plevs = np.array([90000.0, 80000.0], dtype=np.float64)
 
-        data_float32 = xr.DataArray(
-            np.ones((2, 1, 2), dtype=np.float32), dims=["lev", "lat", "lon"]
-        )
         ps = xr.DataArray(
             np.ones((1, 2), dtype=np.float64) * 100000.0, dims=["lat", "lon"]
-        )
-        assert (
-            interpolation_mod._interp_hybrid_to_pressure_fortran_corder(
-                data=data_float32,
-                ps=ps,
-                hyam=hyam,
-                hybm=hybm,
-                p0=100000.0,
-                new_levels=plevs,
-                lev_dim="lev",
-                method="linear",
-                extrapolate=False,
-                variable=None,
-                t_bot=None,
-                phi_sfc=None,
-            )
-            is None
         )
 
         dask_array = pytest.importorskip("dask.array")
@@ -727,6 +707,147 @@ class TestInterpolationEdgeCases:
         assert_array_equal(tbot_cols, np.zeros(2, dtype=np.float64))
         assert_array_equal(phi_cols, np.zeros(2, dtype=np.float64))
         assert_array_equal(out_ecmwf.values, np.full((2, 1, 2), 22.0))
+
+    def test_fortran_helper_converts_once_and_restores_float32_output(
+        self, monkeypatch
+    ):
+        """Compiled vinth helper should feed float64 into the kernel and return float32."""
+
+        data = xr.DataArray(
+            np.array([[[280.0, 285.0]], [[240.0, 245.0]]], dtype=np.float32),
+            dims=["lev", "lat", "lon"],
+            coords={"lat": [0], "lon": [0, 90]},
+        )
+        ps = xr.DataArray(
+            np.array([[100000.0, 100000.0]], dtype=np.float32),
+            dims=["lat", "lon"],
+            coords={"lat": [0], "lon": [0, 90]},
+        )
+        hyam = xr.DataArray(np.array([0.0, 0.2], dtype=np.float32), dims=["lev"])
+        hybm = xr.DataArray(np.array([1.0, 0.0], dtype=np.float32), dims=["lev"])
+        new_levels = np.array([90000.0, 80000.0], dtype=np.float32)
+
+        captured = {}
+
+        def fake_nodes_into(
+            dati,
+            dato,
+            hbcofa,
+            hbcofb,
+            p0,
+            plevo,
+            intyp,
+            psfc,
+            spvl,
+            kxtrp,
+        ):
+            captured["dati_dtype"] = dati.dtype
+            captured["hbcofa_dtype"] = hbcofa.dtype
+            captured["plevo_dtype"] = plevo.dtype
+            captured["psfc_dtype"] = psfc.dtype
+            dato[:, :] = 123.25
+
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_corder_pa_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_nodes_pa_into", fake_nodes_into
+        )
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", object())
+
+        result = interpolation_mod._interp_hybrid_to_pressure_fortran(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=new_levels,
+            lev_dim="lev",
+            method="linear",
+            extrapolate=False,
+            variable=None,
+            t_bot=None,
+            phi_sfc=None,
+        )
+
+        assert captured["dati_dtype"] == np.float64
+        assert captured["hbcofa_dtype"] == np.float64
+        assert captured["plevo_dtype"] == np.float64
+        assert captured["psfc_dtype"] == np.float64
+        assert result.dtype == np.float32
+        assert_array_equal(result.values, np.full((2, 1, 2), np.float32(123.25)))
+
+    def test_fortran_corder_fast_path_accepts_float32_aligned_inputs(self, monkeypatch):
+        """Aligned float32 inputs should use the c-order flat backend path."""
+
+        data = xr.DataArray(
+            np.array(
+                [[[280.0, 285.0]], [[240.0, 245.0]]],
+                dtype=np.float32,
+                order="C",
+            ),
+            dims=["lev", "lat", "lon"],
+            coords={"lat": [0], "lon": [0, 90]},
+        )
+        ps = xr.DataArray(
+            np.array([[100000.0, 100000.0]], dtype=np.float32, order="C"),
+            dims=["lat", "lon"],
+            coords={"lat": [0], "lon": [0, 90]},
+        )
+        hyam = xr.DataArray(np.array([0.0, 0.2], dtype=np.float32), dims=["lev"])
+        hybm = xr.DataArray(np.array([1.0, 0.0], dtype=np.float32), dims=["lev"])
+        new_levels = np.array([90000.0, 80000.0], dtype=np.float32)
+
+        captured = {}
+
+        def fake_nodes_corder_into(
+            dati_flat,
+            dato_flat,
+            hbcofa,
+            hbcofb,
+            p0,
+            plevo,
+            intyp,
+            psfc,
+            spvl,
+            kxtrp,
+            nouter,
+            ninner,
+        ):
+            captured["dati_dtype"] = dati_flat.dtype
+            captured["psfc_dtype"] = psfc.dtype
+            captured["hbcofa_dtype"] = hbcofa.dtype
+            captured["shape_args"] = (nouter, ninner)
+            dato_flat[:] = 55.5
+
+        def fail_generic_nodes(*args, **kwargs):
+            raise AssertionError("generic vinth2p helper should not be used")
+
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_nodes_corder_pa_into", fake_nodes_corder_into
+        )
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", fail_generic_nodes)
+
+        result = interpolation_mod._interp_hybrid_to_pressure_fortran(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=new_levels,
+            lev_dim="lev",
+            method="linear",
+            extrapolate=False,
+            variable=None,
+            t_bot=None,
+            phi_sfc=None,
+        )
+
+        assert captured["dati_dtype"] == np.float64
+        assert captured["psfc_dtype"] == np.float64
+        assert captured["hbcofa_dtype"] == np.float64
+        assert captured["shape_args"] == (1, 2)
+        assert result.dtype == np.float32
+        assert_array_equal(result.values, np.full((2, 1, 2), np.float32(55.5)))
 
     def test_interp_hybrid_to_pressure_python_fallback_extrapolation(self, monkeypatch):
         """Public helper should still use the Python remap and extrapolation path."""
@@ -947,6 +1068,85 @@ class TestInterpolationEdgeCases:
         assert result.shape == (1, 2, 2)
         assert_array_equal(result.values, np.full((1, 2, 2), 66.0))
 
+    def test_sigma_to_hybrid_fortran_corder_fast_path_accepts_float32(
+        self, monkeypatch
+    ):
+        """Aligned float32 sigma input should also hit the flat backend path."""
+
+        data = xr.DataArray(
+            np.array(
+                [[[250.0, 260.0], [270.0, 280.0], [290.0, 300.0]]],
+                dtype=np.float32,
+                order="C",
+            ),
+            dims=["time", "sigma", "spatial"],
+            coords={"time": [0], "sigma": [0.2, 0.6, 1.0], "spatial": [0, 1]},
+        )
+        sig_coords = xr.DataArray(
+            np.array([0.2, 0.6, 1.0], dtype=np.float32), dims=["sigma"]
+        )
+        ps = xr.DataArray(
+            np.array([[101325.0, 100000.0]], dtype=np.float32),
+            dims=["time", "spatial"],
+        )
+        hya = xr.DataArray(np.array([0.0, 0.5], dtype=np.float32), dims=["hlev"])
+        hyb = xr.DataArray(np.array([1.0, 0.0], dtype=np.float32), dims=["hlev"])
+
+        captured = {}
+
+        def fake_sigma_corder_into(
+            dati_flat,
+            dato_flat,
+            sigmai,
+            hyam_vals,
+            hybm_vals,
+            p0,
+            psfc,
+            intyp,
+            spvl,
+            nouter,
+            ninner,
+            nlevo,
+            **shape_kwargs,
+        ):
+            captured["dati_dtype"] = dati_flat.dtype
+            captured["psfc_dtype"] = psfc.dtype
+            captured["sigmai_dtype"] = sigmai.dtype
+            captured["shape_args"] = (nouter, ninner, nlevo)
+            captured["shape_kwargs"] = shape_kwargs
+            dato_flat[:] = 44.5
+
+        def fail_generic_sigma(*args, **kwargs):
+            raise AssertionError("generic sigma helper should not be used")
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dsigma2hybrid_nodes_corder_into",
+            fake_sigma_corder_into,
+        )
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dsigma2hybrid_nodes", fail_generic_sigma
+        )
+
+        result = interp_sigma_to_hybrid(
+            data=data,
+            sig_coords=sig_coords,
+            ps=ps,
+            hyam=hya,
+            hybm=hyb,
+            lev_dim="sigma",
+            method="linear",
+        )
+
+        assert captured["dati_dtype"] == np.float64
+        assert captured["psfc_dtype"] == np.float64
+        assert captured["sigmai_dtype"] == np.float64
+        assert captured["shape_args"] == (1, 2, 2)
+        assert captured["shape_kwargs"] == {"nlevi": 3}
+        assert result.dtype == np.float32
+        assert_array_equal(result.values, np.full((1, 2, 2), np.float32(44.5)))
+
     def test_sigma_to_hybrid_fortran_falls_back_to_return_backend(self, monkeypatch):
         """Sigma-to-hybrid should fall back to the return-array backend when needed."""
         data = xr.DataArray(
@@ -992,6 +1192,52 @@ class TestInterpolationEdgeCases:
         assert captured["shape_kwargs"] == {"nlevi": 3, "ncol": 1}
         assert result.shape == (2,)
         assert_array_equal(result.values, np.full((2,), 88.0))
+
+    def test_sigma_to_hybrid_fortran_restores_float32_output(self, monkeypatch):
+        """Sigma-to-hybrid helper should keep float32 public precision."""
+
+        data = xr.DataArray(
+            np.array([220.0, 250.0, 290.0], dtype=np.float32),
+            dims=["sigma"],
+            coords={"sigma": [0.2, 0.6, 1.0]},
+        )
+        sig_coords = np.array([0.2, 0.6, 1.0], dtype=np.float32)
+        ps = xr.DataArray(np.array(101325.0, dtype=np.float32))
+        hya = xr.DataArray(np.array([0.0, 0.2], dtype=np.float32), dims=["hlev"])
+        hyb = xr.DataArray(np.array([0.8, 0.0], dtype=np.float32), dims=["hlev"])
+
+        captured = {}
+
+        def fake_sigma_return(
+            dati, sigmai, sigmao, intyp, spvl, *shape_args, **shape_kwargs
+        ):
+            captured["dati_dtype"] = dati.dtype
+            captured["sigmai_dtype"] = sigmai.dtype
+            captured["sigmao_dtype"] = sigmao.dtype
+            return np.full((2, 1), 88.5, dtype=np.float64)
+
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes_corder_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dsigma2hybrid_nodes", fake_sigma_return
+        )
+
+        result = interpolation_mod._interp_sigma_to_hybrid_fortran(
+            data=data,
+            sig_coords=sig_coords,
+            ps=ps,
+            hyam=hya,
+            hybm=hyb,
+            p0=100000.0,
+            lev_dim="sigma",
+            method="linear",
+        )
+
+        assert captured["dati_dtype"] == np.float64
+        assert captured["sigmai_dtype"] == np.float64
+        assert captured["sigmao_dtype"] == np.float64
+        assert result.dtype == np.float32
+        assert_array_equal(result.values, np.full((2,), np.float32(88.5)))
 
     def test_multidim_interpolation_single_point(self):
         """Test multidimensional interpolation to single output point."""
