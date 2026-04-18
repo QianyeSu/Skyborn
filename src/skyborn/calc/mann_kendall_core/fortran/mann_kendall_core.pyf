@@ -1,0 +1,29 @@
+python module mann_kendall_core ! in
+    interface ! in :mann_kendall_core
+        subroutine mk_score_var_batch_clean(data,s_values,var_values,modified,ntime,nseries) ! in :mann_kendall_core:mann_kendall_core.f90
+            integer optional, intent(hide), depend(data) :: ntime = shape(data,0)
+            integer optional, intent(hide), depend(data) :: nseries = shape(data,1)
+            double precision intent(in) :: data(ntime,nseries)
+            double precision intent(out) :: s_values(nseries)
+            double precision intent(out) :: var_values(nseries)
+            integer intent(in) :: modified
+        end subroutine mk_score_var_batch_clean
+
+        subroutine sen_slope_batch_clean(data,slopes,ntime,nseries) ! in :mann_kendall_core:mann_kendall_core.f90
+            integer optional, intent(hide), depend(data) :: ntime = shape(data,0)
+            integer optional, intent(hide), depend(data) :: nseries = shape(data,1)
+            double precision intent(in) :: data(ntime,nseries)
+            double precision intent(out) :: slopes(nseries)
+        end subroutine sen_slope_batch_clean
+
+        subroutine mk_score_var_sen_batch_clean(data,s_values,var_values,slopes,modified,ntime,nseries) ! in :mann_kendall_core:mann_kendall_core.f90
+            integer optional, intent(hide), depend(data) :: ntime = shape(data,0)
+            integer optional, intent(hide), depend(data) :: nseries = shape(data,1)
+            double precision intent(in) :: data(ntime,nseries)
+            double precision intent(out) :: s_values(nseries)
+            double precision intent(out) :: var_values(nseries)
+            double precision intent(out) :: slopes(nseries)
+            integer intent(in) :: modified
+        end subroutine mk_score_var_sen_batch_clean
+    end interface
+end python module mann_kendall_core
