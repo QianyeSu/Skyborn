@@ -688,24 +688,6 @@ def _compiled_float64_output(shape, order: str = "F") -> np.ndarray:
     return np.empty(shape, dtype=np.float64, order=order)
 
 
-def _as_c_contiguous_float64_view(array: xr.DataArray, dims, shape):
-    """Return a zero-copy 1D float64 view when the DataArray matches the fast path."""
-
-    if array is None or not isinstance(array, xr.DataArray):
-        return None
-
-    if tuple(array.dims) != tuple(dims) or tuple(array.shape) != tuple(shape):
-        return None
-
-    values = array.data
-    if not isinstance(values, np.ndarray):
-        return None
-    if values.dtype != np.float64 or not values.flags.c_contiguous:
-        return None
-
-    return values.reshape(-1)
-
-
 def _as_c_contiguous_compiled_flat(array: xr.DataArray, dims, shape):
     """Return a float64 flat buffer for aligned C-order floating inputs."""
 
