@@ -59,12 +59,12 @@ mann_kendall_multidim = mann_kendall_module.mann_kendall_multidim
 trend_analysis = mann_kendall_module.trend_analysis
 _dask_mann_kendall = mann_kendall_module._dask_mann_kendall
 mann_kendall_xarray = mann_kendall_module.mann_kendall_xarray
-_backend_available = mann_kendall_module._backend_available
-_as_fortran_float64_2d = mann_kendall_module._as_fortran_float64_2d
-_load_mk_backend = mann_kendall_module._load_mk_backend
-_mk_score_var_batch_clean = mann_kendall_module._mk_score_var_batch_clean
-_mk_score_var_sen_batch_clean = mann_kendall_module._mk_score_var_sen_batch_clean
-_sen_slope_batch_clean = mann_kendall_module._sen_slope_batch_clean
+_kernels_ready = mann_kendall_module._kernels_ready
+_as_core_input_2d = mann_kendall_module._as_core_input_2d
+_load_core_module = mann_kendall_module._load_core_module
+_score_variance_batch = mann_kendall_module._score_variance_batch
+_score_variance_slope_batch = mann_kendall_module._score_variance_slope_batch
+_sen_slope_batch = mann_kendall_module._sen_slope_batch
 _vectorized_mk_test = mann_kendall_module._vectorized_mk_test
 
 
@@ -1395,7 +1395,7 @@ class TestMannKendallComprehensive:
 
     def test_combined_backend_matches_split_helpers(self):
         """The combined compiled helper should agree with split compiled calls."""
-        if not _backend_available():
+        if not _kernels_ready():
             pytest.skip("Compiled mann_kendall_core backend not available")
 
         data = np.array(
@@ -1415,10 +1415,10 @@ class TestMannKendallComprehensive:
         )
 
         scores_combined, variances_combined, slopes_combined = (
-            _mk_score_var_sen_batch_clean(data, modified=True)
+            _score_variance_slope_batch(data, modified=True)
         )
-        scores_split, variances_split = _mk_score_var_batch_clean(data, modified=True)
-        slopes_split = _sen_slope_batch_clean(data)
+        scores_split, variances_split = _score_variance_batch(data, modified=True)
+        slopes_split = _sen_slope_batch(data)
 
         np.testing.assert_allclose(scores_combined, scores_split, rtol=0.0, atol=0.0)
         np.testing.assert_allclose(
@@ -1444,13 +1444,9 @@ class TestMannKendallComprehensive:
             dtype=float,
         )
 
-        monkeypatch.setattr(
-            mann_kendall_module, "_mk_score_var_batch_clean_backend", None
-        )
-        monkeypatch.setattr(
-            mann_kendall_module, "_mk_score_var_sen_batch_clean_backend", None
-        )
-        monkeypatch.setattr(mann_kendall_module, "_sen_slope_batch_clean_backend", None)
+        monkeypatch.setattr(mann_kendall_module, "_score_variance_kernel", None)
+        monkeypatch.setattr(mann_kendall_module, "_score_variance_slope_kernel", None)
+        monkeypatch.setattr(mann_kendall_module, "_sen_slope_kernel", None)
 
         with pytest.raises(ImportError, match="compiled mann_kendall_core"):
             mann_kendall_test(data, method="theilslopes", modified=True)
@@ -1475,7 +1471,7 @@ class TestMannKendallComprehensive:
             )
             monkeypatch.setattr(mann_kendall_module, "EXTENSION_SUFFIXES", [".pyd"])
 
-            assert _load_mk_backend() is None
+            assert _load_core_module() is None
 
     def test_loader_skips_broken_local_extension_candidate(self, monkeypatch):
         """Backend loader should ignore local extension candidates that fail to import."""
@@ -1509,7 +1505,7 @@ class TestMannKendallComprehensive:
             monkeypatch.setattr(
                 mann_kendall_module.importlib_util, "spec_from_file_location", _boom
             )
-            assert _load_mk_backend() is None
+            assert _load_core_module() is None
 
     def test_loader_skips_local_candidate_when_spec_has_no_loader(self, monkeypatch):
         """Backend loader should ignore probe candidates that produce no loader."""
@@ -1545,7 +1541,7 @@ class TestMannKendallComprehensive:
                 lambda *args, **kwargs: FakeSpec(),
             )
 
-            assert _load_mk_backend() is None
+            assert _load_core_module() is None
 
     def test_loader_uses_local_extension_candidate_when_imports_fail(self, monkeypatch):
         """Backend loader should fall through to the local extension probe path."""
@@ -1592,14 +1588,14 @@ class TestMannKendallComprehensive:
                 lambda spec: fake_module,
             )
 
-            loaded = _load_mk_backend()
+            loaded = _load_core_module()
             assert loaded is fake_module
             assert loaded.loaded_from_local_probe is True
 
-    def test_as_fortran_float64_2d_validation(self):
+    def test_as_core_input_2d_validation(self):
         """The backend layout helper should reject non-2D inputs."""
         with pytest.raises(ValueError, match="Expected a 2D array"):
-            _as_fortran_float64_2d(np.arange(5.0))
+            _as_core_input_2d(np.arange(5.0))
 
     def test_backend_dispatch_propagates_backend_exception(self, monkeypatch):
         """Dispatch helpers should expose backend failures instead of masking them."""
@@ -1615,19 +1611,19 @@ class TestMannKendallComprehensive:
 
         monkeypatch.setattr(
             mann_kendall_module,
-            "_mk_score_var_batch_clean_backend",
+            "_score_variance_kernel",
             unittest.mock.Mock(side_effect=RuntimeError("fail")),
         )
         monkeypatch.setattr(
             mann_kendall_module,
-            "_sen_slope_batch_clean_backend",
+            "_sen_slope_kernel",
             unittest.mock.Mock(side_effect=RuntimeError("fail")),
         )
 
         with pytest.raises(RuntimeError, match="fail"):
-            _mk_score_var_batch_clean(data, modified=False)
+            _score_variance_batch(data, modified=False)
         with pytest.raises(RuntimeError, match="fail"):
-            _sen_slope_batch_clean(data)
+            _sen_slope_batch(data)
 
     def test_combined_dispatch_propagates_backend_exception(self, monkeypatch):
         """The combined dispatch helper should expose backend failures directly."""
@@ -1643,12 +1639,12 @@ class TestMannKendallComprehensive:
 
         monkeypatch.setattr(
             mann_kendall_module,
-            "_mk_score_var_sen_batch_clean_backend",
+            "_score_variance_slope_kernel",
             unittest.mock.Mock(side_effect=RuntimeError("fail")),
         )
 
         with pytest.raises(RuntimeError, match="fail"):
-            _mk_score_var_sen_batch_clean(data, modified=True)
+            _score_variance_slope_batch(data, modified=True)
 
     def test_batch_variance_dispatch_stays_aligned_with_scalar_semantics(self):
         """Direct clean-batch dispatch should stay aligned with scalar semantics."""
@@ -1662,7 +1658,7 @@ class TestMannKendallComprehensive:
             dtype=np.float64,
         )
 
-        batch = _mk_score_var_batch_clean(data, modified=False)[1]
+        batch = _score_variance_batch(data, modified=False)[1]
         scalar = np.array(
             [
                 mann_kendall_module._calculate_mk_variance(
@@ -1685,7 +1681,7 @@ class TestMannKendallComprehensive:
     def test_scalar_sen_slope_helper_matches_batch_first_column(self):
         """Clean batch Sen slope should agree with SciPy on consecutive spacing."""
         y = np.array([1.0, 1.0, 2.0, 3.0, 5.0, 8.0], dtype=np.float64)
-        batch = _sen_slope_batch_clean(y.reshape(-1, 1))[0]
+        batch = _sen_slope_batch(y.reshape(-1, 1))[0]
         scipy_slope = scipy.stats.mstats.theilslopes(
             y, np.arange(y.size, dtype=np.float64)
         )[0]
@@ -1737,13 +1733,13 @@ class TestMannKendallComprehensive:
             dtype=np.float64,
         )
 
-        score_values = _mk_score_var_batch_clean(data, modified=False)[0]
-        slope_values = _sen_slope_batch_clean(data)
+        score_values = _score_variance_batch(data, modified=False)[0]
+        slope_values = _sen_slope_batch(data)
 
         np.testing.assert_allclose(
-            score_values, _mk_score_var_batch_clean(data, modified=False)[0]
+            score_values, _score_variance_batch(data, modified=False)[0]
         )
-        np.testing.assert_allclose(slope_values, _sen_slope_batch_clean(data))
+        np.testing.assert_allclose(slope_values, _sen_slope_batch(data))
 
     def test_dask_helper_chunks_large_numpy_input(self):
         """Large eager xarray inputs should exercise the chunk-resizing branch."""
