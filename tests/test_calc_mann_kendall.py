@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 # Direct import to avoid main package import issues
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-# Import mann_kendall module directly to avoid package-level imports
+# Import the implementation module directly to avoid package-level imports
 mann_kendall_path = os.path.join(
     os.path.dirname(__file__),
     "..",
@@ -37,12 +37,11 @@ mann_kendall_path = os.path.join(
     "skyborn",
     "calc",
     "mann_kendall",
-    "__init__.py",
+    "core.py",
 )
 spec = importlib.util.spec_from_file_location(
-    "skyborn.calc.mann_kendall",
+    "skyborn.calc.mann_kendall.core",
     mann_kendall_path,
-    submodule_search_locations=[os.path.dirname(mann_kendall_path)],
 )
 mann_kendall_module = importlib.util.module_from_spec(spec)
 
