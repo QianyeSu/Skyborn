@@ -95,13 +95,33 @@ __pres_lev_mandatory__ = np.array(
 __pres_lev_mandatory__ = __pres_lev_mandatory__ * 100.0  # Convert mb to Pa
 
 
+def _normalize_interp_method(method: str) -> str:
+    """Normalize public interpolation method aliases to one canonical label.
+
+    In particular, accept ``"loglog"`` from user-facing calls and normalize it
+    to the internal ``"log-log"`` spelling used by the vinth2p kernels.
+    """
+
+    normalized = method.lower().replace("_", "-")
+    if normalized == "loglog":
+        return "log-log"
+    return normalized
+
+
 def _func_interpolate(method="linear"):
     """Define interpolation function."""
+
+    method = _normalize_interp_method(method)
 
     if method == "linear":
         func_interpolate = metpy.interpolate.interpolate_1d
     elif method == "log":
         func_interpolate = metpy.interpolate.log_interpolate_1d
+    elif method == "log-log":
+        raise ValueError(
+            'Interpolation method "log-log" requires the compiled Fortran backend. '
+            'Python fallback supports only "linear" and "log".'
+        )
     else:
         raise ValueError(
             f"Unknown interpolation method: {method}. "
@@ -621,14 +641,18 @@ def _align_hybrid_level_dimension(hyam, hybm, lev_dim):
 def _vinth2p_intyp(method: str) -> int:
     """Translate public interpolation methods to legacy vinth2p flags."""
 
+    method = _normalize_interp_method(method)
+
     if method == "linear":
         return 1
     if method == "log":
         return 2
+    if method == "log-log":
+        return 3
 
     raise ValueError(
         f"Unknown interpolation method: {method}. "
-        f'Supported methods are: "log" and "linear".'
+        f'Supported methods are: "linear", "log", and "log-log".'
     )
 
 
@@ -1254,8 +1278,9 @@ def interp_hybrid_to_pressure(
         automatically using CF conventions.
 
     method : str, optional
-        String that is the interpolation method; can be either "linear" or "log".
-        Defaults to "linear".
+        Interpolation method. Public fallback supports ``"linear"`` and ``"log"``.
+        ``"log-log"`` and its alias ``"loglog"`` are also available when the
+        compiled Fortran backend is present. Defaults to ``"linear"``.
 
     extrapolate : bool, optional
         If True, below ground extrapolation for ``variable`` will be done using
@@ -1347,17 +1372,13 @@ def interp_hybrid_to_pressure(
             ) from exc
 
     hyam, hybm = _align_hybrid_level_dimension(hyam, hybm, lev_dim)
-
-    try:
-        func_interpolate = _func_interpolate(method)
-    except ValueError as vexc:
-        raise ValueError(vexc.args[0])
+    method = _normalize_interp_method(method)
 
     if (
         not in_dask
         and not in_pint
         and _dvinth2p_nodes_pa is not None
-        and method in {"linear", "log"}
+        and method in {"linear", "log", "log-log"}
     ):
         return _interp_hybrid_to_pressure_fortran(
             data=data,
@@ -1373,6 +1394,17 @@ def interp_hybrid_to_pressure(
             t_bot=t_bot,
             phi_sfc=phi_sfc,
         )
+
+    if method == "log-log":
+        raise ValueError(
+            'Interpolation method "log-log" requires the compiled Fortran backend. '
+            'Python fallback supports only "linear" and "log".'
+        )
+
+    try:
+        func_interpolate = _func_interpolate(method)
+    except ValueError as vexc:
+        raise ValueError(vexc.args[0])
 
     interp_axis = data.dims.index(lev_dim)
 
@@ -1501,8 +1533,9 @@ def interp_sigma_to_hybrid(
         automatically using CF conventions.
 
     method : str, optional
-        String that is the interpolation method; can be either "linear" or "log".
-        Defaults to "linear".
+        Interpolation method. Public fallback supports ``"linear"`` and ``"log"``.
+        ``"log-log"`` and its alias ``"loglog"`` are also available when the
+        compiled Fortran backend is present. Defaults to ``"linear"``.
 
     Returns
     -------
@@ -1543,10 +1576,7 @@ def interp_sigma_to_hybrid(
                 "Unable to determine vertical dimension name. Please specify the name via `lev_dim` argument.'"
             )
 
-    try:
-        func_interpolate = _func_interpolate(method)
-    except ValueError as vexc:
-        raise ValueError(vexc.args[0])
+    method = _normalize_interp_method(method)
 
     in_dask = _is_dask_backed(data) or _is_dask_backed(ps)
     in_pint = _is_pint_backed(data) or _is_pint_backed(ps)
@@ -1555,7 +1585,7 @@ def interp_sigma_to_hybrid(
         not in_dask
         and not in_pint
         and _dsigma2hybrid_nodes is not None
-        and method in {"linear", "log"}
+        and method in {"linear", "log", "log-log"}
     ):
         sigma_source_values = np.asarray(
             sig_coords.data if isinstance(sig_coords, xr.DataArray) else sig_coords,
@@ -1577,6 +1607,17 @@ def interp_sigma_to_hybrid(
                 lev_dim=lev_dim,
                 method=method,
             )
+
+    if method == "log-log":
+        raise ValueError(
+            'Interpolation method "log-log" requires the compiled Fortran backend. '
+            'Python fallback supports only "linear" and "log".'
+        )
+
+    try:
+        func_interpolate = _func_interpolate(method)
+    except ValueError as vexc:
+        raise ValueError(vexc.args[0])
 
     # Calculate sigma levels at the hybrid levels
     sigma = _sigma_from_hybrid(ps, hyam, hybm, p0)  # Pa
