@@ -4,3 +4,4 @@ black>=22.0.0
 flake8>=5.0.0
 mypy>=1.0.0
 jupyterlab>=3.0.0
+pymannkendall>=1.4.3
