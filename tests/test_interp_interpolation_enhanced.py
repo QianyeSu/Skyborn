@@ -486,7 +486,7 @@ class TestInterpolationEdgeCases:
             interpolation_mod._vinth2p_intyp("cubic")
 
         assert (
-            interpolation_mod._as_c_contiguous_float64_view(
+            interpolation_mod._as_c_contiguous_compiled_flat(
                 None, ("lat", "lon"), (2, 2)
             )
             is None
@@ -494,7 +494,7 @@ class TestInterpolationEdgeCases:
 
         arr = xr.DataArray(np.ones((2, 2), dtype=np.float64), dims=["lat", "lon"])
         assert (
-            interpolation_mod._as_c_contiguous_float64_view(
+            interpolation_mod._as_c_contiguous_compiled_flat(
                 arr, ("time", "lat"), (2, 2)
             )
             is None
@@ -505,7 +505,7 @@ class TestInterpolationEdgeCases:
             dask_array.ones((2, 2), dtype=np.float64), dims=["lat", "lon"]
         )
         assert (
-            interpolation_mod._as_c_contiguous_float64_view(
+            interpolation_mod._as_c_contiguous_compiled_flat(
                 dask_backed, ("lat", "lon"), (2, 2)
             )
             is None
@@ -514,12 +514,11 @@ class TestInterpolationEdgeCases:
         float32_arr = xr.DataArray(
             np.ones((2, 2), dtype=np.float32), dims=["lat", "lon"]
         )
-        assert (
-            interpolation_mod._as_c_contiguous_float64_view(
-                float32_arr, ("lat", "lon"), (2, 2)
-            )
-            is None
+        compiled_flat = interpolation_mod._as_c_contiguous_compiled_flat(
+            float32_arr, ("lat", "lon"), (2, 2)
         )
+        assert compiled_flat is not None
+        assert compiled_flat.dtype == np.float64
 
     def test_fortran_corder_helper_rejects_unsupported_inputs(self, monkeypatch):
         """C-order helper should return None when guards reject the input layout."""
