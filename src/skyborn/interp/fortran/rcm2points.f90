@@ -1,3 +1,16 @@
+! =============================================================================
+! Author  : Qianye Su
+! Copyright (C) 2026 by Qianye Su
+! Created : 2026-04-17
+! File    : rcm2points.f90
+! Purpose : Interpolate curvilinear-grid source fields to an unstructured list
+!           of target points through legacy-compatible exact-hit, cell, and
+!           inverse-distance fallback logic.
+! Notes   : The helper module provides monotonic-grid search primitives so the
+!           public entry point can keep the original behavior with narrower
+!           local searches on well-behaved grids.
+! =============================================================================
+!
 module rcm2points_core
     implicit none
 contains
