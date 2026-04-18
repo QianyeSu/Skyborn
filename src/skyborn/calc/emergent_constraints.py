@@ -35,6 +35,27 @@ __all__ = [
 ]
 
 
+def _preferred_float_dtype(*values) -> np.dtype:
+    """Pick a floating work dtype from the provided inputs."""
+    preferred = None
+
+    for value in values:
+        raw = getattr(value, "values", value)
+        array = np.asarray(raw)
+        dtype = np.dtype(array.dtype)
+
+        if not np.issubdtype(dtype, np.floating):
+            continue
+
+        if dtype.itemsize < np.dtype(np.float32).itemsize:
+            dtype = np.dtype(np.float32)
+
+        if preferred is None or dtype.itemsize > preferred.itemsize:
+            preferred = dtype
+
+    return preferred if preferred is not None else np.dtype(np.float32)
+
+
 def gaussian_pdf(
     mu: float, sigma: float, x: Union[np.ndarray, float]
 ) -> Union[np.ndarray, float]:
@@ -59,25 +80,34 @@ def gaussian_pdf(
     ----------
     Adapted from: https://github.com/blackcata/Emergent_Constraints/tree/master
     """
-    x_values = np.asarray(x, dtype=np.float64)
+    work_dtype = _preferred_float_dtype(x)
+    x_values = np.asarray(x, dtype=work_dtype)
+    mu_value = work_dtype.type(mu)
+    sigma_value = work_dtype.type(sigma)
 
-    if sigma < 0:
+    if sigma_value < 0:
         warnings.warn(
             "Standard deviation must be non-negative for gaussian_pdf.",
             RuntimeWarning,
             stacklevel=2,
         )
-        pdf = np.full_like(x_values, np.nan, dtype=np.float64)
-    elif sigma == 0:
+        pdf = np.full_like(x_values, np.nan, dtype=work_dtype)
+    elif sigma_value == 0:
         warnings.warn(
             "Standard deviation is zero in gaussian_pdf; returning a degenerate limit.",
             RuntimeWarning,
             stacklevel=2,
         )
-        pdf = np.where(x_values == mu, np.inf, 0.0)
+        pdf = np.where(
+            x_values == mu_value,
+            work_dtype.type(np.inf),
+            work_dtype.type(0.0),
+        )
     else:
-        scale = 1.0 / (np.sqrt(2.0 * np.pi) * sigma)
-        exponent = -0.5 * ((x_values - mu) / sigma) ** 2
+        scale = work_dtype.type(1.0) / (
+            np.sqrt(work_dtype.type(2.0 * np.pi)) * sigma_value
+        )
+        exponent = work_dtype.type(-0.5) * ((x_values - mu_value) / sigma_value) ** 2
         pdf = scale * np.exp(exponent)
 
     if np.ndim(x_values) == 0:
@@ -86,11 +116,11 @@ def gaussian_pdf(
 
 
 def _fit_linear_relationship(
-    x_models: np.ndarray, y_models: np.ndarray
+    x_models: np.ndarray, y_models: np.ndarray, work_dtype: np.dtype
 ) -> Tuple[np.ndarray, np.ndarray, float, float, float, float]:
     """Fit the inter-model linear relationship used by the EC formulas."""
-    x_models = np.asarray(x_models, dtype=np.float64)
-    y_models = np.asarray(y_models, dtype=np.float64)
+    x_models = np.asarray(x_models, dtype=work_dtype)
+    y_models = np.asarray(y_models, dtype=work_dtype)
 
     valid_mask = np.isfinite(x_models) & np.isfinite(y_models)
     x_models = x_models[valid_mask]
@@ -101,27 +131,29 @@ def _fit_linear_relationship(
             "constraint_data and target_data must contain valid paired data."
         )
 
-    x_mean = float(np.mean(x_models))
-    y_mean = float(np.mean(y_models))
+    x_mean = np.mean(x_models)
+    y_mean = np.mean(y_models)
     x_centered = x_models - x_mean
     y_centered = y_models - y_mean
-    ss_x = float(np.sum(x_centered**2))
+    ss_x = np.sum(x_centered**2)
 
-    if ss_x > 0.0:
-        slope = float(np.sum(x_centered * y_centered) / ss_x)
+    if ss_x > work_dtype.type(0.0):
+        slope = np.sum(x_centered * y_centered) / ss_x
     else:
-        slope = 0.0
+        slope = work_dtype.type(0.0)
 
     intercept = y_mean - slope * x_mean
     residuals = y_models - (intercept + slope * x_models)
 
     if x_models.size > 2:
-        prediction_error = float(np.sqrt(np.sum(residuals**2) / (x_models.size - 2)))
+        prediction_error = np.sqrt(
+            np.sum(residuals**2) / work_dtype.type(x_models.size - 2)
+        )
     else:
-        prediction_error = float(np.sqrt(np.mean(residuals**2)))
+        prediction_error = np.sqrt(np.mean(residuals**2))
 
     if not np.isfinite(prediction_error):
-        prediction_error = 0.0
+        prediction_error = work_dtype.type(0.0)
 
     return x_models, y_models, slope, intercept, prediction_error, ss_x
 
@@ -134,11 +166,13 @@ def _prediction_std(
     ss_x: float,
 ) -> np.ndarray:
     """Return predictive standard deviation for regression-conditioned values."""
-    if prediction_error == 0.0:
-        return np.zeros_like(x_values, dtype=np.float64)
+    work_dtype = np.dtype(np.asarray(x_values).dtype)
 
-    base = np.ones_like(x_values, dtype=np.float64) + 1.0 / sample_size
-    if ss_x > 0.0:
+    if prediction_error == 0.0:
+        return np.zeros_like(x_values, dtype=work_dtype)
+
+    base = np.ones_like(x_values, dtype=work_dtype) + work_dtype.type(1.0 / sample_size)
+    if ss_x > work_dtype.type(0.0):
         base = base + ((x_values - x_mean) ** 2) / ss_x
 
     return prediction_error * np.sqrt(base)
@@ -183,10 +217,14 @@ def emergent_constraint_posterior(
     Adapted from: https://github.com/blackcata/Emergent_Constraints/tree/master
     Cox, P. M., et al. (2013). Nature, 494(7437), 341-344.
     """
+    work_dtype = _preferred_float_dtype(constraint_data, target_data)
+    constraint_grid = np.asarray(constraint_grid, dtype=work_dtype)
+    target_grid = np.asarray(target_grid, dtype=work_dtype)
+    obs_pdf = np.asarray(obs_pdf, dtype=work_dtype)
     dx = constraint_grid[1] - constraint_grid[0]
 
     x_models, y_models, slope, intercept, prediction_error, ss_x = (
-        _fit_linear_relationship(constraint_data.values, target_data.values)
+        _fit_linear_relationship(constraint_data.values, target_data.values, work_dtype)
     )
     n_models = len(x_models)
     regression_line = intercept + slope * constraint_grid
@@ -194,24 +232,24 @@ def emergent_constraint_posterior(
         prediction_error,
         n_models,
         constraint_grid,
-        float(np.mean(x_models)),
+        np.mean(x_models),
         ss_x,
     )
 
-    posterior_pdf = np.zeros(len(target_grid), dtype=np.float64)
+    posterior_pdf = np.zeros(len(target_grid), dtype=work_dtype)
     nonzero_sigma = sigma_prediction > 0.0
 
     if np.any(nonzero_sigma):
         likelihood = np.zeros(
-            (len(target_grid), len(constraint_grid)), dtype=np.float64
+            (len(target_grid), len(constraint_grid)), dtype=work_dtype
         )
         sigma_used = sigma_prediction[nonzero_sigma]
         centered = (
             target_grid[:, np.newaxis] - regression_line[nonzero_sigma][np.newaxis, :]
         )
         likelihood[:, nonzero_sigma] = np.exp(
-            -0.5 * (centered / sigma_used[np.newaxis, :]) ** 2
-        ) / (np.sqrt(2.0 * np.pi) * sigma_used[np.newaxis, :])
+            work_dtype.type(-0.5) * (centered / sigma_used[np.newaxis, :]) ** 2
+        ) / (np.sqrt(work_dtype.type(2.0 * np.pi)) * sigma_used[np.newaxis, :])
         posterior_pdf = likelihood @ (obs_pdf * dx)
     else:
         nearest = np.argmin(
@@ -299,8 +337,11 @@ def emergent_constraint_prior(
     ----------
     Adapted from: https://github.com/blackcata/Emergent_Constraints/tree/master
     """
+    work_dtype = _preferred_float_dtype(constraint_data, target_data)
+    constraint_grid = np.asarray(constraint_grid, dtype=work_dtype)
+    target_grid = np.asarray(target_grid, dtype=work_dtype)
     x_models, y_models, slope, intercept, prediction_error_base, ss_x = (
-        _fit_linear_relationship(constraint_data.values, target_data.values)
+        _fit_linear_relationship(constraint_data.values, target_data.values, work_dtype)
     )
     n_models = len(x_models)
 
@@ -310,11 +351,11 @@ def emergent_constraint_prior(
         prediction_error_base,
         n_models,
         constraint_grid,
-        float(np.mean(x_models)),
+        np.mean(x_models),
         ss_x,
     )
 
-    prior_pdf = np.zeros((len(target_grid), len(constraint_grid)), dtype=np.float64)
+    prior_pdf = np.zeros((len(target_grid), len(constraint_grid)), dtype=work_dtype)
     nonzero_sigma = prediction_error > 0.0
     if np.any(nonzero_sigma):
         centered = (
@@ -322,8 +363,8 @@ def emergent_constraint_prior(
         )
         sigma_used = prediction_error[nonzero_sigma]
         prior_pdf[:, nonzero_sigma] = np.exp(
-            -0.5 * (centered / sigma_used[np.newaxis, :]) ** 2
-        ) / (np.sqrt(2.0 * np.pi) * sigma_used[np.newaxis, :])
+            work_dtype.type(-0.5) * (centered / sigma_used[np.newaxis, :]) ** 2
+        ) / (np.sqrt(work_dtype.type(2.0 * np.pi)) * sigma_used[np.newaxis, :])
 
     if np.any(~nonzero_sigma):
         nearest = np.argmin(
