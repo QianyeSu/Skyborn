@@ -1,3 +1,15 @@
+! =============================================================================
+! Author  : Qianye Su
+! Copyright (C) 2026 by Qianye Su
+! Created : 2026-04-17
+! File    : rcm2rgrid.f90
+! Purpose : Remap between curvilinear and rectilinear grids while preserving
+!           the legacy Skyborn/NCL interpolation entry points.
+! Notes   : The helper module centralizes exact-hit, cell-search, and
+!           short-gap cleanup logic so both public directions share the same
+!           compatibility-sensitive arithmetic.
+! =============================================================================
+!
 module rcm2rgrid_kernels_core
     use rcm_geodesy_core, only : dgcdist_core
     use linmsg_core, only : dlinmsg_interior_short_gaps
