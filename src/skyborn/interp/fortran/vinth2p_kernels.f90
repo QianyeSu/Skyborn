@@ -353,10 +353,10 @@ contains
     ! Interpolate one vertical column from hybrid levels to requested pressure
     ! levels without ECMWF below-ground extrapolation.
     subroutine interpolate_column_nodes( &
-        dati_col, dato_col, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp &
+        dati_col, dato_col, hbcofa_p0_mb, hbcofb, plevo_mb, intyp, psfc, spvl, kxtrp &
     )
-        real(real64), intent(in) :: dati_col(:), hbcofa(:), hbcofb(:), plevo_mb(:)
-        real(real64), intent(in) :: p0_mb, psfc, spvl
+        real(real64), intent(in) :: dati_col(:), hbcofa_p0_mb(:), hbcofb(:), plevo_mb(:)
+        real(real64), intent(in) :: psfc, spvl
         real(real64), intent(out) :: dato_col(size(plevo_mb))
         integer, intent(in) :: intyp, kxtrp
 
@@ -374,7 +374,7 @@ contains
         ! Build hybrid pressures once per column, then reuse them for every
         ! requested output pressure level.
         psfc_mb = psfc * 0.01_real64
-        call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
+        call build_input_pressures_precomputed(hbcofa_p0_mb, hbcofb, psfc_mb, plevi)
         is_ascending = levels_ascending(plevi)
         target_monotonic = levels_monotonic(plevo_mb)
         have_kp_hint = .false.
@@ -491,11 +491,11 @@ contains
     ! Interpolate one vertical column from hybrid levels to requested pressure
     ! levels with ECMWF below-ground extrapolation when requested.
     subroutine interpolate_column_ecmwf( &
-        dati_col, dato_col, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp, &
+        dati_col, dato_col, hbcofa_p0_mb, hbcofb, plevo_mb, intyp, psfc, spvl, kxtrp, &
         varflg, tbot, phis &
     )
-        real(real64), intent(in) :: dati_col(:), hbcofa(:), hbcofb(:), plevo_mb(:)
-        real(real64), intent(in) :: p0_mb, psfc, spvl, tbot, phis
+        real(real64), intent(in) :: dati_col(:), hbcofa_p0_mb(:), hbcofb(:), plevo_mb(:)
+        real(real64), intent(in) :: psfc, spvl, tbot, phis
         real(real64), intent(out) :: dato_col(size(plevo_mb))
         integer, intent(in) :: intyp, kxtrp, varflg
 
@@ -514,7 +514,7 @@ contains
         ! current column, but interior interpolation still follows the same
         ! bracketing logic as the plain node kernel.
         psfc_mb = psfc * 0.01_real64
-        call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
+        call build_input_pressures_precomputed(hbcofa_p0_mb, hbcofb, psfc_mb, plevi)
         is_ascending = levels_ascending(plevi)
         target_monotonic = levels_monotonic(plevo_mb)
         have_kp_hint = .false.
@@ -950,12 +950,12 @@ contains
 
     ! Flat-buffer helper for the C-order hybrid->pressure path.
     subroutine interpolate_flat_column_nodes( &
-        dati_flat, dato_flat, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp, &
+        dati_flat, dato_flat, hbcofa_p0_mb, hbcofb, plevo_mb, intyp, psfc, spvl, kxtrp, &
         base_in, base_out, inner, ninner, nlevi, nlevo &
     )
-        real(real64), intent(in) :: dati_flat(:), hbcofa(:), hbcofb(:), plevo_mb(:)
+        real(real64), intent(in) :: dati_flat(:), hbcofa_p0_mb(:), hbcofb(:), plevo_mb(:)
         real(real64), intent(inout) :: dato_flat(:)
-        real(real64), intent(in) :: p0_mb, psfc, spvl
+        real(real64), intent(in) :: psfc, spvl
         integer, intent(in) :: intyp, kxtrp, base_in, base_out, inner
         integer, intent(in) :: ninner, nlevi, nlevo
 
@@ -972,7 +972,7 @@ contains
         end if
 
         psfc_mb = psfc * 0.01_real64
-        call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
+        call build_input_pressures_precomputed(hbcofa_p0_mb, hbcofb, psfc_mb, plevi)
         is_ascending = levels_ascending(plevi)
         target_monotonic = levels_monotonic(plevo_mb)
         have_kp_hint = .false.
@@ -1095,12 +1095,12 @@ contains
 
     ! Flat-buffer helper for the C-order ECMWF hybrid->pressure path.
     subroutine interpolate_flat_column_ecmwf( &
-        dati_flat, dato_flat, hbcofa, hbcofb, p0_mb, plevo_mb, intyp, psfc, spvl, kxtrp, &
+        dati_flat, dato_flat, hbcofa_p0_mb, hbcofb, plevo_mb, intyp, psfc, spvl, kxtrp, &
         varflg, tbot, phis, base_in, base_out, inner, ninner, nlevi, nlevo &
     )
-        real(real64), intent(in) :: dati_flat(:), hbcofa(:), hbcofb(:), plevo_mb(:)
+        real(real64), intent(in) :: dati_flat(:), hbcofa_p0_mb(:), hbcofb(:), plevo_mb(:)
         real(real64), intent(inout) :: dato_flat(:)
-        real(real64), intent(in) :: p0_mb, psfc, spvl, tbot, phis
+        real(real64), intent(in) :: psfc, spvl, tbot, phis
         integer, intent(in) :: intyp, kxtrp, varflg, base_in, base_out, inner
         integer, intent(in) :: ninner, nlevi, nlevo
 
@@ -1117,7 +1117,7 @@ contains
         end if
 
         psfc_mb = psfc * 0.01_real64
-        call build_input_pressures(hbcofa, hbcofb, p0_mb, psfc_mb, plevi)
+        call build_input_pressures_precomputed(hbcofa_p0_mb, hbcofb, psfc_mb, plevi)
         is_ascending = levels_ascending(plevi)
         target_monotonic = levels_monotonic(plevo_mb)
         have_kp_hint = .false.
@@ -1589,17 +1589,18 @@ subroutine dvinth2p_nodes_pa( &
     real(real64), intent(in) :: hbcofa(nlevi), hbcofb(nlevi)
     real(real64), intent(in) :: p0, plevo(nlevo), psfc(ncol), spvl
 
-    real(real64) :: plevo_mb(nlevo), p0_mb
+    real(real64) :: hbcofa_p0_mb(nlevi), plevo_mb(nlevo), p0_mb
     integer :: j
 
     ! This is the generic column-major entry point used by the fallback Python
     ! bridge and by the explicit output-buffer wrapper below.
     p0_mb = p0 * 0.01_real64
+    hbcofa_p0_mb = hbcofa * p0_mb
     call convert_levels_to_mb(plevo, plevo_mb)
 
     do j = 1, ncol
         call interpolate_column_nodes( &
-            dati(:, j), dato(:, j), hbcofa, hbcofb, p0_mb, plevo_mb, &
+            dati(:, j), dato(:, j), hbcofa_p0_mb, hbcofb, plevo_mb, &
             intyp, psfc(j), spvl, kxtrp &
         )
     end do
@@ -1653,17 +1654,18 @@ subroutine dvinth2p_ecmwf_nodes_pa( &
     real(real64), intent(in) :: p0, plevo(nlevo), psfc(ncol), spvl
     real(real64), intent(in) :: tbot(ncol), phis(ncol)
 
-    real(real64) :: plevo_mb(nlevo), p0_mb
+    real(real64) :: hbcofa_p0_mb(nlevi), plevo_mb(nlevo), p0_mb
     integer :: j
 
     ! This is the generic column-major ECMWF entry point used by the fallback
     ! Python bridge and by the explicit output-buffer wrapper below.
     p0_mb = p0 * 0.01_real64
+    hbcofa_p0_mb = hbcofa * p0_mb
     call convert_levels_to_mb(plevo, plevo_mb)
 
     do j = 1, ncol
         call interpolate_column_ecmwf( &
-            dati(:, j), dato(:, j), hbcofa, hbcofb, p0_mb, plevo_mb, &
+            dati(:, j), dato(:, j), hbcofa_p0_mb, hbcofb, plevo_mb, &
             intyp, psfc(j), spvl, kxtrp, varflg, tbot(j), phis(j) &
         )
     end do
@@ -1857,10 +1859,11 @@ subroutine dvinth2p_nodes_corder_pa_into( &
     ! This flat-array entry point exists purely to avoid Python-side
     ! transpose/packing when the caller already has NumPy C-order data with the
     ! interpolation axis in place.
-    real(real64) :: plevo_mb(nlevo), p0_mb
+    real(real64) :: hbcofa_p0_mb(nlevi), plevo_mb(nlevo), p0_mb
     integer :: base_in, base_out, col_idx, inner, outer
 
     p0_mb = p0 * 0.01_real64
+    hbcofa_p0_mb = hbcofa * p0_mb
     call convert_levels_to_mb(plevo, plevo_mb)
 
     do outer = 0, nouter - 1
@@ -1869,7 +1872,7 @@ subroutine dvinth2p_nodes_corder_pa_into( &
         do inner = 1, ninner
             col_idx = outer * ninner + inner
             call interpolate_flat_column_nodes( &
-                dati_flat, dato_flat, hbcofa, hbcofb, p0_mb, plevo_mb, &
+                dati_flat, dato_flat, hbcofa_p0_mb, hbcofb, plevo_mb, &
                 intyp, psfc(col_idx), spvl, kxtrp, &
                 base_in, base_out, inner, ninner, nlevi, nlevo &
             )
@@ -1913,10 +1916,11 @@ subroutine dvinth2p_ecmwf_nodes_corder_pa_into( &
 
     ! This flat-array ECMWF entry point mirrors the generic column-major kernel
     ! but keeps the data in its original NumPy C-order layout.
-    real(real64) :: plevo_mb(nlevo), p0_mb
+    real(real64) :: hbcofa_p0_mb(nlevi), plevo_mb(nlevo), p0_mb
     integer :: base_in, base_out, col_idx, inner, outer
 
     p0_mb = p0 * 0.01_real64
+    hbcofa_p0_mb = hbcofa * p0_mb
     call convert_levels_to_mb(plevo, plevo_mb)
 
     do outer = 0, nouter - 1
@@ -1925,7 +1929,7 @@ subroutine dvinth2p_ecmwf_nodes_corder_pa_into( &
         do inner = 1, ninner
             col_idx = outer * ninner + inner
             call interpolate_flat_column_ecmwf( &
-                dati_flat, dato_flat, hbcofa, hbcofb, p0_mb, plevo_mb, &
+                dati_flat, dato_flat, hbcofa_p0_mb, hbcofb, plevo_mb, &
                 intyp, psfc(col_idx), spvl, kxtrp, varflg, tbot(col_idx), phis(col_idx), &
                 base_in, base_out, inner, ninner, nlevi, nlevo &
             )
