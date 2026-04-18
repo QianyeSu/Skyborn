@@ -1007,6 +1007,13 @@ class TestEmergentConstraints:
         expected = 1 / np.sqrt(2 * np.pi * sigma**2)
         assert abs(pdf - expected) < 1e-10
 
+    def test_gaussian_pdf_preserves_float32_input_precision(self):
+        """Gaussian PDF should keep float32 array precision by default."""
+        x = np.linspace(-3, 3, 100, dtype=np.float32)
+        pdf = gaussian_pdf(np.float32(0.0), np.float32(1.0), x)
+
+        assert pdf.dtype == np.float32
+
     def test_emergent_constraint_posterior(self, sample_emergent_constraint_data):
         """Test emergent constraint posterior calculation."""
         constraint_data, target_data, constraint_grid, target_grid, obs_pdf = (
@@ -1031,6 +1038,33 @@ class TestEmergentConstraints:
 
         # Check that std is positive
         assert posterior_std > 0
+
+    def test_emergent_constraints_prefer_model_data_precision(self):
+        """Posterior and prior should follow the model-data precision by default."""
+        constraint_data = xr.DataArray(
+            np.linspace(1.0, 4.0, 12, dtype=np.float32), dims=["model"]
+        )
+        target_data = xr.DataArray(
+            (1.5 * constraint_data.values + 0.25).astype(np.float32), dims=["model"]
+        )
+
+        # Keep grids at NumPy's float64 default to verify the implementation
+        # prefers the model data precision rather than silently promoting.
+        constraint_grid = np.linspace(0.5, 4.5, 40)
+        target_grid = np.linspace(1.0, 7.0, 50)
+        obs_pdf = gaussian_pdf(2.5, 0.3, constraint_grid)
+
+        posterior_pdf, _, _ = emergent_constraint_posterior(
+            constraint_data, target_data, constraint_grid, target_grid, obs_pdf
+        )
+        prior_pdf, prediction_error, regression_line = emergent_constraint_prior(
+            constraint_data, target_data, constraint_grid, target_grid
+        )
+
+        assert posterior_pdf.dtype == np.float32
+        assert prior_pdf.dtype == np.float32
+        assert prediction_error.dtype == np.float32
+        assert regression_line.dtype == np.float32
 
     def test_emergent_constraint_posterior_reduces_uncertainty(
         self, sample_emergent_constraint_data
