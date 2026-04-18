@@ -77,8 +77,8 @@ def _load_mk_backend():
     """Best-effort loader for the compiled Mann-Kendall backend."""
     candidate_names = []
     if __package__:
-        candidate_names.append(f"{__package__}.mk_kernels.mk_kernels_backend")
-    candidate_names.append("skyborn.calc.mk_kernels.mk_kernels_backend")
+        candidate_names.append(f"{__package__}.mann_kendall_core.mann_kendall_core")
+    candidate_names.append("skyborn.calc.mann_kendall_core.mann_kendall_core")
 
     for module_name in candidate_names:
         try:
@@ -86,15 +86,15 @@ def _load_mk_backend():
         except Exception:
             continue
 
-    backend_dir = Path(__file__).resolve().parent / "mk_kernels"
+    backend_dir = Path(__file__).resolve().parent / "mann_kendall_core"
     for suffix in EXTENSION_SUFFIXES:
-        candidate = backend_dir / f"mk_kernels_backend{suffix}"
+        candidate = backend_dir / f"mann_kendall_core{suffix}"
         if not candidate.exists():
             continue
 
         try:
             spec = importlib_util.spec_from_file_location(
-                "mk_kernels_backend", candidate
+                "mann_kendall_core", candidate
             )
             if spec is None or spec.loader is None:
                 continue
@@ -141,7 +141,7 @@ def _require_backend_function(function, function_name: str):
     if function is None:
         raise ImportError(
             "skyborn.calc.mann_kendall requires the compiled "
-            f"mk_kernels backend entry '{function_name}'. "
+            f"mann_kendall_core entry '{function_name}'. "
             "Install a prebuilt wheel or build the Skyborn extensions first."
         )
     return function
