@@ -848,8 +848,9 @@ class TestCalculationsIntegration:
 
         # Check physical realism
         assert len(potential_temps) == len(pressure_levels)
-        # theta > T for p < 1000 hPa
-        assert np.all(potential_temps > temperatures)
+        # theta == T at the reference pressure and theta > T aloft
+        assert np.isclose(potential_temps[0], temperatures[0])
+        assert np.all(potential_temps[1:] > temperatures[1:])
 
         # Potential temperature should generally increase with height in stable conditions
         # Check that the calculation is physically reasonable without being too strict
@@ -960,7 +961,10 @@ class TestEmergentConstraints:
 
         # Check normalization (approximately)
         dx = x[1] - x[0]
-        integral = np.trapz(pdf, dx=dx)
+        trapezoid = getattr(np, "trapezoid", None)
+        if trapezoid is None:
+            trapezoid = np.trapz
+        integral = trapezoid(pdf, dx=dx)
         assert abs(integral - 1.0) < 0.01
 
         # Check maximum at mean
