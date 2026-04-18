@@ -9,6 +9,7 @@ dask-based parallel processing, edge cases, and error handling.
 import importlib.util
 import os
 import sys
+import tempfile
 import unittest.mock
 import warnings
 
@@ -49,7 +50,67 @@ mann_kendall_multidim = mann_kendall_module.mann_kendall_multidim
 trend_analysis = mann_kendall_module.trend_analysis
 _dask_mann_kendall = mann_kendall_module._dask_mann_kendall
 mann_kendall_xarray = mann_kendall_module.mann_kendall_xarray
+_backend_available = mann_kendall_module._backend_available
+_as_fortran_float64_2d = mann_kendall_module._as_fortran_float64_2d
+_calculate_mk_score_python = mann_kendall_module._calculate_mk_score_python
 _calculate_std_error_theil = mann_kendall_module._calculate_std_error_theil
+_calculate_mk_variance_batch = mann_kendall_module._calculate_mk_variance_batch
+_load_mk_backend = mann_kendall_module._load_mk_backend
+_mk_score_var_batch_clean = mann_kendall_module._mk_score_var_batch_clean
+_mk_score_var_batch_clean_python = mann_kendall_module._mk_score_var_batch_clean_python
+_sen_slope_batch_clean = mann_kendall_module._sen_slope_batch_clean
+_sen_slope_batch_clean_python = mann_kendall_module._sen_slope_batch_clean_python
+_vectorized_mk_test = mann_kendall_module._vectorized_mk_test
+
+
+def _equal_or_both_nan(left, right, atol=1e-12):
+    """Treat NaN/NaN as equal while keeping numeric comparisons strict."""
+    left_value = np.asarray(left)
+    right_value = np.asarray(right)
+    if (
+        left_value.shape == ()
+        and right_value.shape == ()
+        and np.isnan(left_value.item())
+        and np.isnan(right_value.item())
+    ):
+        return True
+    return bool(np.allclose(left, right, rtol=0.0, atol=atol, equal_nan=True))
+
+
+def _assert_matches_pymannkendall(result, pmk_result):
+    """Assert that Skyborn and pymannkendall report the same MK statistics."""
+    assert result["h"] == bool(pmk_result.h)
+    assert _equal_or_both_nan(result["trend"], pmk_result.slope)
+    assert _equal_or_both_nan(result["p"], pmk_result.p)
+    assert _equal_or_both_nan(result["z"], pmk_result.z)
+    assert _equal_or_both_nan(result["tau"], pmk_result.Tau)
+
+
+def _build_pymannkendall_cases(include_strict_linear=False):
+    """Return deterministic sample cases used for library parity checks."""
+    cases = {
+        "ties_up": np.array([1, 1, 2, 2, 3, 3, 4, 4, 5, 5], dtype=float),
+        "ties_mixed": np.array([1, 2, 2, 3, 3, 3, 4, 4, 5, 5], dtype=float),
+        "oscillating": np.array([1, 3, 2, 4, 3, 5, 4, 6, 5, 7], dtype=float),
+        "random_seeded": np.array(
+            [
+                0.12573022,
+                -0.13210486,
+                0.64042265,
+                0.10490012,
+                -0.53566937,
+                0.36159505,
+                1.30400005,
+                0.94708096,
+                -0.70373524,
+                -1.26542147,
+            ],
+            dtype=float,
+        ),
+    }
+    if include_strict_linear:
+        cases = {"strict_increase": np.arange(1, 11, dtype=float), **cases}
+    return cases
 
 
 class TestMannKendallComprehensive:
@@ -335,6 +396,128 @@ class TestMannKendallComprehensive:
         # Both should complete successfully
         assert "tau" in result_standard
         assert "tau" in result_modified
+
+    def test_modified_mk_matches_pymannkendall_reference_regression(self):
+        """Lock the Yue-Wang modified path to the verified pymannkendall values."""
+        data = np.array(
+            [
+                0.12573022,
+                -0.13210486,
+                0.64042265,
+                0.10490012,
+                -0.53566937,
+                0.36159505,
+                1.30400005,
+                0.94708096,
+                -0.70373524,
+                -1.26542147,
+            ]
+        )
+
+        result = mann_kendall_test(data, method="theilslopes", modified=True)
+
+        assert result["h"] == False
+        np.testing.assert_allclose(result["trend"], -0.09294253333333334)
+        np.testing.assert_allclose(result["tau"], -0.15555555555555556)
+        np.testing.assert_allclose(result["z"], -0.9835080531601669)
+        np.testing.assert_allclose(result["p"], 0.3253574537616566)
+
+    @pytest.mark.parametrize("modified", [False, True])
+    def test_matches_pymannkendall_reference_cases(self, modified):
+        """Skyborn should match pymannkendall on deterministic regression cases."""
+        pmk = pytest.importorskip("pymannkendall")
+        cases = _build_pymannkendall_cases(include_strict_linear=modified)
+
+        for name, data in cases.items():
+            pmk_result = (
+                pmk.yue_wang_modification_test(data)
+                if modified
+                else pmk.original_test(data)
+            )
+            result = mann_kendall_test(data, method="theilslopes", modified=modified)
+
+            try:
+                _assert_matches_pymannkendall(result, pmk_result)
+            except AssertionError as exc:
+                raise AssertionError(
+                    f"Mismatch against pymannkendall for case={name}, modified={modified}"
+                ) from exc
+
+    def test_theil_slope_matches_pymannkendall_sens_slope(self):
+        """The Theil-Sen slope should match pymannkendall.sens_slope exactly."""
+        pmk = pytest.importorskip("pymannkendall")
+
+        for name, data in _build_pymannkendall_cases(
+            include_strict_linear=True
+        ).items():
+            result = mann_kendall_test(data, method="theilslopes", modified=False)
+            pmk_slope = pmk.sens_slope(data)
+
+            assert _equal_or_both_nan(
+                result["trend"], pmk_slope.slope
+            ), f"Slope mismatch for case={name}"
+
+    def test_vectorized_clean_tied_series_matches_scalar_reference(self):
+        """Clean tied series should match scalar MK statistics exactly."""
+        data = np.array(
+            [
+                [1.0, 5.0, 2.0],
+                [1.0, 5.0, 2.0],
+                [2.0, 4.0, 2.0],
+                [2.0, 4.0, 3.0],
+                [3.0, 3.0, 3.0],
+                [3.0, 3.0, 4.0],
+                [4.0, 2.0, 4.0],
+                [4.0, 2.0, 4.0],
+                [5.0, 1.0, 5.0],
+                [5.0, 1.0, 5.0],
+            ]
+        )
+
+        vectorized = _vectorized_mk_test(data, method="linregress", modified=False)
+
+        for idx in range(data.shape[1]):
+            scalar = mann_kendall_test(
+                data[:, idx], method="linregress", modified=False
+            )
+            assert vectorized["h"][idx] == scalar["h"]
+            np.testing.assert_allclose(vectorized["trend"][idx], scalar["trend"])
+            np.testing.assert_allclose(vectorized["p"][idx], scalar["p"])
+            np.testing.assert_allclose(vectorized["z"][idx], scalar["z"])
+            np.testing.assert_allclose(vectorized["tau"][idx], scalar["tau"])
+            np.testing.assert_allclose(
+                vectorized["std_error"][idx], scalar["std_error"]
+            )
+
+    def test_vectorized_clean_tied_series_matches_scalar_modified_reference(self):
+        """Modified MK should also stay aligned for clean tied series."""
+        data = np.array(
+            [
+                [1.0, 3.0],
+                [1.0, 3.0],
+                [2.0, 3.0],
+                [2.0, 2.0],
+                [3.0, 2.0],
+                [3.0, 2.0],
+                [4.0, 1.0],
+                [4.0, 1.0],
+                [5.0, 1.0],
+                [5.0, 0.0],
+            ]
+        )
+
+        vectorized = _vectorized_mk_test(data, method="linregress", modified=True)
+
+        for idx in range(data.shape[1]):
+            scalar = mann_kendall_test(data[:, idx], method="linregress", modified=True)
+            assert vectorized["h"][idx] == scalar["h"]
+            np.testing.assert_allclose(vectorized["trend"][idx], scalar["trend"])
+            np.testing.assert_allclose(vectorized["p"][idx], scalar["p"])
+            np.testing.assert_allclose(vectorized["z"][idx], scalar["z"])
+            np.testing.assert_allclose(vectorized["tau"][idx], scalar["tau"])
+            np.testing.assert_allclose(
+                vectorized["std_error"][idx], scalar["std_error"]
+            )
 
     def test_multidimensional_numpy(self):
         """Test multidimensional numpy implementation."""
@@ -1204,6 +1387,309 @@ class TestMannKendallComprehensive:
         edge_data = np.array([[[1, 2], [3, 4]], [[1, 2], [3, 4]]])
         result = mann_kendall_multidim(edge_data, axis=0)
         assert result["trend"].shape == (2, 2)
+
+    def test_backend_clean_batch_matches_python_fallback(self, monkeypatch):
+        """Compiled clean-series kernels should match the Python fallback exactly."""
+        if not _backend_available():
+            pytest.skip("Compiled mk_kernels backend not available")
+
+        data = np.array(
+            [
+                [1.0, 5.0, 2.0],
+                [1.0, 5.0, 2.0],
+                [2.0, 4.0, 2.0],
+                [2.0, 4.0, 3.0],
+                [3.0, 3.0, 3.0],
+                [3.0, 3.0, 4.0],
+                [4.0, 2.0, 4.0],
+                [4.0, 2.0, 4.0],
+                [5.0, 1.0, 5.0],
+                [5.0, 1.0, 5.0],
+            ],
+            dtype=np.float64,
+        )
+
+        score_backend, var_backend = _mk_score_var_batch_clean(data, modified=False)
+        slope_backend = _sen_slope_batch_clean(data)
+
+        monkeypatch.setattr(
+            mann_kendall_module, "_mk_score_var_batch_clean_backend", None
+        )
+        monkeypatch.setattr(mann_kendall_module, "_sen_slope_batch_clean_backend", None)
+
+        score_python, var_python = _mk_score_var_batch_clean_python(
+            data, modified=False
+        )
+        slope_python = _sen_slope_batch_clean_python(data)
+
+        np.testing.assert_allclose(score_backend, score_python, rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(var_backend, var_python, rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(slope_backend, slope_python, rtol=0.0, atol=0.0)
+
+    def test_backend_modified_batch_matches_python_fallback(self, monkeypatch):
+        """Modified clean-series kernels should stay aligned with the Python fallback."""
+        if not _backend_available():
+            pytest.skip("Compiled mk_kernels backend not available")
+
+        data = np.array(
+            [
+                [0.12573022, 1.0],
+                [-0.13210486, 1.0],
+                [0.64042265, 2.0],
+                [0.10490012, 2.0],
+                [-0.53566937, 3.0],
+                [0.36159505, 3.0],
+                [1.30400005, 4.0],
+                [0.94708096, 4.0],
+                [-0.70373524, 5.0],
+                [-1.26542147, 5.0],
+            ],
+            dtype=np.float64,
+        )
+
+        score_backend, var_backend = _mk_score_var_batch_clean(data, modified=True)
+
+        monkeypatch.setattr(
+            mann_kendall_module, "_mk_score_var_batch_clean_backend", None
+        )
+        monkeypatch.setattr(mann_kendall_module, "_sen_slope_batch_clean_backend", None)
+
+        score_python, var_python = _mk_score_var_batch_clean_python(data, modified=True)
+
+        np.testing.assert_allclose(score_backend, score_python, rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(
+            var_backend, var_python, rtol=0.0, atol=1e-12, equal_nan=True
+        )
+
+    def test_mann_kendall_test_fallback_without_backend(self, monkeypatch):
+        """Scalar public API should keep the same answers when the backend is disabled."""
+        data = np.array(
+            [
+                0.12573022,
+                -0.13210486,
+                0.64042265,
+                0.10490012,
+                -0.53566937,
+                0.36159505,
+                1.30400005,
+                0.94708096,
+                -0.70373524,
+                -1.26542147,
+            ],
+            dtype=float,
+        )
+
+        with_backend = mann_kendall_test(data, method="theilslopes", modified=True)
+
+        monkeypatch.setattr(
+            mann_kendall_module, "_mk_score_var_batch_clean_backend", None
+        )
+        monkeypatch.setattr(mann_kendall_module, "_sen_slope_batch_clean_backend", None)
+
+        without_backend = mann_kendall_test(data, method="theilslopes", modified=True)
+
+        for key in ["trend", "p", "z", "tau", "std_error"]:
+            np.testing.assert_allclose(
+                with_backend[key],
+                without_backend[key],
+                rtol=0.0,
+                atol=1e-12,
+                equal_nan=True,
+            )
+        assert with_backend["h"] == without_backend["h"]
+
+    def test_loader_returns_none_when_import_and_local_probe_fail(self, monkeypatch):
+        """Backend loader should gracefully return None when no candidate can load."""
+        repo_tmp = os.path.join(os.path.dirname(__file__), "..", ".codex_tmp")
+        os.makedirs(repo_tmp, exist_ok=True)
+
+        with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
+            fake_source = os.path.join(tmp_dir, "mann_kendall.py")
+            with open(fake_source, "w", encoding="utf-8") as handle:
+                handle.write("# probe\n")
+
+            monkeypatch.setattr(mann_kendall_module, "__file__", fake_source)
+            monkeypatch.setattr(
+                mann_kendall_module,
+                "import_module",
+                unittest.mock.Mock(side_effect=ImportError),
+            )
+            monkeypatch.setattr(mann_kendall_module, "EXTENSION_SUFFIXES", [".pyd"])
+
+            assert _load_mk_backend() is None
+
+    def test_loader_skips_broken_local_extension_candidate(self, monkeypatch):
+        """Backend loader should ignore local extension candidates that fail to import."""
+        repo_tmp = os.path.join(os.path.dirname(__file__), "..", ".codex_tmp")
+        os.makedirs(repo_tmp, exist_ok=True)
+
+        with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
+            fake_source = os.path.join(tmp_dir, "mann_kendall.py")
+            backend_dir = os.path.join(tmp_dir, "mk_kernels")
+            os.makedirs(backend_dir, exist_ok=True)
+
+            with open(fake_source, "w", encoding="utf-8") as handle:
+                handle.write("# probe\n")
+            with open(
+                os.path.join(backend_dir, "mk_kernels_backend.pyd"), "wb"
+            ) as handle:
+                handle.write(b"not a real extension")
+
+            monkeypatch.setattr(mann_kendall_module, "__file__", fake_source)
+            monkeypatch.setattr(
+                mann_kendall_module,
+                "import_module",
+                unittest.mock.Mock(side_effect=ImportError),
+            )
+            monkeypatch.setattr(mann_kendall_module, "EXTENSION_SUFFIXES", [".pyd"])
+
+            def _boom(*args, **kwargs):
+                raise ImportError("boom")
+
+            monkeypatch.setattr(
+                mann_kendall_module.importlib_util, "spec_from_file_location", _boom
+            )
+            assert _load_mk_backend() is None
+
+    def test_as_fortran_float64_2d_validation(self):
+        """The backend layout helper should reject non-2D inputs."""
+        with pytest.raises(ValueError, match="Expected a 2D array"):
+            _as_fortran_float64_2d(np.arange(5.0))
+
+    def test_scalar_python_fallback_helper(self):
+        """Pure Python scalar score helper should stay deterministic."""
+        y = np.array([1.0, 1.0, 2.0, 2.0, 3.0, 4.0, 5.0, 5.0], dtype=np.float64)
+        assert _calculate_mk_score_python(y) == 25
+
+    def test_backend_dispatch_falls_back_after_backend_exception(self, monkeypatch):
+        """Dispatch helpers should recover by using the Python implementation."""
+        data = np.array(
+            [
+                [1.0, 3.0],
+                [2.0, 4.0],
+                [3.0, 5.0],
+                [4.0, 6.0],
+            ],
+            dtype=np.float64,
+        )
+
+        monkeypatch.setattr(
+            mann_kendall_module,
+            "_mk_score_var_batch_clean_backend",
+            unittest.mock.Mock(side_effect=RuntimeError("fail")),
+        )
+        monkeypatch.setattr(
+            mann_kendall_module,
+            "_sen_slope_batch_clean_backend",
+            unittest.mock.Mock(side_effect=RuntimeError("fail")),
+        )
+
+        score_fallback, var_fallback = _mk_score_var_batch_clean(data, modified=False)
+        slope_fallback = _sen_slope_batch_clean(data)
+
+        score_python, var_python = _mk_score_var_batch_clean_python(
+            data, modified=False
+        )
+        slope_python = _sen_slope_batch_clean_python(data)
+
+        np.testing.assert_allclose(score_fallback, score_python)
+        np.testing.assert_allclose(var_fallback, var_python)
+        np.testing.assert_allclose(slope_fallback, slope_python)
+
+    def test_calculate_mk_variance_batch_dispatch(self):
+        """Direct batch variance helper should stay aligned with scalar semantics."""
+        data = np.array(
+            [
+                [1.0, 2.0],
+                [2.0, 2.0],
+                [3.0, 3.0],
+                [4.0, 4.0],
+            ],
+            dtype=np.float64,
+        )
+
+        batch = _calculate_mk_variance_batch(data, modified=False)
+        scalar = np.array(
+            [
+                mann_kendall_module._calculate_mk_variance(
+                    data[:, 0], 4, modified=False
+                ),
+                mann_kendall_module._calculate_mk_variance(
+                    data[:, 1], 4, modified=False
+                ),
+            ]
+        )
+        np.testing.assert_allclose(batch, scalar, rtol=0.0, atol=0.0)
+
+    def test_mann_kendall_multidim_dim_takes_precedence(self):
+        """The dim alias should override axis in the multidim numpy path."""
+        data = np.random.randn(12, 5, 4) + np.arange(12)[:, None, None] * 0.1
+        result_dim = mann_kendall_multidim(data, axis=2, dim=0)
+        result_axis = mann_kendall_multidim(data, axis=0)
+        np.testing.assert_allclose(result_dim["trend"], result_axis["trend"])
+
+    def test_vectorized_nan_branch_skips_insufficient_series(self):
+        """Series that drop below three finite values in the NaN path should remain NaN."""
+        data = np.array(
+            [
+                [1.0, np.nan],
+                [2.0, np.nan],
+                [3.0, 1.0],
+                [4.0, np.nan],
+            ],
+            dtype=np.float64,
+        )
+
+        result = _vectorized_mk_test(data, method="theilslopes", modified=False)
+        assert np.isnan(result["trend"][1])
+
+    def test_vectorized_nan_branch_handles_scalar_exception(self, monkeypatch):
+        """The NaN branch should swallow scalar errors and leave the slot untouched."""
+        data = np.array(
+            [
+                [1.0, np.nan],
+                [2.0, 1.0],
+                [3.0, np.nan],
+                [4.0, 2.0],
+            ],
+            dtype=np.float64,
+        )
+
+        def _raise_once(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(mann_kendall_module, "mann_kendall_test", _raise_once)
+        result = _vectorized_mk_test(data, method="theilslopes", modified=False)
+        assert np.isnan(result["trend"][1])
+
+    def test_dask_helper_chunks_large_numpy_input(self):
+        """Large eager xarray inputs should exercise the chunk-resizing branch."""
+        data = xr.DataArray(
+            np.random.randn(8, 130, 140),
+            dims=["time", "lat", "lon"],
+            coords={"time": np.arange(8), "lat": np.arange(130), "lon": np.arange(140)},
+        )
+        result = _dask_mann_kendall(
+            data, dim="time", alpha=0.05, method="theilslopes", modified=False
+        )
+        assert result["trend"].shape == (130, 140)
+
+    def test_dask_helper_swallows_block_exceptions(self, monkeypatch):
+        """The dask block processor should skip problematic points instead of failing."""
+        data = xr.DataArray(
+            np.random.randn(6, 4, 3),
+            dims=["time", "lat", "lon"],
+            coords={"time": np.arange(6), "lat": np.arange(4), "lon": np.arange(3)},
+        )
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(mann_kendall_module, "mann_kendall_test", _boom)
+        result = _dask_mann_kendall(
+            data, dim="time", alpha=0.05, method="theilslopes", modified=False
+        )
+        assert np.all(np.isnan(result["trend"]))
 
         # Test lines 555-558 - chunk processing edge cases
         # Test with chunk size larger than data
