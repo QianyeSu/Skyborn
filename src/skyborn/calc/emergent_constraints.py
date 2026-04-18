@@ -18,6 +18,7 @@ Date: 2023.03.15
 Modified for Skyborn package with type annotations and improved naming
 """
 
+import warnings
 from typing import Tuple, Union
 
 import numpy as np
@@ -58,8 +59,89 @@ def gaussian_pdf(
     ----------
     Adapted from: https://github.com/blackcata/Emergent_Constraints/tree/master
     """
-    pdf = 1 / np.sqrt(2 * np.pi * sigma**2) * np.exp(-1 / 2 * ((x - mu) / sigma) ** 2)
+    x_values = np.asarray(x, dtype=np.float64)
+
+    if sigma < 0:
+        warnings.warn(
+            "Standard deviation must be non-negative for gaussian_pdf.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        pdf = np.full_like(x_values, np.nan, dtype=np.float64)
+    elif sigma == 0:
+        warnings.warn(
+            "Standard deviation is zero in gaussian_pdf; returning a degenerate limit.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        pdf = np.where(x_values == mu, np.inf, 0.0)
+    else:
+        scale = 1.0 / (np.sqrt(2.0 * np.pi) * sigma)
+        exponent = -0.5 * ((x_values - mu) / sigma) ** 2
+        pdf = scale * np.exp(exponent)
+
+    if np.ndim(x_values) == 0:
+        return float(pdf)
     return pdf
+
+
+def _fit_linear_relationship(
+    x_models: np.ndarray, y_models: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray, float, float, float, float]:
+    """Fit the inter-model linear relationship used by the EC formulas."""
+    x_models = np.asarray(x_models, dtype=np.float64)
+    y_models = np.asarray(y_models, dtype=np.float64)
+
+    valid_mask = np.isfinite(x_models) & np.isfinite(y_models)
+    x_models = x_models[valid_mask]
+    y_models = y_models[valid_mask]
+
+    if x_models.size != y_models.size or x_models.size == 0:
+        raise ValueError(
+            "constraint_data and target_data must contain valid paired data."
+        )
+
+    x_mean = float(np.mean(x_models))
+    y_mean = float(np.mean(y_models))
+    x_centered = x_models - x_mean
+    y_centered = y_models - y_mean
+    ss_x = float(np.sum(x_centered**2))
+
+    if ss_x > 0.0:
+        slope = float(np.sum(x_centered * y_centered) / ss_x)
+    else:
+        slope = 0.0
+
+    intercept = y_mean - slope * x_mean
+    residuals = y_models - (intercept + slope * x_models)
+
+    if x_models.size > 2:
+        prediction_error = float(np.sqrt(np.sum(residuals**2) / (x_models.size - 2)))
+    else:
+        prediction_error = float(np.sqrt(np.mean(residuals**2)))
+
+    if not np.isfinite(prediction_error):
+        prediction_error = 0.0
+
+    return x_models, y_models, slope, intercept, prediction_error, ss_x
+
+
+def _prediction_std(
+    prediction_error: float,
+    sample_size: int,
+    x_values: np.ndarray,
+    x_mean: float,
+    ss_x: float,
+) -> np.ndarray:
+    """Return predictive standard deviation for regression-conditioned values."""
+    if prediction_error == 0.0:
+        return np.zeros_like(x_values, dtype=np.float64)
+
+    base = np.ones_like(x_values, dtype=np.float64) + 1.0 / sample_size
+    if ss_x > 0.0:
+        base = base + ((x_values - x_mean) ** 2) / ss_x
+
+    return prediction_error * np.sqrt(base)
 
 
 def emergent_constraint_posterior(
@@ -103,53 +185,39 @@ def emergent_constraint_posterior(
     """
     dx = constraint_grid[1] - constraint_grid[0]
 
-    # Extract model data
-    x_models = constraint_data.values
-    y_models = target_data.values
-
-    # Linear regression for inter-model relationship
-    n_models = len(x_models)
-    sigma_x = np.sqrt(np.var(x_models))
-    sigma_xy = np.sqrt(np.cov(x_models, y_models))[0, 1]
-
-    slope = (sigma_xy / sigma_x) ** 2
-    intercept = -1 / n_models * (slope * x_models - y_models).sum()
-
-    regression_line = intercept + slope * x_models
-
-    # Prediction error
-    prediction_error = np.sqrt(
-        1 / (n_models - 2) * ((y_models - regression_line) ** 2).sum()
+    x_models, y_models, slope, intercept, prediction_error, ss_x = (
+        _fit_linear_relationship(constraint_data.values, target_data.values)
     )
-    slope_uncertainty = (prediction_error / sigma_x) * np.sqrt(n_models)
+    n_models = len(x_models)
+    regression_line = intercept + slope * constraint_grid
+    sigma_prediction = _prediction_std(
+        prediction_error,
+        n_models,
+        constraint_grid,
+        float(np.mean(x_models)),
+        ss_x,
+    )
 
-    # Calculate posterior PDF
-    posterior_pdf = np.zeros(len(target_grid))
-    for i_target in range(len(target_grid)):
-        for i_constraint in range(len(constraint_grid)):
-            sigma_prediction = prediction_error * np.sqrt(
-                1
-                + 1 / n_models
-                + (constraint_grid[i_constraint] - x_models.mean()) ** 2
-                / (n_models * sigma_x**2)
-            )
+    posterior_pdf = np.zeros(len(target_grid), dtype=np.float64)
+    nonzero_sigma = sigma_prediction > 0.0
 
-            likelihood = (
-                1
-                / np.sqrt(2 * np.pi * sigma_prediction**2)
-                * np.exp(
-                    -(
-                        (
-                            target_grid[i_target]
-                            - (intercept + slope * constraint_grid[i_constraint])
-                        )
-                        ** 2
-                    )
-                    / (2 * sigma_prediction**2)
-                )
-            )
-
-            posterior_pdf[i_target] += likelihood * obs_pdf[i_constraint] * dx
+    if np.any(nonzero_sigma):
+        likelihood = np.zeros(
+            (len(target_grid), len(constraint_grid)), dtype=np.float64
+        )
+        sigma_used = sigma_prediction[nonzero_sigma]
+        centered = (
+            target_grid[:, np.newaxis] - regression_line[nonzero_sigma][np.newaxis, :]
+        )
+        likelihood[:, nonzero_sigma] = np.exp(
+            -0.5 * (centered / sigma_used[np.newaxis, :]) ** 2
+        ) / (np.sqrt(2.0 * np.pi) * sigma_used[np.newaxis, :])
+        posterior_pdf = likelihood @ (obs_pdf * dx)
+    else:
+        nearest = np.argmin(
+            np.abs(target_grid[:, np.newaxis] - regression_line[np.newaxis, :]), axis=0
+        )
+        np.add.at(posterior_pdf, nearest, obs_pdf * dx)
 
     # Calculate statistics
     threshold = 0.341  # For 1-sigma equivalent
@@ -183,18 +251,20 @@ def _calculate_std_from_pdf(
     ----------
     Adapted from: https://github.com/blackcata/Emergent_Constraints/tree/master
     """
-    max_index = pdf.argmax()
+    pdf_sum = np.sum(pdf)
+    if pdf_sum <= 0 or not np.isfinite(pdf_sum):
+        return np.nan
 
-    for i in range(len(values)):
-        pdf_integral = pdf[i : max_index + 1].sum() / pdf.sum()
-        if pdf_integral < threshold:
-            std_dev = values[max_index] - values[i]
-            break
-    else:
-        # If no break occurred, use a default calculation
-        std_dev = np.sqrt(np.average((values - values[max_index]) ** 2, weights=pdf))
+    max_index = int(pdf.argmax())
 
-    return std_dev
+    for i in range(max_index, -1, -1):
+        pdf_integral = pdf[i : max_index + 1].sum() / pdf_sum
+        if pdf_integral >= threshold:
+            return float(abs(values[max_index] - values[i]))
+
+    std_dev = np.sqrt(np.average((values - values[max_index]) ** 2, weights=pdf))
+
+    return float(std_dev)
 
 
 def emergent_constraint_prior(
@@ -229,38 +299,41 @@ def emergent_constraint_prior(
     ----------
     Adapted from: https://github.com/blackcata/Emergent_Constraints/tree/master
     """
-    x_models = constraint_data.values
-    y_models = target_data.values
-
+    x_models, y_models, slope, intercept, prediction_error_base, ss_x = (
+        _fit_linear_relationship(constraint_data.values, target_data.values)
+    )
     n_models = len(x_models)
-    sigma_x = np.sqrt(np.var(x_models))
-    sigma_xy = np.sqrt(np.cov(x_models, y_models))[0, 1]
-
-    slope = (sigma_xy / sigma_x) ** 2
-    intercept = -1 / n_models * (slope * x_models - y_models).sum()
 
     regression_line = intercept + slope * constraint_grid
 
-    # Prediction error
-    prediction_error_base = np.sqrt(
-        1 / (n_models - 2) * ((y_models - (intercept + slope * x_models)) ** 2).sum()
-    )
-    slope_uncertainty = (prediction_error_base / sigma_x) * np.sqrt(n_models)
-
-    prediction_error = prediction_error_base * np.sqrt(
-        1
-        + 1 / n_models
-        + (constraint_grid - x_models.mean()) ** 2 / (n_models * sigma_x**2)
+    prediction_error = _prediction_std(
+        prediction_error_base,
+        n_models,
+        constraint_grid,
+        float(np.mean(x_models)),
+        ss_x,
     )
 
-    prior_pdf = (
-        1
-        / np.sqrt(2 * np.pi * prediction_error**2)
-        * np.exp(
-            -((target_grid[:, np.newaxis] - regression_line) ** 2)
-            / (2 * prediction_error**2)
+    prior_pdf = np.zeros((len(target_grid), len(constraint_grid)), dtype=np.float64)
+    nonzero_sigma = prediction_error > 0.0
+    if np.any(nonzero_sigma):
+        centered = (
+            target_grid[:, np.newaxis] - regression_line[nonzero_sigma][np.newaxis, :]
         )
-    )
+        sigma_used = prediction_error[nonzero_sigma]
+        prior_pdf[:, nonzero_sigma] = np.exp(
+            -0.5 * (centered / sigma_used[np.newaxis, :]) ** 2
+        ) / (np.sqrt(2.0 * np.pi) * sigma_used[np.newaxis, :])
+
+    if np.any(~nonzero_sigma):
+        nearest = np.argmin(
+            np.abs(
+                target_grid[:, np.newaxis]
+                - regression_line[~nonzero_sigma][np.newaxis, :]
+            ),
+            axis=0,
+        )
+        prior_pdf[nearest, np.where(~nonzero_sigma)[0]] = 1.0
 
     return prior_pdf, prediction_error, regression_line
 
