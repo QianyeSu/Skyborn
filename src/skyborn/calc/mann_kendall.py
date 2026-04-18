@@ -51,7 +51,11 @@ Flexible dimension specification with xarray:
 """
 
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from importlib import import_module
+from importlib import util as importlib_util
+from importlib.machinery import EXTENSION_SUFFIXES
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple, Union
 
 import dask.array as da
 import numpy as np
@@ -67,6 +71,124 @@ __all__ = [
     "mk_test",
     "mk_multidim",
 ]
+
+
+def _load_mk_backend():
+    """Best-effort loader for the compiled Mann-Kendall backend."""
+    candidate_names = []
+    if __package__:
+        candidate_names.append(f"{__package__}.mk_kernels.mk_kernels_backend")
+    candidate_names.append("skyborn.calc.mk_kernels.mk_kernels_backend")
+
+    for module_name in candidate_names:
+        try:
+            return import_module(module_name)
+        except Exception:
+            continue
+
+    backend_dir = Path(__file__).resolve().parent / "mk_kernels"
+    for suffix in EXTENSION_SUFFIXES:
+        candidate = backend_dir / f"mk_kernels_backend{suffix}"
+        if not candidate.exists():
+            continue
+
+        try:
+            spec = importlib_util.spec_from_file_location(
+                "mk_kernels_backend", candidate
+            )
+            if spec is None or spec.loader is None:
+                continue
+            backend = importlib_util.module_from_spec(spec)
+            spec.loader.exec_module(backend)
+            return backend
+        except Exception:
+            continue
+
+    return None
+
+
+_mk_backend = _load_mk_backend()
+_mk_score_var_batch_clean_backend = getattr(
+    _mk_backend, "mk_score_var_batch_clean", None
+)
+_mk_score_var_sen_batch_clean_backend = getattr(
+    _mk_backend, "mk_score_var_sen_batch_clean", None
+)
+_sen_slope_batch_clean_backend = getattr(_mk_backend, "sen_slope_batch_clean", None)
+
+
+def _backend_available() -> bool:
+    """Return whether all compiled clean-series kernels are available."""
+    return (
+        _mk_score_var_batch_clean_backend is not None
+        and _mk_score_var_sen_batch_clean_backend is not None
+        and _sen_slope_batch_clean_backend is not None
+    )
+
+
+def _as_fortran_float64_2d(data_2d: np.ndarray) -> np.ndarray:
+    """Convert clean 2D data to the float64 Fortran layout expected by f2py."""
+    array = np.asarray(data_2d, dtype=np.float64)
+    if array.ndim != 2:
+        raise ValueError("Expected a 2D array for Mann-Kendall clean-series kernels.")
+    if array.flags.f_contiguous:
+        return array
+    return np.asfortranarray(array)
+
+
+def _require_backend_function(function, function_name: str):
+    """Return a compiled backend entry point or raise a clear import error."""
+    if function is None:
+        raise ImportError(
+            "skyborn.calc.mann_kendall requires the compiled "
+            f"mk_kernels backend entry '{function_name}'. "
+            "Install a prebuilt wheel or build the Skyborn extensions first."
+        )
+    return function
+
+
+def _mk_score_var_batch_clean(
+    data_2d: np.ndarray, modified: bool = False
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Run the compiled clean 2D score/variance kernel."""
+    clean_data = np.asarray(data_2d, dtype=np.float64)
+    backend_function = _require_backend_function(
+        _mk_score_var_batch_clean_backend, "mk_score_var_batch_clean"
+    )
+    s_values, var_values = backend_function(
+        _as_fortran_float64_2d(clean_data), int(modified)
+    )
+    return np.asarray(s_values, dtype=np.float64), np.asarray(
+        var_values, dtype=np.float64
+    )
+
+
+def _sen_slope_batch_clean(data_2d: np.ndarray) -> np.ndarray:
+    """Run the compiled clean 2D Theil-Sen slope kernel."""
+    clean_data = np.asarray(data_2d, dtype=np.float64)
+    backend_function = _require_backend_function(
+        _sen_slope_batch_clean_backend, "sen_slope_batch_clean"
+    )
+    slopes = backend_function(_as_fortran_float64_2d(clean_data))
+    return np.asarray(slopes, dtype=np.float64)
+
+
+def _mk_score_var_sen_batch_clean(
+    data_2d: np.ndarray, modified: bool = False
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Run the compiled clean 2D combined score/variance/slope kernel."""
+    clean_data = np.asarray(data_2d, dtype=np.float64)
+    backend_function = _require_backend_function(
+        _mk_score_var_sen_batch_clean_backend, "mk_score_var_sen_batch_clean"
+    )
+    s_values, var_values, slopes = backend_function(
+        _as_fortran_float64_2d(clean_data), int(modified)
+    )
+    return (
+        np.asarray(s_values, dtype=np.float64),
+        np.asarray(var_values, dtype=np.float64),
+        np.asarray(slopes, dtype=np.float64),
+    )
 
 
 def mann_kendall_test(
@@ -149,23 +271,19 @@ def mann_kendall_test(
     >>> print(f"P-value: {result['p']:.3f}")
     >>> print(f"Significant trend: {result['h']}")
     """
-    # Handle both numpy and xarray inputs
     if hasattr(data, "values"):
         values = data.values
     else:
         values = np.asarray(data)
 
-    # Ensure 1D
     if values.ndim > 1:
         raise ValueError(
             "mann_kendall_test only accepts 1D data. Use trend_analysis for multidimensional data."
         )
 
-    # Remove NaN values
     valid_mask = np.isfinite(values)
-    y = values[valid_mask]
-    # Use consecutive time indices for compatibility with pymannkendall
-    x = np.arange(len(y))
+    y = np.asarray(values[valid_mask], dtype=np.float64)
+    x = np.arange(len(y), dtype=np.float64)
     n = len(y)
 
     if n < 3:
@@ -179,13 +297,18 @@ def mann_kendall_test(
             "std_error": np.nan,
         }
 
-    # Calculate Mann-Kendall score (S)
-    S = _calculate_mk_score(y)
+    if method == "theilslopes":
+        S_values, var_values, slopes = _mk_score_var_sen_batch_clean(
+            y.reshape(-1, 1), modified=modified
+        )
+        S = int(np.rint(S_values[0]))
+        var_s = float(var_values[0])
+        slope = float(slopes[0])
+        intercept = np.median(y) - slope * np.median(x)
+    else:
+        S = _calculate_mk_score(y)
+        var_s = _calculate_mk_variance(y, n, modified)
 
-    # Calculate variance of S
-    var_s = _calculate_mk_variance(y, n, modified)
-
-    # Calculate normalized test statistic
     if S > 0:
         z = (S - 1) / np.sqrt(var_s)
     elif S == 0:
@@ -193,22 +316,15 @@ def mann_kendall_test(
     else:
         z = (S + 1) / np.sqrt(var_s)
 
-    # Calculate p-value and hypothesis test
     p_value = 2 * (1 - stats.norm.cdf(abs(z)))
     h = abs(z) > stats.norm.ppf(1 - alpha / 2)
 
-    # Calculate slope using Theil-Sen estimator (default)
-    if method == "theilslopes":
-        slope, intercept = stats.mstats.theilslopes(y, x)[:2]
-    elif method == "linregress":
+    if method == "linregress":
         slope, intercept = stats.linregress(x, y)[:2]
-    else:
+    elif method != "theilslopes":
         raise ValueError(f"Unknown method: {method}. Use 'theilslopes' or 'linregress'")
 
-    # Calculate Kendall's tau
     tau = S / (0.5 * n * (n - 1))
-
-    # Calculate standard error
     y_detrend = y - (x * slope + intercept)
     std_error = np.std(y_detrend) / np.sqrt(n)
 
@@ -224,58 +340,18 @@ def mann_kendall_test(
 
 def _calculate_mk_score(y: np.ndarray) -> int:
     """Calculate Mann-Kendall score S."""
-    n = len(y)
-    S = 0
-
-    for i in range(n - 1):
-        for j in range(i + 1, n):
-            S += np.sign(y[j] - y[i])
-
-    return S
+    s_values, _ = _mk_score_var_batch_clean(
+        np.asarray(y, dtype=np.float64).reshape(-1, 1)
+    )
+    return int(np.rint(s_values[0]))
 
 
 def _calculate_mk_variance(y: np.ndarray, n: int, modified: bool = False) -> float:
     """Calculate variance of Mann-Kendall score."""
-    # Count tied groups
-    unique_vals, counts = np.unique(y, return_counts=True)
-    tied_groups = counts[counts > 1]
-
-    # Basic variance calculation
-    if len(tied_groups) == 0:
-        var_s = n * (n - 1) * (2 * n + 5) / 18
-    else:
-        var_s = (
-            n * (n - 1) * (2 * n + 5)
-            - np.sum(tied_groups * (tied_groups - 1) * (2 * tied_groups + 5))
-        ) / 18
-
-    # Apply modification for autocorrelation if requested
-    if modified:
-        # Yue and Wang (2004) modification
-        x = np.arange(n)
-        slope, intercept = stats.linregress(x, y)[:2]
-        y_detrend = y - (x * slope + intercept)
-
-        # Calculate autocorrelation
-        autocorr = _calculate_autocorrelation(y_detrend)
-
-        # Calculate effective sample size multiplier
-        n_star = 1 + 2 * np.sum([(1 - k / n) * autocorr[k] for k in range(1, n)])
-        var_s *= n_star
-
-    return var_s
-
-
-def _calculate_autocorrelation(y: np.ndarray) -> np.ndarray:
-    """Calculate autocorrelation function."""
-    n = len(y)
-    y_centered = y - np.mean(y)
-
-    # Full autocorrelation using numpy correlate
-    full_corr = np.correlate(y_centered, y_centered, mode="full")
-    autocorr = full_corr[n - 1 :] / full_corr[n - 1]  # Normalize
-
-    return autocorr
+    _, variances = _mk_score_var_batch_clean(
+        np.asarray(y, dtype=np.float64).reshape(-1, 1), modified=modified
+    )
+    return float(variances[0])
 
 
 def mann_kendall_multidim(
@@ -461,7 +537,7 @@ def _vectorized_mk_test(
     3. Automatic skipping of series with insufficient data
     """
     time_steps, n_series = data_chunk.shape
-    x = np.arange(time_steps)
+    x = np.arange(time_steps, dtype=np.float64)
 
     # Initialize result arrays
     results = {
@@ -487,65 +563,48 @@ def _vectorized_mk_test(
     no_nan_mask = valid_counts[valid_series] == time_steps
     no_nan_indices = valid_indices[no_nan_mask]
 
-    # Process series without NaN using full vectorization
-    # Handle Dask arrays by converting boolean mask to count
-    if hasattr(no_nan_mask, "sum"):
-        n_clean_series = no_nan_mask.sum()
-        # For Dask arrays, compute the sum to check if any clean series exist
-        if hasattr(n_clean_series, "compute"):
-            n_clean_series = n_clean_series.compute()
-    else:
-        n_clean_series = np.sum(no_nan_mask)
+    # Process series without NaN using full vectorization.
+    # NumPy returns a scalar directly; Dask returns a deferred scalar.
+    n_clean_series = no_nan_mask.sum()
+    if hasattr(n_clean_series, "compute"):
+        n_clean_series = n_clean_series.compute()
 
     if n_clean_series > 0:
-        # For Dask arrays, we need to be careful with indexing
         if hasattr(data_chunk, "compute"):
-            # Dask array - extract clean data carefully
-            clean_data = data_chunk[:, no_nan_indices]
+            clean_data_computed = data_chunk[:, no_nan_indices].compute()
         else:
-            # Regular numpy array
-            clean_data = data_chunk[:, no_nan_indices]
+            clean_data_computed = np.asarray(data_chunk[:, no_nan_indices])
 
-        # Vectorized Mann-Kendall S calculation
-        S_values = _vectorized_mk_score(clean_data)
-
-        # Vectorized variance calculation (simplified for no tied groups)
-        n = time_steps
-        var_s = n * (n - 1) * (2 * n + 5) / 18
+        clean_data_computed = np.asarray(clean_data_computed, dtype=np.float64)
+        if method == "theilslopes":
+            S_values, var_s_values, slopes = _mk_score_var_sen_batch_clean(
+                clean_data_computed, modified=modified
+            )
+        else:
+            S_values, var_s_values = _mk_score_var_batch_clean(
+                clean_data_computed, modified=modified
+            )
 
         # Vectorized z-score calculation
-        z_values = np.where(
-            S_values > 0,
-            (S_values - 1) / np.sqrt(var_s),
-            np.where(S_values == 0, 0, (S_values + 1) / np.sqrt(var_s)),
+        z_values = np.zeros_like(S_values, dtype=np.float64)
+        positive_mask = S_values > 0
+        negative_mask = S_values < 0
+        z_values[positive_mask] = (S_values[positive_mask] - 1) / np.sqrt(
+            var_s_values[positive_mask]
+        )
+        z_values[negative_mask] = (S_values[negative_mask] + 1) / np.sqrt(
+            var_s_values[negative_mask]
         )
 
-        # Vectorized p-value calculation
         p_values = 2 * (1 - stats.norm.cdf(np.abs(z_values)))
         h_values = np.abs(z_values) > stats.norm.ppf(1 - alpha / 2)
 
-        # Vectorized hypothesis testing
-
-        # Vectorized slope calculation
-        # Handle potential Dask arrays by ensuring we have integer dimensions
-        if hasattr(clean_data, "compute"):
-            clean_data_computed = clean_data.compute()
-            n_clean_series_actual = clean_data_computed.shape[1]
-        else:
-            clean_data_computed = clean_data
-            n_clean_series_actual = clean_data.shape[1]
-
-        if method == "theilslopes":
-            # Vectorized Theil-Sen slope calculation
-            slopes = _vectorized_theil_slopes(clean_data_computed, x)
-        else:  # linregress
-            # Vectorized linear regression
+        if method != "theilslopes":
             slopes = _vectorized_linregress_slopes(clean_data_computed, x)
 
-        # Vectorized tau calculation
+        n = time_steps
         tau_values = S_values / (0.5 * n * (n - 1))
 
-        # Vectorized standard error calculation
         if method == "theilslopes":
             std_errors = _vectorized_std_error_theil(clean_data_computed, x, slopes)
         else:
@@ -553,7 +612,6 @@ def _vectorized_mk_test(
                 clean_data_computed, x, slopes
             )
 
-        # Store vectorized results
         results["trend"][no_nan_indices] = slopes
         results["h"][no_nan_indices] = h_values
         results["p"][no_nan_indices] = p_values
@@ -577,14 +635,8 @@ def _vectorized_mk_test(
     for series_idx in nan_indices:
         y = data_for_nan[:, series_idx]
         finite_mask = np.isfinite(y)
-        n_finite = np.sum(finite_mask)
-
-        if n_finite < 3:
-            # Skip series with insufficient data - results remain NaN
-            continue
 
         y_clean = y[finite_mask]
-        x_clean = x[finite_mask]
 
         # Mann-Kendall test for individual series with NaN
         try:
@@ -600,67 +652,6 @@ def _vectorized_mk_test(
             continue
 
     return results
-
-
-def _vectorized_mk_score(data_2d: np.ndarray) -> np.ndarray:
-    """
-    Vectorized Mann-Kendall S score calculation.
-
-    Parameters
-    ----------
-    data_2d : np.ndarray
-        Shape (time_steps, n_series)
-
-    Returns
-    -------
-    S_values : np.ndarray
-        Mann-Kendall S scores for each series
-    """
-    time_steps, n_series = data_2d.shape
-
-    # Create upper triangular indices for time comparisons
-    i_idx, j_idx = np.triu_indices(time_steps, k=1)
-
-    # Vectorized difference calculation
-    # Shape: (n_pairs, n_series)
-    diff_matrix = data_2d[j_idx, :] - data_2d[i_idx, :]
-
-    # Sum of signs for each series
-    S_values = np.sum(np.sign(diff_matrix), axis=0)
-
-    return S_values
-
-
-def _vectorized_theil_slopes(data_2d: np.ndarray, x: np.ndarray) -> np.ndarray:
-    """
-    Vectorized Theil-Sen slope calculation for multiple time series.
-
-    This is a major performance improvement over calling stats.mstats.theilslopes
-    in a loop for each series.
-    """
-    time_steps, n_series = data_2d.shape
-
-    # Create all possible slope combinations
-    i_idx, j_idx = np.triu_indices(time_steps, k=1)
-
-    # Calculate slopes for all pairs and all series
-    # Shape: (n_pairs, n_series)
-    x_diff = x[j_idx] - x[i_idx]  # Shape: (n_pairs,)
-    # Shape: (n_pairs, n_series)
-    y_diff = data_2d[j_idx, :] - data_2d[i_idx, :]
-
-    # Avoid division by zero
-    x_diff = x_diff[:, np.newaxis]  # Shape: (n_pairs, 1)
-    valid_pairs = x_diff != 0
-
-    # Calculate slopes for all valid pairs
-    slopes_matrix = np.full((len(i_idx), n_series), np.nan)
-    slopes_matrix[valid_pairs.ravel(), :] = (y_diff / x_diff)[valid_pairs.ravel(), :]
-
-    # Take median slope for each series
-    theil_slopes = np.nanmedian(slopes_matrix, axis=0)
-
-    return theil_slopes
 
 
 def _vectorized_linregress_slopes(data_2d: np.ndarray, x: np.ndarray) -> np.ndarray:
@@ -715,7 +706,11 @@ def _vectorized_std_error_linregress(
     data_2d: np.ndarray, x: np.ndarray, slopes: np.ndarray
 ) -> np.ndarray:
     """
-    Vectorized standard error calculation for linear regression.
+    Vectorized residual standard error calculation for linear regression.
+
+    This mirrors the scalar `mann_kendall_test` implementation, which returns
+    the standard error of the detrended residuals rather than the regression
+    slope standard error.
     """
     time_steps, n_series = data_2d.shape
 
@@ -728,31 +723,10 @@ def _vectorized_std_error_linregress(
     y_pred = x[:, np.newaxis] * slopes + intercepts
     residuals = data_2d - y_pred
 
-    # Standard error of slope
-    x_centered = x - x_mean
-    ss_x = np.sum(x_centered**2)
-    ss_res = np.sum(residuals**2, axis=0)
-
-    # Standard error formula for slope
-    std_errors = np.sqrt(ss_res / ((time_steps - 2) * ss_x))
+    # Match the scalar API: residual spread scaled by sqrt(n)
+    std_errors = np.std(residuals, axis=0) / np.sqrt(time_steps)
 
     return std_errors
-
-
-def _calculate_std_error_theil(y: np.ndarray, x: np.ndarray, slope: float) -> float:
-    """Calculate standard error for Theil-Sen slope estimate."""
-    n = len(y)
-    if n < 3:
-        return np.nan
-
-    # Residuals from Theil-Sen fit
-    y_pred = x * slope + np.median(y - x * slope)  # Median intercept
-    residuals = y - y_pred
-
-    # Standard error estimation
-    std_error = np.std(residuals) / np.sqrt(n)
-
-    return std_error
 
 
 def mann_kendall_xarray(
