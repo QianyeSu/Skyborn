@@ -706,6 +706,27 @@ def _as_c_contiguous_float64_view(array: xr.DataArray, dims, shape):
     return values.reshape(-1)
 
 
+def _as_c_contiguous_compiled_flat(array: xr.DataArray, dims, shape):
+    """Return a float64 flat buffer for aligned C-order floating inputs."""
+
+    if array is None or not isinstance(array, xr.DataArray):
+        return None
+
+    if tuple(array.dims) != tuple(dims) or tuple(array.shape) != tuple(shape):
+        return None
+
+    values = array.data
+    if not isinstance(values, np.ndarray):
+        return None
+    if not values.flags.c_contiguous or not np.issubdtype(values.dtype, np.floating):
+        return None
+
+    if values.dtype == np.float64:
+        return values.reshape(-1)
+
+    return _compiled_float64_flat(values)
+
+
 def _as_broadcast_float64_flat(array: xr.DataArray, template: xr.DataArray):
     """Return a flattened float64 array after lightweight xarray broadcasting."""
 
@@ -761,7 +782,9 @@ def _interp_hybrid_to_pressure_fortran_corder(
     raw_data = data.data
     if not isinstance(raw_data, np.ndarray):
         return None
-    if raw_data.dtype != np.float64 or not raw_data.flags.c_contiguous:
+    if not raw_data.flags.c_contiguous or not np.issubdtype(
+        raw_data.dtype, np.floating
+    ):
         return None
 
     shape_before = data.shape[:interp_axis]
@@ -772,8 +795,13 @@ def _interp_hybrid_to_pressure_fortran_corder(
     ninner = int(np.prod(shape_after, dtype=np.int64)) if shape_after else 1
     nlevi = data.shape[interp_axis]
     nlevo = new_levels.size
+    raw_data_flat = (
+        raw_data.reshape(-1)
+        if raw_data.dtype == np.float64
+        else _compiled_float64_flat(raw_data)
+    )
 
-    ps_flat = _as_c_contiguous_float64_view(ps, lead_dims, lead_shape)
+    ps_flat = _as_c_contiguous_compiled_flat(ps, lead_dims, lead_shape)
     if ps_flat is None or not np.isfinite(ps_flat).all():
         return None
 
@@ -796,16 +824,16 @@ def _interp_hybrid_to_pressure_fortran_corder(
             tbot_flat = np.zeros(nouter * ninner, dtype=np.float64)
             phi_flat = np.zeros(nouter * ninner, dtype=np.float64)
         else:
-            tbot_flat = _as_c_contiguous_float64_view(t_bot, lead_dims, lead_shape)
+            tbot_flat = _as_c_contiguous_compiled_flat(t_bot, lead_dims, lead_shape)
             if tbot_flat is None:
                 tbot_flat = _as_broadcast_float64_flat(t_bot, base_template)
-            phi_flat = _as_c_contiguous_float64_view(phi_sfc, lead_dims, lead_shape)
+            phi_flat = _as_c_contiguous_compiled_flat(phi_sfc, lead_dims, lead_shape)
             if phi_flat is None:
                 phi_flat = _as_broadcast_float64_flat(phi_sfc, base_template)
             if tbot_flat is None or phi_flat is None:
                 return None
         _dvinth2p_ecmwf_nodes_corder_pa_into(
-            raw_data.reshape(-1),
+            raw_data_flat,
             output_flat,
             hyam_values,
             hybm_values,
@@ -823,7 +851,7 @@ def _interp_hybrid_to_pressure_fortran_corder(
         )
     else:
         _dvinth2p_nodes_corder_pa_into(
-            raw_data.reshape(-1),
+            raw_data_flat,
             output_flat,
             hyam_values,
             hybm_values,
@@ -1120,7 +1148,9 @@ def _interp_sigma_to_hybrid_fortran_corder(
     raw_data = data.data
     if not isinstance(raw_data, np.ndarray):
         return None
-    if raw_data.dtype != np.float64 or not raw_data.flags.c_contiguous:
+    if not raw_data.flags.c_contiguous or not np.issubdtype(
+        raw_data.dtype, np.floating
+    ):
         return None
 
     shape_before = data.shape[:interp_axis]
@@ -1132,8 +1162,13 @@ def _interp_sigma_to_hybrid_fortran_corder(
     nlevi = data.shape[interp_axis]
     nlevo = hyam.shape[0]
     base_template = data.isel({lev_dim: 0}, drop=True)
+    raw_data_flat = (
+        raw_data.reshape(-1)
+        if raw_data.dtype == np.float64
+        else _compiled_float64_flat(raw_data)
+    )
 
-    ps_flat = _as_c_contiguous_float64_view(ps, lead_dims, lead_shape)
+    ps_flat = _as_c_contiguous_compiled_flat(ps, lead_dims, lead_shape)
     if ps_flat is None:
         ps_flat = _as_broadcast_float64_flat(ps, base_template)
     if ps_flat is None or not np.isfinite(ps_flat).all():
@@ -1148,7 +1183,7 @@ def _interp_sigma_to_hybrid_fortran_corder(
     output_flat = output_values.reshape(-1)
 
     _dsigma2hybrid_nodes_corder_into(
-        raw_data.reshape(-1),
+        raw_data_flat,
         output_flat,
         sigma_source_values,
         hyam_values,
