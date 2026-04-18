@@ -1,3 +1,15 @@
+! =============================================================================
+! Author  : Qianye Su
+! Copyright (C) 2026 by Qianye Su
+! Created : 2026-04-17
+! File    : grid2triple.f90
+! Purpose : Pack a rectilinear grid into the legacy triple-array layout used
+!           by the interp Fortran entry points.
+! Notes   : This free-form implementation preserves the historical exact
+!           missing-value comparison semantics from the archived fixed-form
+!           routine.
+! =============================================================================
+!
 subroutine grid2triple(x, y, z, mx, ny, d, ldmax, ld, zmsg, ier)
     implicit none
 
