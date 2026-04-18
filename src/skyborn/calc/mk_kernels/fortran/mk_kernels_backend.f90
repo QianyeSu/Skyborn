@@ -12,6 +12,29 @@ module mk_kernels_core
 
 contains
 
+    pure real(real64) function median_of_three(a, b, c) result(value)
+        real(real64), intent(in) :: a, b, c
+
+        if (a < b) then
+            if (b < c) then
+                value = b
+            else if (a < c) then
+                value = c
+            else
+                value = a
+            end if
+        else
+            if (a < c) then
+                value = a
+            else if (b < c) then
+                value = c
+            else
+                value = b
+            end if
+        end if
+    end function median_of_three
+
+
     subroutine insertion_sort_real(values, left, right)
         real(real64), intent(inout) :: values(:)
         integer, intent(in) :: left, right
@@ -77,6 +100,55 @@ contains
         call quicksort_real(values, 1, size(values))
         call insertion_sort_real(values, 1, size(values))
     end subroutine sort_real_inplace
+
+
+    subroutine select_kth_real(values, kth_index)
+        real(real64), intent(inout) :: values(:)
+        integer, intent(in) :: kth_index
+
+        integer, parameter :: insertion_threshold = 16
+        integer :: i, j, left, right
+        real(real64) :: pivot, temp
+
+        left = 1
+        right = size(values)
+
+        do while (right - left > insertion_threshold)
+            pivot = median_of_three(values(left), values(left + (right - left) / 2), values(right))
+            i = left
+            j = right
+
+            do
+                do while (values(i) < pivot)
+                    i = i + 1
+                end do
+
+                do while (values(j) > pivot)
+                    j = j - 1
+                end do
+
+                if (i <= j) then
+                    temp = values(i)
+                    values(i) = values(j)
+                    values(j) = temp
+                    i = i + 1
+                    j = j - 1
+                end if
+
+                if (i > j) exit
+            end do
+
+            if (kth_index <= j) then
+                right = j
+            else if (kth_index >= i) then
+                left = i
+            else
+                return
+            end if
+        end do
+
+        call insertion_sort_real(values, left, right)
+    end subroutine select_kth_real
 
 
     subroutine compute_s_value(y, s_value)
@@ -168,12 +240,13 @@ contains
             end do
         end do
 
-        call sort_real_inplace(slope_work(:nslopes))
-
         mid_index = nslopes / 2
         if (mod(nslopes, 2) == 0) then
+            call select_kth_real(slope_work(:nslopes), mid_index)
+            call select_kth_real(slope_work(:nslopes), mid_index + 1)
             slope = 0.5_real64 * (slope_work(mid_index) + slope_work(mid_index + 1))
         else
+            call select_kth_real(slope_work(:nslopes), mid_index + 1)
             slope = slope_work(mid_index + 1)
         end if
     end subroutine compute_sen_slope
