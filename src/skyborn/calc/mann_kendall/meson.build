@@ -9,6 +9,7 @@ py_dep = py.dependency()
 
 py.install_sources([
     '__init__.py',
+    'core.py',
 ], subdir: 'skyborn/calc/mann_kendall')
 
 incdir_numpy_cmd = run_command(
