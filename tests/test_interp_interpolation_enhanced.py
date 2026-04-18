@@ -243,6 +243,138 @@ class TestInterpolationEdgeCases:
         # Geopotential should increase with altitude (decrease with pressure)
         assert result[0, 0, 0] <= result[0, 1, 0] <= result[0, 2, 0]
 
+    def test_nodes_corder_loglog_matches_column_kernel_near_model_top(self):
+        """Flat nodes log-log path should keep the plain nodes bracketing rule."""
+
+        if not (
+            callable(getattr(interpolation_mod, "_dvinth2p_nodes_pa_into", None))
+            and callable(
+                getattr(interpolation_mod, "_dvinth2p_nodes_corder_pa_into", None)
+            )
+        ):
+            pytest.skip("vinth2p Fortran backend is not available")
+
+        p0 = 100000.0
+        hyam = np.array([0.003, 0.008, 0.020, 0.050], dtype=np.float64)
+        hybm = np.zeros(4, dtype=np.float64)
+        plevo = np.array([700.0, 500.0, 400.0], dtype=np.float64)
+        psfc = np.array([100000.0, 100000.0], dtype=np.float64)
+
+        # One outer slice, four hybrid levels, two independent columns.
+        data_c = np.array(
+            [[[1.0, 10.0], [2.0, 20.0], [4.0, 40.0], [8.0, 80.0]]],
+            dtype=np.float64,
+            order="C",
+        )
+        data_columns = np.asfortranarray(data_c[0])
+
+        output_c = np.empty((1, plevo.size, 2), dtype=np.float64, order="C")
+        output_columns = np.empty((plevo.size, 2), dtype=np.float64, order="F")
+
+        interpolation_mod._dvinth2p_nodes_corder_pa_into(
+            data_c.reshape(-1),
+            output_c.reshape(-1),
+            hyam,
+            hybm,
+            p0,
+            plevo,
+            3,
+            psfc,
+            interpolation_mod._VINTH2P_SPVL,
+            0,
+            1,
+            2,
+        )
+        interpolation_mod._dvinth2p_nodes_pa_into(
+            data_columns,
+            output_columns,
+            hyam,
+            hybm,
+            p0,
+            plevo,
+            3,
+            psfc,
+            interpolation_mod._VINTH2P_SPVL,
+            0,
+        )
+
+        assert_array_equal(output_c[0], output_columns)
+
+    @pytest.mark.parametrize("method", ["linear", "log"])
+    def test_compiled_ecmwf_path_matches_python_fallback(self, monkeypatch, method):
+        """Compiled ECMWF interpolation should preserve the GeoCAT-style fallback semantics."""
+
+        if not callable(
+            getattr(interpolation_mod, "_dvinth2p_ecmwf_nodes_pa_into", None)
+        ):
+            pytest.skip("vinth2p Fortran backend is not available")
+
+        data = xr.DataArray(
+            np.array([[[10.0], [20.0], [40.0], [80.0]]], dtype=np.float64),
+            dims=["time", "lev", "x"],
+            coords={"time": [0], "lev": [0, 1, 2, 3], "x": [0]},
+        )
+        ps = xr.DataArray(
+            np.array([[100000.0]], dtype=np.float64),
+            dims=["time", "x"],
+            coords={"time": [0], "x": [0]},
+        )
+        hyam = xr.DataArray([0.1, 0.2, 0.4, 0.8], dims=["lev"])
+        hybm = xr.DataArray(np.zeros(4, dtype=np.float64), dims=["lev"])
+        t_bot = xr.DataArray(
+            np.array([[280.0]], dtype=np.float64),
+            dims=["time", "x"],
+            coords={"time": [0], "x": [0]},
+        )
+        phi_sfc = xr.DataArray(
+            np.array([[500.0]], dtype=np.float64),
+            dims=["time", "x"],
+            coords={"time": [0], "x": [0]},
+        )
+        new_levels = np.array([15000.0, 30000.0, 90000.0], dtype=np.float64)
+
+        compiled = interp_hybrid_to_pressure(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=new_levels,
+            lev_dim="lev",
+            method=method,
+            extrapolate=True,
+            variable="geopotential",
+            t_bot=t_bot,
+            phi_sfc=phi_sfc,
+        )
+
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_corder_pa_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_ecmwf_nodes_pa", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_ecmwf_nodes_pa_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_ecmwf_nodes_corder_pa_into", None
+        )
+
+        fallback = interp_hybrid_to_pressure(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=new_levels,
+            lev_dim="lev",
+            method=method,
+            extrapolate=True,
+            variable="geopotential",
+            t_bot=t_bot,
+            phi_sfc=phi_sfc,
+        )
+
+        assert_array_equal(compiled.plev.values, fallback.plev.values)
+        assert_allclose(compiled.values, fallback.values, rtol=0.0, atol=1e-12)
+
     def test_fortran_path_prefers_preallocated_output_buffer(self, monkeypatch):
         """Test that the Fortran fast path reuses a caller-allocated output buffer."""
         data = xr.DataArray(
@@ -482,6 +614,11 @@ class TestInterpolationEdgeCases:
 
     def test_vinth2p_private_helpers_cover_guard_paths(self):
         """Private vinth helpers should reject unsupported methods and array layouts."""
+        assert interpolation_mod._vinth2p_intyp("log-log") == 3
+        assert interpolation_mod._vinth2p_intyp("loglog") == 3
+        with pytest.raises(ValueError, match="requires the compiled Fortran backend"):
+            interpolation_mod._func_interpolate("loglog")
+
         with pytest.raises(ValueError, match="Unknown interpolation method"):
             interpolation_mod._vinth2p_intyp("cubic")
 
@@ -906,6 +1043,142 @@ class TestInterpolationEdgeCases:
         assert captured["vertical_shape"] == (2, 1, 2)
         assert captured["extrap_variable"] == "other"
         assert_array_equal(result.values, np.full((2, 1, 2), 5.0))
+
+    def test_interp_hybrid_to_pressure_loglog_dispatches_to_fortran(self, monkeypatch):
+        """Public hybrid-pressure helper should route log-log through the Fortran path."""
+
+        data = xr.DataArray(
+            np.array([[[280.0]], [[240.0]]], dtype=np.float64),
+            dims=["lev", "lat", "lon"],
+            coords={"lat": [0.0], "lon": [0.0]},
+        )
+        ps = xr.DataArray(
+            np.array([[100000.0]], dtype=np.float64),
+            dims=["lat", "lon"],
+            coords={"lat": [0.0], "lon": [0.0]},
+        )
+        hyam = xr.DataArray([0.0, 0.2], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
+        captured = {}
+
+        def fake_fortran(**kwargs):
+            captured["method"] = kwargs["method"]
+            return xr.DataArray(
+                np.full((2, 1, 1), 7.0, dtype=np.float64),
+                dims=["plev", "lat", "lon"],
+                coords={"plev": kwargs["new_levels"], "lat": [0.0], "lon": [0.0]},
+            )
+
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", object())
+        monkeypatch.setattr(
+            interpolation_mod, "_interp_hybrid_to_pressure_fortran", fake_fortran
+        )
+
+        result = interp_hybrid_to_pressure(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            new_levels=np.array([90000.0, 80000.0], dtype=np.float64),
+            lev_dim="lev",
+            method="loglog",
+        )
+
+        assert captured["method"] == "log-log"
+        assert_array_equal(result.values, np.full((2, 1, 1), 7.0))
+
+    def test_interp_hybrid_to_pressure_loglog_requires_fortran(self, monkeypatch):
+        """Public hybrid-pressure log-log mode should not fall back to Python."""
+
+        data = xr.DataArray(
+            np.array([[[280.0]], [[240.0]]], dtype=np.float64),
+            dims=["lev", "lat", "lon"],
+        )
+        ps = xr.DataArray(np.array([[100000.0]], dtype=np.float64), dims=["lat", "lon"])
+        hyam = xr.DataArray([0.0, 0.2], dims=["lev"])
+        hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
+
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", None)
+
+        with pytest.raises(ValueError, match="requires the compiled Fortran backend"):
+            interp_hybrid_to_pressure(
+                data=data,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                new_levels=np.array([90000.0], dtype=np.float64),
+                lev_dim="lev",
+                method="log-log",
+            )
+
+    def test_interp_sigma_to_hybrid_loglog_dispatches_to_fortran(self, monkeypatch):
+        """Public sigma-hybrid helper should route log-log through the Fortran path."""
+
+        data = xr.DataArray(
+            np.array([[[250.0], [270.0], [290.0]]], dtype=np.float64),
+            dims=["time", "sigma", "spatial"],
+            coords={"time": [0], "sigma": [0.2, 0.6, 1.0], "spatial": [0]},
+        )
+        sig_coords = xr.DataArray([0.2, 0.6, 1.0], dims=["sigma"])
+        ps = xr.DataArray(
+            np.array([[100000.0]], dtype=np.float64), dims=["time", "spatial"]
+        )
+        hyam = xr.DataArray([0.0, 0.5], dims=["hlev"])
+        hybm = xr.DataArray([1.0, 0.0], dims=["hlev"])
+        captured = {}
+
+        def fake_sigma_fortran(**kwargs):
+            captured["method"] = kwargs["method"]
+            return xr.DataArray(
+                np.full((1, 2, 1), 9.0, dtype=np.float64),
+                dims=["time", "hlev", "spatial"],
+                coords={"time": [0], "hlev": [1.0, 0.5], "spatial": [0]},
+            )
+
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes", object())
+        monkeypatch.setattr(
+            interpolation_mod, "_interp_sigma_to_hybrid_fortran", fake_sigma_fortran
+        )
+
+        result = interp_sigma_to_hybrid(
+            data=data,
+            sig_coords=sig_coords,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            lev_dim="sigma",
+            method="log-log",
+        )
+
+        assert captured["method"] == "log-log"
+        assert_array_equal(result.values, np.full((1, 2, 1), 9.0))
+
+    def test_interp_sigma_to_hybrid_loglog_requires_fortran(self, monkeypatch):
+        """Public sigma-hybrid log-log mode should not fall back to Python."""
+
+        data = xr.DataArray(
+            np.array([[[250.0], [270.0], [290.0]]], dtype=np.float64),
+            dims=["time", "sigma", "spatial"],
+        )
+        sig_coords = xr.DataArray([0.2, 0.6, 1.0], dims=["sigma"])
+        ps = xr.DataArray(
+            np.array([[100000.0]], dtype=np.float64), dims=["time", "spatial"]
+        )
+        hyam = xr.DataArray([0.0, 0.5], dims=["hlev"])
+        hybm = xr.DataArray([1.0, 0.0], dims=["hlev"])
+
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes", None)
+
+        with pytest.raises(ValueError, match="requires the compiled Fortran backend"):
+            interp_sigma_to_hybrid(
+                data=data,
+                sig_coords=sig_coords,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                lev_dim="sigma",
+                method="log-log",
+            )
 
     @pytest.mark.skipif(
         not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
