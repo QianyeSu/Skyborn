@@ -486,7 +486,7 @@ def mann_kendall_multidim(
         chunk_data = data_2d[:, start_idx:end_idx]
 
         # Vectorized Mann-Kendall calculation for chunk
-        chunk_results = _batch_mk_test(
+        chunk_results = _vectorized_mk_test(
             chunk_data, alpha=alpha, method=method, modified=modified
         )
 
@@ -501,7 +501,7 @@ def mann_kendall_multidim(
     return results
 
 
-def _batch_mk_test(
+def _vectorized_mk_test(
     data_chunk: np.ndarray,
     alpha: float = 0.05,
     method: str = "theilslopes",
