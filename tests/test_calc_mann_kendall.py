@@ -639,6 +639,7 @@ class TestMannKendallComprehensive:
         [
             ("multivariate", "multivariate_test"),
             ("regional", "regional_test"),
+            ("correlated_multivariate", "correlated_multivariate_test"),
         ],
     )
     @pytest.mark.parametrize(
@@ -823,6 +824,7 @@ class TestMannKendallComprehensive:
         [
             ("multivariate", "multivariate_test"),
             ("regional", "regional_test"),
+            ("correlated_multivariate", "correlated_multivariate_test"),
         ],
     )
     def test_grouped_clean_batch_matches_pymannkendall_loops(self, test_name, pmk_name):
@@ -886,7 +888,7 @@ class TestMannKendallComprehensive:
             ],
             dtype=float,
         )
-        for test_name in ["multivariate", "regional"]:
+        for test_name in ["multivariate", "regional", "correlated_multivariate"]:
             result = _vectorized_grouped_mk_test(
                 data, method="linregress", test=test_name
             )
@@ -1051,6 +1053,44 @@ class TestMannKendallComprehensive:
                     result["tau"][lat_idx, lon_idx], pmk_result.Tau
                 )
 
+    def test_multidimensional_correlated_multivariate_matches_pymannkendall(self):
+        """Correlated multivariate MK should match per-grid pymannkendall loops."""
+        pmk = pytest.importorskip("pymannkendall")
+        data = np.array(
+            [
+                [[[1.0, 0.5], [0.2, 2.0]], [[1.6, 0.8], [0.5, 2.3]]],
+                [[[2.0, 1.0], [0.4, 2.2]], [[2.4, 1.2], [0.7, 2.6]]],
+                [[[3.1, 1.3], [0.7, 2.5]], [[3.0, 1.7], [1.0, 2.8]]],
+                [[[4.3, 1.9], [1.1, 2.9]], [[3.9, 2.1], [1.3, 3.1]]],
+                [[[5.2, 2.4], [1.4, 3.2]], [[4.7, 2.7], [1.6, 3.5]]],
+            ],
+            dtype=float,
+        )
+
+        result = mann_kendall_multidim(
+            data,
+            axis=0,
+            group_axis=1,
+            method="theilslopes",
+            test="correlated_multivariate",
+        )
+        assert result["trend"].shape == (2, 2)
+
+        for lat_idx in range(data.shape[2]):
+            for lon_idx in range(data.shape[3]):
+                pmk_result = pmk.correlated_multivariate_test(
+                    data[:, :, lat_idx, lon_idx]
+                )
+                assert result["h"][lat_idx, lon_idx] == bool(pmk_result.h)
+                np.testing.assert_allclose(
+                    result["trend"][lat_idx, lon_idx], pmk_result.slope
+                )
+                np.testing.assert_allclose(result["p"][lat_idx, lon_idx], pmk_result.p)
+                np.testing.assert_allclose(result["z"][lat_idx, lon_idx], pmk_result.z)
+                np.testing.assert_allclose(
+                    result["tau"][lat_idx, lon_idx], pmk_result.Tau
+                )
+
     def test_grouped_numpy_requires_group_axis_when_ambiguous(self):
         """Grouped MK on higher-rank arrays should require an explicit group axis."""
         data = np.ones((6, 2, 3), dtype=float)
@@ -1061,6 +1101,15 @@ class TestMannKendallComprehensive:
         """Cover grouped scalar branches including inference, errors, and sign cases."""
         one_dim = mann_kendall_test(np.array([1.0, 2.0, 3.0, 4.0]), test="multivariate")
         assert np.isfinite(one_dim["trend"])
+
+        correlated = mann_kendall_test(
+            np.array(
+                [[1.0, 1.2], [2.0, 2.1], [3.0, 3.2], [4.0, 4.4]],
+                dtype=float,
+            ),
+            test="correlated_multivariate",
+        )
+        assert np.isfinite(correlated["trend"])
 
         with pytest.raises(ValueError, match="1D or 2D data"):
             mann_kendall_test(np.ones((2, 2, 2)), test="multivariate")
@@ -1085,6 +1134,15 @@ class TestMannKendallComprehensive:
             method="linregress",
         )
         assert down["z"] < 0
+
+        flat_correlated = mann_kendall_test(
+            np.ones((4, 2), dtype=float),
+            test="correlated_multivariate",
+            method="linregress",
+        )
+        assert np.isnan(flat_correlated["z"])
+        assert np.isnan(flat_correlated["p"])
+        assert flat_correlated["tau"] == 0
 
     def test_grouped_axis_resolution_and_dask_guard(self):
         """Grouped axis helpers should cover string, inference, and guard errors."""
@@ -1121,6 +1179,15 @@ class TestMannKendallComprehensive:
         )
         assert inferred_xarray.attrs["group_dim"] == "member"
 
+        correlated_xarray = mann_kendall_xarray(
+            da_grouped,
+            dim="time",
+            group_dim="member",
+            test="correlated_multivariate",
+            use_dask=True,
+        )
+        assert correlated_xarray.attrs["group_dim"] == "member"
+
         with pytest.raises(ValueError, match="NumPy path"):
             _dask_mann_kendall(
                 da_grouped,
@@ -1129,6 +1196,53 @@ class TestMannKendallComprehensive:
                 method="theilslopes",
                 test="regional",
             )
+
+    def test_xarray_correlated_multivariate_preserves_non_group_dims(self):
+        """Grouped xarray correlated multivariate should preserve remaining dims."""
+        pmk = pytest.importorskip("pymannkendall")
+        data = xr.DataArray(
+            np.array(
+                [
+                    [[[1.0, 0.5], [0.2, 2.0]], [[1.6, 0.8], [0.5, 2.3]]],
+                    [[[2.0, 1.0], [0.4, 2.2]], [[2.4, 1.2], [0.7, 2.6]]],
+                    [[[3.1, 1.3], [0.7, 2.5]], [[3.0, 1.7], [1.0, 2.8]]],
+                    [[[4.3, 1.9], [1.1, 2.9]], [[3.9, 2.1], [1.3, 3.1]]],
+                    [[[5.2, 2.4], [1.4, 3.2]], [[4.7, 2.7], [1.6, 3.5]]],
+                ],
+                dtype=float,
+            ),
+            dims=["time", "member", "lat", "lon"],
+            coords={
+                "time": np.arange(5),
+                "member": ["a", "b"],
+                "lat": [10.0, 20.0],
+                "lon": [100.0, 110.0],
+            },
+        )
+
+        result = mann_kendall_xarray(
+            data,
+            dim="time",
+            group_dim="member",
+            method="theilslopes",
+            test="correlated_multivariate",
+            use_dask=False,
+        )
+
+        assert result.trend.dims == ("lat", "lon")
+        assert result.attrs["group_dim"] == "member"
+
+        for lat_idx in range(data.sizes["lat"]):
+            for lon_idx in range(data.sizes["lon"]):
+                pmk_result = pmk.correlated_multivariate_test(
+                    data.values[:, :, lat_idx, lon_idx]
+                )
+                np.testing.assert_allclose(
+                    result.trend.values[lat_idx, lon_idx], pmk_result.slope
+                )
+                np.testing.assert_allclose(
+                    result.p.values[lat_idx, lon_idx], pmk_result.p
+                )
 
     def test_different_time_axes(self):
         """Test with time along different axes."""
