@@ -70,7 +70,11 @@ from .regression import (
 )
 from .variants import (
     _correlated_seasonal_stats_scalar,
+    _grouped_time_index,
     _hamed_rao_variance_batch,
+    _multivariate_score_variance_batch,
+    _multivariate_score_variance_scalar,
+    _multivariate_sens_slope_scalar,
     _pre_whiten_score_variance_batch,
     _seasonal_score_variance_batch,
     _seasonal_score_variance_scalar,
@@ -88,6 +92,9 @@ __all__ = [
 ]
 
 
+_GROUPED_TESTS = {"multivariate", "regional"}
+
+
 def _normalize_test_name(test: str) -> str:
     """Normalize public MK test aliases to one canonical label."""
     normalized = test.lower().replace("-", "_").replace(" ", "_")
@@ -99,6 +106,10 @@ def _normalize_test_name(test: str) -> str:
         return "seasonal"
     if normalized in {"correlated_seasonal", "correlatedseasonal"}:
         return "correlated_seasonal"
+    if normalized in {"multivariate", "multivar"}:
+        return "multivariate"
+    if normalized in {"regional", "regional_mk"}:
+        return "regional"
     if normalized in {"hamed_rao", "hamedrao"}:
         return "hamed_rao"
     if normalized in {
@@ -112,13 +123,33 @@ def _normalize_test_name(test: str) -> str:
     raise ValueError(
         "Unknown test: "
         f"{test}. Supported tests are 'original', 'yue_wang', 'seasonal', "
-        "'correlated_seasonal', 'hamed_rao', 'pre_whitening', and "
+        "'correlated_seasonal', 'multivariate', 'regional', "
+        "'hamed_rao', 'pre_whitening', and "
         "'trend_free_pre_whitening'."
     )
 
 
 def _load_core_module():
     """Best-effort loader for the compiled Mann-Kendall core extension."""
+    backend_dir = Path(__file__).resolve().parent
+    for probe_dir in (backend_dir / "build", backend_dir):
+        for suffix in EXTENSION_SUFFIXES:
+            candidate = probe_dir / f"mann_kendall_core{suffix}"
+            if not candidate.exists():
+                continue
+
+            try:
+                spec = importlib_util.spec_from_file_location(
+                    "mann_kendall_core", candidate
+                )
+                if spec is None or spec.loader is None:
+                    continue
+                core = importlib_util.module_from_spec(spec)
+                spec.loader.exec_module(core)
+                return core
+            except Exception:
+                continue
+
     candidate_names = []
     if __package__:
         candidate_names.append(f"{__package__}.mann_kendall_core")
@@ -130,24 +161,6 @@ def _load_core_module():
         except Exception:
             continue
 
-    backend_dir = Path(__file__).resolve().parent
-    for suffix in EXTENSION_SUFFIXES:
-        candidate = backend_dir / f"mann_kendall_core{suffix}"
-        if not candidate.exists():
-            continue
-
-        try:
-            spec = importlib_util.spec_from_file_location(
-                "mann_kendall_core", candidate
-            )
-            if spec is None or spec.loader is None:
-                continue
-            core = importlib_util.module_from_spec(spec)
-            spec.loader.exec_module(core)
-            return core
-        except Exception:
-            continue
-
     return None
 
 
@@ -155,6 +168,10 @@ _core_module = _load_core_module()
 _score_variance_kernel = getattr(_core_module, "mk_score_var_batch", None)
 _score_variance_slope_kernel = getattr(_core_module, "mk_score_var_sen_batch", None)
 _sen_slope_kernel = getattr(_core_module, "sen_slope_batch", None)
+_grouped_sen_slope_kernel = getattr(_core_module, "grouped_sen_slope_batch", None)
+_grouped_correlated_stats_kernel = getattr(
+    _core_module, "grouped_correlated_stats_batch", None
+)
 
 
 def _kernels_ready() -> bool:
@@ -163,6 +180,7 @@ def _kernels_ready() -> bool:
         _score_variance_kernel is not None
         and _score_variance_slope_kernel is not None
         and _sen_slope_kernel is not None
+        and _grouped_sen_slope_kernel is not None
     )
 
 
@@ -203,6 +221,28 @@ def _sen_slope_batch(data_2d: np.ndarray) -> np.ndarray:
     kernel = _require_kernel(_sen_slope_kernel, "sen_slope_batch")
     slopes = kernel(_as_core_input_2d(data_2d))
     return np.asarray(slopes, dtype=np.float64)
+
+
+def _grouped_sen_slope_batch(data_2d: np.ndarray, period: int) -> np.ndarray:
+    """Run the compiled grouped 2D Theil-Sen slope kernel."""
+    kernel = _require_kernel(_grouped_sen_slope_kernel, "grouped_sen_slope_batch")
+    slopes = kernel(_as_core_input_2d(data_2d), int(period))
+    return np.asarray(slopes, dtype=np.float64)
+
+
+def _grouped_correlated_stats_batch(
+    data_2d: np.ndarray, period: int
+) -> Tuple[np.ndarray, np.ndarray, float]:
+    """Run the compiled grouped correlated-statistics kernel."""
+    kernel = _require_kernel(
+        _grouped_correlated_stats_kernel, "grouped_correlated_stats_batch"
+    )
+    s_values, var_values, denom = kernel(_as_core_input_2d(data_2d), int(period))
+    return (
+        np.asarray(s_values, dtype=np.float64),
+        np.asarray(var_values, dtype=np.float64),
+        float(denom),
+    )
 
 
 def _score_variance_slope_batch(
@@ -247,6 +287,8 @@ def mann_kendall_test(
         - 'yue_wang': Yue and Wang (2004) modified variance correction
         - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
         - 'correlated_seasonal': Hipel (1994) correlated seasonal Mann-Kendall test
+        - 'multivariate': Hirsch-Slack / Helsel grouped multivariate MK test
+        - 'regional': Helsel regional MK test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
@@ -313,6 +355,74 @@ def mann_kendall_test(
         values = data.values
     else:
         values = np.asarray(data)
+
+    if test_name in _GROUPED_TESTS:
+        grouped_values = np.asarray(values, dtype=np.float64)
+        if grouped_values.ndim == 1:
+            grouped_values = grouped_values.reshape(-1, 1)
+        elif grouped_values.ndim != 2:
+            raise ValueError(
+                "Grouped Mann-Kendall tests require 1D or 2D data with shape "
+                "(time, group). Use trend_analysis for multidimensional data."
+            )
+
+        finite_mask = np.isfinite(grouped_values)
+        n_finite = int(np.sum(finite_mask))
+
+        if n_finite < 3:
+            warnings.warn("Need at least 3 data points for Mann-Kendall test")
+            return {
+                "trend": np.nan,
+                "h": False,
+                "p": np.nan,
+                "z": np.nan,
+                "tau": np.nan,
+                "std_error": np.nan,
+            }
+
+        if method not in {"theilslopes", "linregress"}:
+            raise ValueError(
+                f"Unknown method: {method}. Use 'theilslopes' or 'linregress'"
+            )
+
+        if method == "theilslopes":
+            slope, intercept = _multivariate_sens_slope_scalar(grouped_values)
+        else:
+            grouped_x = _grouped_time_index(
+                grouped_values.shape[0], grouped_values.shape[1]
+            )
+            flattened = grouped_values.reshape(-1)
+            finite_flat = np.isfinite(flattened)
+            slope, intercept = stats.linregress(
+                grouped_x[finite_flat], flattened[finite_flat]
+            )[:2]
+
+        S, var_s, denom = _multivariate_score_variance_scalar(grouped_values)
+        if S > 0:
+            z = (S - 1) / np.sqrt(var_s)
+        elif S == 0:
+            z = 0
+        else:
+            z = (S + 1) / np.sqrt(var_s)
+
+        p_value = 2 * (1 - stats.norm.cdf(abs(z)))
+        h = abs(z) > stats.norm.ppf(1 - alpha / 2)
+        tau = S / denom if denom != 0.0 else np.nan
+        grouped_x = _grouped_time_index(
+            grouped_values.shape[0], grouped_values.shape[1]
+        )
+        flattened = grouped_values.reshape(-1)
+        finite_flat = np.isfinite(flattened)
+        fitted = grouped_x[finite_flat] * slope + intercept
+        std_error = np.std(flattened[finite_flat] - fitted) / np.sqrt(n_finite)
+        return {
+            "trend": slope,
+            "h": h,
+            "p": p_value,
+            "z": z,
+            "tau": tau,
+            "std_error": std_error,
+        }
 
     if values.ndim > 1:
         raise ValueError(
@@ -485,6 +595,149 @@ def _calculate_mk_variance(y: np.ndarray, n: int, modified: bool = False) -> flo
     return float(variances[0])
 
 
+def _resolve_group_axis(
+    data: Any,
+    group_axis: Optional[Union[int, str]],
+    time_axis: int,
+    test_name: str,
+) -> Optional[int]:
+    """Resolve the grouping axis for grouped MK families."""
+    if test_name not in _GROUPED_TESTS:
+        return None
+
+    if group_axis is not None:
+        if isinstance(group_axis, str):
+            if hasattr(data, "get_axis_num"):
+                resolved = data.get_axis_num(group_axis)
+            else:
+                raise ValueError(
+                    "String group_axis requires an array-like object with named dimensions."
+                )
+        else:
+            resolved = int(group_axis)
+    else:
+        ndim = data.ndim if hasattr(data, "ndim") else np.asarray(data).ndim
+        candidate_axes = [axis for axis in range(ndim) if axis != time_axis]
+        if len(candidate_axes) == 1:
+            resolved = candidate_axes[0]
+        else:
+            raise ValueError(
+                f"test='{test_name}' requires group_axis/group_dim when more than one "
+                "non-time dimension is present."
+            )
+
+    if resolved == time_axis:
+        raise ValueError(
+            "group_axis/group_dim must be different from the analyzed time axis."
+        )
+    return resolved
+
+
+def _vectorized_grouped_mk_test(
+    data_chunk: np.ndarray,
+    alpha: float = 0.05,
+    method: str = "theilslopes",
+    test: str = "multivariate",
+) -> Dict[str, np.ndarray]:
+    """Vectorized grouped MK test for data shaped as (time, group, series)."""
+    test_name = _normalize_test_name(test)
+    if test_name not in _GROUPED_TESTS:
+        raise ValueError(f"Unsupported grouped test: {test_name}")
+    if method not in {"theilslopes", "linregress"}:
+        raise ValueError(f"Unknown method: {method}. Use 'theilslopes' or 'linregress'")
+
+    time_steps, n_groups, n_series = data_chunk.shape
+    grouped_x = _grouped_time_index(time_steps, n_groups)
+
+    results = {
+        "trend": np.full(n_series, np.nan),
+        "h": np.zeros(n_series, dtype=bool),
+        "p": np.full(n_series, np.nan),
+        "z": np.full(n_series, np.nan),
+        "tau": np.full(n_series, np.nan),
+        "std_error": np.full(n_series, np.nan),
+    }
+
+    finite_counts = np.sum(np.isfinite(data_chunk), axis=(0, 1))
+    valid_series = finite_counts >= 3
+    if not np.any(valid_series):
+        return results
+
+    valid_indices = np.where(valid_series)[0]
+    no_nan_mask = np.all(np.isfinite(data_chunk[:, :, valid_indices]), axis=(0, 1))
+    no_nan_indices = valid_indices[no_nan_mask]
+
+    if no_nan_indices.size > 0:
+        clean_data = np.asarray(data_chunk[:, :, no_nan_indices], dtype=np.float64)
+        if method == "theilslopes":
+            flat_clean = np.ascontiguousarray(clean_data).reshape(
+                time_steps * n_groups, clean_data.shape[2]
+            )
+            slopes = _grouped_sen_slope_batch(flat_clean, n_groups)
+            intercepts = (
+                np.median(flat_clean, axis=0)
+                - (0.5 * (flat_clean.shape[0] - 1) / n_groups) * slopes
+            )
+            fitted = (
+                grouped_x[:, np.newaxis] * slopes[np.newaxis, :]
+                + intercepts[np.newaxis, :]
+            )
+            std_errors = np.std(flat_clean - fitted, axis=0) / np.sqrt(
+                flat_clean.shape[0]
+            )
+        else:
+            flattened = clean_data.reshape(time_steps * n_groups, clean_data.shape[2])
+            slopes = _linregress_slope_batch(flattened, grouped_x)
+            x_mean = np.mean(grouped_x)
+            y_mean = np.mean(flattened, axis=0)
+            intercepts = y_mean - slopes * x_mean
+            std_errors = _linregress_std_error_batch(flattened, grouped_x, slopes)
+
+        S_values, var_s_values, grouped_denom = _multivariate_score_variance_batch(
+            clean_data
+        )
+        z_values = np.zeros_like(S_values, dtype=np.float64)
+        positive_mask = S_values > 0
+        negative_mask = S_values < 0
+        z_values[positive_mask] = (S_values[positive_mask] - 1) / np.sqrt(
+            var_s_values[positive_mask]
+        )
+        z_values[negative_mask] = (S_values[negative_mask] + 1) / np.sqrt(
+            var_s_values[negative_mask]
+        )
+        p_values = 2 * (1 - stats.norm.cdf(np.abs(z_values)))
+        h_values = np.abs(z_values) > stats.norm.ppf(1 - alpha / 2)
+        tau_values = (
+            S_values / grouped_denom
+            if grouped_denom != 0.0
+            else np.full_like(S_values, np.nan)
+        )
+
+        results["trend"][no_nan_indices] = slopes
+        results["h"][no_nan_indices] = h_values
+        results["p"][no_nan_indices] = p_values
+        results["z"][no_nan_indices] = z_values
+        results["tau"][no_nan_indices] = tau_values
+        results["std_error"][no_nan_indices] = std_errors
+
+    nan_indices = valid_indices[~no_nan_mask]
+    for series_idx in nan_indices:
+        try:
+            mk_result = mann_kendall_test(
+                np.asarray(data_chunk[:, :, series_idx], dtype=np.float64),
+                alpha=alpha,
+                method=method,
+                test=test_name,
+            )
+        except Exception:
+            continue
+
+        for key, value in mk_result.items():
+            results[key][series_idx] = value
+
+    return results
+
+
 def mann_kendall_multidim(
     data: np.ndarray,
     axis: Union[int, str] = 0,
@@ -494,6 +747,7 @@ def mann_kendall_multidim(
     dim: Optional[Union[int, str]] = None,
     test: str = "original",
     period: int = 12,
+    group_axis: Optional[Union[int, str]] = None,
 ) -> Dict[str, np.ndarray]:
     """
     Optimized numpy-based Mann-Kendall test for multidimensional arrays.
@@ -528,11 +782,17 @@ def mann_kendall_multidim(
         - 'yue_wang': Yue and Wang (2004) modified variance correction
         - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
         - 'correlated_seasonal': Hipel (1994) correlated seasonal Mann-Kendall test
+        - 'multivariate': Hirsch-Slack / Helsel grouped multivariate MK test
+        - 'regional': Helsel regional MK test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
     period : int, default 12
         Seasonal cycle length used when ``test="seasonal"``.
+    group_axis : int or str, optional
+        Grouping axis used by grouped test families such as ``test="multivariate"``
+        and ``test="regional"``. If omitted, it is inferred only when there is
+        exactly one non-time axis.
 
     Returns
     -------
@@ -593,27 +853,33 @@ def mann_kendall_multidim(
         actual_time_axis = _resolve_axis(data, dim)
     else:
         actual_time_axis = _resolve_axis(data, axis)
+    actual_group_axis = _resolve_group_axis(
+        data, group_axis=group_axis, time_axis=actual_time_axis, test_name=test_name
+    )
     # Handle 1D input
     if data.ndim == 1:
         return mann_kendall_test(
             data, alpha=alpha, method=method, test=test_name, period=period
         )
 
-    # Move time axis to the front
-    data = np.moveaxis(data, actual_time_axis, 0)
-    time_steps = data.shape[0]
-
-    # Handle different input shapes
-    if data.ndim == 2:
-        # Already in the right format: (time, n_series)
-        data_2d = data
-        spatial_shape = (data.shape[1],)
+    if actual_group_axis is not None:
+        grouped = np.moveaxis(data, (actual_time_axis, actual_group_axis), (0, 1))
+        time_steps = grouped.shape[0]
+        group_size = grouped.shape[1]
+        spatial_shape = grouped.shape[2:]
+        data_3d = grouped.reshape(time_steps, group_size, -1)
     else:
-        # Reshape to 2D: (time, space)
-        spatial_shape = data.shape[1:]
-        data_2d = data.reshape(time_steps, -1)
+        data = np.moveaxis(data, actual_time_axis, 0)
+        time_steps = data.shape[0]
 
-    n_points = data_2d.shape[1]
+        if data.ndim == 2:
+            data_2d = data
+            spatial_shape = (data.shape[1],)
+        else:
+            spatial_shape = data.shape[1:]
+            data_2d = data.reshape(time_steps, -1)
+
+    n_points = data_3d.shape[2] if actual_group_axis is not None else data_2d.shape[1]
 
     # Initialize output arrays
     results = {
@@ -642,16 +908,23 @@ def mann_kendall_multidim(
     # Process in chunks
     for start_idx in range(0, n_points, chunk_size):
         end_idx = min(start_idx + chunk_size, n_points)
-        chunk_data = data_2d[:, start_idx:end_idx]
-
-        # Vectorized Mann-Kendall calculation for chunk
-        chunk_results = _vectorized_mk_test(
-            chunk_data,
-            alpha=alpha,
-            method=method,
-            test=test_name,
-            period=period,
-        )
+        if actual_group_axis is not None:
+            chunk_data = data_3d[:, :, start_idx:end_idx]
+            chunk_results = _vectorized_grouped_mk_test(
+                chunk_data,
+                alpha=alpha,
+                method=method,
+                test=test_name,
+            )
+        else:
+            chunk_data = data_2d[:, start_idx:end_idx]
+            chunk_results = _vectorized_mk_test(
+                chunk_data,
+                alpha=alpha,
+                method=method,
+                test=test_name,
+                period=period,
+            )
 
         # Store results
         for key, values in chunk_results.items():
@@ -728,12 +1001,11 @@ def _vectorized_mk_test(
         if test_name in {"seasonal", "correlated_seasonal"}:
             core_input = _as_core_input_2d(clean_data_computed)
             if method == "theilslopes":
-                slopes = np.empty(core_input.shape[1], dtype=np.float64)
-                intercepts = np.empty(core_input.shape[1], dtype=np.float64)
-                for idx in range(core_input.shape[1]):
-                    slopes[idx], intercepts[idx] = _seasonal_sens_slope_scalar(
-                        core_input[:, idx], period
-                    )
+                slopes = _grouped_sen_slope_batch(core_input, period)
+                intercepts = (
+                    np.median(clean_data_computed, axis=0)
+                    - (0.5 * (clean_data_computed.shape[0] - 1) / period) * slopes
+                )
             else:
                 slopes = _linregress_slope_batch(clean_data_computed, x)
                 x_mean = np.mean(x)
@@ -745,13 +1017,9 @@ def _vectorized_mk_test(
                     core_input, period
                 )
             else:
-                S_values = np.empty(core_input.shape[1], dtype=np.float64)
-                var_s_values = np.empty(core_input.shape[1], dtype=np.float64)
-                seasonal_denom = 0.0
-                for idx in range(core_input.shape[1]):
-                    S_values[idx], var_s_values[idx], seasonal_denom = (
-                        _correlated_seasonal_stats_scalar(core_input[:, idx], period)
-                    )
+                S_values, var_s_values, seasonal_denom = (
+                    _grouped_correlated_stats_batch(core_input, period)
+                )
             stat_n = time_steps
         elif test_name == "pre_whitening":
             core_input = _as_core_input_2d(clean_data_computed)
@@ -913,6 +1181,7 @@ def mann_kendall_xarray(
     use_dask: bool = True,
     test: str = "original",
     period: int = 12,
+    group_dim: Optional[str] = None,
 ):  # -> xr.Dataset
     """
     Mann-Kendall test for xarray DataArray with intelligent dimension handling.
@@ -941,11 +1210,17 @@ def mann_kendall_xarray(
         - 'yue_wang': Yue and Wang (2004) modified variance correction
         - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
         - 'correlated_seasonal': Hipel (1994) correlated seasonal Mann-Kendall test
+        - 'multivariate': Hirsch-Slack / Helsel grouped multivariate MK test
+        - 'regional': Helsel regional MK test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
     period : int, default 12
         Seasonal cycle length used when ``test="seasonal"``.
+    group_dim : str, optional
+        Grouping dimension used by ``test="multivariate"`` and
+        ``test="regional"``. If omitted, it is inferred only when there is
+        exactly one non-time dimension.
 
     Returns
     -------
@@ -966,8 +1241,12 @@ def mann_kendall_xarray(
     """
     # Get time axis
     time_axis = data.get_axis_num(dim)
+    test_name = _normalize_test_name(test)
+    group_axis = _resolve_group_axis(
+        data, group_axis=group_dim, time_axis=time_axis, test_name=test_name
+    )
 
-    if use_dask and hasattr(data.data, "chunks"):
+    if use_dask and hasattr(data.data, "chunks") and group_axis is None:
         # Use dask for computation
         results = _dask_mann_kendall(data, dim, alpha, method, test, period)
     else:
@@ -979,6 +1258,7 @@ def mann_kendall_xarray(
             method=method,
             test=test,
             period=period,
+            group_axis=group_axis,
         )
 
     # Smart dimension handling: preserve order and filter scalar dimensions
@@ -989,6 +1269,10 @@ def mann_kendall_xarray(
     for d in data.dims:
         if d == dim:
             # Skip the analyzed dimension
+            continue
+        if group_dim is not None and d == group_dim:
+            continue
+        if group_axis is not None and d == data.dims[group_axis]:
             continue
 
         # Check if this is a true dimension (size > 1) or scalar (size == 1)
@@ -1045,9 +1329,10 @@ def mann_kendall_xarray(
                 "title": "Mann-Kendall Trend Analysis",
                 "alpha": alpha,
                 "method": method,
-                "test": _normalize_test_name(test),
+                "test": test_name,
                 "input_dims": str(data.dims),
                 "analyzed_dim": dim,
+                "group_dim": data.dims[group_axis] if group_axis is not None else "",
             },
         )
     else:
@@ -1066,9 +1351,10 @@ def mann_kendall_xarray(
                 "title": "Mann-Kendall Trend Analysis",
                 "alpha": alpha,
                 "method": method,
-                "test": _normalize_test_name(test),
+                "test": test_name,
                 "input_dims": str(data.dims),
                 "analyzed_dim": dim,
+                "group_dim": data.dims[group_axis] if group_axis is not None else "",
             },
         )
 
@@ -1084,6 +1370,11 @@ def _dask_mann_kendall(
     period: int = 12,
 ):  # -> Dict[str, np.ndarray]
     """Use dask map_blocks for Mann-Kendall computation."""
+    if _normalize_test_name(test) in _GROUPED_TESTS:
+        raise ValueError(
+            "Grouped Mann-Kendall tests are currently dispatched through the NumPy "
+            "path. Use mann_kendall_xarray(..., group_dim=...) instead."
+        )
 
     # Get time axis
     time_axis = data.get_axis_num(dim)
@@ -1190,6 +1481,8 @@ def trend_analysis(
     dim: Optional[Union[int, str]] = None,
     test: str = "original",
     period: int = 12,
+    group_axis: Optional[Union[int, str]] = None,
+    group_dim: Optional[str] = None,
     **kwargs,
 ) -> Any:
     """
@@ -1215,11 +1508,19 @@ def trend_analysis(
         - 'yue_wang': Yue and Wang (2004) modified variance correction
         - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
         - 'correlated_seasonal': Hipel (1994) correlated seasonal Mann-Kendall test
+        - 'multivariate': Hirsch-Slack / Helsel grouped multivariate MK test
+        - 'regional': Helsel regional MK test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
     period : int, default 12
         Seasonal cycle length used when ``test="seasonal"``.
+    group_axis : int or str, optional
+        Grouping axis used by ``test="multivariate"`` and ``test="regional"``
+        for NumPy inputs.
+    group_dim : str, optional
+        Grouping dimension used by ``test="multivariate"`` and
+        ``test="regional"`` for xarray inputs.
     **kwargs
         Additional arguments passed to underlying functions
 
@@ -1242,6 +1543,7 @@ def trend_analysis(
             method=method,
             test=test,
             period=period,
+            group_dim=group_dim,
             **kwargs,
         )
     else:
@@ -1252,6 +1554,7 @@ def trend_analysis(
             method=method,
             test=test,
             period=period,
+            group_axis=group_axis,
             **kwargs,
         )
 
