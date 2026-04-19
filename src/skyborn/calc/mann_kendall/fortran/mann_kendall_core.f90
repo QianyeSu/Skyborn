@@ -535,6 +535,111 @@ end module mann_kendall_core_mod
 
 ! QUICK REFERENCE
 ! PURPOSE
+!    BATCH ENTRY POINT FOR THE YUE-WANG PRE-WHITENING TRANSFORM USING
+!    LAG-1 AUTOCORRELATION PER CLEAN INPUT COLUMN.
+!
+! EXPECTED INPUT SHAPES
+!    DATA(NTIME, NSERIES) - EACH COLUMN IS ONE CLEAN TIME SERIES
+!
+! OUTPUT
+!    WHITENED(NTIME-1, NSERIES) - PRE-WHITENED SERIES
+!    DEGENERATE(NSERIES)        - 1 WHERE THE INPUT COLUMN HAS ZERO
+!                                 VARIANCE AND AUTOCORRELATION IS
+!                                 UNDEFINED, 0 OTHERWISE
+subroutine pre_whiten_batch_clean(data, whitened, degenerate, ntime, nseries)
+    use mann_kendall_core_mod, only : real64
+    implicit none
+
+    integer, intent(in) :: ntime, nseries
+    real(real64), intent(in) :: data(ntime, nseries)
+    real(real64), intent(out) :: whitened(max(1, ntime - 1), nseries)
+    integer, intent(out) :: degenerate(nseries)
+
+    real(real64) :: acf1, acov0, acov1, mean_value
+    integer :: col, i
+
+    do col = 1, nseries
+        mean_value = sum(data(:, col)) / real(ntime, real64)
+        acov0 = 0.0_real64
+        acov1 = 0.0_real64
+
+        do i = 1, ntime
+            acov0 = acov0 + (data(i, col) - mean_value) * (data(i, col) - mean_value)
+        end do
+
+        if (acov0 == 0.0_real64) then
+            degenerate(col) = 1
+            whitened(:, col) = 0.0_real64
+        else
+            degenerate(col) = 0
+            do i = 1, ntime - 1
+                acov1 = acov1 + (data(i, col) - mean_value) * (data(i + 1, col) - mean_value)
+            end do
+            acf1 = acov1 / acov0
+            do i = 1, ntime - 1
+                whitened(i, col) = data(i + 1, col) - data(i, col) * acf1
+            end do
+        end if
+    end do
+end subroutine pre_whiten_batch_clean
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    BATCH ENTRY POINT THAT APPLIES THE YUE-WANG PRE-WHITENING
+!    TRANSFORM AND RETURNS THE ORIGINAL MK S / VARIANCE OF THE
+!    WHITENED SERIES WITHOUT ROUND-TRIPPING THE INTERMEDIATE ARRAY
+!    BACK TO PYTHON.
+!
+! EXPECTED INPUT SHAPES
+!    DATA(NTIME, NSERIES) - EACH COLUMN IS ONE CLEAN TIME SERIES
+!
+! OUTPUT
+!    S_VALUES(NSERIES)   - MK S STATISTIC OF THE WHITENED SERIES
+!    VAR_VALUES(NSERIES) - ORIGINAL MK VARIANCE OF THE WHITENED SERIES
+subroutine pre_whiten_score_var_batch_clean(data, s_values, var_values, ntime, nseries)
+    use mann_kendall_core_mod, only : compute_base_variance, compute_s_value, real64
+    implicit none
+
+    integer, intent(in) :: ntime, nseries
+    real(real64), intent(in) :: data(ntime, nseries)
+    real(real64), intent(out) :: s_values(nseries), var_values(nseries)
+
+    real(real64) :: acf1, acov0, acov1, mean_value
+    real(real64) :: sorted_work(max(1, ntime - 1)), whitened(max(1, ntime - 1))
+    integer :: col, i
+
+    do col = 1, nseries
+        mean_value = sum(data(:, col)) / real(ntime, real64)
+        acov0 = 0.0_real64
+        acov1 = 0.0_real64
+
+        do i = 1, ntime
+            acov0 = acov0 + (data(i, col) - mean_value) * (data(i, col) - mean_value)
+        end do
+
+        if (acov0 == 0.0_real64) then
+            s_values(col) = 0.0_real64
+            var_values(col) = real((ntime - 1) * (ntime - 2) * (2 * (ntime - 1) + 5), real64) / 18.0_real64
+        else
+            do i = 1, ntime - 1
+                acov1 = acov1 + (data(i, col) - mean_value) * (data(i + 1, col) - mean_value)
+            end do
+            acf1 = acov1 / acov0
+
+            do i = 1, ntime - 1
+                whitened(i) = data(i + 1, col) - data(i, col) * acf1
+            end do
+
+            call compute_s_value(whitened(:ntime - 1), s_values(col))
+            call compute_base_variance(whitened(:ntime - 1), sorted_work, var_values(col))
+        end if
+    end do
+end subroutine pre_whiten_score_var_batch_clean
+
+
+! QUICK REFERENCE
+! PURPOSE
 !    BATCH ENTRY POINT FOR THE MANN-KENDALL S STATISTIC AND ITS
 !    VARIANCE OVER MULTIPLE CLEAN SERIES.
 !
