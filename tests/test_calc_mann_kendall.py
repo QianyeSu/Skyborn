@@ -6,6 +6,7 @@ implementations of Mann-Kendall trend detection algorithms, including
 dask-based parallel processing, edge cases, and error handling.
 """
 
+import importlib
 import importlib.util
 import os
 import sys
@@ -66,6 +67,9 @@ _score_variance_batch = mann_kendall_module._score_variance_batch
 _score_variance_slope_batch = mann_kendall_module._score_variance_slope_batch
 _sen_slope_batch = mann_kendall_module._sen_slope_batch
 _vectorized_mk_test = mann_kendall_module._vectorized_mk_test
+
+bindings_module = importlib.import_module("skyborn.calc.mann_kendall.bindings")
+variants_module = importlib.import_module("skyborn.calc.mann_kendall.variants")
 
 
 def _equal_or_both_nan(left, right, atol=1e-12):
@@ -1886,6 +1890,208 @@ class TestMannKendallComprehensive:
 
         with pytest.raises(RuntimeError, match="fail"):
             _score_variance_slope_batch(data, modified=True)
+
+    def test_bindings_loader_returns_none_when_import_and_probe_fail(self, monkeypatch):
+        """The shared bindings loader should gracefully return None on total failure."""
+        repo_tmp = os.path.join(os.path.dirname(__file__), "..", ".codex_tmp")
+        os.makedirs(repo_tmp, exist_ok=True)
+
+        with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
+            package_dir = os.path.join(tmp_dir, "mann_kendall")
+            os.makedirs(package_dir, exist_ok=True)
+            fake_source = os.path.join(package_dir, "__init__.py")
+            with open(fake_source, "w", encoding="utf-8") as handle:
+                handle.write("# probe\n")
+
+            monkeypatch.setattr(bindings_module, "__file__", fake_source)
+            monkeypatch.setattr(
+                bindings_module,
+                "import_module",
+                unittest.mock.Mock(side_effect=ImportError),
+            )
+            monkeypatch.setattr(bindings_module, "EXTENSION_SUFFIXES", [".pyd"])
+
+            assert bindings_module._load_core_module() is None
+
+    def test_bindings_loader_skips_broken_probe_candidate(self, monkeypatch):
+        """The shared bindings loader should skip broken local probe candidates."""
+        repo_tmp = os.path.join(os.path.dirname(__file__), "..", ".codex_tmp")
+        os.makedirs(repo_tmp, exist_ok=True)
+
+        with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
+            package_dir = os.path.join(tmp_dir, "mann_kendall")
+            os.makedirs(package_dir, exist_ok=True)
+            fake_source = os.path.join(package_dir, "__init__.py")
+
+            with open(fake_source, "w", encoding="utf-8") as handle:
+                handle.write("# probe\n")
+            with open(
+                os.path.join(package_dir, "mann_kendall_core.pyd"), "wb"
+            ) as handle:
+                handle.write(b"placeholder")
+
+            monkeypatch.setattr(bindings_module, "__file__", fake_source)
+            monkeypatch.setattr(
+                bindings_module,
+                "import_module",
+                unittest.mock.Mock(side_effect=ImportError),
+            )
+            monkeypatch.setattr(bindings_module, "EXTENSION_SUFFIXES", [".pyd"])
+
+            class FakeSpec:
+                loader = None
+
+            monkeypatch.setattr(
+                bindings_module.importlib_util,
+                "spec_from_file_location",
+                lambda *args, **kwargs: FakeSpec(),
+            )
+
+            assert bindings_module._load_core_module() is None
+
+    def test_bindings_loader_uses_local_probe_candidate(self, monkeypatch):
+        """The shared bindings loader should use the local probe path when imports fail."""
+        repo_tmp = os.path.join(os.path.dirname(__file__), "..", ".codex_tmp")
+        os.makedirs(repo_tmp, exist_ok=True)
+
+        with tempfile.TemporaryDirectory(dir=repo_tmp) as tmp_dir:
+            package_dir = os.path.join(tmp_dir, "mann_kendall")
+            os.makedirs(package_dir, exist_ok=True)
+            fake_source = os.path.join(package_dir, "__init__.py")
+            candidate = os.path.join(package_dir, "mann_kendall_core.pyd")
+
+            with open(fake_source, "w", encoding="utf-8") as handle:
+                handle.write("# probe\n")
+            with open(candidate, "wb") as handle:
+                handle.write(b"placeholder")
+
+            class FakeLoader:
+                def exec_module(self, module):
+                    module.loaded_from_local_probe = True
+
+            class FakeSpec:
+                def __init__(self):
+                    self.loader = FakeLoader()
+
+            fake_module = type("FakeModule", (), {})()
+
+            monkeypatch.setattr(bindings_module, "__file__", fake_source)
+            monkeypatch.setattr(
+                bindings_module,
+                "import_module",
+                unittest.mock.Mock(side_effect=ImportError),
+            )
+            monkeypatch.setattr(bindings_module, "EXTENSION_SUFFIXES", [".pyd"])
+            monkeypatch.setattr(
+                bindings_module.importlib_util,
+                "spec_from_file_location",
+                lambda *args, **kwargs: FakeSpec(),
+            )
+            monkeypatch.setattr(
+                bindings_module.importlib_util,
+                "module_from_spec",
+                lambda spec: fake_module,
+            )
+
+            loaded = bindings_module._load_core_module()
+            assert loaded is fake_module
+            assert loaded.loaded_from_local_probe is True
+
+    def test_bindings_as_core_input_2d_and_require_kernel(self):
+        """The shared bindings helpers should validate shape and missing kernels."""
+        data = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+        converted = bindings_module._as_core_input_2d(data)
+        assert converted.dtype == np.float64
+        assert converted.flags.f_contiguous
+
+        with pytest.raises(ValueError, match="Expected a 2D array"):
+            bindings_module._as_core_input_2d(np.arange(5.0))
+
+        with pytest.raises(ImportError, match="compiled mann_kendall_core"):
+            bindings_module._require_kernel(None, "missing_entry")
+
+    def test_bindings_dispatch_helpers_success_and_failure(self, monkeypatch):
+        """The shared bindings dispatch helpers should expose both success and failure paths."""
+        data = np.array(
+            [
+                [1.0, 3.0],
+                [2.0, 4.0],
+                [3.0, 5.0],
+                [4.0, 6.0],
+            ],
+            dtype=np.float64,
+        )
+
+        def fake_score_var(array, modified):
+            assert array.dtype == np.float64
+            return np.array([1.0, 2.0]), np.array([3.0, 4.0])
+
+        def fake_slope(array):
+            return np.array([0.5, 1.5])
+
+        def fake_combined(array, modified):
+            return (
+                np.array([1.0, 2.0]),
+                np.array([3.0, 4.0]),
+                np.array([0.5, 1.5]),
+            )
+
+        monkeypatch.setattr(bindings_module, "_score_variance_kernel", fake_score_var)
+        monkeypatch.setattr(bindings_module, "_sen_slope_kernel", fake_slope)
+        monkeypatch.setattr(
+            bindings_module, "_score_variance_slope_kernel", fake_combined
+        )
+
+        s_values, var_values = bindings_module._score_variance_batch(
+            data, modified=True
+        )
+        slopes = bindings_module._sen_slope_batch(data)
+        combo = bindings_module._score_variance_slope_batch(data, modified=False)
+
+        np.testing.assert_allclose(s_values, [1.0, 2.0])
+        np.testing.assert_allclose(var_values, [3.0, 4.0])
+        np.testing.assert_allclose(slopes, [0.5, 1.5])
+        np.testing.assert_allclose(combo[2], [0.5, 1.5])
+
+        monkeypatch.setattr(
+            bindings_module,
+            "_score_variance_kernel",
+            unittest.mock.Mock(side_effect=RuntimeError("fail")),
+        )
+        monkeypatch.setattr(
+            bindings_module,
+            "_sen_slope_kernel",
+            unittest.mock.Mock(side_effect=RuntimeError("fail")),
+        )
+        monkeypatch.setattr(
+            bindings_module,
+            "_score_variance_slope_kernel",
+            unittest.mock.Mock(side_effect=RuntimeError("fail")),
+        )
+
+        with pytest.raises(RuntimeError, match="fail"):
+            bindings_module._score_variance_batch(data, modified=False)
+        with pytest.raises(RuntimeError, match="fail"):
+            bindings_module._sen_slope_batch(data)
+        with pytest.raises(RuntimeError, match="fail"):
+            bindings_module._score_variance_slope_batch(data, modified=False)
+
+    def test_variant_helpers_cover_single_series_and_short_hamed_rao(self):
+        """Variant helper utilities should cover direct single-series and short-series branches."""
+        whitened, degenerate = variants_module._pre_whiten_series(
+            np.array([1.0, 2.0, 4.0])
+        )
+        assert whitened.shape == (2,)
+        assert degenerate is False
+
+        base_var = np.array([1.5, 2.5], dtype=np.float64)
+        corrected = variants_module._hamed_rao_variance_batch(
+            np.array([[1.0, 2.0], [2.0, 3.0]], dtype=np.float64),
+            base_var,
+            np.array([0.5, 0.25], dtype=np.float64),
+            alpha=0.05,
+        )
+        np.testing.assert_allclose(corrected, base_var)
 
     def test_batch_variance_dispatch_stays_aligned_with_scalar_semantics(self):
         """Direct clean-batch dispatch should stay aligned with scalar semantics."""
