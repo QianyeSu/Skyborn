@@ -1965,6 +1965,122 @@ class TestInterpolationHelperCoverage:
         assert dph_da.dims == ("lev", "x")
         assert_array_equal(dph_da.values, dph_np)
 
+    def test_delta_pressure_hybrid_numpy_prefers_preallocated_fortran_buffer(
+        self, monkeypatch
+    ):
+        """Numpy delta-pressure helper should reuse a caller-provided Fortran buffer."""
+
+        captured = {}
+
+        def fake_delta_into(psfc, dph, hbcofa, hbcofb, p0, nlevo, ncol, nlev):
+            captured["psfc_shape"] = psfc.shape
+            captured["dph_shape"] = dph.shape
+            captured["ncol"] = ncol
+            captured["nlev"] = nlev
+            captured["nlevo"] = nlevo
+            dph[:, :] = np.arange(dph.size, dtype=np.float64).reshape(dph.shape) + 10.0
+
+        def fail_return_allocating_delta(*args, **kwargs):
+            raise AssertionError(
+                "return-allocating delta-pressure wrapper should not be used"
+            )
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_ddelta_pressure_hybrid_pa_into",
+            fake_delta_into,
+        )
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_ddelta_pressure_hybrid_pa",
+            fail_return_allocating_delta,
+        )
+
+        result = delta_pressure_hybrid(
+            np.array([100000.0, 90000.0]),
+            np.array([0.0, 0.2, 0.5]),
+            np.array([1.0, 0.5, 0.0]),
+        )
+
+        assert captured["psfc_shape"] == (2,)
+        assert captured["dph_shape"] == (2, 2)
+        assert captured["ncol"] == 2
+        assert captured["nlev"] == 3
+        assert captured["nlevo"] == 2
+        assert result.shape == (2, 2)
+        assert_array_equal(result, np.array([[10.0, 11.0], [12.0, 13.0]]))
+
+    def test_delta_pressure_hybrid_xarray_fortran_preserves_dims_coords_and_attrs(
+        self, monkeypatch
+    ):
+        """Xarray delta-pressure fast path should keep public metadata semantics."""
+
+        captured = {}
+
+        def fake_delta_into(psfc, dph, hbcofa, hbcofb, p0, nlevo, ncol, nlev):
+            captured["psfc_shape"] = psfc.shape
+            captured["dph_shape"] = dph.shape
+            dph[:, :] = np.arange(dph.size, dtype=np.float64).reshape(dph.shape) + 20.0
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_ddelta_pressure_hybrid_pa_into",
+            fake_delta_into,
+        )
+        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa", object())
+
+        ps = xr.DataArray(
+            np.array([[100000.0, 90000.0]]),
+            dims=["lat", "lon"],
+            coords={"lat": [0.0], "lon": [0.0, 90.0]},
+        )
+        hya = xr.DataArray([0.0, 0.2, 0.5], dims=["lev"], coords={"lev": [1, 2, 3]})
+        hyb = xr.DataArray([1.0, 0.5, 0.0], dims=["lev"], coords={"lev": [1, 2, 3]})
+
+        result = delta_pressure_hybrid(ps, hya, hyb)
+
+        assert captured["psfc_shape"] == (2,)
+        assert captured["dph_shape"] == (2, 2)
+        assert result.dims == ("lev", "lat", "lon")
+        assert_array_equal(result.lev.values, np.array([0, 1]))
+        assert_array_equal(result.values, np.array([[[20.0, 21.0]], [[22.0, 23.0]]]))
+        assert result.name == "dph"
+        assert result.attrs["long_name"] == "pressure layer thickness"
+        assert result.attrs["units"] == "Pa"
+
+    def test_delta_pressure_hybrid_dask_input_skips_fortran_fast_path(
+        self, monkeypatch
+    ):
+        """Dask-backed pressure inputs should keep the existing lazy xarray path."""
+
+        da = pytest.importorskip("dask.array")
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_ddelta_pressure_hybrid_pa_into",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("Fortran fast path should be skipped for dask inputs")
+            ),
+        )
+        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa", object())
+
+        ps = xr.DataArray(
+            da.from_array(np.array([[100000.0, 90000.0]]), chunks=(1, 2)),
+            dims=["lat", "lon"],
+        )
+
+        result = delta_pressure_hybrid(
+            ps,
+            np.array([0.0, 0.2, 0.5]),
+            np.array([1.0, 0.5, 0.0]),
+        )
+
+        assert getattr(result.data, "chunks", None) is not None
+        assert_array_equal(
+            result.compute().values,
+            np.array([[[30000.0, 25000.0]], [[20000.0, 15000.0]]]),
+        )
+
     def test_delta_pressure_hybrid_warns_on_coeff_dim_name_mismatch(self):
         """Xarray coeff dim mismatches should be normalized with a warning."""
         ps = xr.DataArray([100000.0], dims=["x"])
