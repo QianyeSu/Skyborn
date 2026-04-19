@@ -1,5 +1,21 @@
 python module mann_kendall_core ! in
     interface ! in :mann_kendall_core
+        subroutine pre_whiten_batch_clean(data,whitened,degenerate,ntime,nseries) ! in :mann_kendall_core:mann_kendall_core.f90
+            integer optional, intent(hide), depend(data) :: ntime = shape(data,0)
+            integer optional, intent(hide), depend(data) :: nseries = shape(data,1)
+            double precision intent(in) :: data(ntime,nseries)
+            double precision intent(out), depend(ntime,nseries) :: whitened(max(1,ntime-1),nseries)
+            integer intent(out) :: degenerate(nseries)
+        end subroutine pre_whiten_batch_clean
+
+        subroutine pre_whiten_score_var_batch_clean(data,s_values,var_values,ntime,nseries) ! in :mann_kendall_core:mann_kendall_core.f90
+            integer optional, intent(hide), depend(data) :: ntime = shape(data,0)
+            integer optional, intent(hide), depend(data) :: nseries = shape(data,1)
+            double precision intent(in) :: data(ntime,nseries)
+            double precision intent(out) :: s_values(nseries)
+            double precision intent(out) :: var_values(nseries)
+        end subroutine pre_whiten_score_var_batch_clean
+
         subroutine mk_score_var_batch_clean(data,s_values,var_values,modified,ntime,nseries) ! in :mann_kendall_core:mann_kendall_core.f90
             integer optional, intent(hide), depend(data) :: ntime = shape(data,0)
             integer optional, intent(hide), depend(data) :: nseries = shape(data,1)
