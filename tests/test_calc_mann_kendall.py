@@ -2497,6 +2497,27 @@ class TestMannKendallComprehensive:
         with pytest.raises(ValueError, match="2D matrix"):
             variants_module._correlated_multivariate_stats_scalar(np.ones(3))
 
+        correlated_matrix = np.array(
+            [
+                [1.0, 1.2, 0.8],
+                [2.0, 2.2, 1.5],
+                [3.0, np.nan, 2.4],
+                [4.1, 4.0, 3.6],
+            ],
+            dtype=float,
+        )
+        filtered = correlated_matrix[~np.isnan(correlated_matrix).any(axis=1)]
+        expected = bindings_module._grouped_correlated_stats_batch(
+            np.ascontiguousarray(filtered).reshape(-1, 1), filtered.shape[1]
+        )
+        scalar = variants_module._correlated_multivariate_stats_scalar(
+            correlated_matrix
+        )
+        np.testing.assert_allclose(
+            scalar,
+            (float(expected[0][0]), float(expected[1][0]), float(expected[2])),
+        )
+
     def test_seasonal_and_yue_wang_remaining_branch_coverage(self):
         """Cover remaining seasonal linregress and Yue-Wang vectorized branches."""
         flat = np.tile(np.array([1.0, 1.0, 1.0, 1.0], dtype=float), 3)
