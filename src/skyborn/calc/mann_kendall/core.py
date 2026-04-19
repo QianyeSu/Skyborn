@@ -69,6 +69,7 @@ from .regression import (
     _theil_std_error_batch,
 )
 from .variants import (
+    _correlated_multivariate_stats_scalar,
     _correlated_seasonal_stats_scalar,
     _grouped_time_index,
     _hamed_rao_variance_batch,
@@ -92,7 +93,7 @@ __all__ = [
 ]
 
 
-_GROUPED_TESTS = {"multivariate", "regional"}
+_GROUPED_TESTS = {"multivariate", "regional", "correlated_multivariate"}
 
 
 def _normalize_test_name(test: str) -> str:
@@ -106,6 +107,8 @@ def _normalize_test_name(test: str) -> str:
         return "seasonal"
     if normalized in {"correlated_seasonal", "correlatedseasonal"}:
         return "correlated_seasonal"
+    if normalized in {"correlated_multivariate", "correlatedmultivariate"}:
+        return "correlated_multivariate"
     if normalized in {"multivariate", "multivar"}:
         return "multivariate"
     if normalized in {"regional", "regional_mk"}:
@@ -123,7 +126,8 @@ def _normalize_test_name(test: str) -> str:
     raise ValueError(
         "Unknown test: "
         f"{test}. Supported tests are 'original', 'yue_wang', 'seasonal', "
-        "'correlated_seasonal', 'multivariate', 'regional', "
+        "'correlated_seasonal', 'correlated_multivariate', "
+        "'multivariate', 'regional', "
         "'hamed_rao', 'pre_whitening', and "
         "'trend_free_pre_whitening'."
     )
@@ -181,6 +185,7 @@ def _kernels_ready() -> bool:
         and _score_variance_slope_kernel is not None
         and _sen_slope_kernel is not None
         and _grouped_sen_slope_kernel is not None
+        and _grouped_correlated_stats_kernel is not None
     )
 
 
@@ -287,6 +292,7 @@ def mann_kendall_test(
         - 'yue_wang': Yue and Wang (2004) modified variance correction
         - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
         - 'correlated_seasonal': Hipel (1994) correlated seasonal Mann-Kendall test
+        - 'correlated_multivariate': Libiseller-Grimvall correlated multivariate MK test
         - 'multivariate': Hirsch-Slack / Helsel grouped multivariate MK test
         - 'regional': Helsel regional MK test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
@@ -397,13 +403,18 @@ def mann_kendall_test(
                 grouped_x[finite_flat], flattened[finite_flat]
             )[:2]
 
-        S, var_s, denom = _multivariate_score_variance_scalar(grouped_values)
-        if S > 0:
-            z = (S - 1) / np.sqrt(var_s)
-        elif S == 0:
-            z = 0
+        if test_name == "correlated_multivariate":
+            S, var_s, denom = _correlated_multivariate_stats_scalar(grouped_values)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                z = S / np.sqrt(var_s)
         else:
-            z = (S + 1) / np.sqrt(var_s)
+            S, var_s, denom = _multivariate_score_variance_scalar(grouped_values)
+            if S > 0:
+                z = (S - 1) / np.sqrt(var_s)
+            elif S == 0:
+                z = 0
+            else:
+                z = (S + 1) / np.sqrt(var_s)
 
         p_value = 2 * (1 - stats.norm.cdf(abs(z)))
         h = abs(z) > stats.norm.ppf(1 - alpha / 2)
@@ -468,7 +479,8 @@ def mann_kendall_test(
                 z = (S + 1) / np.sqrt(var_s)
         else:
             S, var_s, denom = _correlated_seasonal_stats_scalar(season_values, period)
-            z = S / np.sqrt(var_s)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                z = S / np.sqrt(var_s)
 
         p_value = 2 * (1 - stats.norm.cdf(abs(z)))
         h = abs(z) > stats.norm.ppf(1 - alpha / 2)
@@ -693,18 +705,25 @@ def _vectorized_grouped_mk_test(
             intercepts = y_mean - slopes * x_mean
             std_errors = _linregress_std_error_batch(flattened, grouped_x, slopes)
 
-        S_values, var_s_values, grouped_denom = _multivariate_score_variance_batch(
-            clean_data
-        )
-        z_values = np.zeros_like(S_values, dtype=np.float64)
-        positive_mask = S_values > 0
-        negative_mask = S_values < 0
-        z_values[positive_mask] = (S_values[positive_mask] - 1) / np.sqrt(
-            var_s_values[positive_mask]
-        )
-        z_values[negative_mask] = (S_values[negative_mask] + 1) / np.sqrt(
-            var_s_values[negative_mask]
-        )
+        if test_name == "correlated_multivariate":
+            S_values, var_s_values, grouped_denom = _grouped_correlated_stats_batch(
+                flat_clean if method == "theilslopes" else flattened, n_groups
+            )
+            with np.errstate(divide="ignore", invalid="ignore"):
+                z_values = S_values / np.sqrt(var_s_values)
+        else:
+            S_values, var_s_values, grouped_denom = _multivariate_score_variance_batch(
+                clean_data
+            )
+            z_values = np.zeros_like(S_values, dtype=np.float64)
+            positive_mask = S_values > 0
+            negative_mask = S_values < 0
+            z_values[positive_mask] = (S_values[positive_mask] - 1) / np.sqrt(
+                var_s_values[positive_mask]
+            )
+            z_values[negative_mask] = (S_values[negative_mask] + 1) / np.sqrt(
+                var_s_values[negative_mask]
+            )
         p_values = 2 * (1 - stats.norm.cdf(np.abs(z_values)))
         h_values = np.abs(z_values) > stats.norm.ppf(1 - alpha / 2)
         tau_values = (
@@ -782,6 +801,7 @@ def mann_kendall_multidim(
         - 'yue_wang': Yue and Wang (2004) modified variance correction
         - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
         - 'correlated_seasonal': Hipel (1994) correlated seasonal Mann-Kendall test
+        - 'correlated_multivariate': Libiseller-Grimvall correlated multivariate MK test
         - 'multivariate': Hirsch-Slack / Helsel grouped multivariate MK test
         - 'regional': Helsel regional MK test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
@@ -790,9 +810,10 @@ def mann_kendall_multidim(
     period : int, default 12
         Seasonal cycle length used when ``test="seasonal"``.
     group_axis : int or str, optional
-        Grouping axis used by grouped test families such as ``test="multivariate"``
-        and ``test="regional"``. If omitted, it is inferred only when there is
-        exactly one non-time axis.
+        Grouping axis used by grouped test families such as
+        ``test="multivariate"``, ``test="regional"``, and
+        ``test="correlated_multivariate"``. If omitted, it is inferred only
+        when there is exactly one non-time axis.
 
     Returns
     -------
@@ -1210,6 +1231,7 @@ def mann_kendall_xarray(
         - 'yue_wang': Yue and Wang (2004) modified variance correction
         - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
         - 'correlated_seasonal': Hipel (1994) correlated seasonal Mann-Kendall test
+        - 'correlated_multivariate': Libiseller-Grimvall correlated multivariate MK test
         - 'multivariate': Hirsch-Slack / Helsel grouped multivariate MK test
         - 'regional': Helsel regional MK test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
@@ -1218,9 +1240,10 @@ def mann_kendall_xarray(
     period : int, default 12
         Seasonal cycle length used when ``test="seasonal"``.
     group_dim : str, optional
-        Grouping dimension used by ``test="multivariate"`` and
-        ``test="regional"``. If omitted, it is inferred only when there is
-        exactly one non-time dimension.
+        Grouping dimension used by ``test="multivariate"``,
+        ``test="regional"``, and ``test="correlated_multivariate"``. If
+        omitted, it is inferred only when there is exactly one non-time
+        dimension.
 
     Returns
     -------
