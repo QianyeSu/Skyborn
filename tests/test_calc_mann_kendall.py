@@ -67,6 +67,7 @@ _score_variance_batch = mann_kendall_module._score_variance_batch
 _score_variance_slope_batch = mann_kendall_module._score_variance_slope_batch
 _sen_slope_batch = mann_kendall_module._sen_slope_batch
 _vectorized_mk_test = mann_kendall_module._vectorized_mk_test
+_vectorized_grouped_mk_test = mann_kendall_module._vectorized_grouped_mk_test
 
 bindings_module = importlib.import_module("skyborn.calc.mann_kendall.bindings")
 variants_module = importlib.import_module("skyborn.calc.mann_kendall.variants")
@@ -295,6 +296,43 @@ class TestMannKendallComprehensive:
         )
         result = mann_kendall_xarray(da, dim="time", use_dask=True)
         assert isinstance(result, xr.Dataset)
+
+    def test_xarray_grouped_multivariate_preserves_non_group_dims(self):
+        """Grouped xarray MK should drop both time and group dimensions from output."""
+        data = xr.DataArray(
+            np.array(
+                [
+                    [[[1.0, 0.5], [0.2, 2.0]], [[1.5, 0.8], [0.5, 2.3]]],
+                    [[[2.0, 1.0], [0.4, 2.2]], [[2.2, 1.2], [0.7, 2.5]]],
+                    [[[3.0, 1.4], [0.6, 2.5]], [[2.9, 1.6], [1.0, 2.7]]],
+                    [[[4.0, 1.9], [0.9, 2.7]], [[3.7, 2.0], [1.2, 3.0]]],
+                ],
+                dtype=float,
+            ),
+            dims=["time", "member", "lat", "lon"],
+            coords={
+                "time": np.arange(4),
+                "member": ["a", "b"],
+                "lat": [10.0, 20.0],
+                "lon": [100.0, 120.0],
+            },
+        )
+
+        result = mann_kendall_xarray(
+            data,
+            dim="time",
+            group_dim="member",
+            test="regional",
+            use_dask=True,
+        )
+        assert tuple(result.trend.dims) == ("lat", "lon")
+        assert result.attrs["group_dim"] == "member"
+        np.testing.assert_allclose(
+            result["trend"].values,
+            mann_kendall_multidim(data.values, axis=0, group_axis=1, test="regional")[
+                "trend"
+            ],
+        )
 
     def test_dask_functionality_coverage(self):
         """Test dask functionality for coverage."""
@@ -585,35 +623,6 @@ class TestMannKendallComprehensive:
         "data",
         [
             np.linspace(0.0, 2.3, 24, dtype=float),
-            np.array(
-                [
-                    1.0,
-                    1.5,
-                    2.0,
-                    2.5,
-                    3.0,
-                    3.5,
-                    4.0,
-                    4.5,
-                    5.0,
-                    5.5,
-                    6.0,
-                    6.5,
-                    1.2,
-                    1.7,
-                    2.2,
-                    2.7,
-                    np.nan,
-                    3.7,
-                    4.2,
-                    4.7,
-                    5.2,
-                    5.7,
-                    6.2,
-                    6.7,
-                ],
-                dtype=float,
-            ),
         ],
     )
     def test_correlated_seasonal_matches_pymannkendall_reference(self, data):
@@ -623,6 +632,49 @@ class TestMannKendallComprehensive:
         result = mann_kendall_test(
             data, method="theilslopes", test="correlated_seasonal", period=12
         )
+        _assert_matches_pymannkendall(result, pmk_result)
+
+    @pytest.mark.parametrize(
+        ("test_name", "pmk_name"),
+        [
+            ("multivariate", "multivariate_test"),
+            ("regional", "regional_test"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "data",
+        [
+            np.array(
+                [
+                    [1.0, 2.0, 1.5],
+                    [2.0, 2.4, 1.7],
+                    [3.0, 2.8, 1.9],
+                    [4.0, 3.2, 2.2],
+                    [5.0, 3.7, 2.6],
+                    [6.0, 4.1, 2.9],
+                ],
+                dtype=float,
+            ),
+            np.array(
+                [
+                    [1.0, 2.0, np.nan],
+                    [2.0, 2.4, 1.7],
+                    [3.0, np.nan, 1.9],
+                    [4.0, 3.2, 2.2],
+                    [5.0, 3.7, 2.6],
+                    [6.0, 4.1, 2.9],
+                ],
+                dtype=float,
+            ),
+        ],
+    )
+    def test_grouped_tests_match_pymannkendall_reference(
+        self, test_name, pmk_name, data
+    ):
+        """Grouped multivariate-style tests should match pymannkendall."""
+        pmk = pytest.importorskip("pymannkendall")
+        pmk_result = getattr(pmk, pmk_name)(data)
+        result = mann_kendall_test(data, method="theilslopes", test=test_name)
         _assert_matches_pymannkendall(result, pmk_result)
 
     def test_pre_whitening_clean_batch_matches_pymannkendall_loops(self):
@@ -766,6 +818,40 @@ class TestMannKendallComprehensive:
             np.testing.assert_allclose(vectorized["z"][idx], pmk_result.z)
             np.testing.assert_allclose(vectorized["tau"][idx], pmk_result.Tau)
 
+    @pytest.mark.parametrize(
+        ("test_name", "pmk_name"),
+        [
+            ("multivariate", "multivariate_test"),
+            ("regional", "regional_test"),
+        ],
+    )
+    def test_grouped_clean_batch_matches_pymannkendall_loops(self, test_name, pmk_name):
+        """Clean grouped batches should agree with per-series pymannkendall."""
+        pmk = pytest.importorskip("pymannkendall")
+        data = np.array(
+            [
+                [[1.0, 0.5], [1.5, 1.0], [2.0, 1.5]],
+                [[2.0, 1.0], [2.2, 1.4], [2.4, 1.9]],
+                [[3.0, 1.4], [2.9, 1.9], [2.8, 2.2]],
+                [[4.0, 1.9], [3.7, 2.4], [3.3, 2.7]],
+                [[5.0, 2.5], [4.4, 2.9], [3.9, 3.1]],
+                [[6.0, 3.0], [5.2, 3.4], [4.5, 3.6]],
+            ],
+            dtype=float,
+        )
+
+        vectorized = _vectorized_grouped_mk_test(
+            data, method="theilslopes", test=test_name
+        )
+
+        for idx in range(data.shape[2]):
+            pmk_result = getattr(pmk, pmk_name)(data[:, :, idx])
+            assert vectorized["h"][idx] == bool(pmk_result.h)
+            np.testing.assert_allclose(vectorized["trend"][idx], pmk_result.slope)
+            np.testing.assert_allclose(vectorized["p"][idx], pmk_result.p)
+            np.testing.assert_allclose(vectorized["z"][idx], pmk_result.z)
+            np.testing.assert_allclose(vectorized["tau"][idx], pmk_result.Tau)
+
     def test_seasonal_and_autocorrelation_families_linregress_branches(self):
         """Alternative-family clean batch paths should also handle linregress."""
         data = np.stack(
@@ -785,6 +871,24 @@ class TestMannKendallComprehensive:
         ]:
             result = _vectorized_mk_test(
                 data, method="linregress", test=test_name, period=12
+            )
+            assert result["trend"].shape == (2,)
+            assert result["p"].shape == (2,)
+
+    def test_grouped_linregress_branches(self):
+        """Grouped MK families should also handle linregress."""
+        data = np.array(
+            [
+                [[1.0, 0.5], [1.5, 1.0]],
+                [[2.0, 1.0], [2.5, 1.6]],
+                [[3.0, 1.4], [3.3, 2.1]],
+                [[4.0, 1.9], [4.0, 2.7]],
+            ],
+            dtype=float,
+        )
+        for test_name in ["multivariate", "regional"]:
+            result = _vectorized_grouped_mk_test(
+                data, method="linregress", test=test_name
             )
             assert result["trend"].shape == (2,)
             assert result["p"].shape == (2,)
@@ -910,6 +1014,121 @@ class TestMannKendallComprehensive:
         assert results["trend"].shape == (nlat, nlon)
         assert results["h"].shape == (nlat, nlon)
         assert results["p"].shape == (nlat, nlon)
+
+    def test_multidimensional_grouped_numpy_matches_pymannkendall(self):
+        """Grouped multidimensional MK should match per-grid pymannkendall loops."""
+        pmk = pytest.importorskip("pymannkendall")
+        data = np.array(
+            [
+                [[[1.0, 0.5], [0.2, 2.0]], [[1.5, 0.8], [0.5, 2.3]]],
+                [[[2.0, 1.0], [0.4, 2.2]], [[2.2, 1.2], [0.7, 2.5]]],
+                [[[3.0, 1.4], [0.6, 2.5]], [[2.9, 1.6], [1.0, 2.7]]],
+                [[[4.0, 1.9], [0.9, 2.7]], [[3.7, 2.0], [1.2, 3.0]]],
+                [[[5.0, 2.5], [1.1, 3.0]], [[4.4, 2.5], [1.5, 3.2]]],
+            ],
+            dtype=float,
+        )
+
+        result = mann_kendall_multidim(
+            data,
+            axis=0,
+            group_axis=1,
+            method="theilslopes",
+            test="multivariate",
+        )
+        assert result["trend"].shape == (2, 2)
+
+        for lat_idx in range(data.shape[2]):
+            for lon_idx in range(data.shape[3]):
+                pmk_result = pmk.multivariate_test(data[:, :, lat_idx, lon_idx])
+                assert result["h"][lat_idx, lon_idx] == bool(pmk_result.h)
+                np.testing.assert_allclose(
+                    result["trend"][lat_idx, lon_idx], pmk_result.slope
+                )
+                np.testing.assert_allclose(result["p"][lat_idx, lon_idx], pmk_result.p)
+                np.testing.assert_allclose(result["z"][lat_idx, lon_idx], pmk_result.z)
+                np.testing.assert_allclose(
+                    result["tau"][lat_idx, lon_idx], pmk_result.Tau
+                )
+
+    def test_grouped_numpy_requires_group_axis_when_ambiguous(self):
+        """Grouped MK on higher-rank arrays should require an explicit group axis."""
+        data = np.ones((6, 2, 3), dtype=float)
+        with pytest.raises(ValueError, match="group_axis/group_dim"):
+            mann_kendall_multidim(data, axis=0, test="multivariate")
+
+    def test_grouped_scalar_branch_coverage(self):
+        """Cover grouped scalar branches including inference, errors, and sign cases."""
+        one_dim = mann_kendall_test(np.array([1.0, 2.0, 3.0, 4.0]), test="multivariate")
+        assert np.isfinite(one_dim["trend"])
+
+        with pytest.raises(ValueError, match="1D or 2D data"):
+            mann_kendall_test(np.ones((2, 2, 2)), test="multivariate")
+
+        short = mann_kendall_test(np.array([1.0, 2.0]), test="regional")
+        assert np.isnan(short["trend"])
+
+        with pytest.raises(ValueError, match="Unknown method"):
+            mann_kendall_test(np.ones((4, 2)), test="multivariate", method="bad")
+
+        flat = mann_kendall_test(
+            np.ones((4, 2), dtype=float), test="multivariate", method="linregress"
+        )
+        assert flat["z"] == 0
+
+        down = mann_kendall_test(
+            np.array(
+                [[4.0, 4.5], [3.0, 3.5], [2.0, 2.5], [1.0, 1.5]],
+                dtype=float,
+            ),
+            test="regional",
+            method="linregress",
+        )
+        assert down["z"] < 0
+
+    def test_grouped_axis_resolution_and_dask_guard(self):
+        """Grouped axis helpers should cover string, inference, and guard errors."""
+        inferred = mann_kendall_multidim(
+            np.array([[1.0, 2.0], [2.0, 3.0], [3.0, 4.0]], dtype=float),
+            axis=0,
+            test="multivariate",
+        )
+        assert inferred["trend"].shape == ()
+
+        with pytest.raises(ValueError, match="named dimensions"):
+            mann_kendall_multidim(
+                np.ones((4, 2), dtype=float),
+                axis=0,
+                group_axis="member",
+                test="regional",
+            )
+
+        with pytest.raises(ValueError, match="must be different"):
+            mann_kendall_multidim(
+                np.ones((4, 2), dtype=float),
+                axis=0,
+                group_axis=0,
+                test="regional",
+            )
+
+        da_grouped = xr.DataArray(
+            np.ones((4, 2), dtype=float),
+            dims=["time", "member"],
+            coords={"time": np.arange(4), "member": ["a", "b"]},
+        )
+        inferred_xarray = mann_kendall_xarray(
+            da_grouped, dim="time", test="multivariate", use_dask=True
+        )
+        assert inferred_xarray.attrs["group_dim"] == "member"
+
+        with pytest.raises(ValueError, match="NumPy path"):
+            _dask_mann_kendall(
+                da_grouped,
+                dim="time",
+                alpha=0.05,
+                method="theilslopes",
+                test="regional",
+            )
 
     def test_different_time_axes(self):
         """Test with time along different axes."""
@@ -2075,6 +2294,121 @@ class TestMannKendallComprehensive:
             )
 
             assert bindings_module._load_core_module() is None
+
+    def test_grouped_helper_error_and_nan_paths(self, monkeypatch):
+        """Grouped helper paths should cover invalid dispatch and NaN fallbacks."""
+        with pytest.raises(ValueError, match="Unsupported grouped test"):
+            _vectorized_grouped_mk_test(np.ones((3, 2, 1)), test="original")
+
+        with pytest.raises(ValueError, match="Unknown method"):
+            _vectorized_grouped_mk_test(
+                np.ones((3, 2, 1)), test="multivariate", method="bad"
+            )
+
+        empty = _vectorized_grouped_mk_test(
+            np.full((3, 2, 1), np.nan), test="regional", method="theilslopes"
+        )
+        assert np.isnan(empty["trend"][0])
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(mann_kendall_module, "mann_kendall_test", _boom)
+        recovered = _vectorized_grouped_mk_test(
+            np.array(
+                [
+                    [[1.0], [1.5]],
+                    [[2.0], [np.nan]],
+                    [[3.0], [2.5]],
+                ],
+                dtype=float,
+            ),
+            test="multivariate",
+            method="theilslopes",
+        )
+        assert np.isnan(recovered["trend"][0])
+        monkeypatch.setattr(mann_kendall_module, "mann_kendall_test", mann_kendall_test)
+
+        assigned = _vectorized_grouped_mk_test(
+            np.array(
+                [
+                    [[1.0], [1.5]],
+                    [[2.0], [np.nan]],
+                    [[3.0], [2.5]],
+                    [[4.0], [3.5]],
+                ],
+                dtype=float,
+            ),
+            test="regional",
+            method="theilslopes",
+        )
+        assert np.isfinite(assigned["trend"][0])
+
+    def test_additional_variant_branch_coverage(self):
+        """Cover remaining grouped and seasonal helper branches."""
+        reshaped = variants_module._reshape_seasonal_1d(np.arange(5.0), period=4)
+        assert reshaped.shape == (2, 4)
+
+        season_batch = variants_module._seasonal_score_variance_batch(
+            np.ones((2, 1), dtype=float), period=4
+        )
+        assert season_batch[0].shape == (1,)
+
+        mv_scalar = variants_module._multivariate_score_variance_scalar(
+            np.array([1.0, 2.0, 3.0])
+        )
+        assert mv_scalar[2] > 0.0
+
+        mv_skip = variants_module._multivariate_score_variance_scalar(
+            np.array([[1.0, np.nan], [2.0, np.nan], [3.0, np.nan]], dtype=float)
+        )
+        assert mv_skip[2] > 0.0
+
+        mv_slope = variants_module._multivariate_sens_slope_scalar(
+            np.array([1.0, 2.0, 3.0])
+        )
+        assert np.isfinite(mv_slope[0])
+
+        mv_nan_slope = variants_module._multivariate_sens_slope_scalar(
+            np.full((3, 2), np.nan)
+        )
+        assert np.isnan(mv_nan_slope[0])
+
+        with pytest.raises(ValueError, match="1D or 2D array"):
+            variants_module._multivariate_score_variance_scalar(np.ones((2, 2, 2)))
+        with pytest.raises(ValueError, match="3D array"):
+            variants_module._multivariate_score_variance_batch(np.ones((2, 2)))
+        with pytest.raises(ValueError, match="1D or 2D array"):
+            variants_module._multivariate_sens_slope_scalar(np.ones((2, 2, 2)))
+        with pytest.raises(ValueError, match="2D matrix"):
+            variants_module._correlated_multivariate_stats_scalar(np.ones(3))
+
+    def test_seasonal_and_yue_wang_remaining_branch_coverage(self):
+        """Cover remaining seasonal linregress and Yue-Wang vectorized branches."""
+        flat = np.tile(np.array([1.0, 1.0, 1.0, 1.0], dtype=float), 3)
+        seasonal_flat = mann_kendall_test(
+            flat, method="linregress", test="seasonal", period=4
+        )
+        assert seasonal_flat["z"] == 0
+
+        down = np.array(
+            [4.0, 3.0, 2.0, 1.0, 3.0, 2.0, 1.0, 0.0, 2.0, 1.0, 0.0, -1.0],
+            dtype=float,
+        )
+        seasonal_down = mann_kendall_test(
+            down, method="linregress", test="seasonal", period=4
+        )
+        assert seasonal_down["z"] < 0
+
+        with pytest.raises(ValueError, match="Unknown method"):
+            _vectorized_mk_test(np.ones((4, 1), dtype=float), method="bad")
+
+        yue = _vectorized_mk_test(
+            np.array([[1.0], [2.0], [3.0], [4.0]], dtype=float),
+            method="theilslopes",
+            test="yue_wang",
+        )
+        assert np.isfinite(yue["trend"][0])
 
     def test_bindings_loader_uses_local_probe_candidate(self, monkeypatch):
         """The shared bindings loader should use the local probe path when imports fail."""
