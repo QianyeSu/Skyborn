@@ -76,10 +76,10 @@ from .regression import (
     _theil_std_error_batch,
 )
 from .variants import (
+    _autocorr_lag_limit,
     _correlated_multivariate_stats_scalar,
     _correlated_seasonal_stats_scalar,
     _grouped_time_index,
-    _hamed_rao_variance_batch,
     _multivariate_score_variance_batch,
     _multivariate_score_variance_scalar,
     _multivariate_sens_slope_scalar,
@@ -88,7 +88,6 @@ from .variants import (
     _seasonal_score_variance_scalar,
     _seasonal_sens_slope_scalar,
     _trend_free_pre_whiten_score_variance_batch,
-    _yue_wang_variance_batch,
 )
 
 __all__ = [
@@ -165,6 +164,8 @@ _core_module = _load_core_module()
 _kernel_handles = _resolve_kernel_handles(_core_module)
 _score_variance_kernel = _kernel_handles["_score_variance_kernel"]
 _score_variance_slope_kernel = _kernel_handles["_score_variance_slope_kernel"]
+_yue_wang_slope_kernel = _kernel_handles["_yue_wang_slope_kernel"]
+_hamed_rao_slope_kernel = _kernel_handles["_hamed_rao_slope_kernel"]
 _sen_slope_kernel = _kernel_handles["_sen_slope_kernel"]
 _grouped_sen_slope_kernel = _kernel_handles["_grouped_sen_slope_kernel"]
 _grouped_correlated_stats_kernel = _kernel_handles["_grouped_correlated_stats_kernel"]
@@ -227,6 +228,37 @@ def _score_variance_slope_batch(
     """Run the compiled 2D combined score/variance/slope kernel."""
     kernel = _require_kernel(_score_variance_slope_kernel, "mk_score_var_sen_batch")
     s_values, var_values, slopes = kernel(_as_core_input_2d(data_2d), int(modified))
+    return (
+        np.asarray(s_values, dtype=np.float64),
+        np.asarray(var_values, dtype=np.float64),
+        np.asarray(slopes, dtype=np.float64),
+    )
+
+
+def _yue_wang_score_variance_slope_batch(
+    data_2d: np.ndarray, lag: int
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Run the compiled lag-aware Yue-Wang score/variance/slope kernel."""
+    kernel = _require_kernel(_yue_wang_slope_kernel, "mk_yue_wang_score_var_sen_batch")
+    s_values, var_values, slopes = kernel(_as_core_input_2d(data_2d), int(lag))
+    return (
+        np.asarray(s_values, dtype=np.float64),
+        np.asarray(var_values, dtype=np.float64),
+        np.asarray(slopes, dtype=np.float64),
+    )
+
+
+def _hamed_rao_score_variance_slope_batch(
+    data_2d: np.ndarray, alpha: float, lag: int
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Run the compiled Hamed-Rao score/variance/slope kernel."""
+    kernel = _require_kernel(
+        _hamed_rao_slope_kernel, "mk_hamed_rao_score_var_sen_batch"
+    )
+    interval = float(stats.norm.ppf(1 - alpha / 2) / np.sqrt(data_2d.shape[0]))
+    s_values, var_values, slopes = kernel(
+        _as_core_input_2d(data_2d), interval, int(lag)
+    )
     return (
         np.asarray(s_values, dtype=np.float64),
         np.asarray(var_values, dtype=np.float64),
@@ -504,10 +536,8 @@ def mann_kendall_test(
     if method == "theilslopes":
         slope = float(_sen_slope_batch(y.reshape(-1, 1))[0])
         intercept = np.median(y) - slope * np.median(x)
-        correction_slope = slope
     else:
         slope, intercept = stats.linregress(x, y)[:2]
-        correction_slope = float(_sen_slope_batch(y.reshape(-1, 1))[0])
 
     if test_name == "pre_whitening":
         stat_n = n - 1
@@ -515,6 +545,7 @@ def mann_kendall_test(
         S = int(np.rint(s_values[0]))
         var_s = float(var_values[0])
     elif test_name == "yue_wang":
+        lag_limit = _autocorr_lag_limit(n, lag)
         if lag is None and method == "theilslopes":
             S_values, var_values, _ = _score_variance_slope_batch(
                 y.reshape(-1, 1), modified=True
@@ -526,17 +557,13 @@ def mann_kendall_test(
             )
             var_s = float(var_values[0])
         else:
-            S_values, base_var_values = _score_variance_batch(
-                y.reshape(-1, 1), modified=False
+            S_values, var_values, correction_slopes = (
+                _yue_wang_score_variance_slope_batch(y.reshape(-1, 1), lag_limit)
             )
-            var_s = float(
-                _yue_wang_variance_batch(
-                    y.reshape(-1, 1),
-                    base_var_values,
-                    np.asarray([correction_slope], dtype=np.float64),
-                    lag=lag,
-                )[0]
-            )
+            var_s = float(var_values[0])
+            if method == "theilslopes":
+                slope = float(correction_slopes[0])
+                intercept = np.median(y) - slope * np.median(x)
         S = int(np.rint(S_values[0]))
         stat_n = n
     elif test_name == "trend_free_pre_whitening":
@@ -547,20 +574,15 @@ def mann_kendall_test(
         S = int(np.rint(s_values[0]))
         var_s = float(var_values[0])
     elif test_name == "hamed_rao":
-        slopes = np.asarray([slope], dtype=np.float64)
-        s_values, base_var_values = _score_variance_batch(
-            y.reshape(-1, 1), modified=False
+        lag_limit = _autocorr_lag_limit(n, lag)
+        s_values, var_values, correction_slopes = _hamed_rao_score_variance_slope_batch(
+            y.reshape(-1, 1), alpha=alpha, lag=lag_limit
         )
         S = int(np.rint(s_values[0]))
-        var_s = float(
-            _hamed_rao_variance_batch(
-                y.reshape(-1, 1),
-                base_var_values,
-                np.asarray([correction_slope], dtype=np.float64),
-                alpha=alpha,
-                lag=lag,
-            )[0]
-        )
+        var_s = float(var_values[0])
+        if method == "theilslopes":
+            slope = float(correction_slopes[0])
+            intercept = np.median(y) - slope * np.median(x)
         stat_n = n
     elif method == "theilslopes":
         S_values, var_values, _ = _score_variance_slope_batch(
@@ -1084,26 +1106,21 @@ def _vectorized_mk_test(
                 core_input, slopes
             )
         elif test_name == "hamed_rao":
-            if method == "theilslopes":
-                S_values, base_var_values, slopes = _score_variance_slope_batch(
-                    clean_data_computed, modified=False
+            lag_limit = _autocorr_lag_limit(time_steps, lag)
+            S_values, var_s_values, correction_slopes = (
+                _hamed_rao_score_variance_slope_batch(
+                    clean_data_computed,
+                    alpha=alpha,
+                    lag=lag_limit,
                 )
-                correction_slopes = slopes
-            else:
-                S_values, base_var_values = _score_variance_batch(
-                    clean_data_computed, modified=False
-                )
-                slopes = _linregress_slope_batch(clean_data_computed, x)
-                correction_slopes = _sen_slope_batch(clean_data_computed)
-            var_s_values = _hamed_rao_variance_batch(
-                clean_data_computed,
-                base_var_values,
-                correction_slopes,
-                alpha=alpha,
-                lag=lag,
             )
+            if method == "theilslopes":
+                slopes = correction_slopes
+            else:
+                slopes = _linregress_slope_batch(clean_data_computed, x)
             stat_n = time_steps
         elif test_name == "yue_wang":
+            lag_limit = _autocorr_lag_limit(time_steps, lag)
             if lag is None and method == "theilslopes":
                 S_values, var_s_values, slopes = _score_variance_slope_batch(
                     clean_data_computed, modified=True
@@ -1114,23 +1131,15 @@ def _vectorized_mk_test(
                 )
                 slopes = _linregress_slope_batch(clean_data_computed, x)
             else:
-                if method == "theilslopes":
-                    S_values, base_var_values, slopes = _score_variance_slope_batch(
-                        clean_data_computed, modified=False
+                S_values, var_s_values, correction_slopes = (
+                    _yue_wang_score_variance_slope_batch(
+                        clean_data_computed, lag=lag_limit
                     )
-                    correction_slopes = slopes
-                else:
-                    S_values, base_var_values = _score_variance_batch(
-                        clean_data_computed, modified=False
-                    )
-                    slopes = _linregress_slope_batch(clean_data_computed, x)
-                    correction_slopes = _sen_slope_batch(clean_data_computed)
-                var_s_values = _yue_wang_variance_batch(
-                    clean_data_computed,
-                    base_var_values,
-                    correction_slopes,
-                    lag=lag,
                 )
+                if method == "theilslopes":
+                    slopes = correction_slopes
+                else:
+                    slopes = _linregress_slope_batch(clean_data_computed, x)
             stat_n = time_steps
         elif method == "theilslopes":
             S_values, var_s_values, slopes = _score_variance_slope_batch(
