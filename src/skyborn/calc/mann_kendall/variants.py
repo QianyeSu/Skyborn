@@ -236,3 +236,63 @@ def _seasonal_sens_slope_scalar(
     finite_index = np.arange(values.size, dtype=np.float64)[np.isfinite(values)]
     intercept = float(np.nanmedian(values) - np.median(finite_index) / period * slope)
     return slope, intercept
+
+
+def _correlated_multivariate_stats_scalar(
+    matrix_2d: np.ndarray,
+) -> Tuple[float, float, float]:
+    """Return correlated multivariate S, variance, and tau denominator for one matrix."""
+    x = np.asarray(matrix_2d, dtype=np.float64)
+    if x.ndim != 2:
+        raise ValueError("Expected a 2D matrix for correlated multivariate statistics.")
+
+    valid_rows = ~np.isnan(x).any(axis=1)
+    x = x[valid_rows]
+    n, c = x.shape if x.ndim == 2 else (len(x), 1)
+
+    s_value = 0.0
+    denom = 0.0
+    for i in range(c):
+        season_s, _ = _score_variance_batch(x[:, i].reshape(-1, 1), modified=False)
+        s_value += float(season_s[0])
+        denom += 0.5 * n * (n - 1)
+
+    gamma = np.ones((c, c), dtype=np.float64)
+
+    def _k_stat(left: np.ndarray, right: np.ndarray) -> float:
+        k_value = 0.0
+        for i in range(n - 1):
+            j = np.arange(i, n)
+            k_value += np.sum(np.sign((left[j] - left[i]) * (right[j] - right[i])))
+        return float(k_value)
+
+    def _r_stat(values: np.ndarray) -> np.ndarray:
+        result = np.empty(n, dtype=np.float64)
+        indices = np.arange(n)
+        for j in range(n):
+            s = np.sum(np.sign(values[j] - values[indices]))
+            result[j] = (n + 1 + s) / 2.0
+        return result
+
+    for i in range(1, c):
+        for j in range(i):
+            k_value = _k_stat(x[:, i], x[:, j])
+            ri = _r_stat(x[:, i])
+            rj = _r_stat(x[:, j])
+            gamma[i, j] = (k_value + 4.0 * np.sum(ri * rj) - n * (n + 1) ** 2) / 3.0
+            gamma[j, i] = gamma[i, j]
+
+    for i in range(c):
+        k_value = _k_stat(x[:, i], x[:, i])
+        ri = _r_stat(x[:, i])
+        gamma[i, i] = (k_value + 4.0 * np.sum(ri * ri) - n * (n + 1) ** 2) / 3.0
+
+    return s_value, float(np.sum(gamma)), denom
+
+
+def _correlated_seasonal_stats_scalar(
+    values_1d: np.ndarray, period: int
+) -> Tuple[float, float, float]:
+    """Return correlated seasonal S, variance, and tau denominator for one 1D series."""
+    matrix = _reshape_seasonal_1d(values_1d, period)
+    return _correlated_multivariate_stats_scalar(matrix)
