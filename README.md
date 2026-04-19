@@ -58,7 +58,7 @@ Skyborn provides ultra-fast spatial trend calculation and climate index regressi
   - Vectorized operations for massive datasets
 - **Mann-Kendall Trend Analysis**: Robust non-parametric trend testing for both
   single time series and multidimensional climate fields
-  - Supports core ``pymannkendall``-style test families including original,
+  - Supports multiple Mann-Kendall test families including original,
     Yue-Wang, Hamed-Rao, seasonal, correlated seasonal, grouped multivariate,
     regional, correlated multivariate, and partial Mann-Kendall workflows
   - Direct multidimensional support for arrays such as ``(time, lat, lon)``,
@@ -77,11 +77,9 @@ Skyborn provides ultra-fast spatial trend calculation and climate index regressi
 - Teleconnection pattern identification
 - Regional climate impact assessment
 
-For users already familiar with ``pymannkendall``, Skyborn keeps the same core
-test-family semantics for the supported methods while extending them to
-multidimensional NumPy and xarray inputs. The main practical difference is that
-Skyborn is built for large gridded climate-analysis workflows rather than
-single-series Python loops.
+Skyborn extends Mann-Kendall analysis from one-dimensional time series to
+multidimensional NumPy and xarray workflows, making it suitable for large
+gridded climate-analysis tasks as well as standard single-series trend tests.
 
 ### 🌍 Skyborn Windspharm Submodule - Atmospheric Analysis
 
