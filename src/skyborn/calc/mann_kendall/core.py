@@ -452,7 +452,12 @@ def mann_kendall_multidim(
     dim : int or str, optional
         Alternative name for axis parameter (XArray style). Takes precedence over axis.
     test : str, default 'original'
-        Mann-Kendall test family to apply.
+        Mann-Kendall test family to apply:
+        - 'original': original Mann-Kendall test
+        - 'yue_wang': Yue and Wang (2004) modified variance correction
+        - 'hamed_rao': Hamed and Rao (1998) variance correction
+        - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
+        - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
 
     Returns
     -------
@@ -802,7 +807,12 @@ def mann_kendall_xarray(
     use_dask : bool, default True
         Use dask for computation if available
     test : str, default 'original'
-        Mann-Kendall test family to apply.
+        Mann-Kendall test family to apply:
+        - 'original': original Mann-Kendall test
+        - 'yue_wang': Yue and Wang (2004) modified variance correction
+        - 'hamed_rao': Hamed and Rao (1998) variance correction
+        - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
+        - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
 
     Returns
     -------
@@ -1063,7 +1073,12 @@ def trend_analysis(
     dim : int or str, optional
         Alternative name for axis parameter (XArray style). Takes precedence over axis.
     test : str, default 'original'
-        Mann-Kendall test family to apply.
+        Mann-Kendall test family to apply:
+        - 'original': original Mann-Kendall test
+        - 'yue_wang': Yue and Wang (2004) modified variance correction
+        - 'hamed_rao': Hamed and Rao (1998) variance correction
+        - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
+        - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
     **kwargs
         Additional arguments passed to underlying functions
 
