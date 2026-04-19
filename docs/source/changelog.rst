@@ -4,141 +4,129 @@ Changelog
 Version 0.3.20 (Current)
 ------------------------
 
-Troposphere
+**New Features**
 
-* Extended ``skyborn.calc.troposphere`` WMO tropopause support to handle
-  time-varying single-axis isobaric cross-sections.
-* ``skyborn.calc.troposphere.xarray.trop_wmo()`` now accepts
-  ``(time, level, lat)`` and ``(time, level, lon)`` inputs and preserves the
-  corresponding output dimensions as ``(time, lat)`` and ``(time, lon)``.
-* Improved dimension ordering in ``skyborn.calc.troposphere.tropopause`` so
-  direct array workflows can process these cross-sections correctly when
-  ``timedim`` is provided explicitly.
-* Added focused regression coverage for the new NumPy-core and xarray wrapper
-  paths.
+* **Expanded Mann-Kendall Trend Analysis**: Aligned the supported core
+  test families with ``pymannkendall`` while extending them to
+  multidimensional NumPy and xarray workflows
 
-Interpolation
+  - Added public support for grouped multivariate, regional, correlated
+    multivariate, seasonal, correlated seasonal, pre-whitening,
+    trend-free pre-whitening, Hamed-Rao, Yue-Wang, and partial
+    Mann-Kendall workflows
+  - Added standalone partial-Mann-Kendall APIs for one-dimensional,
+    multidimensional, and xarray inputs
+  - Accelerated dense clean-series hot paths with private compiled kernels
+    while preserving validated reference-compatible results
 
-* Added modern Fortran kernels for ``interp_hybrid_to_pressure`` and
-  ``interp_sigma_to_hybrid``, improved eager in-memory execution paths, and
-  reduced temporary-array overhead for validated NumPy and xarray workflows.
-* Added public hybrid-level diagnostics:
-  ``skyborn.interp.pressure_at_hybrid_levels`` and
-  ``skyborn.interp.delta_pressure_hybrid``.
-* Renamed the internal ``vinth2p`` acceleration module from
-  ``vinth2p_backend`` to ``vinth2p_kernels``.
-* Modernized the compiled ``rcm2rgrid``, ``rcm2points``, ``triple2grid``,
-  ``grid2triple``, and shared ``linint2`` interpolation sources to free-form
-  Fortran ``.f90`` files, kept the public entry point names unchanged, and
-  archived the historical fixed-form sources under
-  ``src/skyborn/interp/fortran/archive/``.
-* Optimized the modernized ``rcm2rgrid``, ``rcm2points``, ``triple2grid``, and
-  ``linint2`` kernels while preserving validated legacy-compatible results.
-* Improved ``rcm2rgrid`` xarray output handling so incompatible 2D auxiliary
-  source-grid coordinates such as ``TLAT`` and ``TLONG`` are dropped after
-  remapping instead of raising coordinate-size conflicts.
-* Reduced duplicate Fortran compilation in ``src/skyborn/interp/meson.build``
-  by splitting interpolation support into smaller static libraries that match
-  the actual dependency graph.
-* Reduced eager ``triple_to_grid`` wrapper overhead for non-Dask inputs and
-  improved missing-value handling without changing validated results.
-* Restored legacy exact-hit missing-value behavior in ``rcm2points`` and
-  ``rgrid2rcm`` so unresolved fields can still fall through to the historical
-  interpolation logic when appropriate.
-* Added focused regression coverage for the updated Fortran dispatch,
-  eager-wrapper branches, exact-hit missing-value cases, and
-  ``rcm2points.py`` internal missing-value fast paths.
+* **Hybrid-Pressure Diagnostics and Interpolation Kernels**: Added new
+  compiled interpolation support in ``skyborn.interp``
 
-Scatter Stippling
+  - Added modern Fortran kernels for ``interp_hybrid_to_pressure`` and
+    ``interp_sigma_to_hybrid``
+  - Added public diagnostics
+    ``skyborn.interp.pressure_at_hybrid_levels`` and
+    ``skyborn.interp.delta_pressure_hybrid``
 
-* Improved ``skyborn.plot.scatter`` so masked rectilinear grids now default to
-  NCL-like cell-interior stippling before display-space thinning, allowing
-  month-lat and other coarse cross-sections to place dots between coordinate
-  centers while preserving ``placement="points"`` for the original node-based
-  behavior.
-* Extended ``skyborn.plot.scatter`` cell-interior stippling so the same
-  ``placement="cells"`` and default ``placement="auto"`` path now also
-  supports true curvilinear 2D ``x/y`` grids when cell geometry can be
-  inferred from the provided center coordinates.
+**Improvements**
+
+* **Interpolation Kernel Modernization**: Modernized the compiled
+  ``rcm2rgrid``, ``rcm2points``, ``triple2grid``, ``grid2triple``, and
+  shared ``linint2`` sources to free-form Fortran ``.f90`` while keeping
+  the public entry points unchanged
+* **Interpolation Performance and Build Cleanup**: Reduced eager wrapper
+  overhead, trimmed temporary-array use, split duplicated support-library
+  compilation in ``src/skyborn/interp/meson.build``, and renamed the
+  internal ``vinth2p`` acceleration module from ``vinth2p_backend`` to
+  ``vinth2p_kernels``
+* **Scatter Stippling Enhancements**: Improved
+  ``skyborn.plot.scatter`` so cell-interior stippling now works better
+  for masked rectilinear grids and also supports inferred curvilinear
+  cell geometry
+
+**Bug Fixes**
+
+* **Troposphere Cross-Section Support**: Extended
+  ``skyborn.calc.troposphere`` WMO tropopause workflows to handle
+  time-varying single-axis isobaric cross-sections such as
+  ``(time, level, lat)`` and ``(time, level, lon)`` while preserving the
+  correct output dimensions
+* **rcm2rgrid xarray Coordinate Handling**: Dropped incompatible 2D
+  auxiliary source-grid coordinates such as ``TLAT`` and ``TLONG`` after
+  remapping instead of raising coordinate-size conflicts
+* **Legacy Missing-Value Compatibility**: Restored legacy exact-hit
+  missing-value behavior in ``rcm2points`` and ``rgrid2rcm`` so unresolved
+  fields can still fall through to the historical interpolation logic when
+  appropriate
+* **Regression Coverage**: Added focused tests for the updated
+  Mann-Kendall, troposphere, and interpolation dispatch and wrapper paths
 
 Version 0.3.19
 ------------------------
 
-Scatter Stippling
+**New Features**
 
-* Added ``skyborn.plot.scatter`` for gridded map and profile stippling with
-  NCL-style display-space thinning.
-* Added ``skyborn.plot.scatter`` to the explicit ``skyborn.plot`` public API.
-* Added focused plotting tests, examples, and documentation for the new
-  scatter-stippling workflow.
-* Implemented the public scatter entry point in its own
-  ``skyborn.plot.scatter`` module so the display-space thinning logic stays
-  isolated and easier to maintain.
-* Added ``skyborn.plot.vector`` as the unified public facade for the
-  curly-vector feature family:
+* **Scatter Stippling API**: Added ``skyborn.plot.scatter`` for gridded
+  map and profile stippling with NCL-style display-space thinning
+
+**Improvements**
+
+* **Unified Plotting Facade**: Added ``skyborn.plot.vector`` as the
+  module-oriented public facade for the curly-vector feature family
 
   - ``skyborn.plot.vector.curly_vector``
   - ``skyborn.plot.vector.curly_vector_key``
   - ``skyborn.plot.vector.CurlyVectorPlotSet``
   - ``skyborn.plot.vector.CurlyVectorKey``
 
-* Consolidated the curly-vector implementation into
-  ``skyborn.plot.vector`` so the public wrapper logic and the low-level
-  vector helper surface now live in one top-level module.
+* **Plot Module Consolidation**: Consolidated the curly-vector
+  implementation into ``skyborn.plot.vector`` and narrowed the
+  ``skyborn.plot`` package-root export surface to the common public
+  function-first entry points
+* **Documentation and Test Updates**: Added focused plotting tests,
+  examples, and documentation for the new scatter-stippling and
+  ``skyborn.plot.vector`` workflows
+
+**Cleanup**
+
 * Removed the separate top-level implementation files
   ``ncl_vector.py``, ``vector_key.py``, and ``vector_plot.py`` from
-  ``skyborn.plot``.
-* Kept historical module imports working through package-level
-  compatibility aliases, so existing imports do not need to break
-  immediately.
-* Narrowed the ``skyborn.plot`` package-root export surface so the common
-  public entry points are now function-first:
-
-  - ``skyborn.plot.curly_vector``
-  - ``skyborn.plot.curly_vector_key``
-  - ``skyborn.plot.scatter``
-  - ``skyborn.plot.add_equal_axes``
-  - ``skyborn.plot.createFigure``
-
-* Removed the temporary package-level compatibility aliases for the deleted
-  historical modules ``skyborn.plot.ncl_vector``, ``skyborn.plot.vector_key``,
-  and ``skyborn.plot.vector_plot``.
-* Updated plotting examples and user-facing documentation to recommend
-  ``skyborn.plot.vector`` as the module-oriented import path for curly-vector
-  usage while preserving the existing package-level ``skyborn.plot`` exports.
+  ``skyborn.plot``
+* Removed the temporary package-level compatibility aliases for those
+  deleted historical modules while keeping the intended public imports
+  unchanged
 
 Version 0.3.18
 ------------------------
 
-Plotting API Cleanup
+**New Features**
 
-* Renamed the NCL-like vector plotting public API to the new names:
+* **Renamed Curly-Vector Public API**: Renamed the NCL-like vector
+  plotting public API to:
 
-  - ``skyborn.plot.curly_vector`` (unified arrays + xarray entry point)
+  - ``skyborn.plot.curly_vector``
   - ``skyborn.plot.curly_vector_key``
   - ``skyborn.plot.CurlyVectorPlotSet``
   - ``skyborn.plot.CurlyVectorKey``
 
-* Removed the legacy plotting API names from the public surface:
+**Cleanup**
 
-  - ``velovect``
-  - ``velovect_vertical_profile``
-  - ``dataset_curly_vector``
-  - ``curved_quiver``
-  - ``add_curved_quiverkey``
-  - ``CurvedQuiverplotSet``
-  - ``CurvedQuiverLegend``
+* **Removed Legacy Plotting Names**: Removed the historical public names
+  ``velovect``, ``velovect_vertical_profile``, ``dataset_curly_vector``,
+  ``curved_quiver``, ``add_curved_quiverkey``,
+  ``CurvedQuiverplotSet``, and ``CurvedQuiverLegend``
+* **Split Plotting Implementation**: Split the plotting implementation
+  into clearer modules for the core renderer, the xarray / Cartopy
+  dataset wrapper, and the reference-vector key artist
 
-* Split the plotting implementation into clearer modules:
+**Improvements**
 
-  - ``skyborn.plot.vector_plot`` for the core curly-vector renderer
-  - ``skyborn.plot.ncl_vector`` for the xarray / Cartopy dataset wrapper
-  - ``skyborn.plot.vector_key`` for the reference-vector annotation artist
-
-* Replaced wildcard plotting exports with an explicit ``skyborn.plot`` public API.
-* Added type annotations to the renamed public plotting entry points and key artist class.
+* Replaced wildcard plotting exports with an explicit ``skyborn.plot``
+  public API
+* Added type annotations to the renamed public plotting entry points and
+  key artist class
 * Updated plotting tests, examples, and documentation for the renamed
-  ``curly_vector`` public API.
+  ``curly_vector`` public API
 
 Version 0.3.17
 ------------------------
