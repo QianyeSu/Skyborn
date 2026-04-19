@@ -70,7 +70,12 @@ _vectorized_mk_test = mann_kendall_module._vectorized_mk_test
 _vectorized_grouped_mk_test = mann_kendall_module._vectorized_grouped_mk_test
 
 bindings_module = importlib.import_module("skyborn.calc.mann_kendall.bindings")
+partial_module = importlib.import_module("skyborn.calc.mann_kendall.partial")
 variants_module = importlib.import_module("skyborn.calc.mann_kendall.variants")
+
+partial_mann_kendall_test = partial_module.partial_mann_kendall_test
+partial_mann_kendall_multidim = partial_module.partial_mann_kendall_multidim
+partial_mann_kendall_xarray = partial_module.partial_mann_kendall_xarray
 
 
 def _equal_or_both_nan(left, right, atol=1e-12):
@@ -94,6 +99,18 @@ def _assert_matches_pymannkendall(result, pmk_result):
     assert _equal_or_both_nan(result["p"], pmk_result.p)
     assert _equal_or_both_nan(result["z"], pmk_result.z)
     assert _equal_or_both_nan(result["tau"], pmk_result.Tau)
+
+
+def _assert_matches_pymannkendall_partial(result, pmk_result):
+    """Assert that Skyborn and pymannkendall report the same partial-MK statistics."""
+    assert result["h"] == bool(pmk_result.h)
+    assert _equal_or_both_nan(result["trend"], pmk_result.slope)
+    assert _equal_or_both_nan(result["intercept"], pmk_result.intercept)
+    assert _equal_or_both_nan(result["p"], pmk_result.p)
+    assert _equal_or_both_nan(result["z"], pmk_result.z)
+    assert _equal_or_both_nan(result["tau"], pmk_result.Tau)
+    assert _equal_or_both_nan(result["s"], pmk_result.s)
+    assert _equal_or_both_nan(result["var_s"], pmk_result.var_s)
 
 
 def _build_pymannkendall_cases(include_strict_linear=False):
@@ -894,6 +911,154 @@ class TestMannKendallComprehensive:
             )
             assert result["trend"].shape == (2,)
             assert result["p"].shape == (2,)
+
+    @pytest.mark.parametrize(
+        ("response", "covariate"),
+        [
+            (
+                np.array([1.0, 2.0, 2.5, 3.0, 4.1, 4.8], dtype=float),
+                np.array([0.4, 0.8, 1.0, 1.5, 1.8, 2.1], dtype=float),
+            ),
+            (
+                np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], dtype=float),
+                np.array([2.0, 2.5, np.nan, 3.0, 3.5, 4.0], dtype=float),
+            ),
+        ],
+    )
+    def test_partial_matches_pymannkendall_reference(self, response, covariate):
+        """Partial MK should match pymannkendall on deterministic 1D cases."""
+        pmk = pytest.importorskip("pymannkendall")
+        pmk_result = pmk.partial_test(np.column_stack([response, covariate]))
+        result = partial_mann_kendall_test(response, covariate)
+        _assert_matches_pymannkendall_partial(result, pmk_result)
+
+    def test_partial_invalid_inputs_and_insufficient_coverage(self):
+        """Partial MK should validate rank, shape, method, and joint support."""
+        with pytest.raises(ValueError, match="two 1D arrays"):
+            partial_mann_kendall_test(np.ones((3, 2)), np.ones(3))
+
+        with pytest.raises(ValueError, match="same shape"):
+            partial_mann_kendall_test(np.ones(5), np.ones(6))
+
+        with pytest.raises(ValueError, match="Unknown method"):
+            partial_mann_kendall_test(np.ones(5), np.ones(5), method="bad")
+
+        short = partial_mann_kendall_test(
+            np.array([1.0, np.nan, 2.0]),
+            np.array([1.0, 2.0, np.nan]),
+        )
+        assert np.isnan(short["trend"])
+        assert short["h"] == False
+
+    def test_partial_multidim_global_covariate_matches_pymannkendall_loops(self):
+        """Partial MK multidim should match pymannkendall with one global covariate."""
+        pmk = pytest.importorskip("pymannkendall")
+        data = np.array(
+            [
+                [[1.0, 2.0], [0.5, 1.5]],
+                [[1.5, 2.4], [0.9, 1.8]],
+                [[2.1, 2.9], [1.3, 2.1]],
+                [[2.7, 3.3], [1.7, 2.4]],
+                [[3.4, 3.9], [2.0, 2.8]],
+                [[3.9, 4.5], [2.4, 3.1]],
+            ],
+            dtype=float,
+        )
+        covariate = np.array([0.2, 0.6, 1.0, 1.4, 1.8, 2.2], dtype=float)
+
+        result = partial_mann_kendall_multidim(data, covariate, axis=0)
+        assert result["trend"].shape == (2, 2)
+
+        for lat_idx in range(data.shape[1]):
+            for lon_idx in range(data.shape[2]):
+                pmk_result = pmk.partial_test(
+                    np.column_stack([data[:, lat_idx, lon_idx], covariate])
+                )
+                cell = {key: result[key][lat_idx, lon_idx] for key in result}
+                _assert_matches_pymannkendall_partial(cell, pmk_result)
+
+    def test_partial_multidim_pointwise_covariate_matches_pymannkendall_loops(self):
+        """Partial MK multidim should also match pointwise covariates."""
+        pmk = pytest.importorskip("pymannkendall")
+        data = np.array(
+            [
+                [[1.0, 0.5], [2.0, 2.5]],
+                [[1.6, 0.8], [2.5, 2.9]],
+                [[2.1, 1.2], [3.0, 3.1]],
+                [[2.7, 1.5], [3.6, 3.4]],
+                [[3.4, 1.9], [4.2, 3.9]],
+            ],
+            dtype=float,
+        )
+        covariate = np.array(
+            [
+                [[0.4, 1.2], [2.0, 0.5]],
+                [[0.7, 1.5], [2.2, 0.8]],
+                [[1.0, 1.7], [2.5, 1.0]],
+                [[1.2, 2.0], [2.8, 1.4]],
+                [[1.6, 2.3], [3.0, 1.9]],
+            ],
+            dtype=float,
+        )
+
+        result = partial_mann_kendall_multidim(data, covariate, axis=0)
+
+        for lat_idx in range(data.shape[1]):
+            for lon_idx in range(data.shape[2]):
+                pmk_result = pmk.partial_test(
+                    np.column_stack(
+                        [data[:, lat_idx, lon_idx], covariate[:, lat_idx, lon_idx]]
+                    )
+                )
+                cell = {key: result[key][lat_idx, lon_idx] for key in result}
+                _assert_matches_pymannkendall_partial(cell, pmk_result)
+
+    def test_partial_xarray_preserves_dims_and_matches_reference(self):
+        """xarray partial MK should preserve non-time dims and match pymannkendall."""
+        pmk = pytest.importorskip("pymannkendall")
+        data = xr.DataArray(
+            np.array(
+                [
+                    [[1.0, 2.0], [0.5, 1.5]],
+                    [[1.5, 2.4], [0.9, 1.8]],
+                    [[2.1, 2.9], [1.3, 2.1]],
+                    [[2.7, 3.3], [1.7, 2.4]],
+                    [[3.4, 3.9], [2.0, 2.8]],
+                    [[3.9, 4.5], [2.4, 3.1]],
+                ],
+                dtype=float,
+            ),
+            dims=["time", "lat", "lon"],
+            coords={"time": np.arange(6), "lat": [10.0, 20.0], "lon": [100.0, 110.0]},
+        )
+        covariate = xr.DataArray(
+            np.array([0.2, 0.6, 1.0, 1.4, 1.8, 2.2], dtype=float),
+            dims=["time"],
+            coords={"time": np.arange(6)},
+        )
+
+        result = partial_mann_kendall_xarray(data, covariate, dim="time")
+        assert result.trend.dims == ("lat", "lon")
+
+        for lat_idx in range(data.sizes["lat"]):
+            for lon_idx in range(data.sizes["lon"]):
+                pmk_result = pmk.partial_test(
+                    np.column_stack(
+                        [data.values[:, lat_idx, lon_idx], covariate.values]
+                    )
+                )
+                assert _equal_or_both_nan(
+                    result.trend.values[lat_idx, lon_idx], pmk_result.slope
+                )
+                assert _equal_or_both_nan(
+                    result.p.values[lat_idx, lon_idx], pmk_result.p
+                )
+
+    def test_partial_top_level_exports(self):
+        """The top-level calc package should export the partial MK helpers."""
+        calc_module = importlib.import_module("skyborn.calc")
+        assert calc_module.partial_mann_kendall_test is partial_mann_kendall_test
+        assert calc_module.partial_test is partial_module.partial_test
 
     @pytest.mark.parametrize(
         ("test_name", "pmk_name", "include_strict_linear"),
