@@ -50,6 +50,7 @@ Flexible dimension specification with xarray:
 >>> print(results.trend.values.shape)  # (10, 15)
 """
 
+import sys
 import warnings
 from importlib import import_module
 from importlib import util as importlib_util
@@ -143,15 +144,20 @@ def _load_core_module():
                 continue
 
             try:
+                previous = sys.modules.pop("mann_kendall_core", None)
                 spec = importlib_util.spec_from_file_location(
                     "mann_kendall_core", candidate
                 )
                 if spec is None or spec.loader is None:
+                    if previous is not None:
+                        sys.modules["mann_kendall_core"] = previous
                     continue
                 core = importlib_util.module_from_spec(spec)
                 spec.loader.exec_module(core)
                 return core
             except Exception:
+                if previous is not None:
+                    sys.modules["mann_kendall_core"] = previous
                 continue
 
     candidate_names = []
