@@ -71,6 +71,9 @@ from .regression import (
 from .variants import (
     _hamed_rao_variance_batch,
     _pre_whiten_score_variance_batch,
+    _seasonal_score_variance_batch,
+    _seasonal_score_variance_scalar,
+    _seasonal_sens_slope_scalar,
     _trend_free_pre_whiten_score_variance_batch,
 )
 
@@ -91,6 +94,8 @@ def _normalize_test_name(test: str) -> str:
         return "original"
     if normalized in {"yue_wang", "yuewang"}:
         return "yue_wang"
+    if normalized in {"seasonal", "seasonal_mk"}:
+        return "seasonal"
     if normalized in {"hamed_rao", "hamedrao"}:
         return "hamed_rao"
     if normalized in {
@@ -103,7 +108,7 @@ def _normalize_test_name(test: str) -> str:
         return "pre_whitening"
     raise ValueError(
         "Unknown test: "
-        f"{test}. Supported tests are 'original', 'yue_wang', 'hamed_rao', "
+        f"{test}. Supported tests are 'original', 'yue_wang', 'seasonal', 'hamed_rao', "
         "'pre_whitening', and 'trend_free_pre_whitening'."
     )
 
@@ -214,6 +219,7 @@ def mann_kendall_test(
     alpha: float = 0.05,
     method: str = "theilslopes",
     test: str = "original",
+    period: int = 12,
 ) -> Dict[str, Union[float, bool]]:
     """
     Perform Mann-Kendall test for trend detection on 1D time series.
@@ -235,9 +241,12 @@ def mann_kendall_test(
         Mann-Kendall test family to apply:
         - 'original': original Mann-Kendall test
         - 'yue_wang': Yue and Wang (2004) modified variance correction
+        - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
+    period : int, default 12
+        Seasonal cycle length used when ``test="seasonal"``.
 
     Returns
     -------
@@ -304,6 +313,58 @@ def mann_kendall_test(
         raise ValueError(
             "mann_kendall_test only accepts 1D data. Use trend_analysis for multidimensional data."
         )
+
+    if test_name == "seasonal":
+        season_values = np.asarray(values, dtype=np.float64)
+        finite_mask = np.isfinite(season_values)
+        n_finite = int(np.sum(finite_mask))
+
+        if n_finite < 3:
+            warnings.warn("Need at least 3 data points for Mann-Kendall test")
+            return {
+                "trend": np.nan,
+                "h": False,
+                "p": np.nan,
+                "z": np.nan,
+                "tau": np.nan,
+                "std_error": np.nan,
+            }
+
+        if method not in {"theilslopes", "linregress"}:
+            raise ValueError(
+                f"Unknown method: {method}. Use 'theilslopes' or 'linregress'"
+            )
+
+        if method == "theilslopes":
+            slope, intercept = _seasonal_sens_slope_scalar(season_values, period)
+        else:
+            x_finite = np.arange(season_values.size, dtype=np.float64)[finite_mask]
+            slope, intercept = stats.linregress(x_finite, season_values[finite_mask])[
+                :2
+            ]
+
+        S, var_s, denom = _seasonal_score_variance_scalar(season_values, period)
+        if S > 0:
+            z = (S - 1) / np.sqrt(var_s)
+        elif S == 0:
+            z = 0
+        else:
+            z = (S + 1) / np.sqrt(var_s)
+
+        p_value = 2 * (1 - stats.norm.cdf(abs(z)))
+        h = abs(z) > stats.norm.ppf(1 - alpha / 2)
+        tau = S / denom if denom != 0.0 else np.nan
+        finite_index = np.arange(season_values.size, dtype=np.float64)[finite_mask]
+        fitted = finite_index / period * slope + intercept
+        std_error = np.std(season_values[finite_mask] - fitted) / np.sqrt(n_finite)
+        return {
+            "trend": slope,
+            "h": h,
+            "p": p_value,
+            "z": z,
+            "tau": tau,
+            "std_error": std_error,
+        }
 
     valid_mask = np.isfinite(values)
     y = np.asarray(values[valid_mask], dtype=np.float64)
@@ -423,6 +484,7 @@ def mann_kendall_multidim(
     chunk_size: Optional[int] = None,
     dim: Optional[Union[int, str]] = None,
     test: str = "original",
+    period: int = 12,
 ) -> Dict[str, np.ndarray]:
     """
     Optimized numpy-based Mann-Kendall test for multidimensional arrays.
@@ -455,9 +517,12 @@ def mann_kendall_multidim(
         Mann-Kendall test family to apply:
         - 'original': original Mann-Kendall test
         - 'yue_wang': Yue and Wang (2004) modified variance correction
+        - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
+    period : int, default 12
+        Seasonal cycle length used when ``test="seasonal"``.
 
     Returns
     -------
@@ -520,7 +585,9 @@ def mann_kendall_multidim(
         actual_time_axis = _resolve_axis(data, axis)
     # Handle 1D input
     if data.ndim == 1:
-        return mann_kendall_test(data, alpha=alpha, method=method, test=test_name)
+        return mann_kendall_test(
+            data, alpha=alpha, method=method, test=test_name, period=period
+        )
 
     # Move time axis to the front
     data = np.moveaxis(data, actual_time_axis, 0)
@@ -573,6 +640,7 @@ def mann_kendall_multidim(
             alpha=alpha,
             method=method,
             test=test_name,
+            period=period,
         )
 
         # Store results
@@ -591,6 +659,7 @@ def _vectorized_mk_test(
     alpha: float = 0.05,
     method: str = "theilslopes",
     test: str = "original",
+    period: int = 12,
 ) -> Dict[str, np.ndarray]:
     """
     Truly vectorized Mann-Kendall test for a chunk of time series.
@@ -646,7 +715,26 @@ def _vectorized_mk_test(
             clean_data_computed = np.asarray(data_chunk[:, no_nan_indices])
 
         clean_data_computed = np.asarray(clean_data_computed, dtype=np.float64)
-        if test_name == "pre_whitening":
+        if test_name == "seasonal":
+            core_input = _as_core_input_2d(clean_data_computed)
+            if method == "theilslopes":
+                slopes = np.empty(core_input.shape[1], dtype=np.float64)
+                intercepts = np.empty(core_input.shape[1], dtype=np.float64)
+                for idx in range(core_input.shape[1]):
+                    slopes[idx], intercepts[idx] = _seasonal_sens_slope_scalar(
+                        core_input[:, idx], period
+                    )
+            else:
+                slopes = _linregress_slope_batch(clean_data_computed, x)
+                x_mean = np.mean(x)
+                y_mean = np.mean(clean_data_computed, axis=0)
+                intercepts = y_mean - slopes * x_mean
+
+            S_values, var_s_values, seasonal_denom = _seasonal_score_variance_batch(
+                core_input, period
+            )
+            stat_n = time_steps
+        elif test_name == "pre_whitening":
             core_input = _as_core_input_2d(clean_data_computed)
             if method == "theilslopes":
                 slopes = _sen_slope_batch(core_input)
@@ -728,9 +816,22 @@ def _vectorized_mk_test(
         ):
             slopes = _linregress_slope_batch(clean_data_computed, x)
 
-        tau_values = S_values / (0.5 * stat_n * (stat_n - 1))
+        if test_name == "seasonal":
+            tau_values = (
+                S_values / seasonal_denom
+                if seasonal_denom != 0.0
+                else np.full_like(S_values, np.nan)
+            )
+        else:
+            tau_values = S_values / (0.5 * stat_n * (stat_n - 1))
 
-        if method == "theilslopes":
+        if test_name == "seasonal" and method == "theilslopes":
+            seasonal_x = x[:, np.newaxis] / period
+            fitted = seasonal_x * slopes[np.newaxis, :] + intercepts[np.newaxis, :]
+            std_errors = np.std(clean_data_computed - fitted, axis=0) / np.sqrt(
+                clean_data_computed.shape[0]
+            )
+        elif method == "theilslopes":
             std_errors = _theil_std_error_batch(clean_data_computed, x, slopes)
         else:
             std_errors = _linregress_std_error_batch(clean_data_computed, x, slopes)
@@ -764,7 +865,11 @@ def _vectorized_mk_test(
         # Mann-Kendall test for individual series with NaN
         try:
             mk_result = mann_kendall_test(
-                y_clean, alpha=alpha, method=method, test=test_name
+                y if test_name == "seasonal" else y_clean,
+                alpha=alpha,
+                method=method,
+                test=test_name,
+                period=period,
             )
 
             # Store results
@@ -784,6 +889,7 @@ def mann_kendall_xarray(
     method: str = "theilslopes",
     use_dask: bool = True,
     test: str = "original",
+    period: int = 12,
 ):  # -> xr.Dataset
     """
     Mann-Kendall test for xarray DataArray with intelligent dimension handling.
@@ -810,9 +916,12 @@ def mann_kendall_xarray(
         Mann-Kendall test family to apply:
         - 'original': original Mann-Kendall test
         - 'yue_wang': Yue and Wang (2004) modified variance correction
+        - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
+    period : int, default 12
+        Seasonal cycle length used when ``test="seasonal"``.
 
     Returns
     -------
@@ -836,7 +945,7 @@ def mann_kendall_xarray(
 
     if use_dask and hasattr(data.data, "chunks"):
         # Use dask for computation
-        results = _dask_mann_kendall(data, dim, alpha, method, test)
+        results = _dask_mann_kendall(data, dim, alpha, method, test, period)
     else:
         # Use numpy implementation
         results = mann_kendall_multidim(
@@ -845,6 +954,7 @@ def mann_kendall_xarray(
             alpha=alpha,
             method=method,
             test=test,
+            period=period,
         )
 
     # Smart dimension handling: preserve order and filter scalar dimensions
@@ -947,6 +1057,7 @@ def _dask_mann_kendall(
     alpha: float,
     method: str,
     test: str = "original",  # xr.DataArray
+    period: int = 12,
 ):  # -> Dict[str, np.ndarray]
     """Use dask map_blocks for Mann-Kendall computation."""
 
@@ -999,6 +1110,7 @@ def _dask_mann_kendall(
                     alpha=alpha,
                     method=method,
                     test=test,
+                    period=period,
                 )
 
                 # Store results: [trend, h, p, z, tau, std_error]
@@ -1053,6 +1165,7 @@ def trend_analysis(
     method: str = "theilslopes",
     dim: Optional[Union[int, str]] = None,
     test: str = "original",
+    period: int = 12,
     **kwargs,
 ) -> Any:
     """
@@ -1076,9 +1189,12 @@ def trend_analysis(
         Mann-Kendall test family to apply:
         - 'original': original Mann-Kendall test
         - 'yue_wang': Yue and Wang (2004) modified variance correction
+        - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
+    period : int, default 12
+        Seasonal cycle length used when ``test="seasonal"``.
     **kwargs
         Additional arguments passed to underlying functions
 
@@ -1100,6 +1216,7 @@ def trend_analysis(
             alpha=alpha,
             method=method,
             test=test,
+            period=period,
             **kwargs,
         )
     else:
@@ -1109,6 +1226,7 @@ def trend_analysis(
             alpha=alpha,
             method=method,
             test=test,
+            period=period,
             **kwargs,
         )
 
