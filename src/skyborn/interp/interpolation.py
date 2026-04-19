@@ -20,6 +20,12 @@ import numpy as np
 import xarray as xr
 
 try:
+    from .fortran.vinth2p_kernels import (
+        ddelta_pressure_hybrid_pa as _ddelta_pressure_hybrid_pa,
+    )
+    from .fortran.vinth2p_kernels import (
+        ddelta_pressure_hybrid_pa_into as _ddelta_pressure_hybrid_pa_into,
+    )
     from .fortran.vinth2p_kernels import dsigma2hybrid_nodes as _dsigma2hybrid_nodes
     from .fortran.vinth2p_kernels import (
         dsigma2hybrid_nodes_corder_into as _dsigma2hybrid_nodes_corder_into,
@@ -44,6 +50,8 @@ try:
         dvinth2p_nodes_pa_into as _dvinth2p_nodes_pa_into,
     )
 except Exception:
+    _ddelta_pressure_hybrid_pa = None
+    _ddelta_pressure_hybrid_pa_into = None
     _dsigma2hybrid_nodes = None
     _dsigma2hybrid_nodes_corder_into = None
     _dsigma2hybrid_nodes_into = None
@@ -236,13 +244,18 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
     if isinstance(ps, np.ndarray):
         hya_values = np.asarray(hya.data if isinstance(hya, xr.DataArray) else hya)
         hyb_values = np.asarray(hyb.data if isinstance(hyb, xr.DataArray) else hyb)
+        if _ddelta_pressure_hybrid_pa is not None:
+            output_columns = _delta_pressure_hybrid_fortran_flat(
+                ps, hya_values, hyb_values, p0
+            )
+            return output_columns.reshape(
+                (hya_values.shape[0] - 1,) + ps.shape, order="F"
+            )
+
         reshape = (hya_values.shape[0] - 1,) + (1,) * ps.ndim
-        pa = (
-            p0 * hya_values[:-1].reshape(reshape)
-            + hyb_values[:-1].reshape(reshape) * ps
-        )
-        pb = p0 * hya_values[1:].reshape(reshape) + hyb_values[1:].reshape(reshape) * ps
-        return np.abs(pa - pb)
+        delta_hya = (hya_values[:-1] - hya_values[1:]).reshape(reshape)
+        delta_hyb = (hyb_values[:-1] - hyb_values[1:]).reshape(reshape)
+        return np.abs(p0 * delta_hya + delta_hyb * ps)
 
     if isinstance(hya, np.ndarray):
         hya = xr.DataArray(hya, dims=("lev",))
@@ -260,6 +273,33 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
     hya, hyb = _rename_colliding_coeff_dim(ps, hya, hyb)
 
     lev_name = hya.dims[0]
+    if (
+        _ddelta_pressure_hybrid_pa is not None
+        and not _is_dask_backed(ps)
+        and not _is_pint_backed(ps)
+        and lev_name not in ps.dims
+    ):
+        output_columns = _delta_pressure_hybrid_fortran_flat(
+            ps.data, hya.data, hyb.data, p0
+        )
+        output_values = output_columns.reshape(
+            (hya.shape[0] - 1,) + ps.shape, order="F"
+        )
+        coords = {name: coord for name, coord in ps.coords.items()}
+        if lev_name in hya.coords:
+            coords[lev_name] = hya.coords[lev_name].isel({lev_name: slice(None, -1)})
+        dph = xr.DataArray(
+            output_values,
+            dims=(lev_name, *ps.dims),
+            coords=coords,
+        )
+        dph.name = "dph"
+        dph.attrs = {
+            "long_name": "pressure layer thickness",
+            "units": "Pa",
+        }
+        return dph
+
     pa = (
         p0 * hya.isel({lev_name: slice(None, -1)})
         + hyb.isel({lev_name: slice(None, -1)}) * ps
@@ -710,6 +750,69 @@ def _compiled_float64_output(shape, order: str = "F") -> np.ndarray:
     """Allocate a float64 output buffer for compiled interpolation kernels."""
 
     return np.empty(shape, dtype=np.float64, order=order)
+
+
+def _delta_pressure_hybrid_fortran_flat(
+    ps_values, hya_values, hyb_values, p0
+) -> np.ndarray:
+    """Run eager hybrid layer-thickness calculation through the compiled backend."""
+
+    if _ddelta_pressure_hybrid_pa is None:
+        raise RuntimeError("delta-pressure backend is not available")
+
+    ps_flat = _compiled_float64_flat(ps_values)
+    hya_vector = _compiled_float64_vector(hya_values)
+    hyb_vector = _compiled_float64_vector(hyb_values)
+    ncol = ps_flat.size
+    nlev = hya_vector.size
+    nlevo = nlev - 1
+    output_columns = _compiled_float64_output((nlevo, ncol), order="F")
+
+    if _ddelta_pressure_hybrid_pa_into is not None:
+        try:
+            _ddelta_pressure_hybrid_pa_into(
+                ps_flat,
+                output_columns,
+                hya_vector,
+                hyb_vector,
+                float(p0),
+                nlevo=nlevo,
+                ncol=ncol,
+                nlev=nlev,
+            )
+        except Exception as exc:
+            if "ddelta_pressure_hybrid_pa_into" not in str(exc):
+                raise
+            _ddelta_pressure_hybrid_pa_into(
+                ps_flat,
+                output_columns,
+                hya_vector,
+                hyb_vector,
+                float(p0),
+                nlevo,
+            )
+        return output_columns
+
+    try:
+        return _ddelta_pressure_hybrid_pa(
+            ps_flat,
+            hya_vector,
+            hyb_vector,
+            float(p0),
+            nlevo=nlevo,
+            ncol=ncol,
+            nlev=nlev,
+        )
+    except Exception as exc:
+        if "ddelta_pressure_hybrid_pa" not in str(exc):
+            raise
+        return _ddelta_pressure_hybrid_pa(
+            ps_flat,
+            hya_vector,
+            hyb_vector,
+            float(p0),
+            nlevo,
+        )
 
 
 def _as_c_contiguous_compiled_flat(array: xr.DataArray, dims, shape):
