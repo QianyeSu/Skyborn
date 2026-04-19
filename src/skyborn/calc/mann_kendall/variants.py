@@ -13,6 +13,22 @@ def _variance_without_ties(sample_size: int) -> float:
     return sample_size * (sample_size - 1) * (2 * sample_size + 5) / 18.0
 
 
+def _autocorr_lag_limit(sample_size: int, lag: Optional[int]) -> int:
+    """Resolve the number of autocorrelation lags to include."""
+    if sample_size <= 1:
+        return 0
+    if lag is None:
+        return sample_size - 1
+    lag_value = int(lag)
+    if lag_value < 0:
+        return 0
+    if lag_value >= sample_size:
+        raise IndexError(
+            f"index {lag_value} is out of bounds for axis 0 with size {sample_size}"
+        )
+    return lag_value
+
+
 def _lag1_autocorrelation_batch(data_2d: np.ndarray) -> np.ndarray:
     """Compute lag-1 autocorrelation for each dense series column."""
     centered = np.asarray(data_2d, dtype=np.float64) - np.mean(data_2d, axis=0)
@@ -103,7 +119,7 @@ def _hamed_rao_variance_batch(
 ) -> np.ndarray:
     """Apply the Hamed-Rao variance correction to a dense 2D series batch."""
     n = data_2d.shape[0]
-    max_lag = n - 1 if lag is None else max(0, min(int(lag), n - 1))
+    max_lag = _autocorr_lag_limit(n, lag)
     if n < 3:
         return np.asarray(base_var_values, dtype=np.float64)
 
@@ -134,6 +150,46 @@ def _hamed_rao_variance_batch(
 
     n_ns = 1.0 + (2.0 * sni) / (n * (n - 1) * (n - 2))
     return np.asarray(base_var_values, dtype=np.float64) * n_ns
+
+
+def _yue_wang_variance_batch(
+    data_2d: np.ndarray,
+    base_var_values: np.ndarray,
+    slopes: np.ndarray,
+    lag: Optional[int] = None,
+) -> np.ndarray:
+    """Apply the Yue-Wang variance correction to a dense 2D series batch."""
+    n = data_2d.shape[0]
+    max_lag = _autocorr_lag_limit(n, lag)
+    if n < 3 or max_lag == 0:
+        return np.asarray(base_var_values, dtype=np.float64)
+
+    detrended = np.asarray(data_2d, dtype=np.float64).copy()
+    detrended -= (
+        np.arange(1, n + 1, dtype=np.float64)[:, np.newaxis] * slopes[np.newaxis, :]
+    )
+    centered = detrended - np.mean(detrended, axis=0)
+    denom = np.sum(centered * centered, axis=0)
+
+    corrected = np.asarray(base_var_values, dtype=np.float64).copy()
+    valid = denom != 0.0
+    if not np.any(valid):
+        corrected[:] = np.nan
+        return corrected
+
+    sni = np.zeros(data_2d.shape[1], dtype=np.float64)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        for lag_index in range(1, max_lag + 1):
+            numer = np.sum(
+                centered[:-lag_index, valid] * centered[lag_index:, valid],
+                axis=0,
+                dtype=np.float64,
+            )
+            sni[valid] += (1.0 - float(lag_index) / float(n)) * (numer / denom[valid])
+
+    corrected[valid] *= 1.0 + 2.0 * sni[valid]
+    corrected[~valid] = np.nan
+    return corrected
 
 
 def _reshape_seasonal_1d(values_1d: np.ndarray, period: int) -> np.ndarray:
