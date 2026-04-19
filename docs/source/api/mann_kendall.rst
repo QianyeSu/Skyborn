@@ -23,6 +23,8 @@ The public API uses ``test=...`` to select the Mann-Kendall test family:
 * ``test="yue_wang"``: Yue-Wang (2004) modified variance correction
 * ``test="seasonal"``: Hirsch-Slack (1984) seasonal Mann-Kendall test
 * ``test="correlated_seasonal"``: Hipel (1994) correlated seasonal Mann-Kendall test
+* ``test="multivariate"``: grouped multivariate Mann-Kendall test
+* ``test="regional"``: grouped regional Mann-Kendall test
 * ``test="hamed_rao"``: Hamed-Rao (1998) variance correction
 * ``test="pre_whitening"``: Yue-Wang (2002) pre-whitening modification
 * ``test="trend_free_pre_whitening"``: Yue-Wang (2002) trend-free pre-whitening
@@ -98,6 +100,28 @@ Using xarray Interface
     # Results are returned as xarray Dataset
     print(trends.trend.attrs)  # Includes metadata
     trends.trend.plot()  # Easy visualization
+
+Grouped Multivariate / Regional MK
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Grouped MK families collapse both the analyzed time dimension and one grouping
+dimension, while preserving the remaining spatial dimensions.
+
+.. code-block:: python
+
+    grouped = xr.DataArray(
+        data,
+        dims=["time", "member", "lat", "lon"],
+    )
+
+    regional = mann_kendall_xarray(
+        grouped,
+        dim="time",
+        group_dim="member",
+        test="regional",
+    )
+
+    print(regional.trend.dims)  # ('lat', 'lon')
 
 Performance Optimization
 ------------------------
@@ -190,6 +214,10 @@ For autocorrelated data, explicit test families can be selected:
     result_yw = mann_kendall_test(data, test="yue_wang")
     result_seasonal = mann_kendall_test(data, test="seasonal", period=12)
     result_corr_seasonal = mann_kendall_test(data, test="correlated_seasonal", period=12)
+    result_multi = mann_kendall_test(grouped_matrix, test="multivariate")
+    result_regional = mann_kendall_xarray(
+        grouped_da, dim="time", group_dim="member", test="regional"
+    )
     result_hr = mann_kendall_test(data, test="hamed_rao")
     result_pw = mann_kendall_test(data, test="pre_whitening")
     result_tfpw = mann_kendall_test(data, test="trend_free_pre_whitening")
