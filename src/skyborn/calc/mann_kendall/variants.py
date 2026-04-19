@@ -238,6 +238,97 @@ def _seasonal_sens_slope_scalar(
     return slope, intercept
 
 
+def _grouped_time_index(n_steps: int, n_groups: int) -> np.ndarray:
+    """Return the flattened grouped time coordinate used by grouped MK variants."""
+    return np.arange(n_steps * n_groups, dtype=np.float64) / float(n_groups)
+
+
+def _multivariate_score_variance_scalar(
+    matrix_2d: np.ndarray,
+) -> Tuple[float, float, float]:
+    """Return multivariate S, variance, and tau denominator for one matrix."""
+    matrix = np.asarray(matrix_2d, dtype=np.float64)
+    if matrix.ndim == 1:
+        matrix = matrix.reshape(-1, 1)
+    if matrix.ndim != 2:
+        raise ValueError("Expected a 1D or 2D array for multivariate statistics.")
+
+    s_value = 0.0
+    var_s = 0.0
+    denom = 0.0
+
+    for group in range(matrix.shape[1]):
+        group_values = matrix[:, group]
+        finite = group_values[np.isfinite(group_values)]
+        n = finite.size
+        if n == 0:
+            continue
+
+        group_s, group_var = _score_variance_batch(
+            finite.reshape(-1, 1), modified=False
+        )
+        s_value += float(group_s[0])
+        var_s += float(group_var[0])
+        denom += 0.5 * n * (n - 1)
+
+    return s_value, var_s, denom
+
+
+def _multivariate_score_variance_batch(
+    data_3d: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, float]:
+    """Return multivariate S and variance for a clean grouped batch."""
+    data = np.asarray(data_3d, dtype=np.float64)
+    if data.ndim != 3:
+        raise ValueError("Expected a 3D array with shape (time, group, series).")
+
+    s_values = np.zeros(data.shape[2], dtype=np.float64)
+    var_values = np.zeros(data.shape[2], dtype=np.float64)
+    denom = 0.0
+
+    for group in range(data.shape[1]):
+        group_s, group_var = _score_variance_batch(data[:, group, :], modified=False)
+        s_values += group_s
+        var_values += group_var
+        n = data[:, group, :].shape[0]
+        denom += 0.5 * n * (n - 1)
+
+    return s_values, var_values, denom
+
+
+def _multivariate_sens_slope_scalar(matrix_2d: np.ndarray) -> Tuple[float, float]:
+    """Return multivariate Sen slope and intercept for one grouped series matrix."""
+    matrix = np.asarray(matrix_2d, dtype=np.float64)
+    if matrix.ndim == 1:
+        matrix = matrix.reshape(-1, 1)
+    if matrix.ndim != 2:
+        raise ValueError("Expected a 1D or 2D array for multivariate slope.")
+
+    slopes = []
+    for group in range(matrix.shape[1]):
+        group_values = matrix[:, group]
+        n = group_values.size
+        for i in range(n - 1):
+            if not np.isfinite(group_values[i]):
+                continue
+            for j in range(i + 1, n):
+                if not np.isfinite(group_values[j]):
+                    continue
+                slopes.append((group_values[j] - group_values[i]) / (j - i))
+
+    if slopes:
+        slope = float(np.nanmedian(np.asarray(slopes, dtype=np.float64)))
+    else:
+        slope = np.nan
+
+    flattened = matrix.reshape(-1)
+    finite_index = np.arange(flattened.size, dtype=np.float64)[np.isfinite(flattened)]
+    intercept = float(
+        np.nanmedian(flattened) - np.median(finite_index) / matrix.shape[1] * slope
+    )
+    return slope, intercept
+
+
 def _correlated_multivariate_stats_scalar(
     matrix_2d: np.ndarray,
 ) -> Tuple[float, float, float]:
