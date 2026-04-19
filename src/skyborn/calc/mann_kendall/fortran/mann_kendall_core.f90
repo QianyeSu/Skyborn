@@ -19,7 +19,9 @@ module mann_kendall_core_mod
     public :: real64
     public :: compute_base_variance
     public :: compute_modified_variance
+    public :: compute_modified_variance_with_slope_lag
     public :: compute_modified_variance_with_slope
+    public :: compute_hamed_rao_variance_with_slope_lag
     public :: compute_s_value
     public :: compute_grouped_slope_count
     public :: compute_correlated_grouped_stats
@@ -160,6 +162,117 @@ contains
         call quicksort_real(values, 1, size(values))
         call insertion_sort_real(values, 1, size(values))
     end subroutine sort_real_inplace
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    SORT A SMALL INDEX WINDOW SO THAT `VALUES(INDICES(:))` IS IN
+    !    ASCENDING ORDER.
+    !
+    ! INPUTS
+    !    VALUES(:)   - REFERENCE VALUES USED FOR COMPARISONS
+    !    LEFT, RIGHT - 1-BASED INCLUSIVE BOUNDS OF THE ACTIVE WINDOW
+    !
+    ! INPUT / OUTPUT
+    !    INDICES(:) - INDEX BUFFER TO SORT IN PLACE
+    subroutine insertion_sort_index(values, indices, left, right)
+        real(real64), intent(in) :: values(:)
+        integer, intent(inout) :: indices(:)
+        integer, intent(in) :: left, right
+
+        integer :: current_index, i, j
+        real(real64) :: current_value
+
+        do i = left + 1, right
+            current_index = indices(i)
+            current_value = values(current_index)
+            j = i - 1
+            do while (j >= left .and. values(indices(j)) > current_value)
+                indices(j + 1) = indices(j)
+                j = j - 1
+            end do
+            indices(j + 1) = current_index
+        end do
+    end subroutine insertion_sort_index
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    RECURSIVELY PARTITION AND SORT AN INDEX BUFFER SO THAT
+    !    `VALUES(INDICES(:))` IS ASCENDING OVER THE ACTIVE WINDOW.
+    !
+    ! INPUTS
+    !    VALUES(:)   - REFERENCE VALUES USED FOR COMPARISONS
+    !    LEFT, RIGHT - 1-BASED INCLUSIVE BOUNDS OF THE ACTIVE WINDOW
+    !
+    ! INPUT / OUTPUT
+    !    INDICES(:) - INDEX BUFFER TO SORT IN PLACE
+    recursive subroutine quicksort_index(values, indices, left, right)
+        real(real64), intent(in) :: values(:)
+        integer, intent(inout) :: indices(:)
+        integer, intent(in) :: left, right
+
+        integer, parameter :: insertion_threshold = 16
+        integer :: i, j, temp_index
+        real(real64) :: pivot
+
+        if (right - left <= insertion_threshold) return
+
+        i = left
+        j = right
+        pivot = values(indices(left + (right - left) / 2))
+
+        do
+            do while (values(indices(i)) < pivot)
+                i = i + 1
+            end do
+
+            do while (values(indices(j)) > pivot)
+                j = j - 1
+            end do
+
+            if (i <= j) then
+                temp_index = indices(i)
+                indices(i) = indices(j)
+                indices(j) = temp_index
+                i = i + 1
+                j = j - 1
+            end if
+
+            if (i > j) exit
+        end do
+
+        if (left < j) call quicksort_index(values, indices, left, j)
+        if (i < right) call quicksort_index(values, indices, i, right)
+    end subroutine quicksort_index
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    SORT THE FIRST `N` POSITIONS OF `INDICES` SO THAT
+    !    `VALUES(INDICES(1:N))` IS ASCENDING.
+    !
+    ! INPUTS
+    !    VALUES(:) - REFERENCE VALUES USED FOR COMPARISONS
+    !    N         - ACTIVE LENGTH
+    !
+    ! INPUT / OUTPUT
+    !    INDICES(:) - INDEX BUFFER FILLED WITH 1..N AND SORTED IN PLACE
+    subroutine sort_indices_by_values(values, n, indices)
+        real(real64), intent(in) :: values(:)
+        integer, intent(in) :: n
+        integer, intent(inout) :: indices(:)
+
+        integer :: i
+
+        do i = 1, n
+            indices(i) = i
+        end do
+
+        if (n <= 1) return
+        call quicksort_index(values, indices, 1, n)
+        call insertion_sort_index(values, indices, 1, n)
+    end subroutine sort_indices_by_values
 
 
     ! QUICK REFERENCE
@@ -525,6 +638,52 @@ contains
             slope = slope_work(mid_index + 1)
         end if
     end subroutine compute_grouped_sen_slope_with_inv_lag
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    COMPUTE AVERAGE RANKS MATCHING `scipy.stats.rankdata(...,
+    !    method="average")` FOR ONE REAL VECTOR.
+    !
+    ! INPUTS
+    !    VALUES(:) - INPUT VECTOR OF LENGTH N
+    !    N         - ACTIVE LENGTH
+    !
+    ! INPUT / OUTPUT
+    !    INDEX_WORK(:) - INTEGER WORK BUFFER OF LENGTH AT LEAST N
+    !    RANK_WORK(:)  - REAL WORK BUFFER OF LENGTH AT LEAST N
+    !
+    ! OUTPUT
+    !    RANK_WORK(:N) - AVERAGE 1-BASED RANKS IN ORIGINAL ORDER
+    subroutine compute_average_ranks(values, n, index_work, rank_work)
+        real(real64), intent(in) :: values(:)
+        integer, intent(in) :: n
+        integer, intent(inout) :: index_work(:)
+        real(real64), intent(inout) :: rank_work(:)
+
+        real(real64) :: avg_rank
+        integer :: i, run_end, run_start
+
+        if (n <= 0) return
+
+        call sort_indices_by_values(values, n, index_work)
+
+        run_start = 1
+        do while (run_start <= n)
+            run_end = run_start
+            do while (run_end < n)
+                if (values(index_work(run_end + 1)) /= values(index_work(run_start))) exit
+                run_end = run_end + 1
+            end do
+
+            avg_rank = 0.5_real64 * real(run_start + run_end, real64)
+            do i = run_start, run_end
+                rank_work(index_work(i)) = avg_rank
+            end do
+
+            run_start = run_end + 1
+        end do
+    end subroutine compute_average_ranks
 
 
     ! QUICK REFERENCE
@@ -1013,13 +1172,14 @@ contains
     ! OUTPUT
     !    VAR_S - MODIFIED VARIANCE; NaN WHEN THE DETRENDED SERIES HAS
     !            ZERO VARIANCE AND THE AUTOCORRELATION TERM IS UNDEFINED
-    subroutine compute_modified_variance_with_slope( &
-        y, sorted_work, centered_work, detrended_work, slope, var_s &
+    subroutine compute_modified_variance_with_slope_lag( &
+        y, sorted_work, centered_work, detrended_work, slope, max_lag, var_s &
     )
         real(real64), intent(in) :: y(:)
         real(real64), intent(inout) :: sorted_work(:)
         real(real64), intent(inout) :: centered_work(:), detrended_work(:)
         real(real64), intent(in) :: slope
+        integer, intent(in) :: max_lag
         real(real64), intent(out) :: var_s
 
         integer :: i, lag, n
@@ -1034,6 +1194,11 @@ contains
         call sort_real_inplace(sorted_work(:n))
         call compute_base_variance_from_sorted(sorted_work, n, base_var)
 
+        if (max_lag <= 0) then
+            var_s = base_var
+            return
+        end if
+
         mean_value = sum(detrended_work(:n)) / real(n, real64)
         centered_work(:n) = detrended_work(:n) - mean_value
         denom = sum(centered_work(:n) * centered_work(:n))
@@ -1044,7 +1209,7 @@ contains
         end if
 
         n_star = 1.0_real64
-        do lag = 1, n - 1
+        do lag = 1, max_lag
             numer = sum(centered_work(1:n - lag) * centered_work(1 + lag:n))
             n_star = n_star + 2.0_real64 * &
                 (1.0_real64 - real(lag, real64) / real(n, real64)) * &
@@ -1052,6 +1217,26 @@ contains
         end do
 
         var_s = base_var * n_star
+    end subroutine compute_modified_variance_with_slope_lag
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    COMPUTE THE YUE-WANG MODIFIED VARIANCE AFTER DETRENDING BY A
+    !    CALLER-SUPPLIED SEN SLOPE USING ALL AVAILABLE AUTOCORRELATION
+    !    LAGS.
+    subroutine compute_modified_variance_with_slope( &
+        y, sorted_work, centered_work, detrended_work, slope, var_s &
+    )
+        real(real64), intent(in) :: y(:)
+        real(real64), intent(inout) :: sorted_work(:)
+        real(real64), intent(inout) :: centered_work(:), detrended_work(:)
+        real(real64), intent(in) :: slope
+        real(real64), intent(out) :: var_s
+
+        call compute_modified_variance_with_slope_lag( &
+            y, sorted_work, centered_work, detrended_work, slope, size(y) - 1, var_s &
+        )
     end subroutine compute_modified_variance_with_slope
 
 
@@ -1085,6 +1270,78 @@ contains
             y, sorted_work, centered_work, detrended_work, slope, var_s &
         )
     end subroutine compute_modified_variance
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    COMPUTE THE HAMED-RAO MODIFIED VARIANCE AFTER DETRENDING BY A
+    !    CALLER-SUPPLIED SEN SLOPE AND RANKING THE DETRENDED SERIES.
+    !
+    ! INPUTS
+    !    Y(:)        - INPUT SERIES WITH NO NaN VALUES
+    !    SLOPE       - PRECOMPUTED SEN SLOPE USED FOR DETRENDING
+    !    INTERVAL    - SIGNIFICANCE BOUND USED TO SCREEN AUTOCORRELATION
+    !    MAX_LAG     - NUMBER OF AUTOCORRELATION LAGS TO INCLUDE
+    !
+    ! INPUT / OUTPUT
+    !    SORTED_WORK(:)   - REAL WORK BUFFER OF LENGTH AT LEAST SIZE(Y)
+    !    INDEX_WORK(:)    - INTEGER WORK BUFFER OF LENGTH AT LEAST SIZE(Y)
+    !    RANK_WORK(:)     - REAL WORK BUFFER OF LENGTH AT LEAST SIZE(Y)
+    !    CENTERED_WORK(:) - REAL WORK BUFFER OF LENGTH AT LEAST SIZE(Y)
+    !
+    ! OUTPUT
+    !    VAR_S - HAMED-RAO MODIFIED VARIANCE; NaN WHEN THE RANKED
+    !            DETRENDED SERIES HAS ZERO VARIANCE AND THE
+    !            AUTOCORRELATION TERM IS UNDEFINED
+    subroutine compute_hamed_rao_variance_with_slope_lag( &
+        y, sorted_work, index_work, rank_work, centered_work, slope, interval, max_lag, var_s &
+    )
+        real(real64), intent(in) :: y(:)
+        real(real64), intent(inout) :: sorted_work(:), rank_work(:), centered_work(:)
+        integer, intent(inout) :: index_work(:)
+        real(real64), intent(in) :: slope, interval
+        integer, intent(in) :: max_lag
+        real(real64), intent(out) :: var_s
+
+        integer :: i, lag, n
+        real(real64) :: acf, base_var, denom, n_ns, numer, sni, weight
+        real(real64) :: mean_rank
+
+        n = size(y)
+        call compute_base_variance(y, sorted_work, base_var)
+
+        if (n < 3 .or. max_lag <= 0) then
+            var_s = base_var
+            return
+        end if
+
+        do i = 1, n
+            centered_work(i) = y(i) - real(i, real64) * slope
+        end do
+
+        call compute_average_ranks(centered_work, n, index_work, rank_work)
+        mean_rank = 0.5_real64 * real(n + 1, real64)
+        centered_work(:n) = rank_work(:n) - mean_rank
+        denom = sum(centered_work(:n) * centered_work(:n))
+
+        if (denom == 0.0_real64) then
+            var_s = ieee_value(0.0_real64, ieee_quiet_nan)
+            return
+        end if
+
+        sni = 0.0_real64
+        do lag = 1, max_lag
+            numer = sum(centered_work(1:n - lag) * centered_work(1 + lag:n))
+            acf = numer / denom
+            if (acf < -interval .or. acf > interval) then
+                weight = real((n - lag) * (n - lag - 1) * (n - lag - 2), real64)
+                sni = sni + weight * acf
+            end if
+        end do
+
+        n_ns = 1.0_real64 + 2.0_real64 * sni / real(n * (n - 1) * (n - 2), real64)
+        var_s = base_var * n_ns
+    end subroutine compute_hamed_rao_variance_with_slope_lag
 
 end module mann_kendall_core_mod
 
@@ -1374,3 +1631,100 @@ subroutine mk_score_var_sen_batch( &
         end if
     end do
 end subroutine mk_score_var_sen_batch
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    BATCH ENTRY POINT FOR LAG-LIMITED YUE-WANG MANN-KENDALL
+!    STATISTICS AND EXACT SEN SLOPES.
+!
+! EXPECTED INPUT SHAPES
+!    DATA(NTIME, NSERIES) - EACH COLUMN IS ONE CLEAN TIME SERIES
+!
+! INPUTS
+!    LAG - NUMBER OF AUTOCORRELATION LAGS TO INCLUDE
+!
+! OUTPUT
+!    S_VALUES(NSERIES)   - ONE S STATISTIC PER COLUMN
+!    VAR_VALUES(NSERIES) - ONE YUE-WANG MODIFIED VARIANCE PER COLUMN
+!    SLOPES(NSERIES)     - ONE EXACT SEN SLOPE PER COLUMN
+subroutine mk_yue_wang_score_var_sen_batch( &
+    data, s_values, var_values, slopes, lag, ntime, nseries &
+)
+    use mann_kendall_core_mod, only : &
+        compute_modified_variance_with_slope_lag, &
+        compute_s_value_and_sen_slope_with_inv_lag, real64
+    implicit none
+
+    integer, intent(in) :: lag, ntime, nseries
+    real(real64), intent(in) :: data(ntime, nseries)
+    real(real64), intent(out) :: s_values(nseries), var_values(nseries), slopes(nseries)
+
+    real(real64) :: inv_lag(max(1, ntime - 1))
+    real(real64) :: centered_work(ntime), detrended_work(ntime), sorted_work(ntime)
+    real(real64) :: slope_work(max(1, ntime * (ntime - 1) / 2))
+    integer :: col, lag_index
+
+    do lag_index = 1, ntime - 1
+        inv_lag(lag_index) = 1.0_real64 / real(lag_index, real64)
+    end do
+
+    do col = 1, nseries
+        call compute_s_value_and_sen_slope_with_inv_lag( &
+            data(:, col), inv_lag, s_values(col), slopes(col), slope_work &
+        )
+        call compute_modified_variance_with_slope_lag( &
+            data(:, col), sorted_work, centered_work, detrended_work, slopes(col), lag, var_values(col) &
+        )
+    end do
+end subroutine mk_yue_wang_score_var_sen_batch
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    BATCH ENTRY POINT FOR HAMED-RAO MANN-KENDALL STATISTICS AND
+!    EXACT SEN SLOPES.
+!
+! EXPECTED INPUT SHAPES
+!    DATA(NTIME, NSERIES) - EACH COLUMN IS ONE CLEAN TIME SERIES
+!
+! INPUTS
+!    INTERVAL - AUTOCORRELATION SIGNIFICANCE BOUND
+!    LAG      - NUMBER OF AUTOCORRELATION LAGS TO INCLUDE
+!
+! OUTPUT
+!    S_VALUES(NSERIES)   - ONE S STATISTIC PER COLUMN
+!    VAR_VALUES(NSERIES) - ONE HAMED-RAO MODIFIED VARIANCE PER COLUMN
+!    SLOPES(NSERIES)     - ONE EXACT SEN SLOPE PER COLUMN
+subroutine mk_hamed_rao_score_var_sen_batch( &
+    data, s_values, var_values, slopes, interval, lag, ntime, nseries &
+)
+    use mann_kendall_core_mod, only : &
+        compute_hamed_rao_variance_with_slope_lag, &
+        compute_s_value_and_sen_slope_with_inv_lag, real64
+    implicit none
+
+    integer, intent(in) :: lag, ntime, nseries
+    real(real64), intent(in) :: data(ntime, nseries)
+    real(real64), intent(in) :: interval
+    real(real64), intent(out) :: s_values(nseries), var_values(nseries), slopes(nseries)
+
+    real(real64) :: inv_lag(max(1, ntime - 1))
+    real(real64) :: centered_work(ntime), rank_work(ntime), sorted_work(ntime)
+    real(real64) :: slope_work(max(1, ntime * (ntime - 1) / 2))
+    integer :: col, index_work(ntime), lag_index
+
+    do lag_index = 1, ntime - 1
+        inv_lag(lag_index) = 1.0_real64 / real(lag_index, real64)
+    end do
+
+    do col = 1, nseries
+        call compute_s_value_and_sen_slope_with_inv_lag( &
+            data(:, col), inv_lag, s_values(col), slopes(col), slope_work &
+        )
+        call compute_hamed_rao_variance_with_slope_lag( &
+            data(:, col), sorted_work, index_work, rank_work, centered_work, &
+            slopes(col), interval, lag, var_values(col) &
+        )
+    end do
+end subroutine mk_hamed_rao_score_var_sen_batch
