@@ -21,8 +21,11 @@ module mann_kendall_core_mod
     public :: compute_modified_variance
     public :: compute_modified_variance_with_slope
     public :: compute_s_value
+    public :: compute_grouped_slope_count
+    public :: compute_correlated_grouped_stats
     public :: compute_s_value_and_sen_slope
     public :: compute_sen_slope
+    public :: compute_grouped_sen_slope_with_inv_lag
     public :: compute_s_value_and_sen_slope_with_inv_lag
     public :: compute_sen_slope_with_inv_lag
 
@@ -333,6 +336,34 @@ contains
 
     ! QUICK REFERENCE
     ! PURPOSE
+    !    RETURN THE TOTAL NUMBER OF WITHIN-GROUP PAIRWISE SLOPES WHEN
+    !    A CLEAN FLAT SERIES IS SPLIT INTO `PERIOD` INTERLEAVED GROUPS.
+    !
+    ! INPUTS
+    !    N      - TOTAL FLAT SERIES LENGTH
+    !    PERIOD - NUMBER OF INTERLEAVED GROUPS
+    !
+    ! OUTPUT
+    !    N_SLOPES - TOTAL COUNT OF WITHIN-GROUP PAIRWISE SLOPES
+    pure integer function compute_grouped_slope_count(n, period) result(n_slopes)
+        integer, intent(in) :: n, period
+
+        integer :: group_count, group_index
+
+        n_slopes = 0
+        if (n < 2 .or. period <= 0) return
+
+        do group_index = 1, min(period, n)
+            group_count = 1 + (n - group_index) / period
+            if (group_count > 1) then
+                n_slopes = n_slopes + group_count * (group_count - 1) / 2
+            end if
+        end do
+    end function compute_grouped_slope_count
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
     !    COMPUTE THE EXACT SEN / THEIL-SEN SLOPE MEDIAN FOR ONE CLEAN
     !    TIME SERIES.
     !
@@ -425,6 +456,227 @@ contains
             slope = slope_work(mid_index + 1)
         end if
     end subroutine compute_sen_slope_with_inv_lag
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    COMPUTE THE EXACT GROUPED SEN / THEIL-SEN SLOPE FOR A CLEAN
+    !    FLAT SERIES REPRESENTING `PERIOD` INTERLEAVED GROUPS.
+    !
+    ! INPUTS
+    !    Y(:)        - CLEAN FLAT INPUT SERIES
+    !    PERIOD      - NUMBER OF INTERLEAVED GROUPS
+    !    INV_LAG(:)  - PRECOMPUTED 1 / LAG VALUES FOR GROUP-INTERNAL
+    !                  CYCLE LAGS
+    !
+    ! INPUT / OUTPUT
+    !    SLOPE_WORK(:) - CALLER-SUPPLIED BUFFER WITH LENGTH AT LEAST
+    !                    `compute_grouped_slope_count(size(y), period)`
+    !
+    ! OUTPUT
+    !    SLOPE - EXACT GROUPED MEDIAN SLOPE; NaN WHEN FEWER THAN TWO
+    !            WITHIN-GROUP PAIRS EXIST
+    subroutine compute_grouped_sen_slope_with_inv_lag(y, period, inv_lag, slope, slope_work)
+        real(real64), intent(in) :: y(:), inv_lag(:)
+        integer, intent(in) :: period
+        real(real64), intent(out) :: slope
+        real(real64), intent(inout) :: slope_work(:)
+
+        integer :: group_count, group_index, i, lag, mid_index, n, nslopes, slope_index
+        real(real64) :: factor, lower_median, upper_median
+
+        n = size(y)
+        if (n < 2 .or. period <= 0) then
+            slope = ieee_value(0.0_real64, ieee_quiet_nan)
+            return
+        end if
+
+        nslopes = compute_grouped_slope_count(n, period)
+        if (nslopes <= 0) then
+            slope = ieee_value(0.0_real64, ieee_quiet_nan)
+            return
+        end if
+
+        slope_index = 0
+        do group_index = 1, min(period, n)
+            group_count = 1 + (n - group_index) / period
+            do lag = 1, group_count - 1
+                factor = inv_lag(lag)
+                do i = 1, group_count - lag
+                    slope_index = slope_index + 1
+                    slope_work(slope_index) = ( &
+                        y(group_index + (i - 1 + lag) * period) - &
+                        y(group_index + (i - 1) * period) &
+                    ) * factor
+                end do
+            end do
+        end do
+
+        mid_index = nslopes / 2
+        if (mod(nslopes, 2) == 0) then
+            call select_kth_real(slope_work(:nslopes), mid_index + 1)
+            upper_median = slope_work(mid_index + 1)
+            lower_median = maxval(slope_work(:mid_index))
+            slope = 0.5_real64 * (lower_median + upper_median)
+        else
+            call select_kth_real(slope_work(:nslopes), mid_index + 1)
+            slope = slope_work(mid_index + 1)
+        end if
+    end subroutine compute_grouped_sen_slope_with_inv_lag
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    COMPUTE AVERAGE RANKS FOR ONE GROUP USING THE SAME R DEFINITION
+    !    AS `pymannkendall`'s INTERNAL CORRELATED MULTIVARIATE HELPERS.
+    !
+    ! INPUTS
+    !    VALUES(:) - GROUP SERIES OF LENGTH N
+    !    N         - ACTIVE LENGTH
+    !
+    ! OUTPUT
+    !    RANKS(:)  - AVERAGE RANKS OVER THE ACTIVE WINDOW 1:N
+    subroutine compute_rank_vector(values, n, ranks)
+        real(real64), intent(in) :: values(:)
+        integer, intent(in) :: n
+        real(real64), intent(out) :: ranks(:)
+
+        integer :: i, j, s
+
+        if (n <= 0) return
+
+        do j = 1, n
+            s = 0
+            do i = 1, n
+                if (values(j) > values(i)) then
+                    s = s + 1
+                else if (values(j) < values(i)) then
+                    s = s - 1
+                end if
+            end do
+            ranks(j) = 0.5_real64 * real(n + 1 + s, real64)
+        end do
+    end subroutine compute_rank_vector
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    COMPUTE THE K STATISTIC USED BY THE CORRELATED MULTIVARIATE
+    !    MANN-KENDALL VARIANCE FORMULA.
+    !
+    ! INPUTS
+    !    LEFT(:), RIGHT(:) - GROUP SERIES OF COMMON LENGTH N
+    !    N                 - ACTIVE LENGTH
+    !
+    ! OUTPUT
+    !    K_VALUE - PAIRWISE SIGN-OF-PRODUCT SUM
+    subroutine compute_k_stat(left, right, n, k_value)
+        real(real64), intent(in) :: left(:), right(:)
+        integer, intent(in) :: n
+        real(real64), intent(out) :: k_value
+
+        integer :: i, j
+        real(real64) :: product
+
+        k_value = 0.0_real64
+        if (n <= 1) return
+
+        do i = 1, n - 1
+            do j = i + 1, n
+                product = (left(j) - left(i)) * (right(j) - right(i))
+                if (product > 0.0_real64) then
+                    k_value = k_value + 1.0_real64
+                else if (product < 0.0_real64) then
+                    k_value = k_value - 1.0_real64
+                end if
+            end do
+        end do
+    end subroutine compute_k_stat
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    COMPUTE THE CORRELATED GROUPED MANN-KENDALL S STATISTIC,
+    !    VARIANCE, AND TAU DENOMINATOR FOR ONE CLEAN FLAT INTERLEAVED
+    !    SERIES WITH A FIXED GROUP COUNT.
+    !
+    ! INPUTS
+    !    Y(:)     - CLEAN FLAT INPUT SERIES
+    !    PERIOD   - NUMBER OF INTERLEAVED GROUPS
+    !
+    ! INPUT / OUTPUT
+    !    GROUP_WORK(:,:) - WORK BUFFER OF SHAPE AT LEAST
+    !                      (SIZE(Y) / PERIOD, PERIOD)
+    !    RANK_WORK(:,:)  - WORK BUFFER OF SAME SHAPE AS GROUP_WORK
+    !
+    ! OUTPUT
+    !    S_VALUE - SUM OF GROUP-WISE MANN-KENDALL SCORES
+    !    VAR_S   - CORRELATED MULTIVARIATE VARIANCE
+    !    DENOM   - TAU NORMALIZATION DENOMINATOR
+    subroutine compute_correlated_grouped_stats(y, period, s_value, var_s, denom, group_work, rank_work)
+        real(real64), intent(in) :: y(:)
+        integer, intent(in) :: period
+        real(real64), intent(out) :: s_value, var_s, denom
+        real(real64), intent(inout) :: group_work(:,:), rank_work(:,:)
+
+        integer :: cycle_index, group_i, group_j, n, ncycles
+        real(real64) :: gamma_value, k_value, rank_sum
+        real(real64) :: n_real
+
+        n = size(y)
+        if (period <= 0) then
+            s_value = 0.0_real64
+            var_s = 0.0_real64
+            denom = 0.0_real64
+            return
+        end if
+
+        ncycles = n / period
+        if (ncycles <= 0) then
+            s_value = 0.0_real64
+            var_s = 0.0_real64
+            denom = 0.0_real64
+            return
+        end if
+
+        do group_i = 1, period
+            do cycle_index = 1, ncycles
+                group_work(cycle_index, group_i) = y(group_i + (cycle_index - 1) * period)
+            end do
+        end do
+
+        s_value = 0.0_real64
+        denom = 0.0_real64
+        if (ncycles > 1) then
+            do group_i = 1, period
+                call compute_s_value(group_work(:ncycles, group_i), gamma_value)
+                s_value = s_value + gamma_value
+                denom = denom + 0.5_real64 * real(ncycles * (ncycles - 1), real64)
+                call compute_rank_vector(group_work(:ncycles, group_i), ncycles, rank_work(:ncycles, group_i))
+            end do
+        else
+            do group_i = 1, period
+                call compute_rank_vector(group_work(:ncycles, group_i), ncycles, rank_work(:ncycles, group_i))
+            end do
+        end if
+
+        var_s = 0.0_real64
+        n_real = real(ncycles, real64)
+
+        do group_i = 1, period
+            call compute_k_stat(group_work(:ncycles, group_i), group_work(:ncycles, group_i), ncycles, k_value)
+            rank_sum = sum(rank_work(:ncycles, group_i) * rank_work(:ncycles, group_i))
+            gamma_value = (k_value + 4.0_real64 * rank_sum - n_real * (n_real + 1.0_real64) ** 2) / 3.0_real64
+            var_s = var_s + gamma_value
+
+            do group_j = 1, group_i - 1
+                call compute_k_stat(group_work(:ncycles, group_i), group_work(:ncycles, group_j), ncycles, k_value)
+                rank_sum = sum(rank_work(:ncycles, group_i) * rank_work(:ncycles, group_j))
+                gamma_value = (k_value + 4.0_real64 * rank_sum - n_real * (n_real + 1.0_real64) ** 2) / 3.0_real64
+                var_s = var_s + 2.0_real64 * gamma_value
+            end do
+        end do
+    end subroutine compute_correlated_grouped_stats
 
 
     ! QUICK REFERENCE
@@ -699,6 +951,89 @@ subroutine sen_slope_batch(data, slopes, ntime, nseries)
         call compute_sen_slope_with_inv_lag(data(:, col), inv_lag, slopes(col), slope_work)
     end do
 end subroutine sen_slope_batch
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    BATCH ENTRY POINT FOR THE EXACT GROUPED SEN / THEIL-SEN SLOPE USED
+!    BY SEASONAL AND OTHER INTERLEAVED GROUPED MANN-KENDALL FAMILIES.
+!
+! EXPECTED INPUT SHAPES
+!    DATA(NTIME, NSERIES) - EACH COLUMN IS ONE CLEAN FLAT SERIES
+!
+! INPUTS
+!    PERIOD - NUMBER OF INTERLEAVED GROUPS WITHIN EACH COLUMN
+!
+! OUTPUT
+!    SLOPES(NSERIES) - ONE EXACT GROUPED SEN SLOPE PER COLUMN
+subroutine grouped_sen_slope_batch(data, slopes, period, ntime, nseries)
+    use mann_kendall_core_mod, only : compute_grouped_sen_slope_with_inv_lag, &
+        compute_grouped_slope_count, real64
+    implicit none
+
+    integer, intent(in) :: ntime, nseries, period
+    real(real64), intent(in) :: data(ntime, nseries)
+    real(real64), intent(out) :: slopes(nseries)
+
+    integer :: col, lag, max_group_size
+    real(real64), allocatable :: inv_lag(:), slope_work(:)
+
+    max_group_size = 1 + max(0, ntime - 1) / max(1, period)
+    allocate(inv_lag(max(1, max_group_size - 1)))
+    if (max_group_size > 1) then
+        do lag = 1, max_group_size - 1
+            inv_lag(lag) = 1.0_real64 / real(lag, real64)
+        end do
+    end if
+
+    allocate(slope_work(max(1, compute_grouped_slope_count(ntime, period))))
+
+    do col = 1, nseries
+        call compute_grouped_sen_slope_with_inv_lag( &
+            data(:, col), period, inv_lag, slopes(col), slope_work &
+        )
+    end do
+end subroutine grouped_sen_slope_batch
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    BATCH ENTRY POINT FOR CORRELATED GROUPED MANN-KENDALL STATISTICS.
+!
+! EXPECTED INPUT SHAPES
+!    DATA(NTIME, NSERIES) - EACH COLUMN IS ONE CLEAN FLAT INTERLEAVED SERIES
+!
+! INPUTS
+!    PERIOD - NUMBER OF INTERLEAVED GROUPS WITHIN EACH COLUMN
+!
+! OUTPUT
+!    S_VALUES(NSERIES)   - ONE CORRELATED GROUPED S VALUE PER COLUMN
+!    VAR_VALUES(NSERIES) - ONE CORRELATED GROUPED VARIANCE PER COLUMN
+!    DENOM               - COMMON TAU DENOMINATOR FOR THE CLEAN BATCH
+subroutine grouped_correlated_stats_batch(data, s_values, var_values, denom, period, ntime, nseries)
+    use mann_kendall_core_mod, only : compute_correlated_grouped_stats, real64
+    implicit none
+
+    integer, intent(in) :: ntime, nseries, period
+    real(real64), intent(in) :: data(ntime, nseries)
+    real(real64), intent(out) :: s_values(nseries), var_values(nseries), denom
+
+    integer :: col, ncycles
+    real(real64), allocatable :: group_work(:,:), rank_work(:,:)
+    real(real64) :: denom_value
+
+    ncycles = ntime / max(1, period)
+    allocate(group_work(max(1, ncycles), max(1, period)))
+    allocate(rank_work(max(1, ncycles), max(1, period)))
+
+    denom = 0.0_real64
+    do col = 1, nseries
+        call compute_correlated_grouped_stats( &
+            data(:, col), period, s_values(col), var_values(col), denom_value, group_work, rank_work &
+        )
+        if (col == 1) denom = denom_value
+    end do
+end subroutine grouped_correlated_stats_batch
 
 
 ! QUICK REFERENCE
