@@ -120,11 +120,13 @@ def _load_core_module():
 
 
 _core_module = _load_core_module()
-_score_variance_kernel = getattr(_core_module, "mk_score_var_batch_clean", None)
-_score_variance_slope_kernel = getattr(
-    _core_module, "mk_score_var_sen_batch_clean", None
+_score_variance_kernel = getattr(_core_module, "mk_score_var_batch", None)
+_score_variance_slope_kernel = getattr(_core_module, "mk_score_var_sen_batch", None)
+_sen_slope_kernel = getattr(_core_module, "sen_slope_batch", None)
+_pre_whitening_kernel = getattr(_core_module, "pw_batch_clean", None)
+_pre_whitening_score_variance_kernel = getattr(
+    _core_module, "pw_score_var_batch_clean", None
 )
-_sen_slope_kernel = getattr(_core_module, "sen_slope_batch_clean", None)
 
 
 def _kernels_ready() -> bool:
@@ -140,7 +142,7 @@ def _as_core_input_2d(data_2d: np.ndarray) -> np.ndarray:
     """Convert 2D data to the float64 Fortran layout expected by the core."""
     array = np.asarray(data_2d, dtype=np.float64)
     if array.ndim != 2:
-        raise ValueError("Expected a 2D array for Mann-Kendall clean-series kernels.")
+        raise ValueError("Expected a 2D array for Mann-Kendall core kernels.")
     if array.flags.f_contiguous:
         return array
     return np.asfortranarray(array)
@@ -163,7 +165,7 @@ def _variance_without_ties(sample_size: int) -> float:
 
 
 def _lag1_autocorrelation_batch(data_2d: np.ndarray) -> np.ndarray:
-    """Compute lag-1 autocorrelation for each clean series column."""
+    """Compute lag-1 autocorrelation for each dense series column."""
     centered = np.asarray(data_2d, dtype=np.float64) - np.mean(data_2d, axis=0)
     acov0 = np.sum(centered * centered, axis=0)
     acov1 = np.sum(centered[:-1] * centered[1:], axis=0)
@@ -172,7 +174,13 @@ def _lag1_autocorrelation_batch(data_2d: np.ndarray) -> np.ndarray:
 
 
 def _pre_whiten_batch(data_2d: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Pre-whiten clean 2D series and flag degenerate zero-variance columns."""
+    """Pre-whiten dense 2D series and flag degenerate zero-variance columns."""
+    if _pre_whitening_kernel is not None:
+        whitened, degenerate = _pre_whitening_kernel(_as_core_input_2d(data_2d))
+        return np.asarray(whitened, dtype=np.float64), np.asarray(
+            degenerate, dtype=bool
+        )
+
     acf1 = _lag1_autocorrelation_batch(data_2d)
     whitened = (
         np.asarray(data_2d[1:], dtype=np.float64)
@@ -183,18 +191,44 @@ def _pre_whiten_batch(data_2d: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def _pre_whiten_series(data_1d: np.ndarray) -> Tuple[np.ndarray, bool]:
-    """Pre-whiten one clean finite series and flag degenerate zero-variance input."""
+    """Pre-whiten one finite series and flag degenerate zero-variance input."""
     whitened, degenerate = _pre_whiten_batch(
         np.asarray(data_1d, dtype=np.float64).reshape(-1, 1)
     )
     return whitened[:, 0], bool(degenerate[0])
 
 
+def _pre_whiten_score_variance_batch(
+    data_2d: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Return S and variance of the whitened series without exporting the intermediate."""
+    if _pre_whitening_score_variance_kernel is not None:
+        s_values, var_values = _pre_whitening_score_variance_kernel(
+            _as_core_input_2d(data_2d)
+        )
+        return np.asarray(s_values, dtype=np.float64), np.asarray(
+            var_values, dtype=np.float64
+        )
+
+    whitened, degenerate = _pre_whiten_batch(data_2d)
+    stat_n = whitened.shape[0]
+    s_values = np.zeros(data_2d.shape[1], dtype=np.float64)
+    var_values = np.full(
+        data_2d.shape[1], _variance_without_ties(stat_n), dtype=np.float64
+    )
+    nondegenerate_mask = ~degenerate
+    if np.any(nondegenerate_mask):
+        s_values[nondegenerate_mask], var_values[nondegenerate_mask] = (
+            _score_variance_batch(whitened[:, nondegenerate_mask], modified=False)
+        )
+    return s_values, var_values
+
+
 def _score_variance_batch(
     data_2d: np.ndarray, modified: bool = False
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Run the compiled 2D score/variance kernel."""
-    kernel = _require_kernel(_score_variance_kernel, "mk_score_var_batch_clean")
+    kernel = _require_kernel(_score_variance_kernel, "mk_score_var_batch")
     s_values, var_values = kernel(_as_core_input_2d(data_2d), int(modified))
     return np.asarray(s_values, dtype=np.float64), np.asarray(
         var_values, dtype=np.float64
@@ -203,7 +237,7 @@ def _score_variance_batch(
 
 def _sen_slope_batch(data_2d: np.ndarray) -> np.ndarray:
     """Run the compiled 2D Theil-Sen slope kernel."""
-    kernel = _require_kernel(_sen_slope_kernel, "sen_slope_batch_clean")
+    kernel = _require_kernel(_sen_slope_kernel, "sen_slope_batch")
     slopes = kernel(_as_core_input_2d(data_2d))
     return np.asarray(slopes, dtype=np.float64)
 
@@ -212,9 +246,7 @@ def _score_variance_slope_batch(
     data_2d: np.ndarray, modified: bool = False
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Run the compiled 2D combined score/variance/slope kernel."""
-    kernel = _require_kernel(
-        _score_variance_slope_kernel, "mk_score_var_sen_batch_clean"
-    )
+    kernel = _require_kernel(_score_variance_slope_kernel, "mk_score_var_sen_batch")
     s_values, var_values, slopes = kernel(_as_core_input_2d(data_2d), int(modified))
     return (
         np.asarray(s_values, dtype=np.float64),
@@ -349,14 +381,10 @@ def mann_kendall_test(
         raise ValueError(f"Unknown method: {method}. Use 'theilslopes' or 'linregress'")
 
     if test_name == "pre_whitening":
-        stat_y, degenerate = _pre_whiten_series(y)
-        stat_n = len(stat_y)
-        if degenerate:
-            S = 0
-            var_s = _variance_without_ties(stat_n)
-        else:
-            S = _calculate_mk_score(stat_y)
-            var_s = _calculate_mk_variance(stat_y, stat_n, modified=False)
+        stat_n = n - 1
+        s_values, var_values = _pre_whiten_score_variance_batch(y.reshape(-1, 1))
+        S = int(np.rint(s_values[0]))
+        var_s = float(var_values[0])
     elif method == "theilslopes":
         S_values, var_values, _ = _score_variance_slope_batch(
             y.reshape(-1, 1), modified=modified
@@ -654,21 +682,10 @@ def _vectorized_mk_test(
             else:
                 slopes = _linregress_slope_batch(clean_data_computed, x)
 
-            stat_data, degenerate_mask = _pre_whiten_batch(clean_data_computed)
-            stat_n = stat_data.shape[0]
-            S_values = np.zeros(n_clean_series, dtype=np.float64)
-            var_s_values = np.full(
-                n_clean_series, _variance_without_ties(stat_n), dtype=np.float64
+            stat_n = clean_data_computed.shape[0] - 1
+            S_values, var_s_values = _pre_whiten_score_variance_batch(
+                clean_data_computed
             )
-
-            nondegenerate_mask = ~degenerate_mask
-            if np.any(nondegenerate_mask):
-                (
-                    S_values[nondegenerate_mask],
-                    var_s_values[nondegenerate_mask],
-                ) = _score_variance_batch(
-                    stat_data[:, nondegenerate_mask], modified=False
-                )
         elif method == "theilslopes":
             S_values, var_s_values, slopes = _score_variance_slope_batch(
                 clean_data_computed, modified=modified
