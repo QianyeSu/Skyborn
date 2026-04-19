@@ -1220,8 +1220,8 @@ class TestInterpolationEdgeCases:
         )
         sig_coords = xr.DataArray([0.2, 0.6, 1.0], dims=["sigma"])
         ps = xr.DataArray([[101325.0, 100000.0]], dims=["time", "spatial"])
-        hya = xr.DataArray([0.0, 0.5], dims=["hlev"])
-        hyb = xr.DataArray([1.0, 0.0], dims=["hlev"])
+        hya = xr.DataArray([0.0, 0.5], dims=["hlev"], coords={"hlev": [101, 102]})
+        hyb = xr.DataArray([1.0, 0.0], dims=["hlev"], coords={"hlev": [101, 102]})
 
         captured = {}
 
@@ -1264,6 +1264,7 @@ class TestInterpolationEdgeCases:
         assert captured["shape_args"] == (2,)
         assert captured["shape_kwargs"] == {"nlevi": 3, "ncol": 2}
         assert result.shape == (1, 2, 2)
+        assert_array_equal(result.hlev.values, np.array([101, 102]))
         assert_array_equal(result.values, np.full((1, 2, 2), 77.0))
 
     def test_sigma_to_hybrid_fortran_corder_fast_path(self, monkeypatch):
@@ -1282,8 +1283,8 @@ class TestInterpolationEdgeCases:
             np.array([[101325.0, 100000.0]], dtype=np.float64),
             dims=["time", "spatial"],
         )
-        hya = xr.DataArray([0.0, 0.5], dims=["hlev"])
-        hyb = xr.DataArray([1.0, 0.0], dims=["hlev"])
+        hya = xr.DataArray([0.0, 0.5], dims=["hlev"], coords={"hlev": [101, 102]})
+        hyb = xr.DataArray([1.0, 0.0], dims=["hlev"], coords={"hlev": [101, 102]})
 
         captured = {}
 
@@ -1338,7 +1339,49 @@ class TestInterpolationEdgeCases:
         assert captured["shape_args"] == (1, 2, 2)
         assert captured["shape_kwargs"] == {"nlevi": 3}
         assert result.shape == (1, 2, 2)
+        assert_array_equal(result.hlev.values, np.array([101, 102]))
         assert_array_equal(result.values, np.full((1, 2, 2), 66.0))
+
+    def test_interp_sigma_to_hybrid_python_fallback_preserves_hybrid_level_coords(
+        self, monkeypatch
+    ):
+        """Fallback sigma-to-hybrid should expose stable hybrid-level coords."""
+
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes", None)
+
+        data = xr.DataArray(
+            np.array(
+                [[[250.0, 260.0], [270.0, 280.0], [290.0, 300.0]]],
+                dtype=np.float64,
+            ),
+            dims=["time", "sigma", "spatial"],
+            coords={"time": [0], "sigma": [0.2, 0.6, 1.0], "spatial": [0, 1]},
+        )
+        sig_coords = xr.DataArray([0.2, 0.6, 1.0], dims=["sigma"])
+        ps = xr.DataArray([[100000.0, 50000.0]], dims=["time", "spatial"])
+        hya = xr.DataArray(
+            [0.0, 0.2],
+            dims=["model_level"],
+            coords={"model_level": [101, 102]},
+        )
+        hyb = xr.DataArray(
+            [0.8, 0.0],
+            dims=["model_level"],
+            coords={"model_level": [101, 102]},
+        )
+
+        result = interp_sigma_to_hybrid(
+            data=data,
+            sig_coords=sig_coords,
+            ps=ps,
+            hyam=hya,
+            hybm=hyb,
+            lev_dim="sigma",
+        )
+
+        assert result.dims == ("time", "hlev", "spatial")
+        assert_array_equal(result.hlev.values, np.array([101, 102]))
+        assert np.all(np.isfinite(result.values))
 
     def test_sigma_to_hybrid_fortran_corder_fast_path_accepts_float32(
         self, monkeypatch
@@ -2042,11 +2085,47 @@ class TestInterpolationHelperCoverage:
         assert captured["psfc_shape"] == (2,)
         assert captured["dph_shape"] == (2, 2)
         assert result.dims == ("lev", "lat", "lon")
-        assert_array_equal(result.lev.values, np.array([0, 1]))
+        assert_array_equal(result.lev.values, np.array([1, 2]))
+        assert_array_equal(result.lat.values, np.array([0.0]))
+        assert_array_equal(result.lon.values, np.array([0.0, 90.0]))
         assert_array_equal(result.values, np.array([[[20.0, 21.0]], [[22.0, 23.0]]]))
         assert result.name == "dph"
         assert result.attrs["long_name"] == "pressure layer thickness"
         assert result.attrs["units"] == "Pa"
+
+    def test_delta_pressure_hybrid_xarray_python_path_preserves_level_coords(
+        self, monkeypatch
+    ):
+        """The pure-xarray delta-pressure path should keep the original level coords."""
+
+        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa", None)
+        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa_into", None)
+
+        ps = xr.DataArray(
+            np.array([[100000.0, 90000.0]]),
+            dims=["lat", "lon"],
+            coords={"lat": [0.0], "lon": [0.0, 90.0]},
+        )
+        hya = xr.DataArray(
+            [0.0, 0.2, 0.5],
+            dims=["ilev"],
+            coords={"ilev": [10, 20, 30]},
+        )
+        hyb = xr.DataArray(
+            [1.0, 0.5, 0.0],
+            dims=["ilev"],
+            coords={"ilev": [10, 20, 30]},
+        )
+
+        result = delta_pressure_hybrid(ps, hya, hyb)
+
+        assert result.dims == ("ilev", "lat", "lon")
+        assert result.shape == (2, 1, 2)
+        assert_array_equal(result.ilev.values, np.array([10, 20]))
+        assert_array_equal(
+            result.values,
+            np.array([[[30000.0, 25000.0]], [[20000.0, 15000.0]]]),
+        )
 
     def test_delta_pressure_hybrid_dask_input_skips_fortran_fast_path(
         self, monkeypatch
