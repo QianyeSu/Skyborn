@@ -26,6 +26,7 @@ module mann_kendall_core_mod
     public :: compute_s_value_and_sen_slope
     public :: compute_sen_slope
     public :: compute_grouped_sen_slope_with_inv_lag
+    public :: compute_partial_stats
     public :: compute_s_value_and_sen_slope_with_inv_lag
     public :: compute_sen_slope_with_inv_lag
 
@@ -681,6 +682,91 @@ contains
 
     ! QUICK REFERENCE
     ! PURPOSE
+    !    COMPUTE THE PARTIAL MANN-KENDALL STATISTICS FOR ONE CLEAN
+    !    RESPONSE / COVARIATE PAIR.
+    !
+    ! INPUTS
+    !    X(:) - CLEAN RESPONSE SERIES
+    !    Y(:) - CLEAN COVARIATE SERIES
+    !
+    ! INPUT / OUTPUT
+    !    RANK_X(:), RANK_Y(:) - WORK BUFFERS OF SIZE AT LEAST SIZE(X)
+    !
+    ! OUTPUT
+    !    S_VALUE - PARTIAL MANN-KENDALL S STATISTIC
+    !    VAR_S   - PARTIAL MANN-KENDALL VARIANCE
+    !    TAU     - RESPONSE-SERIES KENDALL TAU NORMALIZATION
+    subroutine compute_partial_stats(x, y, s_value, var_s, tau, rank_x, rank_y)
+        real(real64), intent(in) :: x(:), y(:)
+        real(real64), intent(out) :: s_value, var_s, tau
+        real(real64), intent(inout) :: rank_x(:), rank_y(:)
+
+        integer :: i, j, n
+        real(real64) :: x_score, y_score, k_value, sigma, rho
+        real(real64) :: delta_x, delta_y, sign_sum_x, sign_sum_y
+        real(real64) :: var_no_ties, n_real
+
+        n = size(x)
+        if (size(y) /= n .or. n < 3) then
+            s_value = 0.0_real64
+            var_s = 0.0_real64
+            tau = 0.0_real64
+            return
+        end if
+
+        call compute_s_value(x, x_score)
+        call compute_s_value(y, y_score)
+
+        n_real = real(n, real64)
+        var_no_ties = n_real * real(n - 1, real64) * real(2 * n + 5, real64) / 18.0_real64
+
+        do i = 1, n
+            sign_sum_x = 0.0_real64
+            sign_sum_y = 0.0_real64
+            do j = 1, n
+                delta_x = x(i) - x(j)
+                if (delta_x > 0.0_real64) then
+                    sign_sum_x = sign_sum_x + 1.0_real64
+                else if (delta_x < 0.0_real64) then
+                    sign_sum_x = sign_sum_x - 1.0_real64
+                end if
+
+                delta_y = y(i) - y(j)
+                if (delta_y > 0.0_real64) then
+                    sign_sum_y = sign_sum_y + 1.0_real64
+                else if (delta_y < 0.0_real64) then
+                    sign_sum_y = sign_sum_y - 1.0_real64
+                end if
+            end do
+            rank_x(i) = (n_real + 1.0_real64 + sign_sum_x) / 2.0_real64
+            rank_y(i) = (n_real + 1.0_real64 + sign_sum_y) / 2.0_real64
+        end do
+
+        k_value = 0.0_real64
+        do i = 1, n - 1
+            do j = i, n
+                delta_x = (x(j) - x(i)) * (y(j) - y(i))
+                if (delta_x > 0.0_real64) then
+                    k_value = k_value + 1.0_real64
+                else if (delta_x < 0.0_real64) then
+                    k_value = k_value - 1.0_real64
+                end if
+            end do
+        end do
+
+        sigma = ( &
+            k_value + 4.0_real64 * sum(rank_x(:n) * rank_y(:n)) - n_real * (n_real + 1.0_real64) ** 2 &
+        ) / 3.0_real64
+        rho = sigma / var_no_ties
+
+        s_value = x_score - rho * y_score
+        var_s = (1.0_real64 - rho * rho) * var_no_ties
+        tau = x_score / (0.5_real64 * n_real * real(n - 1, real64))
+    end subroutine compute_partial_stats
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
     !    COMPUTE THE MANN-KENDALL S STATISTIC AND THE EXACT SEN /
     !    THEIL-SEN SLOPE USING ONE SHARED PAIRWISE SCAN.
     !
@@ -1034,6 +1120,40 @@ subroutine grouped_correlated_stats_batch(data, s_values, var_values, denom, per
         if (col == 1) denom = denom_value
     end do
 end subroutine grouped_correlated_stats_batch
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    BATCH ENTRY POINT FOR PARTIAL MANN-KENDALL STATISTICS.
+!
+! EXPECTED INPUT SHAPES
+!    RESPONSE(NTIME, NSERIES)  - EACH COLUMN IS ONE CLEAN RESPONSE SERIES
+!    COVARIATE(NTIME, NSERIES) - MATCHING CLEAN COVARIATE SERIES
+!
+! OUTPUT
+!    S_VALUES(NSERIES)   - ONE PARTIAL MK S VALUE PER COLUMN
+!    VAR_VALUES(NSERIES) - ONE PARTIAL MK VARIANCE PER COLUMN
+!    TAU_VALUES(NSERIES) - RESPONSE-SERIES KENDALL TAU PER COLUMN
+subroutine partial_stats_batch(response, covariate, s_values, var_values, tau_values, ntime, nseries)
+    use mann_kendall_core_mod, only : compute_partial_stats, real64
+    implicit none
+
+    integer, intent(in) :: ntime, nseries
+    real(real64), intent(in) :: response(ntime, nseries), covariate(ntime, nseries)
+    real(real64), intent(out) :: s_values(nseries), var_values(nseries), tau_values(nseries)
+
+    integer :: col
+    real(real64), allocatable :: rank_x(:), rank_y(:)
+
+    allocate(rank_x(max(1, ntime)))
+    allocate(rank_y(max(1, ntime)))
+
+    do col = 1, nseries
+        call compute_partial_stats( &
+            response(:, col), covariate(:, col), s_values(col), var_values(col), tau_values(col), rank_x, rank_y &
+        )
+    end do
+end subroutine partial_stats_batch
 
 
 ! QUICK REFERENCE
