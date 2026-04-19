@@ -27,6 +27,7 @@ module mann_kendall_core_mod
     public :: compute_sen_slope
     public :: compute_grouped_sen_slope_with_inv_lag
     public :: compute_partial_stats
+    public :: compute_partial_stats_and_sen_slope_with_inv_lag
     public :: compute_s_value_and_sen_slope_with_inv_lag
     public :: compute_sen_slope_with_inv_lag
 
@@ -769,6 +770,126 @@ contains
 
     ! QUICK REFERENCE
     ! PURPOSE
+    !    COMPUTE PARTIAL MANN-KENDALL STATISTICS AND THE EXACT SEN /
+    !    THEIL-SEN SLOPE FOR ONE CLEAN RESPONSE / COVARIATE PAIR USING
+    !    ONE SHARED PAIRWISE SCAN.
+    !
+    ! INPUTS
+    !    X(:)       - CLEAN RESPONSE SERIES
+    !    Y(:)       - CLEAN COVARIATE SERIES
+    !    INV_LAG(:) - PRECOMPUTED VALUES 1 / LAG FOR LAG = 1..SIZE(X)-1
+    !
+    ! INPUT / OUTPUT
+    !    RANK_X(:), RANK_Y(:) - WORK BUFFERS OF SIZE AT LEAST SIZE(X)
+    !    SLOPE_WORK(:)        - WORK BUFFER OF LENGTH AT LEAST
+    !                           N * (N - 1) / 2
+    !
+    ! OUTPUT
+    !    S_VALUE - PARTIAL MANN-KENDALL S STATISTIC
+    !    VAR_S   - PARTIAL MANN-KENDALL VARIANCE
+    !    TAU     - RESPONSE-SERIES KENDALL TAU
+    !    SLOPE   - EXACT SEN / THEIL-SEN SLOPE OF X
+    subroutine compute_partial_stats_and_sen_slope_with_inv_lag( &
+        x, y, inv_lag, s_value, var_s, tau, slope, rank_x, rank_y, slope_work &
+    )
+        real(real64), intent(in) :: x(:), y(:), inv_lag(:)
+        real(real64), intent(out) :: s_value, var_s, tau, slope
+        real(real64), intent(inout) :: rank_x(:), rank_y(:), slope_work(:)
+
+        integer :: i, lag, n, nslopes, mid_index, slope_index
+        real(real64) :: x_score, y_score, k_value, sigma, rho
+        real(real64) :: delta_x, delta_y, sign_x, sign_y
+        real(real64) :: var_no_ties, n_real, factor, lower_median, upper_median
+
+        n = size(x)
+        if (size(y) /= n .or. n < 2) then
+            s_value = 0.0_real64
+            var_s = 0.0_real64
+            tau = 0.0_real64
+            slope = ieee_value(0.0_real64, ieee_quiet_nan)
+            return
+        end if
+
+        nslopes = n * (n - 1) / 2
+        if (nslopes <= 0) then
+            s_value = 0.0_real64
+            var_s = 0.0_real64
+            tau = 0.0_real64
+            slope = ieee_value(0.0_real64, ieee_quiet_nan)
+            return
+        end if
+
+        n_real = real(n, real64)
+        var_no_ties = n_real * real(n - 1, real64) * real(2 * n + 5, real64) / 18.0_real64
+
+        x_score = 0.0_real64
+        y_score = 0.0_real64
+        k_value = 0.0_real64
+        rank_x(:n) = 0.0_real64
+        rank_y(:n) = 0.0_real64
+        slope_index = 0
+
+        do lag = 1, n - 1
+            factor = inv_lag(lag)
+            do i = 1, n - lag
+                delta_x = x(i + lag) - x(i)
+                slope_index = slope_index + 1
+                slope_work(slope_index) = delta_x * factor
+
+                if (delta_x > 0.0_real64) then
+                    sign_x = 1.0_real64
+                else if (delta_x < 0.0_real64) then
+                    sign_x = -1.0_real64
+                else
+                    sign_x = 0.0_real64
+                end if
+                x_score = x_score + sign_x
+                rank_x(i) = rank_x(i) - sign_x
+                rank_x(i + lag) = rank_x(i + lag) + sign_x
+
+                delta_y = y(i + lag) - y(i)
+                if (delta_y > 0.0_real64) then
+                    sign_y = 1.0_real64
+                else if (delta_y < 0.0_real64) then
+                    sign_y = -1.0_real64
+                else
+                    sign_y = 0.0_real64
+                end if
+                y_score = y_score + sign_y
+                rank_y(i) = rank_y(i) - sign_y
+                rank_y(i + lag) = rank_y(i + lag) + sign_y
+
+                k_value = k_value + sign_x * sign_y
+            end do
+        end do
+
+        rank_x(:n) = (n_real + 1.0_real64 + rank_x(:n)) / 2.0_real64
+        rank_y(:n) = (n_real + 1.0_real64 + rank_y(:n)) / 2.0_real64
+
+        sigma = ( &
+            k_value + 4.0_real64 * sum(rank_x(:n) * rank_y(:n)) - n_real * (n_real + 1.0_real64) ** 2 &
+        ) / 3.0_real64
+        rho = sigma / var_no_ties
+
+        s_value = x_score - rho * y_score
+        var_s = (1.0_real64 - rho * rho) * var_no_ties
+        tau = x_score / (0.5_real64 * n_real * real(n - 1, real64))
+
+        mid_index = nslopes / 2
+        if (mod(nslopes, 2) == 0) then
+            call select_kth_real(slope_work(:nslopes), mid_index + 1)
+            upper_median = slope_work(mid_index + 1)
+            lower_median = maxval(slope_work(:mid_index))
+            slope = 0.5_real64 * (lower_median + upper_median)
+        else
+            call select_kth_real(slope_work(:nslopes), mid_index + 1)
+            slope = slope_work(mid_index + 1)
+        end if
+    end subroutine compute_partial_stats_and_sen_slope_with_inv_lag
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
     !    COMPUTE THE MANN-KENDALL S STATISTIC AND THE EXACT SEN /
     !    THEIL-SEN SLOPE USING ONE SHARED PAIRWISE SCAN.
     !
@@ -1156,6 +1277,49 @@ subroutine partial_stats_batch(response, covariate, s_values, var_values, tau_va
         )
     end do
 end subroutine partial_stats_batch
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    BATCH ENTRY POINT FOR PARTIAL MANN-KENDALL STATISTICS PLUS THE
+!    EXACT RESPONSE-SERIES SEN / THEIL-SEN SLOPE.
+!
+! EXPECTED INPUT SHAPES
+!    RESPONSE(NTIME, NSERIES)  - EACH COLUMN IS ONE CLEAN RESPONSE SERIES
+!    COVARIATE(NTIME, NSERIES) - MATCHING CLEAN COVARIATE SERIES
+!
+! OUTPUT
+!    S_VALUES(NSERIES)   - ONE PARTIAL MK S VALUE PER COLUMN
+!    VAR_VALUES(NSERIES) - ONE PARTIAL MK VARIANCE PER COLUMN
+!    TAU_VALUES(NSERIES) - RESPONSE-SERIES KENDALL TAU PER COLUMN
+!    SLOPES(NSERIES)     - ONE EXACT SEN / THEIL-SEN SLOPE PER COLUMN
+subroutine partial_stats_sen_batch(response, covariate, s_values, var_values, tau_values, slopes, ntime, nseries)
+    use mann_kendall_core_mod, only : compute_partial_stats_and_sen_slope_with_inv_lag, real64
+    implicit none
+
+    integer, intent(in) :: ntime, nseries
+    real(real64), intent(in) :: response(ntime, nseries), covariate(ntime, nseries)
+    real(real64), intent(out) :: s_values(nseries), var_values(nseries), tau_values(nseries), slopes(nseries)
+
+    integer :: col, lag
+    real(real64), allocatable :: rank_x(:), rank_y(:), slope_work(:), inv_lag(:)
+
+    allocate(rank_x(max(1, ntime)))
+    allocate(rank_y(max(1, ntime)))
+    allocate(slope_work(max(1, ntime * (ntime - 1) / 2)))
+    allocate(inv_lag(max(1, ntime - 1)))
+
+    do lag = 1, ntime - 1
+        inv_lag(lag) = 1.0_real64 / real(lag, real64)
+    end do
+
+    do col = 1, nseries
+        call compute_partial_stats_and_sen_slope_with_inv_lag( &
+            response(:, col), covariate(:, col), inv_lag, s_values(col), var_values(col), tau_values(col), &
+            slopes(col), rank_x, rank_y, slope_work &
+        )
+    end do
+end subroutine partial_stats_sen_batch
 
 
 ! QUICK REFERENCE
