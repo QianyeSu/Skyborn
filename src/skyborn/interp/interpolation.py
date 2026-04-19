@@ -280,6 +280,14 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
         Pressure layer thickness in Pascals for each hybrid layer. The output
         shape is ``(len(hya) - 1, *ps.shape)`` for NumPy inputs, or
         ``(lev, *ps.dims)`` for xarray inputs.
+
+    Notes
+    -----
+    This function expects hybrid coefficients defined at layer interfaces, not
+    layer midpoints. For datasets such as ERA5, use ``hyai`` / ``hybi`` to
+    compute layer-thickness values. If you need pressure at the layer
+    midpoints instead, use :func:`pressure_at_hybrid_levels` with ``hyam`` /
+    ``hybm``.
     """
 
     if not all(isinstance(x, (xr.DataArray, np.ndarray)) for x in (ps, hya, hyb)):
