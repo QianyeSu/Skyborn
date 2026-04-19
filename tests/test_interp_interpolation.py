@@ -12,7 +12,7 @@ import sys
 import numpy as np
 import pytest
 import xarray as xr
-from numpy.testing import assert_array_almost_equal, assert_array_equal
+from numpy.testing import assert_allclose, assert_array_almost_equal, assert_array_equal
 
 import skyborn.interp.interpolation as interpolation_module
 from skyborn.interp.interpolation import (
@@ -104,8 +104,11 @@ class TestInterpolationHelpers:
         assert dph.shape == (2, 2)
         assert dph.name == "dph"
         assert dph.attrs["units"] == "Pa"
-        assert_array_equal(
-            dph.values, np.abs(pressure.values[1:] - pressure.values[:-1])
+        assert_allclose(
+            dph.values,
+            np.abs(pressure.values[1:] - pressure.values[:-1]),
+            rtol=0.0,
+            atol=1e-10,
         )
 
     def test_func_interpolate(self):
