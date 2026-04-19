@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 import numpy as np
 import scipy.stats as stats
 
-from .bindings import _score_variance_batch
+from .bindings import _grouped_correlated_stats_batch, _score_variance_batch
 
 
 def _variance_without_ties(sample_size: int) -> float:
@@ -339,46 +339,14 @@ def _correlated_multivariate_stats_scalar(
 
     valid_rows = ~np.isnan(x).any(axis=1)
     x = x[valid_rows]
-    n, c = x.shape if x.ndim == 2 else (len(x), 1)
+    if x.shape[1] == 0 or x.shape[0] == 0:
+        return 0.0, 0.0, 0.0
 
-    s_value = 0.0
-    denom = 0.0
-    for i in range(c):
-        season_s, _ = _score_variance_batch(x[:, i].reshape(-1, 1), modified=False)
-        s_value += float(season_s[0])
-        denom += 0.5 * n * (n - 1)
-
-    gamma = np.ones((c, c), dtype=np.float64)
-
-    def _k_stat(left: np.ndarray, right: np.ndarray) -> float:
-        k_value = 0.0
-        for i in range(n - 1):
-            j = np.arange(i, n)
-            k_value += np.sum(np.sign((left[j] - left[i]) * (right[j] - right[i])))
-        return float(k_value)
-
-    def _r_stat(values: np.ndarray) -> np.ndarray:
-        result = np.empty(n, dtype=np.float64)
-        indices = np.arange(n)
-        for j in range(n):
-            s = np.sum(np.sign(values[j] - values[indices]))
-            result[j] = (n + 1 + s) / 2.0
-        return result
-
-    for i in range(1, c):
-        for j in range(i):
-            k_value = _k_stat(x[:, i], x[:, j])
-            ri = _r_stat(x[:, i])
-            rj = _r_stat(x[:, j])
-            gamma[i, j] = (k_value + 4.0 * np.sum(ri * rj) - n * (n + 1) ** 2) / 3.0
-            gamma[j, i] = gamma[i, j]
-
-    for i in range(c):
-        k_value = _k_stat(x[:, i], x[:, i])
-        ri = _r_stat(x[:, i])
-        gamma[i, i] = (k_value + 4.0 * np.sum(ri * ri) - n * (n + 1) ** 2) / 3.0
-
-    return s_value, float(np.sum(gamma)), denom
+    flat_interleaved = np.ascontiguousarray(x).reshape(-1, 1)
+    s_values, var_values, denom = _grouped_correlated_stats_batch(
+        flat_interleaved, x.shape[1]
+    )
+    return float(s_values[0]), float(var_values[0]), float(denom)
 
 
 def _correlated_seasonal_stats_scalar(
