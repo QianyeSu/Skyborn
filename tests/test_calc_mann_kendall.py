@@ -2852,6 +2852,11 @@ class TestMannKendallComprehensive:
             (float(expected[0][0]), float(expected[1][0]), float(expected[2])),
         )
 
+        empty_correlated = variants_module._correlated_multivariate_stats_scalar(
+            np.array([[np.nan, 1.0], [2.0, np.nan]], dtype=float)
+        )
+        assert empty_correlated == (0.0, 0.0, 0.0)
+
     def test_seasonal_and_yue_wang_remaining_branch_coverage(self):
         """Cover remaining seasonal linregress and Yue-Wang vectorized branches."""
         flat = np.tile(np.array([1.0, 1.0, 1.0, 1.0], dtype=float), 3)
