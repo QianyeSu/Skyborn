@@ -52,6 +52,7 @@ _grouped_sen_slope_kernel = getattr(_core_module, "grouped_sen_slope_batch", Non
 _grouped_correlated_stats_kernel = getattr(
     _core_module, "grouped_correlated_stats_batch", None
 )
+_partial_stats_kernel = getattr(_core_module, "partial_stats_batch", None)
 
 
 def _as_core_input_2d(data_2d: np.ndarray) -> np.ndarray:
@@ -112,6 +113,22 @@ def _grouped_correlated_stats_batch(
         np.asarray(s_values, dtype=np.float64),
         np.asarray(var_values, dtype=np.float64),
         float(denom),
+    )
+
+
+def _partial_stats_batch(
+    response_2d: np.ndarray, covariate_2d: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Run the compiled partial-MK statistics kernel."""
+    kernel = _require_kernel(_partial_stats_kernel, "partial_stats_batch")
+    s_values, var_values, tau_values = kernel(
+        _as_core_input_2d(response_2d),
+        _as_core_input_2d(covariate_2d),
+    )
+    return (
+        np.asarray(s_values, dtype=np.float64),
+        np.asarray(var_values, dtype=np.float64),
+        np.asarray(tau_values, dtype=np.float64),
     )
 
 
