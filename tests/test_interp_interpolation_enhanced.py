@@ -2119,12 +2119,46 @@ class TestInterpolationHelperCoverage:
 
         result = delta_pressure_hybrid(ps, hya, hyb)
 
-        assert result.dims == ("ilev", "lat", "lon")
+        assert result.dims == ("lev", "lat", "lon")
         assert result.shape == (2, 1, 2)
-        assert_array_equal(result.ilev.values, np.array([10, 20]))
+        assert_array_equal(result.lev.values, np.array([10, 20]))
         assert_array_equal(
             result.values,
             np.array([[[30000.0, 25000.0]], [[20000.0, 15000.0]]]),
+        )
+
+    def test_delta_pressure_hybrid_standard_xarray_defaults_match_cesm_order(
+        self, monkeypatch
+    ):
+        """Standard time/lat/lon xarray inputs should default to time,lev,lat,lon."""
+
+        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa", None)
+        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa_into", None)
+
+        ps = xr.DataArray(
+            np.array([[[100000.0, 90000.0]]]),
+            dims=["time", "lat", "lon"],
+            coords={"time": [0], "lat": [0.0], "lon": [0.0, 90.0]},
+        )
+        hya = xr.DataArray(
+            [0.0, 0.2, 0.5],
+            dims=["ilev"],
+            coords={"ilev": [10, 20, 30]},
+        )
+        hyb = xr.DataArray(
+            [1.0, 0.5, 0.0],
+            dims=["ilev"],
+            coords={"ilev": [10, 20, 30]},
+        )
+
+        result = delta_pressure_hybrid(ps, hya, hyb)
+
+        assert result.dims == ("time", "lev", "lat", "lon")
+        assert result.shape == (1, 2, 1, 2)
+        assert_array_equal(result.lev.values, np.array([10, 20]))
+        assert_array_equal(
+            result.values,
+            np.array([[[[30000.0, 25000.0]], [[20000.0, 15000.0]]]]),
         )
 
     def test_delta_pressure_hybrid_xarray_python_path_allows_output_dim_controls(
@@ -2248,7 +2282,7 @@ class TestInterpolationHelperCoverage:
         with pytest.warns(UserWarning, match="different dimension names"):
             dph = delta_pressure_hybrid(ps, hya, hyb)
 
-        assert dph.dims == ("a", "x")
+        assert dph.dims == ("lev", "x")
         assert dph.shape == (1, 1)
 
     def test_delta_pressure_hybrid_numpy_rejects_output_dim_controls(self):
@@ -2259,7 +2293,7 @@ class TestInterpolationHelperCoverage:
                 np.array([100000.0, 90000.0]),
                 np.array([0.0, 0.2, 0.5]),
                 np.array([1.0, 0.5, 0.0]),
-                lev_dim="lev",
+                lev_dim="model_level",
             )
 
     def test_sigma_from_hybrid_warns_on_coeff_dim_name_mismatch(self):
