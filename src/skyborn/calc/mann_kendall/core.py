@@ -88,6 +88,7 @@ from .variants import (
     _seasonal_score_variance_scalar,
     _seasonal_sens_slope_scalar,
     _trend_free_pre_whiten_score_variance_batch,
+    _yue_wang_variance_batch,
 )
 
 __all__ = [
@@ -232,6 +233,7 @@ def mann_kendall_test(
     method: str = "theilslopes",
     test: str = "original",
     period: int = 12,
+    lag: Optional[int] = None,
 ) -> Dict[str, Union[float, bool]]:
     """
     Perform Mann-Kendall test for trend detection on 1D time series.
@@ -263,6 +265,10 @@ def mann_kendall_test(
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
     period : int, default 12
         Seasonal cycle length used when ``test="seasonal"``.
+    lag : int, optional
+        Number of autocorrelation lags to include for ``test="yue_wang"``
+        and ``test="hamed_rao"``. ``None`` uses all available lags. This
+        argument has no effect for other test families.
 
     Returns
     -------
@@ -482,8 +488,10 @@ def mann_kendall_test(
     if method == "theilslopes":
         slope = float(_sen_slope_batch(y.reshape(-1, 1))[0])
         intercept = np.median(y) - slope * np.median(x)
+        correction_slope = slope
     else:
         slope, intercept = stats.linregress(x, y)[:2]
+        correction_slope = float(_sen_slope_batch(y.reshape(-1, 1))[0])
 
     if test_name == "pre_whitening":
         stat_n = n - 1
@@ -491,16 +499,29 @@ def mann_kendall_test(
         S = int(np.rint(s_values[0]))
         var_s = float(var_values[0])
     elif test_name == "yue_wang":
-        if method == "theilslopes":
+        if lag is None and method == "theilslopes":
             S_values, var_values, _ = _score_variance_slope_batch(
                 y.reshape(-1, 1), modified=True
             )
-        else:
+            var_s = float(var_values[0])
+        elif lag is None:
             S_values, var_values = _score_variance_batch(
                 y.reshape(-1, 1), modified=True
             )
+            var_s = float(var_values[0])
+        else:
+            S_values, base_var_values = _score_variance_batch(
+                y.reshape(-1, 1), modified=False
+            )
+            var_s = float(
+                _yue_wang_variance_batch(
+                    y.reshape(-1, 1),
+                    base_var_values,
+                    np.asarray([correction_slope], dtype=np.float64),
+                    lag=lag,
+                )[0]
+            )
         S = int(np.rint(S_values[0]))
-        var_s = float(var_values[0])
         stat_n = n
     elif test_name == "trend_free_pre_whitening":
         stat_n = n - 1
@@ -517,7 +538,11 @@ def mann_kendall_test(
         S = int(np.rint(s_values[0]))
         var_s = float(
             _hamed_rao_variance_batch(
-                y.reshape(-1, 1), base_var_values, slopes, alpha=alpha
+                y.reshape(-1, 1),
+                base_var_values,
+                np.asarray([correction_slope], dtype=np.float64),
+                alpha=alpha,
+                lag=lag,
             )[0]
         )
         stat_n = n
@@ -729,6 +754,7 @@ def mann_kendall_multidim(
     dim: Optional[Union[int, str]] = None,
     test: str = "original",
     period: int = 12,
+    lag: Optional[int] = None,
     group_axis: Optional[Union[int, str]] = None,
 ) -> Dict[str, np.ndarray]:
     """
@@ -772,6 +798,10 @@ def mann_kendall_multidim(
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
     period : int, default 12
         Seasonal cycle length used when ``test="seasonal"``.
+    lag : int, optional
+        Number of autocorrelation lags to include for ``test="yue_wang"``
+        and ``test="hamed_rao"``. ``None`` uses all available lags. This
+        argument has no effect for other test families.
     group_axis : int or str, optional
         Grouping axis used by grouped test families such as
         ``test="multivariate"``, ``test="regional"``, and
@@ -843,7 +873,12 @@ def mann_kendall_multidim(
     # Handle 1D input
     if data.ndim == 1:
         return mann_kendall_test(
-            data, alpha=alpha, method=method, test=test_name, period=period
+            data,
+            alpha=alpha,
+            method=method,
+            test=test_name,
+            period=period,
+            lag=lag,
         )
 
     if actual_group_axis is not None:
@@ -908,6 +943,7 @@ def mann_kendall_multidim(
                 method=method,
                 test=test_name,
                 period=period,
+                lag=lag,
             )
 
         # Store results
@@ -927,6 +963,7 @@ def _vectorized_mk_test(
     method: str = "theilslopes",
     test: str = "original",
     period: int = 12,
+    lag: Optional[int] = None,
 ) -> Dict[str, np.ndarray]:
     """
     Truly vectorized Mann-Kendall test for a chunk of time series.
@@ -1030,25 +1067,49 @@ def _vectorized_mk_test(
                 S_values, base_var_values, slopes = _score_variance_slope_batch(
                     clean_data_computed, modified=False
                 )
+                correction_slopes = slopes
             else:
                 S_values, base_var_values = _score_variance_batch(
                     clean_data_computed, modified=False
                 )
                 slopes = _linregress_slope_batch(clean_data_computed, x)
+                correction_slopes = _sen_slope_batch(clean_data_computed)
             var_s_values = _hamed_rao_variance_batch(
-                clean_data_computed, base_var_values, slopes, alpha=alpha
+                clean_data_computed,
+                base_var_values,
+                correction_slopes,
+                alpha=alpha,
+                lag=lag,
             )
             stat_n = time_steps
         elif test_name == "yue_wang":
-            if method == "theilslopes":
+            if lag is None and method == "theilslopes":
                 S_values, var_s_values, slopes = _score_variance_slope_batch(
                     clean_data_computed, modified=True
                 )
-            else:
+            elif lag is None:
                 S_values, var_s_values = _score_variance_batch(
                     clean_data_computed, modified=True
                 )
                 slopes = _linregress_slope_batch(clean_data_computed, x)
+            else:
+                if method == "theilslopes":
+                    S_values, base_var_values, slopes = _score_variance_slope_batch(
+                        clean_data_computed, modified=False
+                    )
+                    correction_slopes = slopes
+                else:
+                    S_values, base_var_values = _score_variance_batch(
+                        clean_data_computed, modified=False
+                    )
+                    slopes = _linregress_slope_batch(clean_data_computed, x)
+                    correction_slopes = _sen_slope_batch(clean_data_computed)
+                var_s_values = _yue_wang_variance_batch(
+                    clean_data_computed,
+                    base_var_values,
+                    correction_slopes,
+                    lag=lag,
+                )
             stat_n = time_steps
         elif method == "theilslopes":
             S_values, var_s_values, slopes = _score_variance_slope_batch(
@@ -1145,6 +1206,7 @@ def _vectorized_mk_test(
                 method=method,
                 test=test_name,
                 period=period,
+                lag=lag,
             )
 
             # Store results
@@ -1165,6 +1227,7 @@ def mann_kendall_xarray(
     use_dask: bool = True,
     test: str = "original",
     period: int = 12,
+    lag: Optional[int] = None,
     group_dim: Optional[str] = None,
 ):  # -> xr.Dataset
     """
@@ -1202,6 +1265,10 @@ def mann_kendall_xarray(
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
     period : int, default 12
         Seasonal cycle length used when ``test="seasonal"``.
+    lag : int, optional
+        Number of autocorrelation lags to include for ``test="yue_wang"``
+        and ``test="hamed_rao"``. ``None`` uses all available lags. This
+        argument has no effect for other test families.
     group_dim : str, optional
         Grouping dimension used by ``test="multivariate"``,
         ``test="regional"``, and ``test="correlated_multivariate"``. If
@@ -1234,7 +1301,7 @@ def mann_kendall_xarray(
 
     if use_dask and hasattr(data.data, "chunks") and group_axis is None:
         # Use dask for computation
-        results = _dask_mann_kendall(data, dim, alpha, method, test, period)
+        results = _dask_mann_kendall(data, dim, alpha, method, test, period, lag)
     else:
         # Use numpy implementation
         results = mann_kendall_multidim(
@@ -1244,6 +1311,7 @@ def mann_kendall_xarray(
             method=method,
             test=test,
             period=period,
+            lag=lag,
             group_axis=group_axis,
         )
 
@@ -1354,6 +1422,7 @@ def _dask_mann_kendall(
     method: str,
     test: str = "original",  # xr.DataArray
     period: int = 12,
+    lag: Optional[int] = None,
 ):  # -> Dict[str, np.ndarray]
     """Use dask map_blocks for Mann-Kendall computation."""
     if _normalize_test_name(test) in _GROUPED_TESTS:
@@ -1412,6 +1481,7 @@ def _dask_mann_kendall(
                     method=method,
                     test=test,
                     period=period,
+                    lag=lag,
                 )
 
                 # Store results: [trend, h, p, z, tau, std_error]
@@ -1467,6 +1537,7 @@ def trend_analysis(
     dim: Optional[Union[int, str]] = None,
     test: str = "original",
     period: int = 12,
+    lag: Optional[int] = None,
     group_axis: Optional[Union[int, str]] = None,
     group_dim: Optional[str] = None,
     **kwargs,
@@ -1501,6 +1572,10 @@ def trend_analysis(
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
     period : int, default 12
         Seasonal cycle length used when ``test="seasonal"``.
+    lag : int, optional
+        Number of autocorrelation lags to include for ``test="yue_wang"``
+        and ``test="hamed_rao"``. ``None`` uses all available lags. This
+        argument has no effect for other test families.
     group_axis : int or str, optional
         Grouping axis used by ``test="multivariate"`` and ``test="regional"``
         for NumPy inputs.
@@ -1529,6 +1604,7 @@ def trend_analysis(
             method=method,
             test=test,
             period=period,
+            lag=lag,
             group_dim=group_dim,
             **kwargs,
         )
@@ -1540,6 +1616,7 @@ def trend_analysis(
             method=method,
             test=test,
             period=period,
+            lag=lag,
             group_axis=group_axis,
             **kwargs,
         )
