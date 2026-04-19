@@ -2127,6 +2127,85 @@ class TestInterpolationHelperCoverage:
             np.array([[[30000.0, 25000.0]], [[20000.0, 15000.0]]]),
         )
 
+    def test_delta_pressure_hybrid_xarray_python_path_allows_output_dim_controls(
+        self, monkeypatch
+    ):
+        """Pure-xarray delta-pressure output can be renamed and transposed."""
+
+        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa", None)
+        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa_into", None)
+
+        ps = xr.DataArray(
+            np.array([[[100000.0, 90000.0]]]),
+            dims=["time", "lat", "lon"],
+            coords={"time": [0], "lat": [0.0], "lon": [0.0, 90.0]},
+        )
+        hya = xr.DataArray(
+            [0.0, 0.2, 0.5],
+            dims=["ilev"],
+            coords={"ilev": [10, 20, 30]},
+        )
+        hyb = xr.DataArray(
+            [1.0, 0.5, 0.0],
+            dims=["ilev"],
+            coords={"ilev": [10, 20, 30]},
+        )
+
+        result = delta_pressure_hybrid(
+            ps,
+            hya,
+            hyb,
+            lev_dim="lev",
+            output_dims=("time", "lev", "lat", "lon"),
+        )
+
+        assert result.dims == ("time", "lev", "lat", "lon")
+        assert result.shape == (1, 2, 1, 2)
+        assert_array_equal(result.lev.values, np.array([10, 20]))
+        assert_array_equal(
+            result.values,
+            np.array([[[[30000.0, 25000.0]], [[20000.0, 15000.0]]]]),
+        )
+
+    def test_delta_pressure_hybrid_xarray_fortran_path_allows_output_dim_controls(
+        self, monkeypatch
+    ):
+        """Compiled delta-pressure output can be renamed and transposed."""
+
+        def fake_delta_into(psfc, dph, hbcofa, hbcofb, p0, nlevo, ncol, nlev):
+            dph[:, :] = np.arange(dph.size, dtype=np.float64).reshape(dph.shape) + 30.0
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_ddelta_pressure_hybrid_pa_into",
+            fake_delta_into,
+        )
+        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa", object())
+
+        ps = xr.DataArray(
+            np.array([[[100000.0, 90000.0]]]),
+            dims=["time", "lat", "lon"],
+            coords={"time": [0], "lat": [0.0], "lon": [0.0, 90.0]},
+        )
+        hya = xr.DataArray([0.0, 0.2, 0.5], dims=["ilev"], coords={"ilev": [1, 2, 3]})
+        hyb = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"], coords={"ilev": [1, 2, 3]})
+
+        result = delta_pressure_hybrid(
+            ps,
+            hya,
+            hyb,
+            lev_dim="lev",
+            output_dims=("time", "lev", "lat", "lon"),
+        )
+
+        assert result.dims == ("time", "lev", "lat", "lon")
+        assert result.shape == (1, 2, 1, 2)
+        assert_array_equal(result.lev.values, np.array([1, 2]))
+        assert_array_equal(
+            result.values,
+            np.array([[[[30.0, 31.0]], [[32.0, 33.0]]]]),
+        )
+
     def test_delta_pressure_hybrid_dask_input_skips_fortran_fast_path(
         self, monkeypatch
     ):
@@ -2171,6 +2250,17 @@ class TestInterpolationHelperCoverage:
 
         assert dph.dims == ("a", "x")
         assert dph.shape == (1, 1)
+
+    def test_delta_pressure_hybrid_numpy_rejects_output_dim_controls(self):
+        """Named output controls are xarray-only."""
+
+        with pytest.raises(TypeError, match="supported only for xarray inputs"):
+            delta_pressure_hybrid(
+                np.array([100000.0, 90000.0]),
+                np.array([0.0, 0.2, 0.5]),
+                np.array([1.0, 0.5, 0.0]),
+                lev_dim="lev",
+            )
 
     def test_sigma_from_hybrid_warns_on_coeff_dim_name_mismatch(self):
         """Sigma helper should also warn and rename mismatched coeff dims."""
