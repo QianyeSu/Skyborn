@@ -383,12 +383,19 @@ contains
     !
     ! OUTPUT
     !    SLOPE - EXACT MEDIAN OF ALL PAIRWISE SLOPES; NaN WHEN SIZE(Y) < 2
+    !
+    ! NOTES
+    !    FOR EVEN COUNTS WE ONLY PARTITION ONCE AROUND THE UPPER MEDIAN.
+    !    AFTER THAT, THE LOWER MEDIAN IS SIMPLY THE MAXIMUM VALUE IN THE
+    !    FIRST HALF OF THE PARTITIONED BUFFER, WHICH AVOIDS A SECOND
+    !    QUICKSELECT PASS WITHOUT CHANGING THE EXACT RESULT.
     subroutine compute_sen_slope_with_inv_lag(y, inv_lag, slope, slope_work)
         real(real64), intent(in) :: y(:), inv_lag(:)
         real(real64), intent(out) :: slope
         real(real64), intent(inout) :: slope_work(:)
 
-        integer :: i, j, n, nslopes, mid_index, slope_index
+        integer :: i, lag, n, nslopes, mid_index, slope_index
+        real(real64) :: factor, lower_median, upper_median
 
         n = size(y)
         if (n < 2) then
@@ -399,18 +406,20 @@ contains
         nslopes = n * (n - 1) / 2
         slope_index = 0
 
-        do i = 1, n - 1
-            do j = i + 1, n
+        do lag = 1, n - 1
+            factor = inv_lag(lag)
+            do i = 1, n - lag
                 slope_index = slope_index + 1
-                slope_work(slope_index) = (y(j) - y(i)) * inv_lag(j - i)
+                slope_work(slope_index) = (y(i + lag) - y(i)) * factor
             end do
         end do
 
         mid_index = nslopes / 2
         if (mod(nslopes, 2) == 0) then
-            call select_kth_real(slope_work(:nslopes), mid_index)
             call select_kth_real(slope_work(:nslopes), mid_index + 1)
-            slope = 0.5_real64 * (slope_work(mid_index) + slope_work(mid_index + 1))
+            upper_median = slope_work(mid_index + 1)
+            lower_median = maxval(slope_work(:mid_index))
+            slope = 0.5_real64 * (lower_median + upper_median)
         else
             call select_kth_real(slope_work(:nslopes), mid_index + 1)
             slope = slope_work(mid_index + 1)
@@ -474,13 +483,18 @@ contains
     ! OUTPUT
     !    S_VALUE - SUM OF PAIRWISE SIGN COMPARISONS
     !    SLOPE   - EXACT MEDIAN OF ALL PAIRWISE SLOPES; NaN WHEN SIZE(Y) < 2
+    !
+    ! NOTES
+    !    THE EVEN-SLOPE MEDIAN CASE REUSES THE SAME SINGLE-PARTITION
+    !    STRATEGY AS `compute_sen_slope_with_inv_lag(...)` SO THE BATCH
+    !    KERNEL DOES NOT PAY FOR TWO FULL QUICKSELECT PASSES.
     subroutine compute_s_value_and_sen_slope_with_inv_lag(y, inv_lag, s_value, slope, slope_work)
         real(real64), intent(in) :: y(:), inv_lag(:)
         real(real64), intent(out) :: s_value, slope
         real(real64), intent(inout) :: slope_work(:)
 
-        integer :: i, j, n, nslopes, mid_index, slope_index
-        real(real64) :: dy
+        integer :: i, lag, n, nslopes, mid_index, slope_index
+        real(real64) :: dy, factor, lower_median, upper_median
 
         n = size(y)
         if (n < 2) then
@@ -493,11 +507,12 @@ contains
         slope_index = 0
         s_value = 0.0_real64
 
-        do i = 1, n - 1
-            do j = i + 1, n
-                dy = y(j) - y(i)
+        do lag = 1, n - 1
+            factor = inv_lag(lag)
+            do i = 1, n - lag
+                dy = y(i + lag) - y(i)
                 slope_index = slope_index + 1
-                slope_work(slope_index) = dy * inv_lag(j - i)
+                slope_work(slope_index) = dy * factor
 
                 if (dy > 0.0_real64) then
                     s_value = s_value + 1.0_real64
@@ -509,9 +524,10 @@ contains
 
         mid_index = nslopes / 2
         if (mod(nslopes, 2) == 0) then
-            call select_kth_real(slope_work(:nslopes), mid_index)
             call select_kth_real(slope_work(:nslopes), mid_index + 1)
-            slope = 0.5_real64 * (slope_work(mid_index) + slope_work(mid_index + 1))
+            upper_median = slope_work(mid_index + 1)
+            lower_median = maxval(slope_work(:mid_index))
+            slope = 0.5_real64 * (lower_median + upper_median)
         else
             call select_kth_real(slope_work(:nslopes), mid_index + 1)
             slope = slope_work(mid_index + 1)
