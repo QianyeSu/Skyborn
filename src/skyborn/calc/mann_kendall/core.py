@@ -141,6 +141,13 @@ def _normalize_test_name(test: str) -> str:
     )
 
 
+def _resolve_seasonal_period(test_name: str, period: Optional[int]) -> Optional[int]:
+    """Return the effective seasonal cycle length for the active test family."""
+    if test_name in {"seasonal", "correlated_seasonal"}:
+        return 12 if period is None else int(period)
+    return None
+
+
 def _load_core_module():
     """Best-effort loader for the compiled Mann-Kendall core extension."""
     return _load_core_module_from(
@@ -232,7 +239,7 @@ def mann_kendall_test(
     alpha: float = 0.05,
     method: str = "theilslopes",
     test: str = "original",
-    period: int = 12,
+    period: Optional[int] = None,
     lag: Optional[int] = None,
 ) -> Dict[str, Union[float, bool]]:
     """
@@ -263,8 +270,10 @@ def mann_kendall_test(
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
-    period : int, default 12
-        Seasonal cycle length used when ``test="seasonal"``.
+    period : int, optional
+        Seasonal cycle length used by ``test="seasonal"`` and
+        ``test="correlated_seasonal"``. When omitted, these seasonal test
+        families default to ``12``. Other test families ignore this argument.
     lag : int, optional
         Number of autocorrelation lags to include for ``test="yue_wang"``
         and ``test="hamed_rao"``. ``None`` uses all available lags. This
@@ -325,6 +334,7 @@ def mann_kendall_test(
     >>> print(f"Significant trend: {result['h']}")
     """
     test_name = _normalize_test_name(test)
+    effective_period = _resolve_seasonal_period(test_name, period)
 
     if hasattr(data, "values"):
         values = data.values
@@ -431,7 +441,9 @@ def mann_kendall_test(
             )
 
         if method == "theilslopes":
-            slope, intercept = _seasonal_sens_slope_scalar(season_values, period)
+            slope, intercept = _seasonal_sens_slope_scalar(
+                season_values, effective_period
+            )
         else:
             x_finite = np.arange(season_values.size, dtype=np.float64)[finite_mask]
             slope, intercept = stats.linregress(x_finite, season_values[finite_mask])[
@@ -439,7 +451,9 @@ def mann_kendall_test(
             ]
 
         if test_name == "seasonal":
-            S, var_s, denom = _seasonal_score_variance_scalar(season_values, period)
+            S, var_s, denom = _seasonal_score_variance_scalar(
+                season_values, effective_period
+            )
             if S > 0:
                 z = (S - 1) / np.sqrt(var_s)
             elif S == 0:
@@ -447,7 +461,9 @@ def mann_kendall_test(
             else:
                 z = (S + 1) / np.sqrt(var_s)
         else:
-            S, var_s, denom = _correlated_seasonal_stats_scalar(season_values, period)
+            S, var_s, denom = _correlated_seasonal_stats_scalar(
+                season_values, effective_period
+            )
             with np.errstate(divide="ignore", invalid="ignore"):
                 z = S / np.sqrt(var_s)
 
@@ -455,7 +471,7 @@ def mann_kendall_test(
         h = abs(z) > stats.norm.ppf(1 - alpha / 2)
         tau = S / denom if denom != 0.0 else np.nan
         finite_index = np.arange(season_values.size, dtype=np.float64)[finite_mask]
-        fitted = finite_index / period * slope + intercept
+        fitted = finite_index / effective_period * slope + intercept
         std_error = np.std(season_values[finite_mask] - fitted) / np.sqrt(n_finite)
         return {
             "trend": slope,
@@ -753,7 +769,7 @@ def mann_kendall_multidim(
     chunk_size: Optional[int] = None,
     dim: Optional[Union[int, str]] = None,
     test: str = "original",
-    period: int = 12,
+    period: Optional[int] = None,
     lag: Optional[int] = None,
     group_axis: Optional[Union[int, str]] = None,
 ) -> Dict[str, np.ndarray]:
@@ -796,8 +812,10 @@ def mann_kendall_multidim(
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
-    period : int, default 12
-        Seasonal cycle length used when ``test="seasonal"``.
+    period : int, optional
+        Seasonal cycle length used by ``test="seasonal"`` and
+        ``test="correlated_seasonal"``. When omitted, these seasonal test
+        families default to ``12``. Other test families ignore this argument.
     lag : int, optional
         Number of autocorrelation lags to include for ``test="yue_wang"``
         and ``test="hamed_rao"``. ``None`` uses all available lags. This
@@ -826,6 +844,7 @@ def mann_kendall_multidim(
     For numpy arrays, string names require the array to have a 'dims' attribute or similar.
     """
     test_name = _normalize_test_name(test)
+    effective_period = _resolve_seasonal_period(test_name, period)
 
     def _resolve_axis(arr: Any, axis_param: Union[int, str]) -> int:
         """Resolve axis parameter to integer index."""
@@ -877,7 +896,7 @@ def mann_kendall_multidim(
             alpha=alpha,
             method=method,
             test=test_name,
-            period=period,
+            period=effective_period,
             lag=lag,
         )
 
@@ -942,7 +961,7 @@ def mann_kendall_multidim(
                 alpha=alpha,
                 method=method,
                 test=test_name,
-                period=period,
+                period=effective_period,
                 lag=lag,
             )
 
@@ -962,7 +981,7 @@ def _vectorized_mk_test(
     alpha: float = 0.05,
     method: str = "theilslopes",
     test: str = "original",
-    period: int = 12,
+    period: Optional[int] = None,
     lag: Optional[int] = None,
 ) -> Dict[str, np.ndarray]:
     """
@@ -977,6 +996,7 @@ def _vectorized_mk_test(
     3. Automatic skipping of series with insufficient data
     """
     test_name = _normalize_test_name(test)
+    effective_period = _resolve_seasonal_period(test_name, period)
     if method not in {"theilslopes", "linregress"}:
         raise ValueError(f"Unknown method: {method}. Use 'theilslopes' or 'linregress'")
     time_steps, n_series = data_chunk.shape
@@ -1022,10 +1042,11 @@ def _vectorized_mk_test(
         if test_name in {"seasonal", "correlated_seasonal"}:
             core_input = _as_core_input_2d(clean_data_computed)
             if method == "theilslopes":
-                slopes = _grouped_sen_slope_batch(core_input, period)
+                slopes = _grouped_sen_slope_batch(core_input, effective_period)
                 intercepts = (
                     np.median(clean_data_computed, axis=0)
-                    - (0.5 * (clean_data_computed.shape[0] - 1) / period) * slopes
+                    - (0.5 * (clean_data_computed.shape[0] - 1) / effective_period)
+                    * slopes
                 )
             else:
                 slopes = _linregress_slope_batch(clean_data_computed, x)
@@ -1035,11 +1056,11 @@ def _vectorized_mk_test(
 
             if test_name == "seasonal":
                 S_values, var_s_values, seasonal_denom = _seasonal_score_variance_batch(
-                    core_input, period
+                    core_input, effective_period
                 )
             else:
                 S_values, var_s_values, seasonal_denom = (
-                    _grouped_correlated_stats_batch(core_input, period)
+                    _grouped_correlated_stats_batch(core_input, effective_period)
                 )
             stat_n = time_steps
         elif test_name == "pre_whitening":
@@ -1162,7 +1183,7 @@ def _vectorized_mk_test(
             tau_values = S_values / (0.5 * stat_n * (stat_n - 1))
 
         if test_name in {"seasonal", "correlated_seasonal"} and method == "theilslopes":
-            seasonal_x = x[:, np.newaxis] / period
+            seasonal_x = x[:, np.newaxis] / effective_period
             fitted = seasonal_x * slopes[np.newaxis, :] + intercepts[np.newaxis, :]
             std_errors = np.std(clean_data_computed - fitted, axis=0) / np.sqrt(
                 clean_data_computed.shape[0]
@@ -1205,7 +1226,7 @@ def _vectorized_mk_test(
                 alpha=alpha,
                 method=method,
                 test=test_name,
-                period=period,
+                period=effective_period,
                 lag=lag,
             )
 
@@ -1226,7 +1247,7 @@ def mann_kendall_xarray(
     method: str = "theilslopes",
     use_dask: bool = True,
     test: str = "original",
-    period: int = 12,
+    period: Optional[int] = None,
     lag: Optional[int] = None,
     group_dim: Optional[str] = None,
 ):  # -> xr.Dataset
@@ -1263,8 +1284,10 @@ def mann_kendall_xarray(
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
-    period : int, default 12
-        Seasonal cycle length used when ``test="seasonal"``.
+    period : int, optional
+        Seasonal cycle length used by ``test="seasonal"`` and
+        ``test="correlated_seasonal"``. When omitted, these seasonal test
+        families default to ``12``. Other test families ignore this argument.
     lag : int, optional
         Number of autocorrelation lags to include for ``test="yue_wang"``
         and ``test="hamed_rao"``. ``None`` uses all available lags. This
@@ -1295,13 +1318,16 @@ def mann_kendall_xarray(
     # Get time axis
     time_axis = data.get_axis_num(dim)
     test_name = _normalize_test_name(test)
+    effective_period = _resolve_seasonal_period(test_name, period)
     group_axis = _resolve_group_axis(
         data, group_axis=group_dim, time_axis=time_axis, test_name=test_name
     )
 
     if use_dask and hasattr(data.data, "chunks") and group_axis is None:
         # Use dask for computation
-        results = _dask_mann_kendall(data, dim, alpha, method, test, period, lag)
+        results = _dask_mann_kendall(
+            data, dim, alpha, method, test, effective_period, lag
+        )
     else:
         # Use numpy implementation
         results = mann_kendall_multidim(
@@ -1310,7 +1336,7 @@ def mann_kendall_xarray(
             alpha=alpha,
             method=method,
             test=test,
-            period=period,
+            period=effective_period,
             lag=lag,
             group_axis=group_axis,
         )
@@ -1421,7 +1447,7 @@ def _dask_mann_kendall(
     alpha: float,
     method: str,
     test: str = "original",  # xr.DataArray
-    period: int = 12,
+    period: Optional[int] = None,
     lag: Optional[int] = None,
 ):  # -> Dict[str, np.ndarray]
     """Use dask map_blocks for Mann-Kendall computation."""
@@ -1536,7 +1562,7 @@ def trend_analysis(
     method: str = "theilslopes",
     dim: Optional[Union[int, str]] = None,
     test: str = "original",
-    period: int = 12,
+    period: Optional[int] = None,
     lag: Optional[int] = None,
     group_axis: Optional[Union[int, str]] = None,
     group_dim: Optional[str] = None,
@@ -1570,8 +1596,10 @@ def trend_analysis(
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
-    period : int, default 12
-        Seasonal cycle length used when ``test="seasonal"``.
+    period : int, optional
+        Seasonal cycle length used by ``test="seasonal"`` and
+        ``test="correlated_seasonal"``. When omitted, these seasonal test
+        families default to ``12``. Other test families ignore this argument.
     lag : int, optional
         Number of autocorrelation lags to include for ``test="yue_wang"``
         and ``test="hamed_rao"``. ``None`` uses all available lags. This
