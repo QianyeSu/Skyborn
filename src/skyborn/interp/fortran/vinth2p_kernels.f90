@@ -24,7 +24,7 @@ module vinth2p_kernels_core
     public :: real64
     public :: build_input_pressures
     public :: build_double_log_levels
-    public :: compute_delta_pressure_flat
+    public :: compute_delta_pressure_columns
     public :: convert_levels_to_mb
     public :: extrapolate_geopotential
     public :: extrapolate_temperature
@@ -68,23 +68,24 @@ contains
 
     ! Compute hybrid-layer pressure thickness directly without materializing
     ! the full adjacent pressure fields in temporary arrays.
-    pure subroutine compute_delta_pressure_flat(psfc, hbcofa, hbcofb, p0, dph_flat)
+    pure subroutine compute_delta_pressure_columns(psfc, hbcofa, hbcofb, p0, dph)
         real(real64), intent(in) :: psfc(:), hbcofa(:), hbcofb(:), p0
-        real(real64), intent(out) :: dph_flat((size(hbcofa) - 1) * size(psfc))
+        real(real64), intent(out) :: dph(size(hbcofa) - 1, size(psfc))
 
-        integer :: col, k, output_idx
-        real(real64) :: delta_a, delta_b
+        integer :: col, k
+        real(real64) :: delta_a(size(hbcofa) - 1), delta_b(size(hbcofa) - 1)
 
-        output_idx = 1
         do k = 1, size(hbcofa) - 1
-            delta_a = hbcofa(k) - hbcofa(k + 1)
-            delta_b = hbcofb(k) - hbcofb(k + 1)
-            do col = 1, size(psfc)
-                dph_flat(output_idx) = abs(p0 * delta_a + delta_b * psfc(col))
-                output_idx = output_idx + 1
+            delta_a(k) = hbcofa(k) - hbcofa(k + 1)
+            delta_b(k) = hbcofb(k) - hbcofb(k + 1)
+        end do
+
+        do col = 1, size(psfc)
+            do k = 1, size(hbcofa) - 1
+                dph(k, col) = abs(p0 * delta_a(k) + delta_b(k) * psfc(col))
             end do
         end do
-    end subroutine compute_delta_pressure_flat
+    end subroutine compute_delta_pressure_columns
 
 
     ! Build the flat-buffer input offsets for one physical column so the hot
@@ -1648,12 +1649,12 @@ end subroutine dvinth2p_ecmwf_nodes_pa_into
 
 ! QUICK REFERENCE
 ! PURPOSE
-!    GENERIC ENTRY POINT FOR HYBRID LAYER-THICKNESS CALCULATION USING A FLAT
-!    C-ORDER OUTPUT BUFFER THAT REPRESENTS [NLEV-1, NCOL].
+!    GENERIC ENTRY POINT FOR HYBRID LAYER-THICKNESS CALCULATION USING A
+!    COLUMN-MAJOR [NLEV-1, NCOL] OUTPUT BUFFER.
 !
 ! EXPECTED INPUT SHAPES
 !    PSFC(NCOL)                 - SURFACE PRESSURE FOR EACH COLUMN
-!    DPH_FLAT((NLEV-1)*NCOL)    - OUTPUT FLAT BUFFER
+!    DPH(NLEVO,NCOL)            - OUTPUT PRESSURE THICKNESS
 !    HBCOFA(NLEV)               - HYBRID "A" COEFFICIENTS
 !    HBCOFB(NLEV)               - HYBRID "B" COEFFICIENTS
 !
@@ -1661,31 +1662,31 @@ end subroutine dvinth2p_ecmwf_nodes_pa_into
 !    P0     - PA
 !    PSFC   - PA
 !    DPH    - PA
-subroutine ddelta_pressure_hybrid_pa(psfc, dph_flat, hbcofa, hbcofb, p0, ncol, nlev)
-    use vinth2p_kernels_core, only : real64, compute_delta_pressure_flat
+subroutine ddelta_pressure_hybrid_pa(psfc, dph, hbcofa, hbcofb, p0, ncol, nlev, nlevo)
+    use vinth2p_kernels_core, only : real64, compute_delta_pressure_columns
     implicit none
 
-    integer, intent(in) :: ncol, nlev
+    integer, intent(in) :: ncol, nlev, nlevo
     real(real64), intent(in) :: psfc(ncol), hbcofa(nlev), hbcofb(nlev), p0
-    real(real64), intent(out) :: dph_flat((nlev - 1) * ncol)
+    real(real64), intent(out) :: dph(nlevo, ncol)
 
-    call compute_delta_pressure_flat(psfc, hbcofa, hbcofb, p0, dph_flat)
+    call compute_delta_pressure_columns(psfc, hbcofa, hbcofb, p0, dph)
 end subroutine ddelta_pressure_hybrid_pa
 
 
 ! QUICK REFERENCE
 ! PURPOSE
 !    THIN F2PY-FRIENDLY WRAPPER THAT WRITES HYBRID DELTA-PRESSURE RESULTS
-!    INTO A CALLER-PROVIDED FLAT OUTPUT BUFFER.
-subroutine ddelta_pressure_hybrid_pa_into(psfc, dph_flat, hbcofa, hbcofb, p0, ncol, nlev)
+!    INTO A CALLER-PROVIDED COLUMN-MAJOR OUTPUT BUFFER.
+subroutine ddelta_pressure_hybrid_pa_into(psfc, dph, hbcofa, hbcofb, p0, ncol, nlev, nlevo)
     use vinth2p_kernels_core, only : real64
     implicit none
 
-    integer, intent(in) :: ncol, nlev
+    integer, intent(in) :: ncol, nlev, nlevo
     real(real64), intent(in) :: psfc(ncol), hbcofa(nlev), hbcofb(nlev), p0
-    real(real64), intent(inout) :: dph_flat((nlev - 1) * ncol)
+    real(real64), intent(inout) :: dph(nlevo, ncol)
 
-    call ddelta_pressure_hybrid_pa(psfc, dph_flat, hbcofa, hbcofb, p0, ncol, nlev)
+    call ddelta_pressure_hybrid_pa(psfc, dph, hbcofa, hbcofb, p0, ncol, nlev, nlevo)
 end subroutine ddelta_pressure_hybrid_pa_into
 
 
