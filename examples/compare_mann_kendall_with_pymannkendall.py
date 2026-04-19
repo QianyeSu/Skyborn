@@ -127,12 +127,13 @@ def main() -> None:
         )
 
     for modified in iter_modified_flags(args.mode):
+        test_name = "yue_wang" if modified else "original"
         print("\n" + "=" * 88)
-        print(f"modified = {modified}")
+        print(f"test = {test_name}")
         print("=" * 88)
 
         for name, arr in cases.items():
-            sky = mk.mann_kendall_test(arr, method=args.method, modified=modified)
+            sky = mk.mann_kendall_test(arr, method=args.method, test=test_name)
             pmk_result = (
                 pmk.yue_wang_modification_test(arr)
                 if modified
