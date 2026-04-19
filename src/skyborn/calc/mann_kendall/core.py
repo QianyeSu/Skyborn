@@ -677,15 +677,14 @@ def _vectorized_mk_test(
 
         clean_data_computed = np.asarray(clean_data_computed, dtype=np.float64)
         if test_name == "pre_whitening":
+            core_input = _as_core_input_2d(clean_data_computed)
             if method == "theilslopes":
-                slopes = _sen_slope_batch(clean_data_computed)
+                slopes = _sen_slope_batch(core_input)
             else:
                 slopes = _linregress_slope_batch(clean_data_computed, x)
 
-            stat_n = clean_data_computed.shape[0] - 1
-            S_values, var_s_values = _pre_whiten_score_variance_batch(
-                clean_data_computed
-            )
+            stat_n = core_input.shape[0] - 1
+            S_values, var_s_values = _pre_whiten_score_variance_batch(core_input)
         elif method == "theilslopes":
             S_values, var_s_values, slopes = _score_variance_slope_batch(
                 clean_data_computed, modified=modified
