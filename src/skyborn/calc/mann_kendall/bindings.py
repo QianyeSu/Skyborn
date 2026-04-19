@@ -11,6 +11,25 @@ import numpy as np
 
 def _load_core_module():
     """Best-effort loader for the compiled Mann-Kendall core extension."""
+    backend_dir = Path(__file__).resolve().parent
+    for probe_dir in (backend_dir / "build", backend_dir):
+        for suffix in EXTENSION_SUFFIXES:
+            candidate = probe_dir / f"mann_kendall_core{suffix}"
+            if not candidate.exists():
+                continue
+
+            try:
+                spec = importlib_util.spec_from_file_location(
+                    "mann_kendall_core", candidate
+                )
+                if spec is None or spec.loader is None:
+                    continue
+                core = importlib_util.module_from_spec(spec)
+                spec.loader.exec_module(core)
+                return core
+            except Exception:
+                continue
+
     candidate_names = []
     if __package__:
         candidate_names.append(f"{__package__}.mann_kendall_core")
@@ -22,24 +41,6 @@ def _load_core_module():
         except Exception:
             continue
 
-    backend_dir = Path(__file__).resolve().parent
-    for suffix in EXTENSION_SUFFIXES:
-        candidate = backend_dir / f"mann_kendall_core{suffix}"
-        if not candidate.exists():
-            continue
-
-        try:
-            spec = importlib_util.spec_from_file_location(
-                "mann_kendall_core", candidate
-            )
-            if spec is None or spec.loader is None:
-                continue
-            core = importlib_util.module_from_spec(spec)
-            spec.loader.exec_module(core)
-            return core
-        except Exception:
-            continue
-
     return None
 
 
@@ -47,6 +48,10 @@ _core_module = _load_core_module()
 _score_variance_kernel = getattr(_core_module, "mk_score_var_batch", None)
 _score_variance_slope_kernel = getattr(_core_module, "mk_score_var_sen_batch", None)
 _sen_slope_kernel = getattr(_core_module, "sen_slope_batch", None)
+_grouped_sen_slope_kernel = getattr(_core_module, "grouped_sen_slope_batch", None)
+_grouped_correlated_stats_kernel = getattr(
+    _core_module, "grouped_correlated_stats_batch", None
+)
 
 
 def _as_core_input_2d(data_2d: np.ndarray) -> np.ndarray:
@@ -86,6 +91,28 @@ def _sen_slope_batch(data_2d: np.ndarray) -> np.ndarray:
     kernel = _require_kernel(_sen_slope_kernel, "sen_slope_batch")
     slopes = kernel(_as_core_input_2d(data_2d))
     return np.asarray(slopes, dtype=np.float64)
+
+
+def _grouped_sen_slope_batch(data_2d: np.ndarray, period: int) -> np.ndarray:
+    """Run the compiled grouped 2D Theil-Sen slope kernel."""
+    kernel = _require_kernel(_grouped_sen_slope_kernel, "grouped_sen_slope_batch")
+    slopes = kernel(_as_core_input_2d(data_2d), int(period))
+    return np.asarray(slopes, dtype=np.float64)
+
+
+def _grouped_correlated_stats_batch(
+    data_2d: np.ndarray, period: int
+) -> Tuple[np.ndarray, np.ndarray, float]:
+    """Run the compiled grouped correlated-statistics kernel."""
+    kernel = _require_kernel(
+        _grouped_correlated_stats_kernel, "grouped_correlated_stats_batch"
+    )
+    s_values, var_values, denom = kernel(_as_core_input_2d(data_2d), int(period))
+    return (
+        np.asarray(s_values, dtype=np.float64),
+        np.asarray(var_values, dtype=np.float64),
+        float(denom),
+    )
 
 
 def _score_variance_slope_batch(
