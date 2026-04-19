@@ -198,6 +198,41 @@ def _dimension_coord_or_default(array, dim, *, output_dim=None, size=None):
     )
 
 
+def _finalize_delta_pressure_hybrid_output(
+    dph: xr.DataArray,
+    *,
+    lev_name: str,
+    lev_coord: xr.DataArray,
+    lev_dim: str | None,
+    output_dims,
+) -> xr.DataArray:
+    """Apply optional public xarray output naming and ordering controls."""
+
+    target_lev_dim = lev_name if lev_dim is None else lev_dim
+
+    target_lev_coord = xr.DataArray(
+        np.asarray(lev_coord.data),
+        dims=(target_lev_dim,),
+        attrs=lev_coord.attrs.copy(),
+    )
+
+    if target_lev_dim != lev_name:
+        dph = dph.rename({lev_name: target_lev_dim})
+
+    dph = dph.assign_coords({target_lev_dim: target_lev_coord})
+
+    if output_dims is not None:
+        output_dims = tuple(output_dims)
+        if len(output_dims) != dph.ndim or set(output_dims) != set(dph.dims):
+            raise ValueError(
+                "`output_dims` must contain each output dimension exactly once: "
+                f"expected a permutation of {dph.dims}, got {output_dims}"
+            )
+        dph = dph.transpose(*output_dims)
+
+    return dph
+
+
 def pressure_at_hybrid_levels(psfc, hya, hyb, p0=100000.0):
     """Calculate pressure at hybrid levels.
 
@@ -257,7 +292,14 @@ def pressure_at_hybrid_levels(psfc, hya, hyb, p0=100000.0):
     return hya * p0 + hyb * psfc
 
 
-def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
+def delta_pressure_hybrid(
+    ps,
+    hya,
+    hyb,
+    p0=100000.0,
+    lev_dim: str = None,
+    output_dims=None,
+):
     """Calculate pressure layer thickness for hybrid coordinates.
 
     Parameters
@@ -274,6 +316,14 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
         Reference pressure in Pascals. Use ``p0=1`` when ``hya`` already has
         pressure units, for example ERA5 ``hyai`` / ``hyam`` coefficients.
 
+    lev_dim : str, optional
+        Output vertical dimension name for xarray inputs. If not provided, the
+        current hybrid interface dimension name is preserved.
+
+    output_dims : sequence of str, optional
+        Output dimension order for xarray inputs. If not provided, the default
+        order remains ``(lev_dim, *ps.dims)``.
+
     Returns
     -------
     :class:`xarray.DataArray`, :class:`numpy.ndarray`
@@ -288,6 +338,11 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
     compute layer-thickness values. If you need pressure at the layer
     midpoints instead, use :func:`pressure_at_hybrid_levels` with ``hyam`` /
     ``hybm``.
+
+    For CESM-family data it is often convenient to keep using ``hyai`` /
+    ``hybi`` for the calculation, but set ``lev_dim`` and ``output_dims`` so
+    the result lines up with a variable on midpoints such as
+    ``V(time, lev, lat, lon)``.
     """
 
     if not all(isinstance(x, (xr.DataArray, np.ndarray)) for x in (ps, hya, hyb)):
@@ -303,6 +358,10 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
         raise ValueError(f"hya and hyb must be 1-dimensional: {hya.shape}")
 
     if isinstance(ps, np.ndarray):
+        if lev_dim is not None or output_dims is not None:
+            raise TypeError(
+                "`lev_dim` and `output_dims` are supported only for xarray inputs"
+            )
         hya_values = np.asarray(hya.data if isinstance(hya, xr.DataArray) else hya)
         hyb_values = np.asarray(hyb.data if isinstance(hyb, xr.DataArray) else hyb)
         if _ddelta_pressure_hybrid_pa is not None:
@@ -361,7 +420,13 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
             "long_name": "pressure layer thickness",
             "units": "Pa",
         }
-        return dph
+        return _finalize_delta_pressure_hybrid_output(
+            dph,
+            lev_name=lev_name,
+            lev_coord=lev_coord,
+            lev_dim=lev_dim,
+            output_dims=output_dims,
+        )
 
     pa = (
         p0 * hya_calc.isel({lev_name: slice(None, -1)})
@@ -379,7 +444,13 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
         "long_name": "pressure layer thickness",
         "units": "Pa",
     }
-    return dph
+    return _finalize_delta_pressure_hybrid_output(
+        dph,
+        lev_name=lev_name,
+        lev_coord=lev_coord,
+        lev_dim=lev_dim,
+        output_dims=output_dims,
+    )
 
 
 def _pressure_from_hybrid(psfc, hya, hyb, p0=100000.0):
