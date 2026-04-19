@@ -69,6 +69,7 @@ from .regression import (
     _theil_std_error_batch,
 )
 from .variants import (
+    _correlated_seasonal_stats_scalar,
     _hamed_rao_variance_batch,
     _pre_whiten_score_variance_batch,
     _seasonal_score_variance_batch,
@@ -96,6 +97,8 @@ def _normalize_test_name(test: str) -> str:
         return "yue_wang"
     if normalized in {"seasonal", "seasonal_mk"}:
         return "seasonal"
+    if normalized in {"correlated_seasonal", "correlatedseasonal"}:
+        return "correlated_seasonal"
     if normalized in {"hamed_rao", "hamedrao"}:
         return "hamed_rao"
     if normalized in {
@@ -108,8 +111,9 @@ def _normalize_test_name(test: str) -> str:
         return "pre_whitening"
     raise ValueError(
         "Unknown test: "
-        f"{test}. Supported tests are 'original', 'yue_wang', 'seasonal', 'hamed_rao', "
-        "'pre_whitening', and 'trend_free_pre_whitening'."
+        f"{test}. Supported tests are 'original', 'yue_wang', 'seasonal', "
+        "'correlated_seasonal', 'hamed_rao', 'pre_whitening', and "
+        "'trend_free_pre_whitening'."
     )
 
 
@@ -242,6 +246,7 @@ def mann_kendall_test(
         - 'original': original Mann-Kendall test
         - 'yue_wang': Yue and Wang (2004) modified variance correction
         - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
+        - 'correlated_seasonal': Hipel (1994) correlated seasonal Mann-Kendall test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
@@ -314,7 +319,7 @@ def mann_kendall_test(
             "mann_kendall_test only accepts 1D data. Use trend_analysis for multidimensional data."
         )
 
-    if test_name == "seasonal":
+    if test_name in {"seasonal", "correlated_seasonal"}:
         season_values = np.asarray(values, dtype=np.float64)
         finite_mask = np.isfinite(season_values)
         n_finite = int(np.sum(finite_mask))
@@ -343,13 +348,17 @@ def mann_kendall_test(
                 :2
             ]
 
-        S, var_s, denom = _seasonal_score_variance_scalar(season_values, period)
-        if S > 0:
-            z = (S - 1) / np.sqrt(var_s)
-        elif S == 0:
-            z = 0
+        if test_name == "seasonal":
+            S, var_s, denom = _seasonal_score_variance_scalar(season_values, period)
+            if S > 0:
+                z = (S - 1) / np.sqrt(var_s)
+            elif S == 0:
+                z = 0
+            else:
+                z = (S + 1) / np.sqrt(var_s)
         else:
-            z = (S + 1) / np.sqrt(var_s)
+            S, var_s, denom = _correlated_seasonal_stats_scalar(season_values, period)
+            z = S / np.sqrt(var_s)
 
         p_value = 2 * (1 - stats.norm.cdf(abs(z)))
         h = abs(z) > stats.norm.ppf(1 - alpha / 2)
@@ -518,6 +527,7 @@ def mann_kendall_multidim(
         - 'original': original Mann-Kendall test
         - 'yue_wang': Yue and Wang (2004) modified variance correction
         - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
+        - 'correlated_seasonal': Hipel (1994) correlated seasonal Mann-Kendall test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
@@ -715,7 +725,7 @@ def _vectorized_mk_test(
             clean_data_computed = np.asarray(data_chunk[:, no_nan_indices])
 
         clean_data_computed = np.asarray(clean_data_computed, dtype=np.float64)
-        if test_name == "seasonal":
+        if test_name in {"seasonal", "correlated_seasonal"}:
             core_input = _as_core_input_2d(clean_data_computed)
             if method == "theilslopes":
                 slopes = np.empty(core_input.shape[1], dtype=np.float64)
@@ -730,9 +740,18 @@ def _vectorized_mk_test(
                 y_mean = np.mean(clean_data_computed, axis=0)
                 intercepts = y_mean - slopes * x_mean
 
-            S_values, var_s_values, seasonal_denom = _seasonal_score_variance_batch(
-                core_input, period
-            )
+            if test_name == "seasonal":
+                S_values, var_s_values, seasonal_denom = _seasonal_score_variance_batch(
+                    core_input, period
+                )
+            else:
+                S_values = np.empty(core_input.shape[1], dtype=np.float64)
+                var_s_values = np.empty(core_input.shape[1], dtype=np.float64)
+                seasonal_denom = 0.0
+                for idx in range(core_input.shape[1]):
+                    S_values[idx], var_s_values[idx], seasonal_denom = (
+                        _correlated_seasonal_stats_scalar(core_input[:, idx], period)
+                    )
             stat_n = time_steps
         elif test_name == "pre_whitening":
             core_input = _as_core_input_2d(clean_data_computed)
@@ -792,14 +811,18 @@ def _vectorized_mk_test(
 
         # Vectorized z-score calculation
         z_values = np.zeros_like(S_values, dtype=np.float64)
-        positive_mask = S_values > 0
-        negative_mask = S_values < 0
-        z_values[positive_mask] = (S_values[positive_mask] - 1) / np.sqrt(
-            var_s_values[positive_mask]
-        )
-        z_values[negative_mask] = (S_values[negative_mask] + 1) / np.sqrt(
-            var_s_values[negative_mask]
-        )
+        if test_name == "correlated_seasonal":
+            with np.errstate(divide="ignore", invalid="ignore"):
+                z_values = S_values / np.sqrt(var_s_values)
+        else:
+            positive_mask = S_values > 0
+            negative_mask = S_values < 0
+            z_values[positive_mask] = (S_values[positive_mask] - 1) / np.sqrt(
+                var_s_values[positive_mask]
+            )
+            z_values[negative_mask] = (S_values[negative_mask] + 1) / np.sqrt(
+                var_s_values[negative_mask]
+            )
 
         p_values = 2 * (1 - stats.norm.cdf(np.abs(z_values)))
         h_values = np.abs(z_values) > stats.norm.ppf(1 - alpha / 2)
@@ -816,7 +839,7 @@ def _vectorized_mk_test(
         ):
             slopes = _linregress_slope_batch(clean_data_computed, x)
 
-        if test_name == "seasonal":
+        if test_name in {"seasonal", "correlated_seasonal"}:
             tau_values = (
                 S_values / seasonal_denom
                 if seasonal_denom != 0.0
@@ -825,7 +848,7 @@ def _vectorized_mk_test(
         else:
             tau_values = S_values / (0.5 * stat_n * (stat_n - 1))
 
-        if test_name == "seasonal" and method == "theilslopes":
+        if test_name in {"seasonal", "correlated_seasonal"} and method == "theilslopes":
             seasonal_x = x[:, np.newaxis] / period
             fitted = seasonal_x * slopes[np.newaxis, :] + intercepts[np.newaxis, :]
             std_errors = np.std(clean_data_computed - fitted, axis=0) / np.sqrt(
@@ -917,6 +940,7 @@ def mann_kendall_xarray(
         - 'original': original Mann-Kendall test
         - 'yue_wang': Yue and Wang (2004) modified variance correction
         - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
+        - 'correlated_seasonal': Hipel (1994) correlated seasonal Mann-Kendall test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
@@ -1190,6 +1214,7 @@ def trend_analysis(
         - 'original': original Mann-Kendall test
         - 'yue_wang': Yue and Wang (2004) modified variance correction
         - 'seasonal': Hirsch-Slack (1984) seasonal Mann-Kendall test
+        - 'correlated_seasonal': Hipel (1994) correlated seasonal Mann-Kendall test
         - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
         - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
