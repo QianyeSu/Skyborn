@@ -532,6 +532,50 @@ class TestMannKendallComprehensive:
         )
         _assert_matches_pymannkendall(result, pmk_result)
 
+    @pytest.mark.parametrize(
+        "data",
+        [
+            np.linspace(0.0, 2.3, 24, dtype=float),
+            np.array(
+                [
+                    1.0,
+                    1.5,
+                    2.0,
+                    2.5,
+                    3.0,
+                    3.5,
+                    4.0,
+                    4.5,
+                    5.0,
+                    5.5,
+                    6.0,
+                    6.5,
+                    1.2,
+                    1.7,
+                    np.nan,
+                    2.7,
+                    3.2,
+                    3.7,
+                    4.2,
+                    4.7,
+                    5.2,
+                    5.7,
+                    6.2,
+                    6.7,
+                ],
+                dtype=float,
+            ),
+        ],
+    )
+    def test_seasonal_matches_pymannkendall_reference(self, data):
+        """Seasonal MK should match pymannkendall on deterministic seasonal cases."""
+        pmk = pytest.importorskip("pymannkendall")
+        pmk_result = pmk.seasonal_test(data, period=12)
+        result = mann_kendall_test(
+            data, method="theilslopes", test="seasonal", period=12
+        )
+        _assert_matches_pymannkendall(result, pmk_result)
+
     def test_pre_whitening_clean_batch_matches_pymannkendall_loops(self):
         """Clean batched pre-whitening should agree with per-series pymannkendall."""
         pmk = pytest.importorskip("pymannkendall")
@@ -617,6 +661,31 @@ class TestMannKendallComprehensive:
 
         for idx in range(data.shape[1]):
             pmk_result = pmk.trend_free_pre_whitening_modification_test(data[:, idx])
+            assert vectorized["h"][idx] == bool(pmk_result.h)
+            np.testing.assert_allclose(vectorized["trend"][idx], pmk_result.slope)
+            np.testing.assert_allclose(vectorized["p"][idx], pmk_result.p)
+            np.testing.assert_allclose(vectorized["z"][idx], pmk_result.z)
+            np.testing.assert_allclose(vectorized["tau"][idx], pmk_result.Tau)
+
+    def test_seasonal_clean_batch_matches_pymannkendall_loops(self):
+        """Clean batched seasonal MK should agree with per-series pymannkendall."""
+        pmk = pytest.importorskip("pymannkendall")
+        base = np.arange(24, dtype=float)
+        data = np.stack(
+            [
+                0.1 * base + np.tile(np.arange(12, dtype=float), 2),
+                0.05 * base + np.tile(np.linspace(0.0, 1.1, 12), 2),
+                np.tile(np.arange(12, dtype=float), 2),
+            ],
+            axis=1,
+        )
+
+        vectorized = _vectorized_mk_test(
+            data, method="theilslopes", test="seasonal", period=12
+        )
+
+        for idx in range(data.shape[1]):
+            pmk_result = pmk.seasonal_test(data[:, idx], period=12)
             assert vectorized["h"][idx] == bool(pmk_result.h)
             np.testing.assert_allclose(vectorized["trend"][idx], pmk_result.slope)
             np.testing.assert_allclose(vectorized["p"][idx], pmk_result.p)
