@@ -134,3 +134,105 @@ def _hamed_rao_variance_batch(
 
     n_ns = 1.0 + (2.0 * sni) / (n * (n - 1) * (n - 2))
     return np.asarray(base_var_values, dtype=np.float64) * n_ns
+
+
+def _reshape_seasonal_1d(values_1d: np.ndarray, period: int) -> np.ndarray:
+    """Pad a 1D seasonal series with NaN and reshape it to (cycles, period)."""
+    values = np.asarray(values_1d, dtype=np.float64)
+    if values.ndim != 1:
+        raise ValueError("Seasonal helpers expect a 1D array.")
+    if period <= 0:
+        raise ValueError("period must be a positive integer.")
+    remainder = values.size % period
+    if remainder != 0:
+        values = np.pad(
+            values,
+            (0, period - remainder),
+            mode="constant",
+            constant_values=np.nan,
+        )
+    return values.reshape(values.size // period, period)
+
+
+def _seasonal_score_variance_scalar(
+    values_1d: np.ndarray, period: int
+) -> Tuple[float, float, float]:
+    """Return seasonal S, variance, and tau denominator for one 1D series."""
+    matrix = _reshape_seasonal_1d(values_1d, period)
+    s_value = 0.0
+    var_s = 0.0
+    denom = 0.0
+
+    for season in range(matrix.shape[1]):
+        season_values = matrix[:, season]
+        finite = season_values[np.isfinite(season_values)]
+        n = finite.size
+        if n == 0:
+            continue
+
+        season_s, season_var = _score_variance_batch(
+            finite.reshape(-1, 1), modified=False
+        )
+        s_value += float(season_s[0])
+        var_s += float(season_var[0])
+        denom += 0.5 * n * (n - 1)
+
+    return s_value, var_s, denom
+
+
+def _seasonal_score_variance_batch(
+    data_2d: np.ndarray, period: int
+) -> Tuple[np.ndarray, np.ndarray, float]:
+    """Return seasonal S and variance for a clean 2D batch with common period."""
+    if period <= 0:
+        raise ValueError("period must be a positive integer.")
+
+    data = np.asarray(data_2d, dtype=np.float64)
+    if data.ndim != 2:
+        raise ValueError("Expected a 2D array for seasonal batch helpers.")
+
+    s_values = np.zeros(data.shape[1], dtype=np.float64)
+    var_values = np.zeros(data.shape[1], dtype=np.float64)
+    denom = 0.0
+
+    for season in range(period):
+        season_data = data[season::period, :]
+        n = season_data.shape[0]
+        if n == 0:
+            continue
+
+        season_s, season_var = _score_variance_batch(season_data, modified=False)
+        s_values += season_s
+        var_values += season_var
+        denom += 0.5 * n * (n - 1)
+
+    return s_values, var_values, denom
+
+
+def _seasonal_sens_slope_scalar(
+    values_1d: np.ndarray, period: int
+) -> Tuple[float, float]:
+    """Return the seasonal Sen slope and intercept for one 1D series."""
+    matrix = _reshape_seasonal_1d(values_1d, period)
+    slopes = []
+
+    for season in range(matrix.shape[1]):
+        season_values = matrix[:, season]
+        n = season_values.size
+        for i in range(n - 1):
+            if not np.isfinite(season_values[i]):
+                continue
+            for j in range(i + 1, n):
+                if not np.isfinite(season_values[j]):
+                    continue
+                slopes.append((season_values[j] - season_values[i]) / (j - i))
+
+    if slopes:
+        slope = float(np.nanmedian(np.asarray(slopes, dtype=np.float64)))
+    else:
+        slope = np.nan
+
+    values = np.asarray(values_1d, dtype=np.float64)
+    finite_index = np.arange(values.size, dtype=np.float64)[np.isfinite(values)]
+    intercept = float(np.nanmedian(values) - np.median(finite_index) / period * slope)
+    return slope, intercept
