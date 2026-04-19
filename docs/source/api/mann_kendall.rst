@@ -8,7 +8,8 @@ The Mann-Kendall test is a non-parametric statistical test used to detect trends
 Key Features
 ------------
 
-* **High Performance**: Vectorized implementation with 15-30x speed improvements
+* **Fast Multidimensional Workloads**: Often tens to hundreds of times faster
+  than looping over ``pymannkendall`` on dense gridded climate workloads
 * **Climate Data Optimized**: Efficient processing of typical climate grids (40×192×288)
 * **Memory Efficient**: Smart chunking with minimal memory overhead (~25MB for full climate datasets)
 * **Robust Statistics**: Handles missing data and provides comprehensive trend statistics
@@ -38,6 +39,87 @@ these seasonal test families default to ``12``. Other test families ignore it.
 
 The optional ``lag=...`` argument is only used by
 ``test="yue_wang"`` and ``test="hamed_rao"``. Other test families ignore it.
+
+Skyborn vs pymannkendall
+------------------------
+
+Compared with ``pymannkendall``, Skyborn is designed not only for one
+time series at a time, but also for multidimensional climate-analysis
+workloads such as ``(time, lat, lon)``, ``(time, level, lat, lon)``, and
+``(ensemble, time, lat, lon)`` as well as labeled xarray inputs.
+
+The practical differences are:
+
+* Skyborn supports multidimensional NumPy and xarray inputs directly, while
+  ``pymannkendall`` is primarily a single-series API.
+* Skyborn uses batch-oriented compiled kernels for dense clean-series hot
+  paths, so large gridded workloads do not have to loop through every grid
+  point in Python.
+* Skyborn keeps the same core MK-family semantics as ``pymannkendall`` for the
+  supported test families, while extending them to multidimensional analysis.
+
+The table below summarizes the current public correspondence.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 23 28 14 35
+
+   * - Skyborn
+     - Corresponding ``pymannkendall``
+     - Status
+     - Main Skyborn difference
+   * - ``test="original"``
+     - ``original_test``
+     - Aligned
+     - Direct multidimensional NumPy/xarray support plus compiled batch execution
+   * - ``test="yue_wang"``
+     - ``yue_wang_modification_test``
+     - Aligned
+     - Direct multidimensional support plus optional ``lag=...``
+   * - ``test="pre_whitening"``
+     - ``pre_whitening_modification_test``
+     - Aligned
+     - Direct multidimensional support and fast dense-batch execution
+   * - ``test="trend_free_pre_whitening"``
+     - ``trend_free_pre_whitening_modification_test``
+     - Aligned
+     - Direct multidimensional support and fast dense-batch execution
+   * - ``test="hamed_rao"``
+     - ``hamed_rao_modification_test``
+     - Aligned
+     - Direct multidimensional support plus optional ``lag=...``
+   * - ``test="seasonal"``
+     - ``seasonal_test``
+     - Aligned
+     - Seasonal multidimensional analysis with grouped compiled kernels
+   * - ``test="correlated_seasonal"``
+     - ``correlated_seasonal_test``
+     - Aligned
+     - Seasonal multidimensional analysis with grouped covariance kernels
+   * - ``test="multivariate"``
+     - ``multivariate_test``
+     - Aligned
+     - Grouped multidimensional workflows are supported directly
+   * - ``test="regional"``
+     - ``regional_test``
+     - Aligned
+     - Grouped multidimensional workflows are supported directly
+   * - ``test="correlated_multivariate"``
+     - ``correlated_multivariate_test``
+     - Aligned
+     - Grouped multidimensional workflows are supported directly
+   * - ``partial_mann_kendall_test`` /
+       ``partial_mann_kendall_multidim`` /
+       ``partial_mann_kendall_xarray``
+     - ``partial_test``
+     - Aligned
+     - Separate partial-MK API for one-dimensional, multidimensional, and xarray inputs
+
+On representative real-data benchmarks in this project, Skyborn has often been
+dramatically faster than looping over ``pymannkendall`` for gridded climate
+data. Exact speedups depend on the test family, time length, missing-data
+pattern, and memory layout. The implementation focus in Skyborn is dense
+multidimensional workloads rather than one-series-at-a-time Python loops.
 
 Partial Mann-Kendall
 --------------------
