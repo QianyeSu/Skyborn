@@ -581,6 +581,50 @@ class TestMannKendallComprehensive:
         )
         _assert_matches_pymannkendall(result, pmk_result)
 
+    @pytest.mark.parametrize(
+        "data",
+        [
+            np.linspace(0.0, 2.3, 24, dtype=float),
+            np.array(
+                [
+                    1.0,
+                    1.5,
+                    2.0,
+                    2.5,
+                    3.0,
+                    3.5,
+                    4.0,
+                    4.5,
+                    5.0,
+                    5.5,
+                    6.0,
+                    6.5,
+                    1.2,
+                    1.7,
+                    2.2,
+                    2.7,
+                    np.nan,
+                    3.7,
+                    4.2,
+                    4.7,
+                    5.2,
+                    5.7,
+                    6.2,
+                    6.7,
+                ],
+                dtype=float,
+            ),
+        ],
+    )
+    def test_correlated_seasonal_matches_pymannkendall_reference(self, data):
+        """Correlated seasonal MK should match pymannkendall on deterministic seasonal cases."""
+        pmk = pytest.importorskip("pymannkendall")
+        pmk_result = pmk.correlated_seasonal_test(data, period=12)
+        result = mann_kendall_test(
+            data, method="theilslopes", test="correlated_seasonal", period=12
+        )
+        _assert_matches_pymannkendall(result, pmk_result)
+
     def test_pre_whitening_clean_batch_matches_pymannkendall_loops(self):
         """Clean batched pre-whitening should agree with per-series pymannkendall."""
         pmk = pytest.importorskip("pymannkendall")
@@ -691,6 +735,31 @@ class TestMannKendallComprehensive:
 
         for idx in range(data.shape[1]):
             pmk_result = pmk.seasonal_test(data[:, idx], period=12)
+            assert vectorized["h"][idx] == bool(pmk_result.h)
+            np.testing.assert_allclose(vectorized["trend"][idx], pmk_result.slope)
+            np.testing.assert_allclose(vectorized["p"][idx], pmk_result.p)
+            np.testing.assert_allclose(vectorized["z"][idx], pmk_result.z)
+            np.testing.assert_allclose(vectorized["tau"][idx], pmk_result.Tau)
+
+    def test_correlated_seasonal_clean_batch_matches_pymannkendall_loops(self):
+        """Clean batched correlated seasonal MK should agree with per-series pymannkendall."""
+        pmk = pytest.importorskip("pymannkendall")
+        base = np.arange(24, dtype=float)
+        data = np.stack(
+            [
+                0.1 * base + np.tile(np.arange(12, dtype=float), 2),
+                0.05 * base + np.tile(np.linspace(0.0, 1.1, 12), 2),
+                np.tile(np.arange(12, dtype=float), 2),
+            ],
+            axis=1,
+        )
+
+        vectorized = _vectorized_mk_test(
+            data, method="theilslopes", test="correlated_seasonal", period=12
+        )
+
+        for idx in range(data.shape[1]):
+            pmk_result = pmk.correlated_seasonal_test(data[:, idx], period=12)
             assert vectorized["h"][idx] == bool(pmk_result.h)
             np.testing.assert_allclose(vectorized["trend"][idx], pmk_result.slope)
             np.testing.assert_allclose(vectorized["p"][idx], pmk_result.p)
@@ -2150,6 +2219,35 @@ class TestMannKendallComprehensive:
             alpha=0.05,
         )
         np.testing.assert_allclose(corrected, base_var)
+
+    def test_seasonal_variant_helper_validation_and_edge_cases(self):
+        """Seasonal helper utilities should validate shapes and cover edge cases."""
+        with pytest.raises(ValueError, match="Seasonal helpers expect a 1D array"):
+            variants_module._reshape_seasonal_1d(np.ones((2, 2)), period=12)
+
+        with pytest.raises(ValueError, match="period must be a positive integer"):
+            variants_module._reshape_seasonal_1d(np.arange(12, dtype=float), period=0)
+
+        with pytest.raises(ValueError, match="period must be a positive integer"):
+            variants_module._seasonal_score_variance_batch(np.ones((12, 2)), period=0)
+
+        with pytest.raises(ValueError, match="Expected a 2D array"):
+            variants_module._seasonal_score_variance_batch(
+                np.arange(12, dtype=float), period=12
+            )
+
+        s_value, var_s, denom = variants_module._seasonal_score_variance_scalar(
+            np.array([np.nan, np.nan, 1.0, np.nan]), period=2
+        )
+        assert s_value == 0.0
+        assert var_s == 0.0
+        assert denom == 0.0
+
+        slope, intercept = variants_module._seasonal_sens_slope_scalar(
+            np.array([np.nan, 1.0, np.nan, np.nan]), period=2
+        )
+        assert np.isnan(slope)
+        assert np.isnan(intercept) or np.isfinite(intercept)
 
     def test_batch_variance_dispatch_stays_aligned_with_scalar_semantics(self):
         """Direct clean-batch dispatch should stay aligned with scalar semantics."""
