@@ -46,6 +46,11 @@ from .mann_kendall import (
     mann_kendall_multidim,
     mann_kendall_test,
     mann_kendall_xarray,
+    partial_mann_kendall_multidim,
+    partial_mann_kendall_test,
+    partial_mann_kendall_xarray,
+    partial_multidim,
+    partial_test,
     trend_analysis,
 )
 
