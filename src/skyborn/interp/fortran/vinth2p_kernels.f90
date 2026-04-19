@@ -24,6 +24,7 @@ module vinth2p_kernels_core
     public :: real64
     public :: build_input_pressures
     public :: build_double_log_levels
+    public :: compute_delta_pressure_flat
     public :: convert_levels_to_mb
     public :: extrapolate_geopotential
     public :: extrapolate_temperature
@@ -63,6 +64,27 @@ contains
 
         plevi = hbcofa * p0_mb + hbcofb * psfc_mb
     end subroutine build_input_pressures
+
+
+    ! Compute hybrid-layer pressure thickness directly without materializing
+    ! the full adjacent pressure fields in temporary arrays.
+    pure subroutine compute_delta_pressure_flat(psfc, hbcofa, hbcofb, p0, dph_flat)
+        real(real64), intent(in) :: psfc(:), hbcofa(:), hbcofb(:), p0
+        real(real64), intent(out) :: dph_flat((size(hbcofa) - 1) * size(psfc))
+
+        integer :: col, k, output_idx
+        real(real64) :: delta_a, delta_b
+
+        output_idx = 1
+        do k = 1, size(hbcofa) - 1
+            delta_a = hbcofa(k) - hbcofa(k + 1)
+            delta_b = hbcofb(k) - hbcofb(k + 1)
+            do col = 1, size(psfc)
+                dph_flat(output_idx) = abs(p0 * delta_a + delta_b * psfc(col))
+                output_idx = output_idx + 1
+            end do
+        end do
+    end subroutine compute_delta_pressure_flat
 
 
     ! Build the flat-buffer input offsets for one physical column so the hot
@@ -1622,6 +1644,49 @@ subroutine dvinth2p_ecmwf_nodes_pa_into( &
         nlevi, ncol, nlevo, varflg, tbot, phis &
     )
 end subroutine dvinth2p_ecmwf_nodes_pa_into
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    GENERIC ENTRY POINT FOR HYBRID LAYER-THICKNESS CALCULATION USING A FLAT
+!    C-ORDER OUTPUT BUFFER THAT REPRESENTS [NLEV-1, NCOL].
+!
+! EXPECTED INPUT SHAPES
+!    PSFC(NCOL)                 - SURFACE PRESSURE FOR EACH COLUMN
+!    DPH_FLAT((NLEV-1)*NCOL)    - OUTPUT FLAT BUFFER
+!    HBCOFA(NLEV)               - HYBRID "A" COEFFICIENTS
+!    HBCOFB(NLEV)               - HYBRID "B" COEFFICIENTS
+!
+! UNITS
+!    P0     - PA
+!    PSFC   - PA
+!    DPH    - PA
+subroutine ddelta_pressure_hybrid_pa(psfc, dph_flat, hbcofa, hbcofb, p0, ncol, nlev)
+    use vinth2p_kernels_core, only : real64, compute_delta_pressure_flat
+    implicit none
+
+    integer, intent(in) :: ncol, nlev
+    real(real64), intent(in) :: psfc(ncol), hbcofa(nlev), hbcofb(nlev), p0
+    real(real64), intent(out) :: dph_flat((nlev - 1) * ncol)
+
+    call compute_delta_pressure_flat(psfc, hbcofa, hbcofb, p0, dph_flat)
+end subroutine ddelta_pressure_hybrid_pa
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    THIN F2PY-FRIENDLY WRAPPER THAT WRITES HYBRID DELTA-PRESSURE RESULTS
+!    INTO A CALLER-PROVIDED FLAT OUTPUT BUFFER.
+subroutine ddelta_pressure_hybrid_pa_into(psfc, dph_flat, hbcofa, hbcofb, p0, ncol, nlev)
+    use vinth2p_kernels_core, only : real64
+    implicit none
+
+    integer, intent(in) :: ncol, nlev
+    real(real64), intent(in) :: psfc(ncol), hbcofa(nlev), hbcofb(nlev), p0
+    real(real64), intent(inout) :: dph_flat((nlev - 1) * ncol)
+
+    call ddelta_pressure_hybrid_pa(psfc, dph_flat, hbcofa, hbcofb, p0, ncol, nlev)
+end subroutine ddelta_pressure_hybrid_pa_into
 
 
 ! QUICK REFERENCE
