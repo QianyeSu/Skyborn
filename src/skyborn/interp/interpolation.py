@@ -167,6 +167,37 @@ def _rename_colliding_coeff_dim(target, hya, hyb):
     return hya, hyb
 
 
+def _with_dataarray_metadata(template, data, coords=None, dims=None):
+    """Build a new DataArray while preserving the template metadata."""
+
+    return xr.DataArray(
+        data,
+        dims=template.dims if dims is None else dims,
+        coords=template.coords if coords is None else coords,
+        name=template.name,
+        attrs=template.attrs.copy(),
+    )
+
+
+def _dimension_coord_or_default(array, dim, *, output_dim=None, size=None):
+    """Return a stable 1D coordinate for ``dim`` or a default integer index."""
+
+    output_dim = dim if output_dim is None else output_dim
+    coord = array.coords.get(dim)
+    if coord is None:
+        length = array.sizes[dim] if size is None else size
+        return xr.DataArray(np.arange(length), dims=(output_dim,))
+
+    if size is not None:
+        coord = coord.isel({dim: slice(None, size)})
+
+    return xr.DataArray(
+        np.asarray(coord.data),
+        dims=(output_dim,),
+        attrs=coord.attrs.copy(),
+    )
+
+
 def pressure_at_hybrid_levels(psfc, hya, hyb, p0=100000.0):
     """Calculate pressure at hybrid levels.
 
@@ -261,8 +292,8 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
         hya = xr.DataArray(hya, dims=("lev",))
         hyb = xr.DataArray(hyb, dims=("lev",))
     else:
-        hya = xr.DataArray(np.asarray(hya.data), dims=hya.dims)
-        hyb = xr.DataArray(np.asarray(hyb.data), dims=hyb.dims)
+        hya = _with_dataarray_metadata(hya, np.asarray(hya.data))
+        hyb = _with_dataarray_metadata(hyb, np.asarray(hyb.data))
         if hya.dims != hyb.dims:
             warnings.warn(
                 "hya and hyb have different dimension names, attempting rename",
@@ -273,6 +304,9 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
     hya, hyb = _rename_colliding_coeff_dim(ps, hya, hyb)
 
     lev_name = hya.dims[0]
+    lev_coord = _dimension_coord_or_default(hya, lev_name, size=hya.shape[0] - 1)
+    hya_calc = xr.DataArray(np.asarray(hya.data), dims=hya.dims)
+    hyb_calc = xr.DataArray(np.asarray(hyb.data), dims=hyb.dims)
     if (
         _ddelta_pressure_hybrid_pa is not None
         and not _is_dask_backed(ps)
@@ -280,14 +314,13 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
         and lev_name not in ps.dims
     ):
         output_columns = _delta_pressure_hybrid_fortran_flat(
-            ps.data, hya.data, hyb.data, p0
+            ps.data, hya_calc.data, hyb_calc.data, p0
         )
         output_values = output_columns.reshape(
             (hya.shape[0] - 1,) + ps.shape, order="C"
         )
         coords = {name: coord for name, coord in ps.coords.items()}
-        if lev_name in hya.coords:
-            coords[lev_name] = hya.coords[lev_name].isel({lev_name: slice(None, -1)})
+        coords[lev_name] = lev_coord
         dph = xr.DataArray(
             output_values,
             dims=(lev_name, *ps.dims),
@@ -301,15 +334,16 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
         return dph
 
     pa = (
-        p0 * hya.isel({lev_name: slice(None, -1)})
-        + hyb.isel({lev_name: slice(None, -1)}) * ps
+        p0 * hya_calc.isel({lev_name: slice(None, -1)})
+        + hyb_calc.isel({lev_name: slice(None, -1)}) * ps
     )
     pb = (
-        p0 * hya.isel({lev_name: slice(1, None)})
-        + hyb.isel({lev_name: slice(1, None)}) * ps
+        p0 * hya_calc.isel({lev_name: slice(1, None)})
+        + hyb_calc.isel({lev_name: slice(1, None)}) * ps
     )
 
     dph = abs(pa - pb)
+    dph = dph.assign_coords({lev_name: lev_coord})
     dph.name = "dph"
     dph.attrs = {
         "long_name": "pressure layer thickness",
@@ -355,10 +389,8 @@ def _pre_interp_multidim(
     """
     # replace missing_val with np.nan
     if missing_val is not None:
-        data_in = xr.DataArray(
-            np.where(data_in.values == missing_val, np.nan, data_in.values),
-            dims=data_in.dims,
-            coords=data_in.coords,
+        data_in = _with_dataarray_metadata(
+            data_in, np.where(data_in.values == missing_val, np.nan, data_in.values)
         )
 
     # add cyclic points and create new data array
@@ -370,13 +402,13 @@ def _pre_interp_multidim(
         padded_longitudes[0] -= 360
         padded_longitudes[-1] += 360
 
-        data_in = xr.DataArray(
+        data_in = _with_dataarray_metadata(
+            data_in,
             padded_data,
             coords={
                 data_in.dims[-2]: data_in.coords[data_in.dims[-2]].values,
                 data_in.dims[-1]: padded_longitudes,
             },
-            dims=data_in.dims,
         )
 
     return data_in
@@ -399,10 +431,8 @@ def _post_interp_multidim(data_in, missing_val):
        The data input with np.nan values replaced with missing_val
     """
     if missing_val is not None:
-        data_in = xr.DataArray(
-            np.where(np.isnan(data_in.values), missing_val, data_in.values),
-            dims=data_in.dims,
-            coords=data_in.coords,
+        data_in = _with_dataarray_metadata(
+            data_in, np.where(np.isnan(data_in.values), missing_val, data_in.values)
         )
 
     return data_in
@@ -1219,13 +1249,8 @@ def _interp_sigma_to_hybrid_fortran(
     output_values[output_values == _VINTH2P_SPVL] = np.nan
     output_values = _restore_compiled_interp_output_dtype(output_values, data)
 
-    h_coords = (
-        _restore_compiled_interp_output_dtype(sigma_target_columns[:, 0].copy(), data)
-        if ncol
-        else np.asarray([], dtype=_compiled_interp_output_dtype(data))
-    )
     coords = {k: v for k, v in base_template.coords.items()}
-    coords["hlev"] = h_coords
+    coords["hlev"] = _dimension_coord_or_default(hyam, hyam.dims[0], output_dim="hlev")
     output = xr.DataArray(
         output_values,
         dims=(*lead_dims, "hlev"),
@@ -1309,11 +1334,8 @@ def _interp_sigma_to_hybrid_fortran_corder(
 
     output_values[output_values == _VINTH2P_SPVL] = np.nan
     output_values = _restore_compiled_interp_output_dtype(output_values, data)
-    h_coords = _restore_compiled_interp_output_dtype(
-        hyam_values * float(p0) / ps_flat[0] + hybm_values, data
-    )
     coords = {k: v for k, v in base_template.coords.items()}
-    coords["hlev"] = h_coords
+    coords["hlev"] = _dimension_coord_or_default(hyam, hyam.dims[0], output_dim="hlev")
     output = xr.DataArray(
         output_values,
         dims=tuple(
@@ -1734,8 +1756,6 @@ def interp_sigma_to_hybrid(
         data_stacked = data.stack(combined=non_lev_dims).transpose()
         sigma_stacked = sigma.stack(combined=non_lev_dims).transpose()
 
-        h_coords = sigma_stacked[0, :].copy()
-
         output = data_stacked[:, : len(hyam)].copy()
 
         for idx, (d, s) in enumerate(zip(data_stacked, sigma_stacked)):
@@ -1747,8 +1767,6 @@ def interp_sigma_to_hybrid(
         # Make output shape same as data shape
         output = output.unstack().transpose(*data.dims)
     else:
-        h_coords = sigma
-
         output = data[: len(hyam)].copy()
         output[: len(hyam)] = xr.DataArray(
             _vertical_remap(func_interpolate, sigma.data, sig_coord_values, data.data),
@@ -1757,7 +1775,9 @@ def interp_sigma_to_hybrid(
 
     # Set output dims and coords
     output = output.rename({lev_dim: "hlev"})
-    output = output.assign_coords({"hlev": h_coords.data})
+    output = output.assign_coords(
+        {"hlev": _dimension_coord_or_default(hyam, hyam.dims[0], output_dim="hlev")}
+    )
 
     return output
 
