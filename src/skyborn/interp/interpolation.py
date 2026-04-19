@@ -258,7 +258,29 @@ def pressure_at_hybrid_levels(psfc, hya, hyb, p0=100000.0):
 
 
 def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
-    """Calculate pressure layer thickness for hybrid coordinates."""
+    """Calculate pressure layer thickness for hybrid coordinates.
+
+    Parameters
+    ----------
+    ps : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        Surface pressure in Pascals.
+
+    hya, hyb : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        One-dimensional hybrid coefficients defined at layer interfaces. If
+        ``hya`` and ``hyb`` have length ``nlev + 1``, the result contains
+        ``nlev`` layer-thickness values.
+
+    p0 : float, optional
+        Reference pressure in Pascals. Use ``p0=1`` when ``hya`` already has
+        pressure units, for example ERA5 ``hyai`` / ``hyam`` coefficients.
+
+    Returns
+    -------
+    :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        Pressure layer thickness in Pascals for each hybrid layer. The output
+        shape is ``(len(hya) - 1, *ps.shape)`` for NumPy inputs, or
+        ``(lev, *ps.dims)`` for xarray inputs.
+    """
 
     if not all(isinstance(x, (xr.DataArray, np.ndarray)) for x in (ps, hya, hyb)):
         raise TypeError("Inputs must be xarray DataArrays or numpy arrays")
