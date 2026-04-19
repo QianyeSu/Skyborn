@@ -12,7 +12,7 @@
 !
 module mann_kendall_core_mod
     use, intrinsic :: ieee_arithmetic, only : ieee_quiet_nan, ieee_value
-    use, intrinsic :: iso_fortran_env, only : real64
+    use, intrinsic :: iso_fortran_env, only : int64, real64
     implicit none
     private
 
@@ -114,7 +114,7 @@ contains
         real(real64), intent(inout) :: values(:)
         integer, intent(in) :: left, right
 
-        integer, parameter :: insertion_threshold = 16
+        integer, parameter :: insertion_threshold = 32
         integer :: i, j
         real(real64) :: pivot, temp
 
@@ -536,11 +536,11 @@ contains
     !    FIRST HALF OF THE PARTITIONED BUFFER, WHICH AVOIDS A SECOND
     !    QUICKSELECT PASS WITHOUT CHANGING THE EXACT RESULT.
     subroutine compute_sen_slope_with_inv_lag(y, inv_lag, slope, slope_work)
-        real(real64), intent(in) :: y(:), inv_lag(:)
+        real(real64), intent(in), contiguous :: y(:), inv_lag(:)
         real(real64), intent(out) :: slope
-        real(real64), intent(inout) :: slope_work(:)
+        real(real64), intent(inout), contiguous :: slope_work(:)
 
-        integer :: i, lag, n, nslopes, mid_index, slope_index
+        integer :: band_end, band_start, i, lag, n, nslopes, mid_index
         real(real64) :: factor, lower_median, upper_median
 
         n = size(y)
@@ -550,24 +550,26 @@ contains
         end if
 
         nslopes = n * (n - 1) / 2
-        slope_index = 0
-
         do lag = 1, n - 1
             factor = inv_lag(lag)
+            band_start = 1 + (lag - 1) * (2 * n - lag) / 2
+            band_end = band_start + (n - lag) - 1
             do i = 1, n - lag
-                slope_index = slope_index + 1
-                slope_work(slope_index) = (y(i + lag) - y(i)) * factor
+                slope_work(band_start + i - 1) = (y(i + lag) - y(i)) * factor
             end do
         end do
 
         mid_index = nslopes / 2
         if (mod(nslopes, 2) == 0) then
-            call select_kth_real(slope_work(:nslopes), mid_index + 1)
+            call select_kth_real(slope_work(1:nslopes), mid_index + 1)
             upper_median = slope_work(mid_index + 1)
-            lower_median = maxval(slope_work(:mid_index))
+            lower_median = slope_work(1)
+            do i = 2, mid_index
+                if (slope_work(i) > lower_median) lower_median = slope_work(i)
+            end do
             slope = 0.5_real64 * (lower_median + upper_median)
         else
-            call select_kth_real(slope_work(:nslopes), mid_index + 1)
+            call select_kth_real(slope_work(1:nslopes), mid_index + 1)
             slope = slope_work(mid_index + 1)
         end if
     end subroutine compute_sen_slope_with_inv_lag
@@ -1109,11 +1111,13 @@ contains
     !    STRATEGY AS `compute_sen_slope_with_inv_lag(...)` SO THE BATCH
     !    KERNEL DOES NOT PAY FOR TWO FULL QUICKSELECT PASSES.
     subroutine compute_s_value_and_sen_slope_with_inv_lag(y, inv_lag, s_value, slope, slope_work)
-        real(real64), intent(in) :: y(:), inv_lag(:)
+        real(real64), intent(in), contiguous :: y(:), inv_lag(:)
         real(real64), intent(out) :: s_value, slope
-        real(real64), intent(inout) :: slope_work(:)
+        real(real64), intent(inout), contiguous :: slope_work(:)
 
-        integer :: i, lag, n, nslopes, mid_index, slope_index
+        integer :: band_start, i, lag, n, nslopes, mid_index
+        integer(int64) :: s_count
+        integer :: band_end
         real(real64) :: dy, factor, lower_median, upper_median
 
         n = size(y)
@@ -1124,32 +1128,36 @@ contains
         end if
 
         nslopes = n * (n - 1) / 2
-        slope_index = 0
-        s_value = 0.0_real64
+        s_count = 0_int64
 
         do lag = 1, n - 1
             factor = inv_lag(lag)
+            band_start = 1 + (lag - 1) * (2 * n - lag) / 2
+            band_end = band_start + (n - lag) - 1
             do i = 1, n - lag
                 dy = y(i + lag) - y(i)
-                slope_index = slope_index + 1
-                slope_work(slope_index) = dy * factor
-
+                slope_work(band_start + i - 1) = dy * factor
                 if (dy > 0.0_real64) then
-                    s_value = s_value + 1.0_real64
+                    s_count = s_count + 1_int64
                 else if (dy < 0.0_real64) then
-                    s_value = s_value - 1.0_real64
+                    s_count = s_count - 1_int64
                 end if
             end do
         end do
 
+        s_value = real(s_count, real64)
+
         mid_index = nslopes / 2
         if (mod(nslopes, 2) == 0) then
-            call select_kth_real(slope_work(:nslopes), mid_index + 1)
+            call select_kth_real(slope_work(1:nslopes), mid_index + 1)
             upper_median = slope_work(mid_index + 1)
-            lower_median = maxval(slope_work(:mid_index))
+            lower_median = slope_work(1)
+            do i = 2, mid_index
+                if (slope_work(i) > lower_median) lower_median = slope_work(i)
+            end do
             slope = 0.5_real64 * (lower_median + upper_median)
         else
-            call select_kth_real(slope_work(:nslopes), mid_index + 1)
+            call select_kth_real(slope_work(1:nslopes), mid_index + 1)
             slope = slope_work(mid_index + 1)
         end if
     end subroutine compute_s_value_and_sen_slope_with_inv_lag
