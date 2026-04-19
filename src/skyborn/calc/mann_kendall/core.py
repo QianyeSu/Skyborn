@@ -80,6 +80,7 @@ from .variants import (
     _correlated_multivariate_stats_scalar,
     _correlated_seasonal_stats_scalar,
     _grouped_time_index,
+    _hamed_rao_variance_batch,
     _multivariate_score_variance_batch,
     _multivariate_score_variance_scalar,
     _multivariate_sens_slope_scalar,
@@ -88,6 +89,7 @@ from .variants import (
     _seasonal_score_variance_scalar,
     _seasonal_sens_slope_scalar,
     _trend_free_pre_whiten_score_variance_batch,
+    _yue_wang_variance_batch,
 )
 
 __all__ = [
@@ -1106,21 +1108,26 @@ def _vectorized_mk_test(
                 core_input, slopes
             )
         elif test_name == "hamed_rao":
-            lag_limit = _autocorr_lag_limit(time_steps, lag)
-            S_values, var_s_values, correction_slopes = (
-                _hamed_rao_score_variance_slope_batch(
-                    clean_data_computed,
-                    alpha=alpha,
-                    lag=lag_limit,
-                )
-            )
             if method == "theilslopes":
-                slopes = correction_slopes
+                S_values, base_var_values, slopes = _score_variance_slope_batch(
+                    clean_data_computed, modified=False
+                )
+                correction_slopes = slopes
             else:
+                S_values, base_var_values = _score_variance_batch(
+                    clean_data_computed, modified=False
+                )
                 slopes = _linregress_slope_batch(clean_data_computed, x)
+                correction_slopes = _sen_slope_batch(clean_data_computed)
+            var_s_values = _hamed_rao_variance_batch(
+                clean_data_computed,
+                base_var_values,
+                correction_slopes,
+                alpha=alpha,
+                lag=lag,
+            )
             stat_n = time_steps
         elif test_name == "yue_wang":
-            lag_limit = _autocorr_lag_limit(time_steps, lag)
             if lag is None and method == "theilslopes":
                 S_values, var_s_values, slopes = _score_variance_slope_batch(
                     clean_data_computed, modified=True
@@ -1131,15 +1138,23 @@ def _vectorized_mk_test(
                 )
                 slopes = _linregress_slope_batch(clean_data_computed, x)
             else:
-                S_values, var_s_values, correction_slopes = (
-                    _yue_wang_score_variance_slope_batch(
-                        clean_data_computed, lag=lag_limit
-                    )
-                )
                 if method == "theilslopes":
-                    slopes = correction_slopes
+                    S_values, base_var_values, slopes = _score_variance_slope_batch(
+                        clean_data_computed, modified=False
+                    )
+                    correction_slopes = slopes
                 else:
+                    S_values, base_var_values = _score_variance_batch(
+                        clean_data_computed, modified=False
+                    )
                     slopes = _linregress_slope_batch(clean_data_computed, x)
+                    correction_slopes = _sen_slope_batch(clean_data_computed)
+                var_s_values = _yue_wang_variance_batch(
+                    clean_data_computed,
+                    base_var_values,
+                    correction_slopes,
+                    lag=lag,
+                )
             stat_n = time_steps
         elif method == "theilslopes":
             S_values, var_s_values, slopes = _score_variance_slope_batch(
