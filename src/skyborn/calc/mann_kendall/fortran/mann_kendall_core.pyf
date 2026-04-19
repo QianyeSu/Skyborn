@@ -44,6 +44,17 @@ python module mann_kendall_core ! in
             double precision intent(out) :: tau_values(nseries)
         end subroutine partial_stats_batch
 
+        subroutine partial_stats_sen_batch(response,covariate,s_values,var_values,tau_values,slopes,ntime,nseries) ! in :mann_kendall_core:mann_kendall_core.f90
+            integer optional, intent(hide), depend(response) :: ntime = shape(response,0)
+            integer optional, intent(hide), depend(response) :: nseries = shape(response,1)
+            double precision intent(in) :: response(ntime,nseries)
+            double precision intent(in), depend(response) :: covariate(ntime,nseries)
+            double precision intent(out) :: s_values(nseries)
+            double precision intent(out) :: var_values(nseries)
+            double precision intent(out) :: tau_values(nseries)
+            double precision intent(out) :: slopes(nseries)
+        end subroutine partial_stats_sen_batch
+
         subroutine mk_score_var_sen_batch(data,s_values,var_values,slopes,modified,ntime,nseries) ! in :mann_kendall_core:mann_kendall_core.f90
             integer optional, intent(hide), depend(data) :: ntime = shape(data,0)
             integer optional, intent(hide), depend(data) :: nseries = shape(data,1)
