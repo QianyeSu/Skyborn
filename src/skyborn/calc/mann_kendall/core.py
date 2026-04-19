@@ -73,6 +73,18 @@ __all__ = [
 ]
 
 
+def _normalize_test_name(test: str) -> str:
+    """Normalize public MK test aliases to one canonical label."""
+    normalized = test.lower().replace("-", "_").replace(" ", "_")
+    if normalized in {"original", "mk", "default"}:
+        return "original"
+    if normalized in {"pre_whitening", "prewhitening", "pre_whiten"}:
+        return "pre_whitening"
+    raise ValueError(
+        f"Unknown test: {test}. Supported tests are 'original' and 'pre_whitening'."
+    )
+
+
 def _load_core_module():
     """Best-effort loader for the compiled Mann-Kendall core extension."""
     candidate_names = []
@@ -145,6 +157,39 @@ def _require_kernel(function, function_name: str):
     return function
 
 
+def _variance_without_ties(sample_size: int) -> float:
+    """Return the no-tie MK variance formula for the given sample size."""
+    return sample_size * (sample_size - 1) * (2 * sample_size + 5) / 18.0
+
+
+def _lag1_autocorrelation_batch(data_2d: np.ndarray) -> np.ndarray:
+    """Compute lag-1 autocorrelation for each clean series column."""
+    centered = np.asarray(data_2d, dtype=np.float64) - np.mean(data_2d, axis=0)
+    acov0 = np.sum(centered * centered, axis=0)
+    acov1 = np.sum(centered[:-1] * centered[1:], axis=0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return acov1 / acov0
+
+
+def _pre_whiten_batch(data_2d: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Pre-whiten clean 2D series and flag degenerate zero-variance columns."""
+    acf1 = _lag1_autocorrelation_batch(data_2d)
+    whitened = (
+        np.asarray(data_2d[1:], dtype=np.float64)
+        - np.asarray(data_2d[:-1], dtype=np.float64) * acf1[np.newaxis, :]
+    )
+    degenerate = ~np.isfinite(acf1)
+    return whitened, degenerate
+
+
+def _pre_whiten_series(data_1d: np.ndarray) -> Tuple[np.ndarray, bool]:
+    """Pre-whiten one clean finite series and flag degenerate zero-variance input."""
+    whitened, degenerate = _pre_whiten_batch(
+        np.asarray(data_1d, dtype=np.float64).reshape(-1, 1)
+    )
+    return whitened[:, 0], bool(degenerate[0])
+
+
 def _score_variance_batch(
     data_2d: np.ndarray, modified: bool = False
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -183,6 +228,7 @@ def mann_kendall_test(
     alpha: float = 0.05,
     method: str = "theilslopes",
     modified: bool = False,
+    test: str = "original",
 ) -> Dict[str, Union[float, bool]]:
     """
     Perform Mann-Kendall test for trend detection on 1D time series.
@@ -203,6 +249,10 @@ def mann_kendall_test(
     modified : bool, default False
         Use modified Mann-Kendall test (Yue and Wang, 2004) to account for
         serial autocorrelation in the data.
+    test : str, default 'original'
+        Mann-Kendall test family to apply:
+        - 'original': original Mann-Kendall test
+        - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
 
     Returns
     -------
@@ -258,6 +308,12 @@ def mann_kendall_test(
     >>> print(f"P-value: {result['p']:.3f}")
     >>> print(f"Significant trend: {result['h']}")
     """
+    test_name = _normalize_test_name(test)
+    if modified and test_name != "original":
+        raise ValueError(
+            "modified=True is currently only supported when test='original'."
+        )
+
     if hasattr(data, "values"):
         values = data.values
     else:
@@ -285,16 +341,33 @@ def mann_kendall_test(
         }
 
     if method == "theilslopes":
-        S_values, var_values, slopes = _score_variance_slope_batch(
+        slope = float(_sen_slope_batch(y.reshape(-1, 1))[0])
+        intercept = np.median(y) - slope * np.median(x)
+    elif method == "linregress":
+        slope, intercept = stats.linregress(x, y)[:2]
+    else:
+        raise ValueError(f"Unknown method: {method}. Use 'theilslopes' or 'linregress'")
+
+    if test_name == "pre_whitening":
+        stat_y, degenerate = _pre_whiten_series(y)
+        stat_n = len(stat_y)
+        if degenerate:
+            S = 0
+            var_s = _variance_without_ties(stat_n)
+        else:
+            S = _calculate_mk_score(stat_y)
+            var_s = _calculate_mk_variance(stat_y, stat_n, modified=False)
+    elif method == "theilslopes":
+        S_values, var_values, _ = _score_variance_slope_batch(
             y.reshape(-1, 1), modified=modified
         )
         S = int(np.rint(S_values[0]))
         var_s = float(var_values[0])
-        slope = float(slopes[0])
-        intercept = np.median(y) - slope * np.median(x)
+        stat_n = n
     else:
         S = _calculate_mk_score(y)
         var_s = _calculate_mk_variance(y, n, modified)
+        stat_n = n
 
     if S > 0:
         z = (S - 1) / np.sqrt(var_s)
@@ -305,13 +378,7 @@ def mann_kendall_test(
 
     p_value = 2 * (1 - stats.norm.cdf(abs(z)))
     h = abs(z) > stats.norm.ppf(1 - alpha / 2)
-
-    if method == "linregress":
-        slope, intercept = stats.linregress(x, y)[:2]
-    elif method != "theilslopes":
-        raise ValueError(f"Unknown method: {method}. Use 'theilslopes' or 'linregress'")
-
-    tau = S / (0.5 * n * (n - 1))
+    tau = S / (0.5 * stat_n * (stat_n - 1))
     y_detrend = y - (x * slope + intercept)
     std_error = np.std(y_detrend) / np.sqrt(n)
 
@@ -347,6 +414,7 @@ def mann_kendall_multidim(
     modified: bool = False,
     chunk_size: Optional[int] = None,
     dim: Optional[Union[int, str]] = None,
+    test: str = "original",
 ) -> Dict[str, np.ndarray]:
     """
     Optimized numpy-based Mann-Kendall test for multidimensional arrays.
@@ -377,6 +445,8 @@ def mann_kendall_multidim(
         Process data in chunks to manage memory usage
     dim : int or str, optional
         Alternative name for axis parameter (XArray style). Takes precedence over axis.
+    test : str, default 'original'
+        Mann-Kendall test family to apply.
 
     Returns
     -------
@@ -395,6 +465,12 @@ def mann_kendall_multidim(
     Both axis and dim can accept integer indices or string dimension names.
     For numpy arrays, string names require the array to have a 'dims' attribute or similar.
     """
+
+    test_name = _normalize_test_name(test)
+    if modified and test_name != "original":
+        raise ValueError(
+            "modified=True is currently only supported when test='original'."
+        )
 
     def _resolve_axis(arr: Any, axis_param: Union[int, str]) -> int:
         """Resolve axis parameter to integer index."""
@@ -438,7 +514,9 @@ def mann_kendall_multidim(
         actual_time_axis = _resolve_axis(data, axis)
     # Handle 1D input
     if data.ndim == 1:
-        return mann_kendall_test(data, alpha=alpha, method=method, modified=modified)
+        return mann_kendall_test(
+            data, alpha=alpha, method=method, modified=modified, test=test_name
+        )
 
     # Move time axis to the front
     data = np.moveaxis(data, actual_time_axis, 0)
@@ -487,7 +565,11 @@ def mann_kendall_multidim(
 
         # Vectorized Mann-Kendall calculation for chunk
         chunk_results = _vectorized_mk_test(
-            chunk_data, alpha=alpha, method=method, modified=modified
+            chunk_data,
+            alpha=alpha,
+            method=method,
+            modified=modified,
+            test=test_name,
         )
 
         # Store results
@@ -506,6 +588,7 @@ def _vectorized_mk_test(
     alpha: float = 0.05,
     method: str = "theilslopes",
     modified: bool = False,
+    test: str = "original",
 ) -> Dict[str, np.ndarray]:
     """
     Truly vectorized Mann-Kendall test for a chunk of time series.
@@ -518,6 +601,13 @@ def _vectorized_mk_test(
     2. Individual processing for series with NaN
     3. Automatic skipping of series with insufficient data
     """
+    test_name = _normalize_test_name(test)
+    if method not in {"theilslopes", "linregress"}:
+        raise ValueError(f"Unknown method: {method}. Use 'theilslopes' or 'linregress'")
+    if modified and test_name != "original":
+        raise ValueError(
+            "modified=True is currently only supported when test='original'."
+        )
     time_steps, n_series = data_chunk.shape
     x = np.arange(time_steps, dtype=np.float64)
 
@@ -558,14 +648,37 @@ def _vectorized_mk_test(
             clean_data_computed = np.asarray(data_chunk[:, no_nan_indices])
 
         clean_data_computed = np.asarray(clean_data_computed, dtype=np.float64)
-        if method == "theilslopes":
+        if test_name == "pre_whitening":
+            if method == "theilslopes":
+                slopes = _sen_slope_batch(clean_data_computed)
+            else:
+                slopes = _linregress_slope_batch(clean_data_computed, x)
+
+            stat_data, degenerate_mask = _pre_whiten_batch(clean_data_computed)
+            stat_n = stat_data.shape[0]
+            S_values = np.zeros(n_clean_series, dtype=np.float64)
+            var_s_values = np.full(
+                n_clean_series, _variance_without_ties(stat_n), dtype=np.float64
+            )
+
+            nondegenerate_mask = ~degenerate_mask
+            if np.any(nondegenerate_mask):
+                (
+                    S_values[nondegenerate_mask],
+                    var_s_values[nondegenerate_mask],
+                ) = _score_variance_batch(
+                    stat_data[:, nondegenerate_mask], modified=False
+                )
+        elif method == "theilslopes":
             S_values, var_s_values, slopes = _score_variance_slope_batch(
                 clean_data_computed, modified=modified
             )
+            stat_n = time_steps
         else:
             S_values, var_s_values = _score_variance_batch(
                 clean_data_computed, modified=modified
             )
+            stat_n = time_steps
 
         # Vectorized z-score calculation
         z_values = np.zeros_like(S_values, dtype=np.float64)
@@ -581,11 +694,10 @@ def _vectorized_mk_test(
         p_values = 2 * (1 - stats.norm.cdf(np.abs(z_values)))
         h_values = np.abs(z_values) > stats.norm.ppf(1 - alpha / 2)
 
-        if method != "theilslopes":
+        if test_name != "pre_whitening" and method != "theilslopes":
             slopes = _linregress_slope_batch(clean_data_computed, x)
 
-        n = time_steps
-        tau_values = S_values / (0.5 * n * (n - 1))
+        tau_values = S_values / (0.5 * stat_n * (stat_n - 1))
 
         if method == "theilslopes":
             std_errors = _theil_std_error_batch(clean_data_computed, x, slopes)
@@ -621,7 +733,7 @@ def _vectorized_mk_test(
         # Mann-Kendall test for individual series with NaN
         try:
             mk_result = mann_kendall_test(
-                y_clean, alpha=alpha, method=method, modified=modified
+                y_clean, alpha=alpha, method=method, modified=modified, test=test_name
             )
 
             # Store results
@@ -696,6 +808,7 @@ def mann_kendall_xarray(
     method: str = "theilslopes",
     modified: bool = False,
     use_dask: bool = True,
+    test: str = "original",
 ):  # -> xr.Dataset
     """
     Mann-Kendall test for xarray DataArray with intelligent dimension handling.
@@ -720,6 +833,8 @@ def mann_kendall_xarray(
         Use modified Mann-Kendall test
     use_dask : bool, default True
         Use dask for computation if available
+    test : str, default 'original'
+        Mann-Kendall test family to apply.
 
     Returns
     -------
@@ -743,7 +858,7 @@ def mann_kendall_xarray(
 
     if use_dask and hasattr(data.data, "chunks"):
         # Use dask for computation
-        results = _dask_mann_kendall(data, dim, alpha, method, modified)
+        results = _dask_mann_kendall(data, dim, alpha, method, modified, test)
     else:
         # Use numpy implementation
         results = mann_kendall_multidim(
@@ -752,6 +867,7 @@ def mann_kendall_xarray(
             alpha=alpha,
             method=method,
             modified=modified,
+            test=test,
         )
 
     # Smart dimension handling: preserve order and filter scalar dimensions
@@ -818,6 +934,7 @@ def mann_kendall_xarray(
                 "title": "Mann-Kendall Trend Analysis",
                 "alpha": alpha,
                 "method": method,
+                "test": _normalize_test_name(test),
                 "modified": modified,
                 "input_dims": str(data.dims),
                 "analyzed_dim": dim,
@@ -839,6 +956,7 @@ def mann_kendall_xarray(
                 "title": "Mann-Kendall Trend Analysis",
                 "alpha": alpha,
                 "method": method,
+                "test": _normalize_test_name(test),
                 "modified": modified,
                 "input_dims": str(data.dims),
                 "analyzed_dim": dim,
@@ -849,7 +967,12 @@ def mann_kendall_xarray(
 
 
 def _dask_mann_kendall(
-    data, dim: str, alpha: float, method: str, modified: bool  # xr.DataArray
+    data,
+    dim: str,
+    alpha: float,
+    method: str,
+    modified: bool,
+    test: str = "original",  # xr.DataArray
 ):  # -> Dict[str, np.ndarray]
     """Use dask map_blocks for Mann-Kendall computation."""
 
@@ -898,7 +1021,11 @@ def _dask_mann_kendall(
             try:
                 # Perform Mann-Kendall test
                 result = mann_kendall_test(
-                    series, alpha=alpha, method=method, modified=modified
+                    series,
+                    alpha=alpha,
+                    method=method,
+                    modified=modified,
+                    test=test,
                 )
 
                 # Store results: [trend, h, p, z, tau, std_error]
@@ -953,6 +1080,7 @@ def trend_analysis(
     method: str = "theilslopes",
     modified: bool = False,
     dim: Optional[Union[int, str]] = None,
+    test: str = "original",
     **kwargs,
 ) -> Any:
     """
@@ -974,6 +1102,8 @@ def trend_analysis(
         Use modified Mann-Kendall test
     dim : int or str, optional
         Alternative name for axis parameter (XArray style). Takes precedence over axis.
+    test : str, default 'original'
+        Mann-Kendall test family to apply.
     **kwargs
         Additional arguments passed to underlying functions
 
@@ -995,6 +1125,7 @@ def trend_analysis(
             alpha=alpha,
             method=method,
             modified=modified,
+            test=test,
             **kwargs,
         )
     else:
@@ -1004,6 +1135,7 @@ def trend_analysis(
             alpha=alpha,
             method=method,
             modified=modified,
+            test=test,
             **kwargs,
         )
 
