@@ -150,6 +150,28 @@ python module vinth2p_kernels ! in
             double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: tbot
             double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: phis
         end subroutine dvinth2p_ecmwf_nodes_corder_pa_into
+        ! signature : dph = ddelta_pressure_hybrid_pa(psfc,hbcofa,hbcofb,p0,nlevo)
+        subroutine ddelta_pressure_hybrid_pa(psfc,dph,hbcofa,hbcofb,p0,ncol,nlev,nlevo) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer intent(in) :: ncol
+            integer intent(in) :: nlev
+            integer intent(in) :: nlevo
+            double precision dimension(ncol), intent(in) :: psfc
+            double precision dimension(nlevo,ncol), intent(out) :: dph
+            double precision dimension(nlev), intent(in) :: hbcofa
+            double precision dimension(nlev), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+        end subroutine ddelta_pressure_hybrid_pa
+        ! signature : ddelta_pressure_hybrid_pa_into(psfc,dph,hbcofa,hbcofb,p0,nlevo)
+        subroutine ddelta_pressure_hybrid_pa_into(psfc,dph,hbcofa,hbcofb,p0,ncol,nlev,nlevo) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer intent(in) :: ncol
+            integer intent(in) :: nlev
+            integer intent(in) :: nlevo
+            double precision dimension(ncol), intent(in) :: psfc
+            double precision dimension(nlevo,ncol), intent(in,out) :: dph
+            double precision dimension(nlev), intent(in) :: hbcofa
+            double precision dimension(nlev), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+        end subroutine ddelta_pressure_hybrid_pa_into
     end interface
 end python module vinth2p_kernels
 
