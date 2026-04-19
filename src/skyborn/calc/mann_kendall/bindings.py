@@ -1,4 +1,4 @@
-"""Shared compiled-kernel dispatch helpers for internal MK submodules."""
+"""Compiled-kernel dispatch helpers for internal MK submodules."""
 
 import sys
 from importlib import import_module
@@ -9,78 +9,36 @@ from typing import Tuple
 
 import numpy as np
 
+from ._compiled import (
+    _as_core_input_2d,
+    _load_core_module_from,
+    _require_kernel,
+    _resolve_kernel_handles,
+)
+
 
 def _load_core_module():
     """Best-effort loader for the compiled Mann-Kendall core extension."""
-    backend_dir = Path(__file__).resolve().parent
-    for probe_dir in (backend_dir / "build", backend_dir):
-        for suffix in EXTENSION_SUFFIXES:
-            candidate = probe_dir / f"mann_kendall_core{suffix}"
-            if not candidate.exists():
-                continue
-
-            try:
-                previous = sys.modules.pop("mann_kendall_core", None)
-                spec = importlib_util.spec_from_file_location(
-                    "mann_kendall_core", candidate
-                )
-                if spec is None or spec.loader is None:
-                    if previous is not None:
-                        sys.modules["mann_kendall_core"] = previous
-                    continue
-                core = importlib_util.module_from_spec(spec)
-                spec.loader.exec_module(core)
-                return core
-            except Exception:
-                if previous is not None:
-                    sys.modules["mann_kendall_core"] = previous
-                continue
-
-    candidate_names = []
-    if __package__:
-        candidate_names.append(f"{__package__}.mann_kendall_core")
-    candidate_names.append("skyborn.calc.mann_kendall.mann_kendall_core")
-
-    for module_name in candidate_names:
-        try:
-            return import_module(module_name)
-        except Exception:
-            continue
-
-    return None
+    return _load_core_module_from(
+        file_path=__file__,
+        package_name=__package__,
+        extension_suffixes=EXTENSION_SUFFIXES,
+        path_type=Path,
+        importlib_util_module=importlib_util,
+        import_module_func=import_module,
+        sys_modules=sys.modules,
+    )
 
 
 _core_module = _load_core_module()
-_score_variance_kernel = getattr(_core_module, "mk_score_var_batch", None)
-_score_variance_slope_kernel = getattr(_core_module, "mk_score_var_sen_batch", None)
-_sen_slope_kernel = getattr(_core_module, "sen_slope_batch", None)
-_grouped_sen_slope_kernel = getattr(_core_module, "grouped_sen_slope_batch", None)
-_grouped_correlated_stats_kernel = getattr(
-    _core_module, "grouped_correlated_stats_batch", None
-)
-_partial_stats_kernel = getattr(_core_module, "partial_stats_batch", None)
-_partial_stats_sen_kernel = getattr(_core_module, "partial_stats_sen_batch", None)
-
-
-def _as_core_input_2d(data_2d: np.ndarray) -> np.ndarray:
-    """Convert 2D data to the float64 Fortran layout expected by the core."""
-    array = np.asarray(data_2d, dtype=np.float64)
-    if array.ndim != 2:
-        raise ValueError("Expected a 2D array for Mann-Kendall core kernels.")
-    if array.flags.f_contiguous:
-        return array
-    return np.asfortranarray(array)
-
-
-def _require_kernel(function, function_name: str):
-    """Return a compiled kernel entry point or raise a clear import error."""
-    if function is None:
-        raise ImportError(
-            "skyborn.calc.mann_kendall requires the compiled "
-            f"mann_kendall_core entry '{function_name}'. "
-            "Install a prebuilt wheel or build the Skyborn extensions first."
-        )
-    return function
+_kernel_handles = _resolve_kernel_handles(_core_module)
+_score_variance_kernel = _kernel_handles["_score_variance_kernel"]
+_score_variance_slope_kernel = _kernel_handles["_score_variance_slope_kernel"]
+_sen_slope_kernel = _kernel_handles["_sen_slope_kernel"]
+_grouped_sen_slope_kernel = _kernel_handles["_grouped_sen_slope_kernel"]
+_grouped_correlated_stats_kernel = _kernel_handles["_grouped_correlated_stats_kernel"]
+_partial_stats_kernel = _kernel_handles["_partial_stats_kernel"]
+_partial_stats_sen_kernel = _kernel_handles["_partial_stats_sen_kernel"]
 
 
 def _score_variance_batch(
