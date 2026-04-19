@@ -32,6 +32,10 @@ The public API uses ``test=...`` to select the Mann-Kendall test family:
 
 All interfaces default to ``test="original"``.
 
+The optional ``period=...`` argument is only used by
+``test="seasonal"`` and ``test="correlated_seasonal"``. When omitted,
+these seasonal test families default to ``12``. Other test families ignore it.
+
 The optional ``lag=...`` argument is only used by
 ``test="yue_wang"`` and ``test="hamed_rao"``. Other test families ignore it.
 
