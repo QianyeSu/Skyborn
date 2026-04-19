@@ -8,6 +8,8 @@ import numpy as np
 _KERNEL_ENTRY_POINTS = {
     "_score_variance_kernel": "mk_score_var_batch",
     "_score_variance_slope_kernel": "mk_score_var_sen_batch",
+    "_yue_wang_slope_kernel": "mk_yue_wang_score_var_sen_batch",
+    "_hamed_rao_slope_kernel": "mk_hamed_rao_score_var_sen_batch",
     "_sen_slope_kernel": "sen_slope_batch",
     "_grouped_sen_slope_kernel": "grouped_sen_slope_batch",
     "_grouped_correlated_stats_kernel": "grouped_correlated_stats_batch",
