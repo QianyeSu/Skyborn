@@ -153,6 +153,11 @@ class TestMannKendallComprehensive:
         with pytest.raises(ValueError, match="Unknown method"):
             mann_kendall_test(np.arange(10), method="invalid_method")
 
+    def test_unknown_test_name_error_coverage(self):
+        """Test invalid test-family error for coverage."""
+        with pytest.raises(ValueError, match="Unknown test"):
+            mann_kendall_test(np.arange(10), test="not_a_real_test")
+
     def test_invalid_axis_error_coverage(self):
         """Test invalid axis error for coverage."""
         data = np.random.randn(20, 10, 8)
@@ -691,6 +696,29 @@ class TestMannKendallComprehensive:
             np.testing.assert_allclose(vectorized["p"][idx], pmk_result.p)
             np.testing.assert_allclose(vectorized["z"][idx], pmk_result.z)
             np.testing.assert_allclose(vectorized["tau"][idx], pmk_result.Tau)
+
+    def test_seasonal_and_autocorrelation_families_linregress_branches(self):
+        """Alternative-family clean batch paths should also handle linregress."""
+        data = np.stack(
+            [
+                np.linspace(0.0, 10.0, 24),
+                np.linspace(1.0, 11.0, 24),
+            ],
+            axis=1,
+        )
+
+        for test_name in [
+            "seasonal",
+            "pre_whitening",
+            "trend_free_pre_whitening",
+            "hamed_rao",
+            "yue_wang",
+        ]:
+            result = _vectorized_mk_test(
+                data, method="linregress", test=test_name, period=12
+            )
+            assert result["trend"].shape == (2,)
+            assert result["p"].shape == (2,)
 
     @pytest.mark.parametrize(
         ("test_name", "pmk_name", "include_strict_linear"),
@@ -1253,6 +1281,16 @@ class TestMannKendallComprehensive:
 
         # Two values should be able to compute, but may not be statistically significant
         assert "tau" in result
+
+    def test_seasonal_short_series_warning_and_invalid_method(self):
+        """Seasonal branch should warn on short series and reject invalid methods."""
+        with warnings.catch_warnings(record=True) as w:
+            result = mann_kendall_test(np.array([1.0, 2.0]), test="seasonal", period=12)
+            assert len(w) > 0
+            assert np.isnan(result["trend"])
+
+        with pytest.raises(ValueError, match="Unknown method"):
+            mann_kendall_test(np.arange(24, dtype=float), test="seasonal", method="bad")
 
     def test_warning_suppression(self):
         """Test warning handling."""
