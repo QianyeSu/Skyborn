@@ -23,6 +23,8 @@ module mann_kendall_core_mod
     public :: compute_s_value
     public :: compute_s_value_and_sen_slope
     public :: compute_sen_slope
+    public :: compute_s_value_and_sen_slope_with_inv_lag
+    public :: compute_sen_slope_with_inv_lag
 
 contains
 
@@ -349,6 +351,43 @@ contains
         real(real64), intent(out) :: slope
         real(real64), intent(inout) :: slope_work(:)
 
+        real(real64) :: inv_lag(max(1, size(y) - 1))
+        integer :: lag, n
+
+        n = size(y)
+        if (n < 2) then
+            slope = ieee_value(0.0_real64, ieee_quiet_nan)
+            return
+        end if
+
+        do lag = 1, n - 1
+            inv_lag(lag) = 1.0_real64 / real(lag, real64)
+        end do
+
+        call compute_sen_slope_with_inv_lag(y, inv_lag, slope, slope_work)
+    end subroutine compute_sen_slope
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    COMPUTE THE EXACT SEN / THEIL-SEN SLOPE MEDIAN FOR ONE CLEAN
+    !    TIME SERIES USING A PRECOMPUTED RECIPROCAL-LAG VECTOR.
+    !
+    ! INPUTS
+    !    Y(:)        - INPUT SERIES WITH NO NaN VALUES AND UNIT TIME SPACING
+    !    INV_LAG(:)  - PRECOMPUTED VALUES 1 / LAG FOR LAG = 1..SIZE(Y)-1
+    !
+    ! INPUT / OUTPUT
+    !    SLOPE_WORK(:) - CALLER-SUPPLIED BUFFER WITH LENGTH AT LEAST
+    !                    N * (N - 1) / 2
+    !
+    ! OUTPUT
+    !    SLOPE - EXACT MEDIAN OF ALL PAIRWISE SLOPES; NaN WHEN SIZE(Y) < 2
+    subroutine compute_sen_slope_with_inv_lag(y, inv_lag, slope, slope_work)
+        real(real64), intent(in) :: y(:), inv_lag(:)
+        real(real64), intent(out) :: slope
+        real(real64), intent(inout) :: slope_work(:)
+
         integer :: i, j, n, nslopes, mid_index, slope_index
 
         n = size(y)
@@ -363,7 +402,7 @@ contains
         do i = 1, n - 1
             do j = i + 1, n
                 slope_index = slope_index + 1
-                slope_work(slope_index) = (y(j) - y(i)) / real(j - i, real64)
+                slope_work(slope_index) = (y(j) - y(i)) * inv_lag(j - i)
             end do
         end do
 
@@ -376,7 +415,7 @@ contains
             call select_kth_real(slope_work(:nslopes), mid_index + 1)
             slope = slope_work(mid_index + 1)
         end if
-    end subroutine compute_sen_slope
+    end subroutine compute_sen_slope_with_inv_lag
 
 
     ! QUICK REFERENCE
@@ -400,6 +439,46 @@ contains
         real(real64), intent(out) :: s_value, slope
         real(real64), intent(inout) :: slope_work(:)
 
+        real(real64) :: inv_lag(max(1, size(y) - 1))
+        integer :: lag, n
+
+        n = size(y)
+        if (n < 2) then
+            s_value = 0.0_real64
+            slope = ieee_value(0.0_real64, ieee_quiet_nan)
+            return
+        end if
+
+        do lag = 1, n - 1
+            inv_lag(lag) = 1.0_real64 / real(lag, real64)
+        end do
+
+        call compute_s_value_and_sen_slope_with_inv_lag(y, inv_lag, s_value, slope, slope_work)
+    end subroutine compute_s_value_and_sen_slope
+
+
+    ! QUICK REFERENCE
+    ! PURPOSE
+    !    COMPUTE THE MANN-KENDALL S STATISTIC AND THE EXACT SEN /
+    !    THEIL-SEN SLOPE USING ONE SHARED PAIRWISE SCAN AND A
+    !    PRECOMPUTED RECIPROCAL-LAG VECTOR.
+    !
+    ! INPUTS
+    !    Y(:)        - INPUT SERIES WITH NO NaN VALUES AND UNIT TIME SPACING
+    !    INV_LAG(:)  - PRECOMPUTED VALUES 1 / LAG FOR LAG = 1..SIZE(Y)-1
+    !
+    ! INPUT / OUTPUT
+    !    SLOPE_WORK(:) - CALLER-SUPPLIED BUFFER WITH LENGTH AT LEAST
+    !                    N * (N - 1) / 2
+    !
+    ! OUTPUT
+    !    S_VALUE - SUM OF PAIRWISE SIGN COMPARISONS
+    !    SLOPE   - EXACT MEDIAN OF ALL PAIRWISE SLOPES; NaN WHEN SIZE(Y) < 2
+    subroutine compute_s_value_and_sen_slope_with_inv_lag(y, inv_lag, s_value, slope, slope_work)
+        real(real64), intent(in) :: y(:), inv_lag(:)
+        real(real64), intent(out) :: s_value, slope
+        real(real64), intent(inout) :: slope_work(:)
+
         integer :: i, j, n, nslopes, mid_index, slope_index
         real(real64) :: dy
 
@@ -418,7 +497,7 @@ contains
             do j = i + 1, n
                 dy = y(j) - y(i)
                 slope_index = slope_index + 1
-                slope_work(slope_index) = dy / real(j - i, real64)
+                slope_work(slope_index) = dy * inv_lag(j - i)
 
                 if (dy > 0.0_real64) then
                     s_value = s_value + 1.0_real64
@@ -437,7 +516,7 @@ contains
             call select_kth_real(slope_work(:nslopes), mid_index + 1)
             slope = slope_work(mid_index + 1)
         end if
-    end subroutine compute_s_value_and_sen_slope
+    end subroutine compute_s_value_and_sen_slope_with_inv_lag
 
 
     ! QUICK REFERENCE
@@ -585,18 +664,23 @@ end subroutine mk_score_var_batch
 ! OUTPUT
 !    SLOPES(NSERIES) - ONE EXACT SEN SLOPE PER COLUMN
 subroutine sen_slope_batch(data, slopes, ntime, nseries)
-    use mann_kendall_core_mod, only : compute_sen_slope, real64
+    use mann_kendall_core_mod, only : compute_sen_slope_with_inv_lag, real64
     implicit none
 
     integer, intent(in) :: ntime, nseries
     real(real64), intent(in) :: data(ntime, nseries)
     real(real64), intent(out) :: slopes(nseries)
 
+    real(real64) :: inv_lag(max(1, ntime - 1))
     real(real64) :: slope_work(max(1, ntime * (ntime - 1) / 2))
-    integer :: col
+    integer :: col, lag
+
+    do lag = 1, ntime - 1
+        inv_lag(lag) = 1.0_real64 / real(lag, real64)
+    end do
 
     do col = 1, nseries
-        call compute_sen_slope(data(:, col), slopes(col), slope_work)
+        call compute_sen_slope_with_inv_lag(data(:, col), inv_lag, slopes(col), slope_work)
     end do
 end subroutine sen_slope_batch
 
@@ -622,20 +706,25 @@ subroutine mk_score_var_sen_batch( &
 )
     use mann_kendall_core_mod, only : &
         compute_base_variance, compute_modified_variance_with_slope, &
-        compute_s_value_and_sen_slope, real64
+        compute_s_value_and_sen_slope_with_inv_lag, real64
     implicit none
 
     integer, intent(in) :: modified, ntime, nseries
     real(real64), intent(in) :: data(ntime, nseries)
     real(real64), intent(out) :: s_values(nseries), var_values(nseries), slopes(nseries)
 
+    real(real64) :: inv_lag(max(1, ntime - 1))
     real(real64) :: centered_work(ntime), detrended_work(ntime), sorted_work(ntime)
     real(real64) :: slope_work(max(1, ntime * (ntime - 1) / 2))
-    integer :: col
+    integer :: col, lag
+
+    do lag = 1, ntime - 1
+        inv_lag(lag) = 1.0_real64 / real(lag, real64)
+    end do
 
     do col = 1, nseries
-        call compute_s_value_and_sen_slope( &
-            data(:, col), s_values(col), slopes(col), slope_work &
+        call compute_s_value_and_sen_slope_with_inv_lag( &
+            data(:, col), inv_lag, s_values(col), slopes(col), slope_work &
         )
 
         if (modified /= 0) then
