@@ -174,7 +174,11 @@ class TestPrePostInterpolationHelpers:
         lon = np.linspace(0, 315, 8)  # 45-degree spacing, missing 360
 
         data_in = xr.DataArray(
-            data, dims=["lat", "lon"], coords={"lat": lat, "lon": lon}
+            data,
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+            name="wind",
+            attrs={"units": "m/s", "long_name": "wind speed"},
         )
 
         result = _pre_interp_multidim(data_in, cyclic=True, missing_val=None)
@@ -186,6 +190,9 @@ class TestPrePostInterpolationHelpers:
         # The exact values depend on wrap mode: wraps last value to beginning and first to end
         assert result.lon.values[0] == lon[-1] - 360  # wrapped last value adjusted
         assert result.lon.values[-1] == lon[0] + 360  # wrapped first value adjusted
+        assert result.name == "wind"
+        assert result.attrs["units"] == "m/s"
+        assert result.attrs["long_name"] == "wind speed"
 
     @pytest.mark.skipif(
         not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
@@ -197,7 +204,11 @@ class TestPrePostInterpolationHelpers:
         lon = np.array([0, 90, 180])
 
         data_in = xr.DataArray(
-            data, dims=["lat", "lon"], coords={"lat": lat, "lon": lon}
+            data,
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+            name="field",
+            attrs={"units": "K", "long_name": "temperature"},
         )
 
         result = _pre_interp_multidim(data_in, cyclic=False, missing_val=99)
@@ -207,6 +218,9 @@ class TestPrePostInterpolationHelpers:
         assert np.isnan(result.values[1, 1])
         assert result.values[0, 0] == 1
         assert result.values[0, 1] == 2
+        assert result.name == "field"
+        assert result.attrs["units"] == "K"
+        assert result.attrs["long_name"] == "temperature"
 
     @pytest.mark.skipif(
         not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
@@ -249,7 +263,12 @@ class TestPrePostInterpolationHelpers:
     def test_post_interp_multidim_with_missing(self):
         """Test postprocessing with missing value replacement."""
         data = np.array([[1.5, np.nan], [4.1, np.nan]])
-        data_in = xr.DataArray(data, dims=["lat", "lon"])
+        data_in = xr.DataArray(
+            data,
+            dims=["lat", "lon"],
+            name="field",
+            attrs={"units": "Pa", "long_name": "pressure"},
+        )
 
         result = _post_interp_multidim(data_in, missing_val=-999)
 
@@ -258,6 +277,9 @@ class TestPrePostInterpolationHelpers:
         assert result.values[1, 1] == -999
         assert result.values[0, 0] == 1.5
         assert result.values[1, 0] == 4.1
+        assert result.name == "field"
+        assert result.attrs["units"] == "Pa"
+        assert result.attrs["long_name"] == "pressure"
 
 
 class TestVerticalRemapHelpers:
@@ -1265,8 +1287,16 @@ class TestInterpolationFortranFallbacks:
             coords={"sigma": sigma_coords},
         )
         ps = xr.DataArray(np.array(101325.0, dtype=np.float64))
-        hya = xr.DataArray(np.array([0.0, 0.1], dtype=np.float64), dims=["hlev"])
-        hyb = xr.DataArray(np.array([0.8, 0.4], dtype=np.float64), dims=["hlev"])
+        hya = xr.DataArray(
+            np.array([0.0, 0.1], dtype=np.float64),
+            dims=["hlev"],
+            coords={"hlev": [101, 102]},
+        )
+        hyb = xr.DataArray(
+            np.array([0.8, 0.4], dtype=np.float64),
+            dims=["hlev"],
+            coords={"hlev": [101, 102]},
+        )
 
         monkeypatch.setattr(interpolation_module, "_dsigma2hybrid_nodes", None)
 
@@ -1281,6 +1311,7 @@ class TestInterpolationFortranFallbacks:
 
         assert result.dims == ("hlev",)
         assert result.shape == (2,)
+        assert_array_equal(result.hlev.values, np.array([101, 102]))
         assert np.all(np.isfinite(result.values))
 
 
@@ -1356,7 +1387,11 @@ class TestMultidimensionalInterpolation:
         data = np.array([[1, 2, 3], [4, 99, 6], [7, 8, 9]])  # 99 is missing
 
         data_in = xr.DataArray(
-            data, dims=["lat", "lon"], coords={"lat": lat_in, "lon": lon_in}
+            data,
+            dims=["lat", "lon"],
+            coords={"lat": lat_in, "lon": lon_in},
+            name="field",
+            attrs={"units": "m/s", "long_name": "wind speed"},
         )
 
         lat_out = np.array([15, 45])
@@ -1367,6 +1402,9 @@ class TestMultidimensionalInterpolation:
         )
 
         assert result.shape == (2, 2)
+        assert result.name == "field"
+        assert result.attrs["units"] == "m/s"
+        assert result.attrs["long_name"] == "wind speed"
 
     def test_interp_multidim_validation(self):
         """Test input validation for multidimensional interpolation."""
