@@ -1060,6 +1060,175 @@ class TestMannKendallComprehensive:
         assert calc_module.partial_mann_kendall_test is partial_mann_kendall_test
         assert calc_module.partial_test is partial_module.partial_test
 
+    def test_partial_helper_branch_coverage(self):
+        """Cover helper-only branches in the standalone partial module."""
+        with pytest.raises(ValueError, match="two 2D arrays"):
+            partial_module._partial_statistics_batch(np.ones(3), np.ones((3, 1)))
+        with pytest.raises(ValueError, match="same shape"):
+            partial_module._partial_statistics_batch(np.ones((3, 1)), np.ones((3, 2)))
+        with pytest.raises(ValueError, match="at least 3 time steps"):
+            partial_module._partial_statistics_batch(np.ones((2, 1)), np.ones((2, 1)))
+
+        slope, intercept, x, y = partial_module._theil_slope_intercept_scalar(
+            np.array([np.nan, 2.0, np.nan])
+        )
+        assert np.isnan(slope)
+        assert np.isnan(intercept)
+        assert x.shape == (1,)
+        assert y.shape == (1,)
+
+        scalar_short = partial_module._response_trend_scalar(
+            np.array([np.nan, 1.0, np.nan]), method="theilslopes"
+        )
+        assert np.isnan(scalar_short[0])
+
+        scalar_lin = partial_module._response_trend_scalar(
+            np.array([1.0, 2.0, 4.0, 7.0], dtype=float), method="linregress"
+        )
+        assert np.isfinite(scalar_lin[0])
+        assert np.isfinite(scalar_lin[1])
+        assert np.isfinite(scalar_lin[2])
+
+        with pytest.raises(ValueError, match="2D array"):
+            partial_module._response_trend_batch(np.ones(3), "theilslopes")
+
+        batch_lin = partial_module._response_trend_batch(
+            np.array([[1.0, 2.0], [2.0, 2.5], [4.0, 3.5]], dtype=float),
+            "linregress",
+        )
+        assert batch_lin["trend"].shape == (2,)
+        assert batch_lin["std_error"].shape == (2,)
+
+        with pytest.raises(ValueError, match="same length"):
+            partial_module._broadcast_numpy_covariate(
+                np.ones((4, 2), dtype=float), np.ones(3, dtype=float), axis=0
+            )
+        with pytest.raises(ValueError, match="same shape as data"):
+            partial_module._broadcast_numpy_covariate(
+                np.ones((4, 2), dtype=float), np.ones((4, 1), dtype=float), axis=0
+            )
+
+    def test_partial_multidim_remaining_branch_coverage(self):
+        """Cover dim override, 1D dispatch, empty chunks, and NaN fallback."""
+        with pytest.raises(ValueError, match="String axis names"):
+            partial_mann_kendall_multidim(np.ones((4, 2)), np.ones(4), axis="time")
+
+        oned = partial_mann_kendall_multidim(
+            np.array([1.0, 2.0, 3.0, 4.0]),
+            np.array([0.5, 0.7, 0.9, 1.1]),
+            dim=0,
+        )
+        scalar = partial_mann_kendall_test(
+            np.array([1.0, 2.0, 3.0, 4.0]),
+            np.array([0.5, 0.7, 0.9, 1.1]),
+        )
+        assert _equal_or_both_nan(oned["trend"], scalar["trend"])
+        assert _equal_or_both_nan(oned["p"], scalar["p"])
+
+        no_valid = partial_mann_kendall_multidim(
+            np.full((4, 2), np.nan),
+            np.array([1.0, 2.0, 3.0, 4.0]),
+            axis=0,
+            chunk_size=1,
+        )
+        assert np.all(np.isnan(no_valid["trend"]))
+
+        fallback = partial_mann_kendall_multidim(
+            np.array(
+                [
+                    [1.0, 1.0],
+                    [2.0, np.nan],
+                    [3.0, 3.0],
+                    [4.0, 4.0],
+                ],
+                dtype=float,
+            ),
+            np.array([0.1, 0.2, 0.3, 0.4], dtype=float),
+            axis=0,
+            chunk_size=1,
+        )
+        direct = partial_mann_kendall_test(
+            np.array([1.0, np.nan, 3.0, 4.0], dtype=float),
+            np.array([0.1, 0.2, 0.3, 0.4], dtype=float),
+        )
+        assert _equal_or_both_nan(fallback["trend"][1], direct["trend"])
+        assert _equal_or_both_nan(fallback["p"][1], direct["p"])
+
+    def test_partial_xarray_scalar_output_branch(self):
+        """Scalar xarray partial MK should return a scalar dataset."""
+        data = xr.DataArray(
+            np.array([1.0, 2.0, 3.0, 4.0], dtype=float),
+            dims=["time"],
+            coords={"time": np.arange(4)},
+        )
+        covariate = xr.DataArray(
+            np.array([0.2, 0.4, 0.6, 0.8], dtype=float),
+            dims=["time"],
+            coords={"time": np.arange(4)},
+        )
+        result = partial_mann_kendall_xarray(data, covariate, dim="time")
+        assert result.trend.dims == ()
+        assert result.attrs["analyzed_dim"] == "time"
+
+    def test_bindings_loader_and_partial_helper_coverage(self, monkeypatch):
+        """Cover bindings loader fallback and direct helper entry points."""
+        original_suffixes = bindings_module.EXTENSION_SUFFIXES
+        original_package = bindings_module.__package__
+        original_spec = bindings_module.importlib_util.spec_from_file_location
+        original_import = bindings_module.import_module
+        original_exists = bindings_module.Path.exists
+
+        monkeypatch.setattr(bindings_module, "EXTENSION_SUFFIXES", (".pyd",))
+        monkeypatch.setattr(
+            bindings_module.Path,
+            "exists",
+            lambda self: self.name == "mann_kendall_core.pyd" or original_exists(self),
+        )
+
+        def fake_spec(*args, **kwargs):
+            if str(args[1]).endswith("mann_kendall_core.pyd"):
+                raise RuntimeError("boom")
+            return original_spec(*args, **kwargs)
+
+        sentinel = object()
+
+        def fake_import(name):
+            if name.endswith("mann_kendall_core"):
+                return sentinel
+            return original_import(name)
+
+        monkeypatch.setattr(
+            bindings_module.importlib_util, "spec_from_file_location", fake_spec
+        )
+        monkeypatch.setattr(bindings_module, "import_module", fake_import)
+        monkeypatch.setattr(bindings_module, "__package__", "skyborn.calc.mann_kendall")
+
+        loaded = bindings_module._load_core_module()
+        assert loaded is sentinel
+
+        grouped_slopes = bindings_module._grouped_sen_slope_batch(
+            np.asfortranarray(
+                np.array(
+                    [
+                        [1.0, 2.0],
+                        [1.5, 2.3],
+                        [2.0, 2.8],
+                        [2.5, 3.4],
+                    ],
+                    dtype=float,
+                )
+            ),
+            period=2,
+        )
+        assert grouped_slopes.shape == (2,)
+
+        partial_stats = bindings_module._partial_stats_batch(
+            np.asfortranarray(np.array([[1.0], [2.0], [4.0], [7.0]], dtype=float)),
+            np.asfortranarray(np.array([[0.2], [0.4], [0.8], [1.0]], dtype=float)),
+        )
+        assert len(partial_stats) == 3
+        assert partial_stats[0].shape == (1,)
+
     @pytest.mark.parametrize(
         ("test_name", "pmk_name", "include_strict_linear"),
         [
