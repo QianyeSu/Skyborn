@@ -63,6 +63,17 @@ import scipy.stats as stats
 import xarray as xr
 from dask.diagnostics import ProgressBar
 
+from .regression import (
+    _linregress_slope_batch,
+    _linregress_std_error_batch,
+    _theil_std_error_batch,
+)
+from .variants import (
+    _hamed_rao_variance_batch,
+    _pre_whiten_score_variance_batch,
+    _trend_free_pre_whiten_score_variance_batch,
+)
+
 __all__ = [
     "mann_kendall_test",
     "mann_kendall_multidim",
@@ -78,10 +89,20 @@ def _normalize_test_name(test: str) -> str:
     normalized = test.lower().replace("-", "_").replace(" ", "_")
     if normalized in {"original", "mk", "default"}:
         return "original"
+    if normalized in {"hamed_rao", "hamedrao"}:
+        return "hamed_rao"
+    if normalized in {
+        "trend_free_pre_whitening",
+        "trend_free_prewhitening",
+        "tfpw",
+    }:
+        return "trend_free_pre_whitening"
     if normalized in {"pre_whitening", "prewhitening", "pre_whiten"}:
         return "pre_whitening"
     raise ValueError(
-        f"Unknown test: {test}. Supported tests are 'original' and 'pre_whitening'."
+        "Unknown test: "
+        f"{test}. Supported tests are 'original', 'hamed_rao', "
+        "'pre_whitening', and 'trend_free_pre_whitening'."
     )
 
 
@@ -123,10 +144,6 @@ _core_module = _load_core_module()
 _score_variance_kernel = getattr(_core_module, "mk_score_var_batch", None)
 _score_variance_slope_kernel = getattr(_core_module, "mk_score_var_sen_batch", None)
 _sen_slope_kernel = getattr(_core_module, "sen_slope_batch", None)
-_pre_whitening_kernel = getattr(_core_module, "pw_batch_clean", None)
-_pre_whitening_score_variance_kernel = getattr(
-    _core_module, "pw_score_var_batch_clean", None
-)
 
 
 def _kernels_ready() -> bool:
@@ -157,71 +174,6 @@ def _require_kernel(function, function_name: str):
             "Install a prebuilt wheel or build the Skyborn extensions first."
         )
     return function
-
-
-def _variance_without_ties(sample_size: int) -> float:
-    """Return the no-tie MK variance formula for the given sample size."""
-    return sample_size * (sample_size - 1) * (2 * sample_size + 5) / 18.0
-
-
-def _lag1_autocorrelation_batch(data_2d: np.ndarray) -> np.ndarray:
-    """Compute lag-1 autocorrelation for each dense series column."""
-    centered = np.asarray(data_2d, dtype=np.float64) - np.mean(data_2d, axis=0)
-    acov0 = np.sum(centered * centered, axis=0)
-    acov1 = np.sum(centered[:-1] * centered[1:], axis=0)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        return acov1 / acov0
-
-
-def _pre_whiten_batch(data_2d: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Pre-whiten dense 2D series and flag degenerate zero-variance columns."""
-    if _pre_whitening_kernel is not None:
-        whitened, degenerate = _pre_whitening_kernel(_as_core_input_2d(data_2d))
-        return np.asarray(whitened, dtype=np.float64), np.asarray(
-            degenerate, dtype=bool
-        )
-
-    acf1 = _lag1_autocorrelation_batch(data_2d)
-    whitened = (
-        np.asarray(data_2d[1:], dtype=np.float64)
-        - np.asarray(data_2d[:-1], dtype=np.float64) * acf1[np.newaxis, :]
-    )
-    degenerate = ~np.isfinite(acf1)
-    return whitened, degenerate
-
-
-def _pre_whiten_series(data_1d: np.ndarray) -> Tuple[np.ndarray, bool]:
-    """Pre-whiten one finite series and flag degenerate zero-variance input."""
-    whitened, degenerate = _pre_whiten_batch(
-        np.asarray(data_1d, dtype=np.float64).reshape(-1, 1)
-    )
-    return whitened[:, 0], bool(degenerate[0])
-
-
-def _pre_whiten_score_variance_batch(
-    data_2d: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Return S and variance of the whitened series without exporting the intermediate."""
-    if _pre_whitening_score_variance_kernel is not None:
-        s_values, var_values = _pre_whitening_score_variance_kernel(
-            _as_core_input_2d(data_2d)
-        )
-        return np.asarray(s_values, dtype=np.float64), np.asarray(
-            var_values, dtype=np.float64
-        )
-
-    whitened, degenerate = _pre_whiten_batch(data_2d)
-    stat_n = whitened.shape[0]
-    s_values = np.zeros(data_2d.shape[1], dtype=np.float64)
-    var_values = np.full(
-        data_2d.shape[1], _variance_without_ties(stat_n), dtype=np.float64
-    )
-    nondegenerate_mask = ~degenerate
-    if np.any(nondegenerate_mask):
-        s_values[nondegenerate_mask], var_values[nondegenerate_mask] = (
-            _score_variance_batch(whitened[:, nondegenerate_mask], modified=False)
-        )
-    return s_values, var_values
 
 
 def _score_variance_batch(
@@ -284,7 +236,9 @@ def mann_kendall_test(
     test : str, default 'original'
         Mann-Kendall test family to apply:
         - 'original': original Mann-Kendall test
+        - 'hamed_rao': Hamed and Rao (1998) variance correction
         - 'pre_whitening': Yue and Wang (2002) pre-whitening modification
+        - 'trend_free_pre_whitening': Yue and Wang (2002) trend-free pre-whitening
 
     Returns
     -------
@@ -372,19 +326,39 @@ def mann_kendall_test(
             "std_error": np.nan,
         }
 
+    if method not in {"theilslopes", "linregress"}:
+        raise ValueError(f"Unknown method: {method}. Use 'theilslopes' or 'linregress'")
+
     if method == "theilslopes":
         slope = float(_sen_slope_batch(y.reshape(-1, 1))[0])
         intercept = np.median(y) - slope * np.median(x)
-    elif method == "linregress":
-        slope, intercept = stats.linregress(x, y)[:2]
     else:
-        raise ValueError(f"Unknown method: {method}. Use 'theilslopes' or 'linregress'")
+        slope, intercept = stats.linregress(x, y)[:2]
 
     if test_name == "pre_whitening":
         stat_n = n - 1
         s_values, var_values = _pre_whiten_score_variance_batch(y.reshape(-1, 1))
         S = int(np.rint(s_values[0]))
         var_s = float(var_values[0])
+    elif test_name == "trend_free_pre_whitening":
+        stat_n = n - 1
+        s_values, var_values = _trend_free_pre_whiten_score_variance_batch(
+            y.reshape(-1, 1), np.asarray([slope], dtype=np.float64)
+        )
+        S = int(np.rint(s_values[0]))
+        var_s = float(var_values[0])
+    elif test_name == "hamed_rao":
+        slopes = np.asarray([slope], dtype=np.float64)
+        s_values, base_var_values = _score_variance_batch(
+            y.reshape(-1, 1), modified=False
+        )
+        S = int(np.rint(s_values[0]))
+        var_s = float(
+            _hamed_rao_variance_batch(
+                y.reshape(-1, 1), base_var_values, slopes, alpha=alpha
+            )[0]
+        )
+        stat_n = n
     elif method == "theilslopes":
         S_values, var_values, _ = _score_variance_slope_batch(
             y.reshape(-1, 1), modified=modified
@@ -685,6 +659,31 @@ def _vectorized_mk_test(
 
             stat_n = core_input.shape[0] - 1
             S_values, var_s_values = _pre_whiten_score_variance_batch(core_input)
+        elif test_name == "trend_free_pre_whitening":
+            core_input = _as_core_input_2d(clean_data_computed)
+            if method == "theilslopes":
+                slopes = _sen_slope_batch(core_input)
+            else:
+                slopes = _linregress_slope_batch(clean_data_computed, x)
+
+            stat_n = core_input.shape[0] - 1
+            S_values, var_s_values = _trend_free_pre_whiten_score_variance_batch(
+                core_input, slopes
+            )
+        elif test_name == "hamed_rao":
+            if method == "theilslopes":
+                S_values, base_var_values, slopes = _score_variance_slope_batch(
+                    clean_data_computed, modified=False
+                )
+            else:
+                S_values, base_var_values = _score_variance_batch(
+                    clean_data_computed, modified=False
+                )
+                slopes = _linregress_slope_batch(clean_data_computed, x)
+            var_s_values = _hamed_rao_variance_batch(
+                clean_data_computed, base_var_values, slopes, alpha=alpha
+            )
+            stat_n = time_steps
         elif method == "theilslopes":
             S_values, var_s_values, slopes = _score_variance_slope_batch(
                 clean_data_computed, modified=modified
@@ -710,7 +709,10 @@ def _vectorized_mk_test(
         p_values = 2 * (1 - stats.norm.cdf(np.abs(z_values)))
         h_values = np.abs(z_values) > stats.norm.ppf(1 - alpha / 2)
 
-        if test_name != "pre_whitening" and method != "theilslopes":
+        if (
+            test_name not in {"pre_whitening", "trend_free_pre_whitening", "hamed_rao"}
+            and method != "theilslopes"
+        ):
             slopes = _linregress_slope_batch(clean_data_computed, x)
 
         tau_values = S_values / (0.5 * stat_n * (stat_n - 1))
@@ -760,61 +762,6 @@ def _vectorized_mk_test(
             continue
 
     return results
-
-
-def _linregress_slope_batch(data_2d: np.ndarray, x: np.ndarray) -> np.ndarray:
-    """
-    Vectorized linear regression slope calculation.
-
-    Much faster than calling stats.linregress for each series individually.
-    """
-    # Center the data
-    x_mean = np.mean(x)
-    x_centered = x - x_mean
-    numerator = x_centered @ data_2d
-    denominator = np.sum(x_centered**2)
-    return numerator / denominator
-
-
-def _theil_std_error_batch(
-    data_2d: np.ndarray, x: np.ndarray, slopes: np.ndarray
-) -> np.ndarray:
-    """
-    Vectorized standard error calculation for Theil-Sen slopes.
-    """
-    time_steps = data_2d.shape[0]
-    workspace = np.empty_like(data_2d, dtype=np.float64)
-    np.multiply(x[:, np.newaxis], slopes[np.newaxis, :], out=workspace)
-    workspace *= -1.0
-    workspace += data_2d
-    intercepts = np.median(workspace, axis=0)
-    workspace -= intercepts
-    return np.std(workspace, axis=0) / np.sqrt(time_steps)
-
-
-def _linregress_std_error_batch(
-    data_2d: np.ndarray, x: np.ndarray, slopes: np.ndarray
-) -> np.ndarray:
-    """
-    Vectorized residual standard error calculation for linear regression.
-
-    This mirrors the scalar `mann_kendall_test` implementation, which returns
-    the standard error of the detrended residuals rather than the regression
-    slope standard error.
-    """
-    time_steps = data_2d.shape[0]
-
-    # Calculate intercepts
-    x_mean = np.mean(x)
-    y_mean = np.mean(data_2d, axis=0)
-    intercepts = y_mean - slopes * x_mean
-
-    residuals = np.empty_like(data_2d, dtype=np.float64)
-    np.multiply(x[:, np.newaxis], slopes[np.newaxis, :], out=residuals)
-    residuals += intercepts
-    residuals *= -1.0
-    residuals += data_2d
-    return np.std(residuals, axis=0) / np.sqrt(time_steps)
 
 
 def mann_kendall_xarray(
