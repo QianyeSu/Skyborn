@@ -25,5 +25,6 @@ python module mann_kendall_core ! in
             double precision intent(out) :: slopes(nseries)
             integer intent(in) :: modified
         end subroutine mk_score_var_sen_batch_clean
+
     end interface
 end python module mann_kendall_core
