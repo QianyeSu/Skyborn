@@ -32,6 +32,19 @@ The public API uses ``test=...`` to select the Mann-Kendall test family:
 
 All interfaces default to ``test="original"``.
 
+Partial Mann-Kendall
+--------------------
+
+Partial Mann-Kendall is exposed through a separate API because it needs two
+inputs: a response series and a covariate series. It is therefore not selected
+through ``test=...`` in the single-series MK interfaces.
+
+Available functions:
+
+* ``partial_mann_kendall_test``: one response series plus one covariate series
+* ``partial_mann_kendall_multidim``: multidimensional NumPy arrays
+* ``partial_mann_kendall_xarray``: xarray ``DataArray`` inputs
+
 Quick Start
 -----------
 
@@ -124,6 +137,32 @@ dimension, while preserving the remaining spatial dimensions.
 
     print(regional.trend.dims)  # ('lat', 'lon')
 
+Partial MK With a Covariate
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Partial MK is useful when the trend in a response variable should be tested
+after accounting for a second covariate, for example precipitation after
+controlling for an ENSO index or water quality after controlling for streamflow.
+
+.. code-block:: python
+
+    import numpy as np
+    from skyborn.calc import partial_mann_kendall_multidim
+
+    # Response field: (time, lat, lon)
+    response = np.random.randn(40, 96, 144)
+
+    # One global covariate shared by all grid points
+    covariate = np.linspace(-1.0, 1.0, 40)
+
+    partial = partial_mann_kendall_multidim(
+        response,
+        covariate,
+        axis=0,
+    )
+
+    print(partial["trend"].shape)  # (96, 144)
+
 Performance Optimization
 ------------------------
 
@@ -169,6 +208,21 @@ XArray Interface
 ~~~~~~~~~~~~~~~~
 
 .. autofunction:: mann_kendall_xarray
+
+Partial Single-Series Analysis
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: partial_mann_kendall_test
+
+Partial Multidimensional Analysis
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: partial_mann_kendall_multidim
+
+Partial XArray Interface
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: partial_mann_kendall_xarray
 
 Unified Interface
 ~~~~~~~~~~~~~~~~~
