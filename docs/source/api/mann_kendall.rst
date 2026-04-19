@@ -14,6 +14,19 @@ Key Features
 * **Robust Statistics**: Handles missing data and provides comprehensive trend statistics
 * **Multiple Interfaces**: Support for NumPy arrays, xarray DataArrays, and Dask arrays
 
+Supported Test Families
+-----------------------
+
+The public API uses ``test=...`` to select the Mann-Kendall test family:
+
+* ``test="original"``: original Mann-Kendall test
+* ``test="yue_wang"``: Yue-Wang (2004) modified variance correction
+* ``test="hamed_rao"``: Hamed-Rao (1998) variance correction
+* ``test="pre_whitening"``: Yue-Wang (2002) pre-whitening modification
+* ``test="trend_free_pre_whitening"``: Yue-Wang (2002) trend-free pre-whitening
+
+All interfaces default to ``test="original"``.
+
 Quick Start
 -----------
 
@@ -165,16 +178,19 @@ The trend magnitude is estimated using either:
 * **Theil-Sen estimator** (default): Robust, non-parametric slope estimation
 * **Linear regression**: Ordinary least squares for comparison
 
-Yue-Wang Modified Test
-~~~~~~~~~~~~~~~~~~~~~~
+Serial-Correlation-Aware Tests
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For autocorrelated data, the Yue-Wang modified Mann-Kendall test (Yue & Wang, 2004) can be used:
+For autocorrelated data, explicit test families can be selected:
 
 .. code-block:: python
 
-    result = mann_kendall_test(data, test="yue_wang")
+    result_yw = mann_kendall_test(data, test="yue_wang")
+    result_hr = mann_kendall_test(data, test="hamed_rao")
+    result_pw = mann_kendall_test(data, test="pre_whitening")
+    result_tfpw = mann_kendall_test(data, test="trend_free_pre_whitening")
 
-This accounts for serial correlation by adjusting the variance calculation.
+These variants account for serial correlation using different correction strategies.
 
 Advantages
 ----------
