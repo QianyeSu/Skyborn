@@ -249,7 +249,7 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
                 ps, hya_values, hyb_values, p0
             )
             return output_columns.reshape(
-                (hya_values.shape[0] - 1,) + ps.shape, order="F"
+                (hya_values.shape[0] - 1,) + ps.shape, order="C"
             )
 
         reshape = (hya_values.shape[0] - 1,) + (1,) * ps.ndim
@@ -283,7 +283,7 @@ def delta_pressure_hybrid(ps, hya, hyb, p0=100000.0):
             ps.data, hya.data, hyb.data, p0
         )
         output_values = output_columns.reshape(
-            (hya.shape[0] - 1,) + ps.shape, order="F"
+            (hya.shape[0] - 1,) + ps.shape, order="C"
         )
         coords = {name: coord for name, coord in ps.coords.items()}
         if lev_name in hya.coords:
