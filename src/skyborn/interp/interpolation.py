@@ -222,11 +222,13 @@ def _finalize_delta_pressure_hybrid_output(
     dph = dph.assign_coords({target_lev_dim: target_lev_coord})
 
     if output_dims is not None:
-        output_dims = tuple(output_dims)
+        requested_dims = tuple(output_dims)
+        output_dims = tuple(dim for dim in requested_dims if dim in dph.dims)
+        output_dims += tuple(dim for dim in dph.dims if dim not in output_dims)
         if len(output_dims) != dph.ndim or set(output_dims) != set(dph.dims):
             raise ValueError(
                 "`output_dims` must contain each output dimension exactly once: "
-                f"expected a permutation of {dph.dims}, got {output_dims}"
+                f"expected a permutation of {dph.dims}, got {requested_dims}"
             )
         dph = dph.transpose(*output_dims)
 
@@ -297,8 +299,8 @@ def delta_pressure_hybrid(
     hya,
     hyb,
     p0=100000.0,
-    lev_dim: str = None,
-    output_dims=None,
+    lev_dim: str = "lev",
+    output_dims=("time", "lev", "lat", "lon"),
 ):
     """Calculate pressure layer thickness for hybrid coordinates.
 
@@ -317,12 +319,12 @@ def delta_pressure_hybrid(
         pressure units, for example ERA5 ``hyai`` / ``hyam`` coefficients.
 
     lev_dim : str, optional
-        Output vertical dimension name for xarray inputs. If not provided, the
-        current hybrid interface dimension name is preserved.
+        Output vertical dimension name for xarray inputs. Defaults to ``"lev"``.
 
     output_dims : sequence of str, optional
-        Output dimension order for xarray inputs. If not provided, the default
-        order remains ``(lev_dim, *ps.dims)``.
+        Preferred output dimension order for xarray inputs. Defaults to
+        ``("time", "lev", "lat", "lon")``; any names not present in the
+        output are ignored, and remaining dimensions keep their relative order.
 
     Returns
     -------
@@ -340,9 +342,16 @@ def delta_pressure_hybrid(
     ``hybm``.
 
     For CESM-family data it is often convenient to keep using ``hyai`` /
-    ``hybi`` for the calculation, but set ``lev_dim`` and ``output_dims`` so
-    the result lines up with a variable on midpoints such as
+    ``hybi`` for the calculation while leaving the default ``lev_dim="lev"``
+    and ``output_dims=("time", "lev", "lat", "lon")`` so the result lines up
+    naturally with variables on model midpoints such as
     ``V(time, lev, lat, lon)``.
+
+    With xarray inputs, the default behavior is therefore to expose the output
+    vertical dimension as ``"lev"`` and to prefer the common
+    ``("time", "lev", "lat", "lon")`` ordering. If one or more of these
+    dimension names are not present in the output, they are ignored and the
+    remaining dimensions keep their relative order.
     """
 
     if not all(isinstance(x, (xr.DataArray, np.ndarray)) for x in (ps, hya, hyb)):
@@ -358,7 +367,8 @@ def delta_pressure_hybrid(
         raise ValueError(f"hya and hyb must be 1-dimensional: {hya.shape}")
 
     if isinstance(ps, np.ndarray):
-        if lev_dim is not None or output_dims is not None:
+        default_output_dims = ("time", "lev", "lat", "lon")
+        if lev_dim != "lev" or tuple(output_dims) != default_output_dims:
             raise TypeError(
                 "`lev_dim` and `output_dims` are supported only for xarray inputs"
             )
