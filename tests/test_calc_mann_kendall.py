@@ -299,9 +299,7 @@ class TestMannKendallComprehensive:
             dims=["time", "lat", "lon"],
             coords={"time": np.arange(15), "lat": np.arange(8), "lon": np.arange(10)},
         )
-        result = _dask_mann_kendall(
-            da_xr, dim="time", alpha=0.05, method="theilslopes", modified=False
-        )
+        result = _dask_mann_kendall(da_xr, dim="time", alpha=0.05, method="theilslopes")
         assert "trend" in result
 
     def test_alternating_pattern_coverage(self):
@@ -319,8 +317,8 @@ class TestMannKendallComprehensive:
     def test_modified_mk_short_series_coverage(self):
         """Test modified Mann-Kendall with short series for coverage."""
         data = np.array([1, 3, 2, 4, 5])
-        result_std = mann_kendall_test(data, modified=False)
-        result_mod = mann_kendall_test(data, modified=True)
+        result_std = mann_kendall_test(data, test="original")
+        result_mod = mann_kendall_test(data, test="yue_wang")
         assert "tau" in result_std and "tau" in result_mod
 
     def test_basic_trend_detection(self):
@@ -399,8 +397,8 @@ class TestMannKendallComprehensive:
         y = trend + noise
 
         # Compare standard vs modified test
-        result_standard = mann_kendall_test(y, modified=False)
-        result_modified = mann_kendall_test(y, modified=True)
+        result_standard = mann_kendall_test(y, test="original")
+        result_modified = mann_kendall_test(y, test="yue_wang")
 
         # Both should complete successfully
         assert "tau" in result_standard
@@ -423,7 +421,7 @@ class TestMannKendallComprehensive:
             ]
         )
 
-        result = mann_kendall_test(data, method="theilslopes", modified=True)
+        result = mann_kendall_test(data, method="theilslopes", test="yue_wang")
 
         assert result["h"] == False
         np.testing.assert_allclose(result["trend"], -0.09294253333333334)
@@ -554,7 +552,7 @@ class TestMannKendallComprehensive:
         )
 
         vectorized = _vectorized_mk_test(
-            data, method="theilslopes", modified=False, test="pre_whitening"
+            data, method="theilslopes", test="pre_whitening"
         )
 
         for idx in range(data.shape[1]):
@@ -584,9 +582,7 @@ class TestMannKendallComprehensive:
             dtype=float,
         )
 
-        vectorized = _vectorized_mk_test(
-            data, method="theilslopes", modified=False, test="hamed_rao"
-        )
+        vectorized = _vectorized_mk_test(data, method="theilslopes", test="hamed_rao")
 
         for idx in range(data.shape[1]):
             pmk_result = pmk.hamed_rao_modification_test(data[:, idx])
@@ -616,10 +612,7 @@ class TestMannKendallComprehensive:
         )
 
         vectorized = _vectorized_mk_test(
-            data,
-            method="theilslopes",
-            modified=False,
-            test="trend_free_pre_whitening",
+            data, method="theilslopes", test="trend_free_pre_whitening"
         )
 
         for idx in range(data.shape[1]):
@@ -630,67 +623,29 @@ class TestMannKendallComprehensive:
             np.testing.assert_allclose(vectorized["z"][idx], pmk_result.z)
             np.testing.assert_allclose(vectorized["tau"][idx], pmk_result.Tau)
 
-    def test_pre_whitening_rejects_modified_flag(self):
-        """The legacy modified flag should not combine with named test variants yet."""
-        data = np.arange(10, dtype=float)
-        with pytest.raises(
-            ValueError,
-            match="modified=True is currently only supported when test='original'",
-        ):
-            mann_kendall_test(
-                data,
-                method="theilslopes",
-                modified=True,
-                test="pre_whitening",
-            )
-
-    def test_hamed_rao_rejects_modified_flag(self):
-        """The legacy modified flag should not combine with Hamed-Rao."""
-        data = np.arange(10, dtype=float)
-        with pytest.raises(
-            ValueError,
-            match="modified=True is currently only supported when test='original'",
-        ):
-            mann_kendall_test(
-                data,
-                method="theilslopes",
-                modified=True,
-                test="hamed_rao",
-            )
-
-    def test_trend_free_pre_whitening_rejects_modified_flag(self):
-        """The legacy modified flag should not combine with trend-free pre-whitening."""
-        data = np.arange(10, dtype=float)
-        with pytest.raises(
-            ValueError,
-            match="modified=True is currently only supported when test='original'",
-        ):
-            mann_kendall_test(
-                data,
-                method="theilslopes",
-                modified=True,
-                test="trend_free_pre_whitening",
-            )
-
-    @pytest.mark.parametrize("modified", [False, True])
-    def test_matches_pymannkendall_reference_cases(self, modified):
+    @pytest.mark.parametrize(
+        ("test_name", "pmk_name", "include_strict_linear"),
+        [
+            ("original", "original_test", False),
+            ("yue_wang", "yue_wang_modification_test", True),
+        ],
+    )
+    def test_matches_pymannkendall_reference_cases(
+        self, test_name, pmk_name, include_strict_linear
+    ):
         """Skyborn should match pymannkendall on deterministic regression cases."""
         pmk = pytest.importorskip("pymannkendall")
-        cases = _build_pymannkendall_cases(include_strict_linear=modified)
+        cases = _build_pymannkendall_cases(include_strict_linear=include_strict_linear)
 
         for name, data in cases.items():
-            pmk_result = (
-                pmk.yue_wang_modification_test(data)
-                if modified
-                else pmk.original_test(data)
-            )
-            result = mann_kendall_test(data, method="theilslopes", modified=modified)
+            pmk_result = getattr(pmk, pmk_name)(data)
+            result = mann_kendall_test(data, method="theilslopes", test=test_name)
 
             try:
                 _assert_matches_pymannkendall(result, pmk_result)
             except AssertionError as exc:
                 raise AssertionError(
-                    f"Mismatch against pymannkendall for case={name}, modified={modified}"
+                    f"Mismatch against pymannkendall for case={name}, test={test_name}"
                 ) from exc
 
     def test_theil_slope_matches_pymannkendall_sens_slope(self):
@@ -700,7 +655,7 @@ class TestMannKendallComprehensive:
         for name, data in _build_pymannkendall_cases(
             include_strict_linear=True
         ).items():
-            result = mann_kendall_test(data, method="theilslopes", modified=False)
+            result = mann_kendall_test(data, method="theilslopes", test="original")
             pmk_slope = pmk.sens_slope(data)
 
             assert _equal_or_both_nan(
@@ -724,11 +679,11 @@ class TestMannKendallComprehensive:
             ]
         )
 
-        vectorized = _vectorized_mk_test(data, method="linregress", modified=False)
+        vectorized = _vectorized_mk_test(data, method="linregress", test="original")
 
         for idx in range(data.shape[1]):
             scalar = mann_kendall_test(
-                data[:, idx], method="linregress", modified=False
+                data[:, idx], method="linregress", test="original"
             )
             assert vectorized["h"][idx] == scalar["h"]
             np.testing.assert_allclose(vectorized["trend"][idx], scalar["trend"])
@@ -739,8 +694,8 @@ class TestMannKendallComprehensive:
                 vectorized["std_error"][idx], scalar["std_error"]
             )
 
-    def test_vectorized_clean_tied_series_matches_scalar_modified_reference(self):
-        """Modified MK should also stay aligned for clean tied series."""
+    def test_vectorized_clean_tied_series_matches_scalar_yue_wang_reference(self):
+        """Yue-Wang MK should also stay aligned for clean tied series."""
         data = np.array(
             [
                 [1.0, 3.0],
@@ -756,10 +711,12 @@ class TestMannKendallComprehensive:
             ]
         )
 
-        vectorized = _vectorized_mk_test(data, method="linregress", modified=True)
+        vectorized = _vectorized_mk_test(data, method="linregress", test="yue_wang")
 
         for idx in range(data.shape[1]):
-            scalar = mann_kendall_test(data[:, idx], method="linregress", modified=True)
+            scalar = mann_kendall_test(
+                data[:, idx], method="linregress", test="yue_wang"
+            )
             assert vectorized["h"][idx] == scalar["h"]
             np.testing.assert_allclose(vectorized["trend"][idx], scalar["trend"])
             np.testing.assert_allclose(vectorized["p"][idx], scalar["p"])
@@ -1153,9 +1110,7 @@ class TestMannKendallComprehensive:
             },
         )
 
-        result = _dask_mann_kendall(
-            da_xr, dim="time", alpha=0.05, method="theilslopes", modified=False
-        )
+        result = _dask_mann_kendall(da_xr, dim="time", alpha=0.05, method="theilslopes")
 
         assert "trend" in result
         assert result["trend"].shape == (nlat, nlon)
@@ -1176,9 +1131,7 @@ class TestMannKendallComprehensive:
         )
 
         # This should trigger auto-chunking code path
-        result = _dask_mann_kendall(
-            da_xr, dim="time", alpha=0.05, method="theilslopes", modified=False
-        )
+        result = _dask_mann_kendall(da_xr, dim="time", alpha=0.05, method="theilslopes")
 
         assert result["trend"].shape == (nlat, nlon)
 
@@ -1202,9 +1155,7 @@ class TestMannKendallComprehensive:
             },
         )
 
-        result = _dask_mann_kendall(
-            da_xr, dim="time", alpha=0.05, method="theilslopes", modified=False
-        )
+        result = _dask_mann_kendall(da_xr, dim="time", alpha=0.05, method="theilslopes")
 
         # Problematic locations should be NaN, but shouldn't crash
         assert np.isnan(result["trend"][2, 3])
@@ -1273,8 +1224,8 @@ class TestMannKendallComprehensive:
         # Add trend
         x += np.arange(n) * 0.01
 
-        result_standard = mann_kendall_test(x, modified=False)
-        result_modified = mann_kendall_test(x, modified=True)
+        result_standard = mann_kendall_test(x, test="original")
+        result_modified = mann_kendall_test(x, test="yue_wang")
 
         assert "tau" in result_standard
         assert "tau" in result_modified
@@ -1556,8 +1507,8 @@ class TestMannKendallComprehensive:
         # For short series, modified MK may behave differently
         x = np.array([1, 3, 2, 4, 5])  # Only 5 data points
 
-        result_standard = mann_kendall_test(x, modified=False)
-        result_modified = mann_kendall_test(x, modified=True)
+        result_standard = mann_kendall_test(x, test="original")
+        result_modified = mann_kendall_test(x, test="yue_wang")
 
         # Both should be able to run
         assert "tau" in result_standard
@@ -1694,7 +1645,7 @@ class TestMannKendallComprehensive:
         monkeypatch.setattr(mann_kendall_module, "_sen_slope_kernel", None)
 
         with pytest.raises(ImportError, match="compiled mann_kendall_core"):
-            mann_kendall_test(data, method="theilslopes", modified=True)
+            mann_kendall_test(data, method="theilslopes", test="yue_wang")
 
     def test_loader_returns_none_when_import_and_local_probe_fail(self, monkeypatch):
         """Backend loader should gracefully return None when no candidate can load."""
@@ -2146,7 +2097,7 @@ class TestMannKendallComprehensive:
             dtype=np.float64,
         )
 
-        result = _vectorized_mk_test(data, method="theilslopes", modified=False)
+        result = _vectorized_mk_test(data, method="theilslopes", test="original")
         assert np.isnan(result["trend"][1])
 
     def test_vectorized_nan_branch_handles_scalar_exception(self, monkeypatch):
@@ -2165,7 +2116,7 @@ class TestMannKendallComprehensive:
             raise RuntimeError("boom")
 
         monkeypatch.setattr(mann_kendall_module, "mann_kendall_test", _raise_once)
-        result = _vectorized_mk_test(data, method="theilslopes", modified=False)
+        result = _vectorized_mk_test(data, method="theilslopes", test="original")
         assert np.isnan(result["trend"][1])
 
     def test_clean_dispatch_helpers_match_split_outputs(self):
@@ -2195,9 +2146,7 @@ class TestMannKendallComprehensive:
             dims=["time", "lat", "lon"],
             coords={"time": np.arange(8), "lat": np.arange(130), "lon": np.arange(140)},
         )
-        result = _dask_mann_kendall(
-            data, dim="time", alpha=0.05, method="theilslopes", modified=False
-        )
+        result = _dask_mann_kendall(data, dim="time", alpha=0.05, method="theilslopes")
         assert result["trend"].shape == (130, 140)
 
     def test_dask_helper_swallows_block_exceptions(self, monkeypatch):
@@ -2212,9 +2161,7 @@ class TestMannKendallComprehensive:
             raise RuntimeError("boom")
 
         monkeypatch.setattr(mann_kendall_module, "mann_kendall_test", _boom)
-        result = _dask_mann_kendall(
-            data, dim="time", alpha=0.05, method="theilslopes", modified=False
-        )
+        result = _dask_mann_kendall(data, dim="time", alpha=0.05, method="theilslopes")
         assert np.all(np.isnan(result["trend"]))
 
         # Test lines 555-558 - chunk processing edge cases
@@ -2254,7 +2201,7 @@ class TestMannKendallComprehensive:
             ).chunk({"time": 2, "lat": 2, "lon": 2})
 
             result = _dask_mann_kendall(
-                da_xr, dim="time", alpha=0.05, method="theilslopes", modified=False
+                da_xr, dim="time", alpha=0.05, method="theilslopes"
             )
             assert "trend" in result
 
@@ -2296,7 +2243,7 @@ class TestMannKendallComprehensive:
 
             # This should trigger the dask compute path for n_clean_series
             result = _dask_mann_kendall(
-                da_xr, dim="time", alpha=0.05, method="theilslopes", modified=False
+                da_xr, dim="time", alpha=0.05, method="theilslopes"
             )
             assert "trend" in result
 
@@ -2419,7 +2366,7 @@ class TestMannKendallComprehensive:
 
             # This might trigger error handling paths
             result = _dask_mann_kendall(
-                da_xr, dim="time", alpha=0.05, method="theilslopes", modified=False
+                da_xr, dim="time", alpha=0.05, method="theilslopes"
             )
             assert "trend" in result
             # Problematic locations should be handled gracefully
@@ -2443,7 +2390,7 @@ class TestMannKendallComprehensive:
 
             # This should trigger the chunking logic at line 835
             result = _dask_mann_kendall(
-                da_xr, dim="time", alpha=0.05, method="theilslopes", modified=False
+                da_xr, dim="time", alpha=0.05, method="theilslopes"
             )
             assert "trend" in result
             assert result["trend"].shape == (25, 30)
@@ -2618,7 +2565,7 @@ class TestMannKendallComprehensive:
 
             # This should trigger dask array handling paths
             result = _dask_mann_kendall(
-                da_xr, dim="time", alpha=0.05, method="theilslopes", modified=False
+                da_xr, dim="time", alpha=0.05, method="theilslopes"
             )
             assert "trend" in result
             assert result["trend"].shape == (30, 25)
@@ -2644,7 +2591,7 @@ class TestMannKendallComprehensive:
 
             # Force dask processing which should trigger compute() calls
             result = _dask_mann_kendall(
-                da_xr, dim="time", alpha=0.05, method="theilslopes", modified=False
+                da_xr, dim="time", alpha=0.05, method="theilslopes"
             )
             assert "trend" in result
             assert result["trend"].shape == (50, 60)
@@ -2791,7 +2738,7 @@ class TestMannKendallComprehensive:
 
             # This should exercise dask error handling paths
             result = _dask_mann_kendall(
-                da_prob, dim="time", alpha=0.05, method="theilslopes", modified=False
+                da_prob, dim="time", alpha=0.05, method="theilslopes"
             )
             assert "trend" in result
             assert result["trend"].shape == (15, 18)
@@ -2854,7 +2801,7 @@ class TestMannKendallComprehensive:
 
             # This should trigger hasattr(data_chunk, 'compute') path
             result = _dask_mann_kendall(
-                da_dask, dim="time", alpha=0.05, method="theilslopes", modified=False
+                da_dask, dim="time", alpha=0.05, method="theilslopes"
             )
             assert "trend" in result
 
@@ -2894,7 +2841,7 @@ class TestMannKendallComprehensive:
 
             # This should trigger the dask compute paths in chunk processing
             result = _dask_mann_kendall(
-                da_chunk, dim="time", alpha=0.05, method="theilslopes", modified=False
+                da_chunk, dim="time", alpha=0.05, method="theilslopes"
             )
             assert "trend" in result
             assert result["trend"].shape == (28, 32)
@@ -3036,7 +2983,7 @@ class TestMannKendallComprehensive:
         # Test 1D data in trend_analysis (line 566)
         data_1d = np.random.randn(30) + np.arange(30) * 0.02
         result = trend_analysis(
-            data_1d, alpha=0.05, method="theilslopes", modified=True
+            data_1d, alpha=0.05, method="theilslopes", test="yue_wang"
         )
         assert "trend" in result
 
