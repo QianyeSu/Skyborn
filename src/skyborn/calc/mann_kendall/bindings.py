@@ -1,5 +1,6 @@
 """Shared compiled-kernel dispatch helpers for internal MK submodules."""
 
+import sys
 from importlib import import_module
 from importlib import util as importlib_util
 from importlib.machinery import EXTENSION_SUFFIXES
@@ -19,15 +20,20 @@ def _load_core_module():
                 continue
 
             try:
+                previous = sys.modules.pop("mann_kendall_core", None)
                 spec = importlib_util.spec_from_file_location(
                     "mann_kendall_core", candidate
                 )
                 if spec is None or spec.loader is None:
+                    if previous is not None:
+                        sys.modules["mann_kendall_core"] = previous
                     continue
                 core = importlib_util.module_from_spec(spec)
                 spec.loader.exec_module(core)
                 return core
             except Exception:
+                if previous is not None:
+                    sys.modules["mann_kendall_core"] = previous
                 continue
 
     candidate_names = []
@@ -53,6 +59,7 @@ _grouped_correlated_stats_kernel = getattr(
     _core_module, "grouped_correlated_stats_batch", None
 )
 _partial_stats_kernel = getattr(_core_module, "partial_stats_batch", None)
+_partial_stats_sen_kernel = getattr(_core_module, "partial_stats_sen_batch", None)
 
 
 def _as_core_input_2d(data_2d: np.ndarray) -> np.ndarray:
@@ -129,6 +136,23 @@ def _partial_stats_batch(
         np.asarray(s_values, dtype=np.float64),
         np.asarray(var_values, dtype=np.float64),
         np.asarray(tau_values, dtype=np.float64),
+    )
+
+
+def _partial_stats_sen_batch(
+    response_2d: np.ndarray, covariate_2d: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Run the compiled partial-MK statistics + Sen-slope kernel."""
+    kernel = _require_kernel(_partial_stats_sen_kernel, "partial_stats_sen_batch")
+    s_values, var_values, tau_values, slopes = kernel(
+        _as_core_input_2d(response_2d),
+        _as_core_input_2d(covariate_2d),
+    )
+    return (
+        np.asarray(s_values, dtype=np.float64),
+        np.asarray(var_values, dtype=np.float64),
+        np.asarray(tau_values, dtype=np.float64),
+        np.asarray(slopes, dtype=np.float64),
     )
 
 
