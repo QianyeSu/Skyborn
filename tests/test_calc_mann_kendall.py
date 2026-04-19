@@ -562,6 +562,68 @@ class TestMannKendallComprehensive:
         _assert_matches_pymannkendall(result, pmk_result)
 
     @pytest.mark.parametrize(
+        ("test_name", "pmk_name"),
+        [
+            ("yue_wang", "yue_wang_modification_test"),
+            ("hamed_rao", "hamed_rao_modification_test"),
+        ],
+    )
+    @pytest.mark.parametrize("lag", [0, 1, 2, 3])
+    def test_autocorrelation_lag_matches_pymannkendall_reference(
+        self, test_name, pmk_name, lag
+    ):
+        """Lag-aware Yue-Wang and Hamed-Rao runs should match pymannkendall."""
+        pmk = pytest.importorskip("pymannkendall")
+        data = np.array(
+            [
+                0.12573022,
+                -0.13210486,
+                0.64042265,
+                0.10490012,
+                -0.53566937,
+                0.36159505,
+                1.30400005,
+                0.94708096,
+                -0.70373524,
+                -1.26542147,
+            ],
+            dtype=float,
+        )
+
+        pmk_result = getattr(pmk, pmk_name)(data, lag=lag)
+        result = mann_kendall_test(data, method="theilslopes", test=test_name, lag=lag)
+        _assert_matches_pymannkendall(result, pmk_result)
+
+    @pytest.mark.parametrize("test_name", ["yue_wang", "hamed_rao"])
+    def test_autocorrelation_lag_out_of_bounds_matches_pymannkendall(self, test_name):
+        """Out-of-range lag values should fail the same way as pymannkendall."""
+        data = np.arange(10, dtype=float)
+        with pytest.raises(IndexError, match="index 10 is out of bounds"):
+            mann_kendall_test(data, test=test_name, lag=10)
+
+    def test_lag_is_ignored_outside_autocorrelation_families(self):
+        """Lag should not change test families that do not use autocorrelation correction."""
+        original = mann_kendall_test(np.arange(10, dtype=float), test="original")
+        original_with_lag = mann_kendall_test(
+            np.arange(10, dtype=float), test="original", lag=3
+        )
+        seasonal = mann_kendall_test(
+            np.linspace(0.0, 2.3, 24, dtype=float), test="seasonal", period=12
+        )
+        seasonal_with_lag = mann_kendall_test(
+            np.linspace(0.0, 2.3, 24, dtype=float),
+            test="seasonal",
+            period=12,
+            lag=3,
+        )
+
+        for key in ["trend", "p", "z", "tau", "std_error"]:
+            assert _equal_or_both_nan(original[key], original_with_lag[key])
+            assert _equal_or_both_nan(seasonal[key], seasonal_with_lag[key])
+        assert original["h"] == original_with_lag["h"]
+        assert seasonal["h"] == seasonal_with_lag["h"]
+
+    @pytest.mark.parametrize(
         "data",
         [
             np.ones(10, dtype=float),
@@ -749,6 +811,47 @@ class TestMannKendallComprehensive:
 
         for idx in range(data.shape[1]):
             pmk_result = pmk.hamed_rao_modification_test(data[:, idx])
+            assert vectorized["h"][idx] == bool(pmk_result.h)
+            np.testing.assert_allclose(vectorized["trend"][idx], pmk_result.slope)
+            np.testing.assert_allclose(vectorized["p"][idx], pmk_result.p)
+            np.testing.assert_allclose(vectorized["z"][idx], pmk_result.z)
+            np.testing.assert_allclose(vectorized["tau"][idx], pmk_result.Tau)
+
+    @pytest.mark.parametrize(
+        ("test_name", "pmk_name"),
+        [
+            ("yue_wang", "yue_wang_modification_test"),
+            ("hamed_rao", "hamed_rao_modification_test"),
+        ],
+    )
+    def test_autocorrelation_lag_clean_batch_matches_pymannkendall_loops(
+        self, test_name, pmk_name
+    ):
+        """Lag-aware clean batches should agree with per-series pymannkendall."""
+        pmk = pytest.importorskip("pymannkendall")
+        lag = 2
+        data = np.array(
+            [
+                [1.0, 0.5, 5.0],
+                [2.0, 0.25, 5.0],
+                [3.0, 0.75, 5.0],
+                [4.0, 1.25, 5.0],
+                [5.0, 1.00, 5.0],
+                [6.0, 1.50, 5.0],
+                [7.0, 2.00, 5.0],
+                [8.0, 1.75, 5.0],
+                [9.0, 2.25, 5.0],
+                [10.0, 2.50, 5.0],
+            ],
+            dtype=float,
+        )
+
+        vectorized = _vectorized_mk_test(
+            data, method="theilslopes", test=test_name, lag=lag
+        )
+
+        for idx in range(data.shape[1]):
+            pmk_result = getattr(pmk, pmk_name)(data[:, idx], lag=lag)
             assert vectorized["h"][idx] == bool(pmk_result.h)
             np.testing.assert_allclose(vectorized["trend"][idx], pmk_result.slope)
             np.testing.assert_allclose(vectorized["p"][idx], pmk_result.p)
@@ -1423,6 +1526,73 @@ class TestMannKendallComprehensive:
                 np.testing.assert_allclose(result["z"][lat_idx, lon_idx], pmk_result.z)
                 np.testing.assert_allclose(
                     result["tau"][lat_idx, lon_idx], pmk_result.Tau
+                )
+
+    @pytest.mark.parametrize(
+        ("test_name", "pmk_name"),
+        [
+            ("yue_wang", "yue_wang_modification_test"),
+            ("hamed_rao", "hamed_rao_modification_test"),
+        ],
+    )
+    def test_autocorrelation_lag_multidim_and_xarray_match_pymannkendall(
+        self, test_name, pmk_name
+    ):
+        """Lag should propagate through multidim and xarray MK interfaces."""
+        pmk = pytest.importorskip("pymannkendall")
+        lag = 2
+        data = np.array(
+            [
+                [[1.0, 2.0], [0.5, 1.5]],
+                [[1.5, 2.4], [0.9, 1.8]],
+                [[2.1, 2.9], [1.3, 2.1]],
+                [[2.7, 3.3], [1.7, 2.4]],
+                [[3.4, 3.9], [2.0, 2.8]],
+                [[3.9, 4.5], [2.4, 3.1]],
+                [[4.3, 4.9], [2.7, 3.5]],
+                [[4.8, 5.4], [3.1, 3.8]],
+            ],
+            dtype=float,
+        )
+
+        result_np = mann_kendall_multidim(data, axis=0, test=test_name, lag=lag)
+        result_xr = mann_kendall_xarray(
+            xr.DataArray(
+                data,
+                dims=["time", "lat", "lon"],
+                coords={
+                    "time": np.arange(data.shape[0]),
+                    "lat": [10.0, 20.0],
+                    "lon": [100.0, 110.0],
+                },
+            ),
+            dim="time",
+            use_dask=False,
+            test=test_name,
+            lag=lag,
+        )
+
+        for lat_idx in range(data.shape[1]):
+            for lon_idx in range(data.shape[2]):
+                pmk_result = getattr(pmk, pmk_name)(data[:, lat_idx, lon_idx], lag=lag)
+                assert result_np["h"][lat_idx, lon_idx] == bool(pmk_result.h)
+                np.testing.assert_allclose(
+                    result_np["trend"][lat_idx, lon_idx], pmk_result.slope
+                )
+                np.testing.assert_allclose(
+                    result_np["p"][lat_idx, lon_idx], pmk_result.p
+                )
+                np.testing.assert_allclose(
+                    result_np["z"][lat_idx, lon_idx], pmk_result.z
+                )
+                np.testing.assert_allclose(
+                    result_np["tau"][lat_idx, lon_idx], pmk_result.Tau
+                )
+                np.testing.assert_allclose(
+                    result_xr.trend.values[lat_idx, lon_idx], pmk_result.slope
+                )
+                np.testing.assert_allclose(
+                    result_xr.p.values[lat_idx, lon_idx], pmk_result.p
                 )
 
     def test_grouped_numpy_requires_group_axis_when_ambiguous(self):
@@ -3027,6 +3197,22 @@ class TestMannKendallComprehensive:
             alpha=0.05,
         )
         np.testing.assert_allclose(corrected, base_var)
+
+        np.testing.assert_allclose(
+            variants_module._yue_wang_variance_batch(
+                np.array([[1.0, 2.0], [2.0, 3.0]], dtype=np.float64),
+                base_var,
+                np.array([0.5, 0.25], dtype=np.float64),
+                lag=0,
+            ),
+            base_var,
+        )
+
+        assert variants_module._autocorr_lag_limit(10, None) == 9
+        assert variants_module._autocorr_lag_limit(10, -1) == 0
+        assert variants_module._autocorr_lag_limit(10, 3) == 3
+        with pytest.raises(IndexError, match="index 10 is out of bounds"):
+            variants_module._autocorr_lag_limit(10, 10)
 
     def test_seasonal_variant_helper_validation_and_edge_cases(self):
         """Seasonal helper utilities should validate shapes and cover edge cases."""
