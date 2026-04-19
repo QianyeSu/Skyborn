@@ -13,7 +13,7 @@ import numpy as np
 import scipy.stats as stats
 import xarray as xr
 
-from .bindings import _partial_stats_batch, _sen_slope_batch
+from .bindings import _partial_stats_batch, _partial_stats_sen_batch, _sen_slope_batch
 from .regression import (
     _linregress_slope_batch,
     _linregress_std_error_batch,
@@ -323,8 +323,27 @@ def partial_mann_kendall_multidim(
             )
             cov_clean = np.asarray(cov_chunk[:, clean_local], dtype=np.float64)
 
-            partial_stats = _partial_statistics_batch(response_clean, cov_clean)
-            response_trend = _response_trend_batch(response_clean, normalized_method)
+            if normalized_method == "theilslopes":
+                s_values, var_values, tau_values, slopes = _partial_stats_sen_batch(
+                    response_clean, cov_clean
+                )
+                partial_stats = {
+                    "s": s_values,
+                    "var_s": var_values,
+                    "tau": tau_values,
+                }
+                x = np.arange(response_clean.shape[0], dtype=np.float64)
+                response_trend = {
+                    "trend": slopes,
+                    "intercept": np.median(response_clean, axis=0)
+                    - np.median(x) * slopes,
+                    "std_error": _theil_std_error_batch(response_clean, x, slopes),
+                }
+            else:
+                partial_stats = _partial_statistics_batch(response_clean, cov_clean)
+                response_trend = _response_trend_batch(
+                    response_clean, normalized_method
+                )
 
             with np.errstate(divide="ignore", invalid="ignore"):
                 z_values = partial_stats["s"] / np.sqrt(partial_stats["var_s"])
