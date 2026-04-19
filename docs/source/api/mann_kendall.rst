@@ -165,14 +165,14 @@ The trend magnitude is estimated using either:
 * **Theil-Sen estimator** (default): Robust, non-parametric slope estimation
 * **Linear regression**: Ordinary least squares for comparison
 
-Modified Mann-Kendall Test
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Yue-Wang Modified Test
+~~~~~~~~~~~~~~~~~~~~~~
 
-For autocorrelated data, the modified Mann-Kendall test (Yue & Wang, 2004) can be used:
+For autocorrelated data, the Yue-Wang modified Mann-Kendall test (Yue & Wang, 2004) can be used:
 
 .. code-block:: python
 
-    result = mann_kendall_test(data, modified=True)
+    result = mann_kendall_test(data, test="yue_wang")
 
 This accounts for serial correlation by adjusting the variance calculation.
 
