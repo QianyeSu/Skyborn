@@ -427,6 +427,94 @@ class TestMannKendallComprehensive:
         np.testing.assert_allclose(result["z"], -0.9835080531601669)
         np.testing.assert_allclose(result["p"], 0.3253574537616566)
 
+    def test_default_original_matches_explicit_original_test(self):
+        """The default test family should remain the explicit original test."""
+        data = np.array(
+            [0.5, 0.25, 0.75, 1.25, 1.0, 1.5, 2.0, 1.75, 2.25, 2.5], dtype=float
+        )
+        implicit = mann_kendall_test(data, method="theilslopes")
+        explicit = mann_kendall_test(data, method="theilslopes", test="original")
+
+        assert implicit["h"] == explicit["h"]
+        np.testing.assert_allclose(implicit["trend"], explicit["trend"])
+        np.testing.assert_allclose(implicit["p"], explicit["p"])
+        np.testing.assert_allclose(implicit["z"], explicit["z"])
+        np.testing.assert_allclose(implicit["tau"], explicit["tau"])
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            np.ones(10, dtype=float),
+            np.arange(10, dtype=float),
+            np.array(
+                [
+                    0.12573022,
+                    -0.13210486,
+                    0.64042265,
+                    0.10490012,
+                    -0.53566937,
+                    0.36159505,
+                    1.30400005,
+                    0.94708096,
+                    -0.70373524,
+                    -1.26542147,
+                ],
+                dtype=float,
+            ),
+        ],
+    )
+    def test_pre_whitening_matches_pymannkendall_reference(self, data):
+        """Pre-whitening should match pymannkendall on deterministic 1D cases."""
+        pmk = pytest.importorskip("pymannkendall")
+        pmk_result = pmk.pre_whitening_modification_test(data)
+        result = mann_kendall_test(data, method="theilslopes", test="pre_whitening")
+        _assert_matches_pymannkendall(result, pmk_result)
+
+    def test_pre_whitening_clean_batch_matches_pymannkendall_loops(self):
+        """Clean batched pre-whitening should agree with per-series pymannkendall."""
+        pmk = pytest.importorskip("pymannkendall")
+        data = np.array(
+            [
+                [1.0, 0.5, 5.0],
+                [2.0, 0.25, 5.0],
+                [3.0, 0.75, 5.0],
+                [4.0, 1.25, 5.0],
+                [5.0, 1.00, 5.0],
+                [6.0, 1.50, 5.0],
+                [7.0, 2.00, 5.0],
+                [8.0, 1.75, 5.0],
+                [9.0, 2.25, 5.0],
+                [10.0, 2.50, 5.0],
+            ],
+            dtype=float,
+        )
+
+        vectorized = _vectorized_mk_test(
+            data, method="theilslopes", modified=False, test="pre_whitening"
+        )
+
+        for idx in range(data.shape[1]):
+            pmk_result = pmk.pre_whitening_modification_test(data[:, idx])
+            assert vectorized["h"][idx] == bool(pmk_result.h)
+            np.testing.assert_allclose(vectorized["trend"][idx], pmk_result.slope)
+            np.testing.assert_allclose(vectorized["p"][idx], pmk_result.p)
+            np.testing.assert_allclose(vectorized["z"][idx], pmk_result.z)
+            np.testing.assert_allclose(vectorized["tau"][idx], pmk_result.Tau)
+
+    def test_pre_whitening_rejects_modified_flag(self):
+        """The legacy modified flag should not combine with named test variants yet."""
+        data = np.arange(10, dtype=float)
+        with pytest.raises(
+            ValueError,
+            match="modified=True is currently only supported when test='original'",
+        ):
+            mann_kendall_test(
+                data,
+                method="theilslopes",
+                modified=True,
+                test="pre_whitening",
+            )
+
     @pytest.mark.parametrize("modified", [False, True])
     def test_matches_pymannkendall_reference_cases(self, modified):
         """Skyborn should match pymannkendall on deterministic regression cases."""
