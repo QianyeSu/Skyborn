@@ -13,7 +13,7 @@ import numpy as np
 import scipy.stats as stats
 import xarray as xr
 
-from .bindings import _score_variance_batch, _sen_slope_batch
+from .bindings import _partial_stats_batch, _sen_slope_batch
 from .regression import (
     _linregress_slope_batch,
     _linregress_std_error_batch,
@@ -27,11 +27,6 @@ __all__ = [
     "partial_test",
     "partial_multidim",
 ]
-
-
-def _variance_without_ties(sample_size: int) -> float:
-    """Return the no-tie Mann-Kendall variance for one sample size."""
-    return sample_size * (sample_size - 1) * (2 * sample_size + 5) / 18.0
 
 
 def _validate_partial_method(method: str) -> str:
@@ -59,44 +54,6 @@ def _empty_partial_result(n_total: int, n_valid: int) -> Dict[str, Union[float, 
     }
 
 
-def _partial_k_stat_batch(
-    response_2d: np.ndarray, covariate_2d: np.ndarray
-) -> np.ndarray:
-    """Return the partial-MK K statistic for each dense column pair."""
-    n_time, n_series = response_2d.shape
-    k_values = np.zeros(n_series, dtype=np.float64)
-
-    for start in range(n_time - 1):
-        dx = response_2d[start:, :] - response_2d[start, :]
-        dy = covariate_2d[start:, :] - covariate_2d[start, :]
-        k_values += np.sum(np.sign(dx * dy), axis=0)
-
-    return k_values
-
-
-def _partial_rank_cross_sum_batch(
-    response_2d: np.ndarray, covariate_2d: np.ndarray
-) -> np.ndarray:
-    """Return ``sum(R_x * R_y)`` for each dense column pair."""
-    n_time = response_2d.shape[0]
-    rank_x = np.empty_like(response_2d, dtype=np.float64)
-    rank_y = np.empty_like(covariate_2d, dtype=np.float64)
-
-    for row in range(n_time):
-        rank_x[row, :] = (
-            n_time
-            + 1.0
-            + np.sum(np.sign(response_2d[row : row + 1, :] - response_2d), axis=0)
-        ) / 2.0
-        rank_y[row, :] = (
-            n_time
-            + 1.0
-            + np.sum(np.sign(covariate_2d[row : row + 1, :] - covariate_2d), axis=0)
-        ) / 2.0
-
-    return np.sum(rank_x * rank_y, axis=0)
-
-
 def _partial_statistics_batch(
     response_2d: np.ndarray, covariate_2d: np.ndarray
 ) -> Dict[str, np.ndarray]:
@@ -109,24 +66,10 @@ def _partial_statistics_batch(
     if response.shape != covariate.shape:
         raise ValueError("Response and covariate batches must have the same shape.")
 
-    n_time = response.shape[0]
-    if n_time < 3:
+    if response.shape[0] < 3:
         raise ValueError("Partial MK batch helpers need at least 3 time steps.")
 
-    response_scores, _ = _score_variance_batch(response, modified=False)
-    covariate_scores, _ = _score_variance_batch(covariate, modified=False)
-
-    k_values = _partial_k_stat_batch(response, covariate)
-    rank_cross_sum = _partial_rank_cross_sum_batch(response, covariate)
-    sigma = (k_values + 4.0 * rank_cross_sum - n_time * (n_time + 1.0) ** 2) / 3.0
-
-    variance_no_ties = _variance_without_ties(n_time)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        rho = sigma / variance_no_ties
-
-    s_values = response_scores - rho * covariate_scores
-    var_values = (1.0 - rho**2) * variance_no_ties
-    tau_values = response_scores / (0.5 * n_time * (n_time - 1))
+    s_values, var_values, tau_values = _partial_stats_batch(response, covariate)
 
     return {
         "s": np.asarray(s_values, dtype=np.float64),
@@ -367,7 +310,6 @@ def partial_mann_kendall_multidim(
         joint_valid_counts = np.sum(
             np.isfinite(response_chunk) & np.isfinite(cov_chunk), axis=0
         )
-        response_valid_counts = np.sum(np.isfinite(response_chunk), axis=0)
         valid_series = joint_valid_counts >= 3
         if not np.any(valid_series):
             continue
