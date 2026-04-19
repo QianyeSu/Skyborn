@@ -470,6 +470,66 @@ class TestMannKendallComprehensive:
         result = mann_kendall_test(data, method="theilslopes", test="pre_whitening")
         _assert_matches_pymannkendall(result, pmk_result)
 
+    @pytest.mark.parametrize(
+        "data",
+        [
+            np.ones(10, dtype=float),
+            np.arange(10, dtype=float),
+            np.array(
+                [
+                    0.12573022,
+                    -0.13210486,
+                    0.64042265,
+                    0.10490012,
+                    -0.53566937,
+                    0.36159505,
+                    1.30400005,
+                    0.94708096,
+                    -0.70373524,
+                    -1.26542147,
+                ],
+                dtype=float,
+            ),
+        ],
+    )
+    def test_hamed_rao_matches_pymannkendall_reference(self, data):
+        """Hamed-Rao should match pymannkendall on deterministic 1D cases."""
+        pmk = pytest.importorskip("pymannkendall")
+        pmk_result = pmk.hamed_rao_modification_test(data)
+        result = mann_kendall_test(data, method="theilslopes", test="hamed_rao")
+        _assert_matches_pymannkendall(result, pmk_result)
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            np.ones(10, dtype=float),
+            np.arange(10, dtype=float),
+            np.array(
+                [
+                    0.12573022,
+                    -0.13210486,
+                    0.64042265,
+                    0.10490012,
+                    -0.53566937,
+                    0.36159505,
+                    1.30400005,
+                    0.94708096,
+                    -0.70373524,
+                    -1.26542147,
+                ],
+                dtype=float,
+            ),
+        ],
+    )
+    def test_trend_free_pre_whitening_matches_pymannkendall_reference(self, data):
+        """Trend-free pre-whitening should match pymannkendall on deterministic 1D cases."""
+        pmk = pytest.importorskip("pymannkendall")
+        pmk_result = pmk.trend_free_pre_whitening_modification_test(data)
+        result = mann_kendall_test(
+            data, method="theilslopes", test="trend_free_pre_whitening"
+        )
+        _assert_matches_pymannkendall(result, pmk_result)
+
     def test_pre_whitening_clean_batch_matches_pymannkendall_loops(self):
         """Clean batched pre-whitening should agree with per-series pymannkendall."""
         pmk = pytest.importorskip("pymannkendall")
@@ -501,6 +561,71 @@ class TestMannKendallComprehensive:
             np.testing.assert_allclose(vectorized["z"][idx], pmk_result.z)
             np.testing.assert_allclose(vectorized["tau"][idx], pmk_result.Tau)
 
+    def test_hamed_rao_clean_batch_matches_pymannkendall_loops(self):
+        """Clean batched Hamed-Rao should agree with per-series pymannkendall."""
+        pmk = pytest.importorskip("pymannkendall")
+        data = np.array(
+            [
+                [1.0, 0.5, 5.0],
+                [2.0, 0.25, 5.0],
+                [3.0, 0.75, 5.0],
+                [4.0, 1.25, 5.0],
+                [5.0, 1.00, 5.0],
+                [6.0, 1.50, 5.0],
+                [7.0, 2.00, 5.0],
+                [8.0, 1.75, 5.0],
+                [9.0, 2.25, 5.0],
+                [10.0, 2.50, 5.0],
+            ],
+            dtype=float,
+        )
+
+        vectorized = _vectorized_mk_test(
+            data, method="theilslopes", modified=False, test="hamed_rao"
+        )
+
+        for idx in range(data.shape[1]):
+            pmk_result = pmk.hamed_rao_modification_test(data[:, idx])
+            assert vectorized["h"][idx] == bool(pmk_result.h)
+            np.testing.assert_allclose(vectorized["trend"][idx], pmk_result.slope)
+            np.testing.assert_allclose(vectorized["p"][idx], pmk_result.p)
+            np.testing.assert_allclose(vectorized["z"][idx], pmk_result.z)
+            np.testing.assert_allclose(vectorized["tau"][idx], pmk_result.Tau)
+
+    def test_trend_free_pre_whitening_clean_batch_matches_pymannkendall_loops(self):
+        """Clean batched trend-free pre-whitening should agree with pymannkendall."""
+        pmk = pytest.importorskip("pymannkendall")
+        data = np.array(
+            [
+                [1.0, 0.5, 5.0],
+                [2.0, 0.25, 5.0],
+                [3.0, 0.75, 5.0],
+                [4.0, 1.25, 5.0],
+                [5.0, 1.00, 5.0],
+                [6.0, 1.50, 5.0],
+                [7.0, 2.00, 5.0],
+                [8.0, 1.75, 5.0],
+                [9.0, 2.25, 5.0],
+                [10.0, 2.50, 5.0],
+            ],
+            dtype=float,
+        )
+
+        vectorized = _vectorized_mk_test(
+            data,
+            method="theilslopes",
+            modified=False,
+            test="trend_free_pre_whitening",
+        )
+
+        for idx in range(data.shape[1]):
+            pmk_result = pmk.trend_free_pre_whitening_modification_test(data[:, idx])
+            assert vectorized["h"][idx] == bool(pmk_result.h)
+            np.testing.assert_allclose(vectorized["trend"][idx], pmk_result.slope)
+            np.testing.assert_allclose(vectorized["p"][idx], pmk_result.p)
+            np.testing.assert_allclose(vectorized["z"][idx], pmk_result.z)
+            np.testing.assert_allclose(vectorized["tau"][idx], pmk_result.Tau)
+
     def test_pre_whitening_rejects_modified_flag(self):
         """The legacy modified flag should not combine with named test variants yet."""
         data = np.arange(10, dtype=float)
@@ -513,6 +638,34 @@ class TestMannKendallComprehensive:
                 method="theilslopes",
                 modified=True,
                 test="pre_whitening",
+            )
+
+    def test_hamed_rao_rejects_modified_flag(self):
+        """The legacy modified flag should not combine with Hamed-Rao."""
+        data = np.arange(10, dtype=float)
+        with pytest.raises(
+            ValueError,
+            match="modified=True is currently only supported when test='original'",
+        ):
+            mann_kendall_test(
+                data,
+                method="theilslopes",
+                modified=True,
+                test="hamed_rao",
+            )
+
+    def test_trend_free_pre_whitening_rejects_modified_flag(self):
+        """The legacy modified flag should not combine with trend-free pre-whitening."""
+        data = np.arange(10, dtype=float)
+        with pytest.raises(
+            ValueError,
+            match="modified=True is currently only supported when test='original'",
+        ):
+            mann_kendall_test(
+                data,
+                method="theilslopes",
+                modified=True,
+                test="trend_free_pre_whitening",
             )
 
     @pytest.mark.parametrize("modified", [False, True])
