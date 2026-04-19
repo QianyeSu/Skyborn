@@ -623,6 +623,28 @@ class TestMannKendallComprehensive:
         assert original["h"] == original_with_lag["h"]
         assert seasonal["h"] == seasonal_with_lag["h"]
 
+    def test_period_none_defaults_to_12_for_seasonal_families(self):
+        """Seasonal families should treat period=None the same as period=12."""
+        data = np.linspace(0.0, 2.3, 24, dtype=float)
+
+        for test_name in ["seasonal", "correlated_seasonal"]:
+            default_period = mann_kendall_test(data, test=test_name, period=None)
+            explicit_period = mann_kendall_test(data, test=test_name, period=12)
+            for key in ["trend", "p", "z", "tau", "std_error"]:
+                assert _equal_or_both_nan(default_period[key], explicit_period[key])
+            assert default_period["h"] == explicit_period["h"]
+
+    def test_period_is_ignored_outside_seasonal_families(self):
+        """Non-seasonal families should ignore the optional period argument."""
+        baseline = mann_kendall_test(np.arange(10, dtype=float), test="original")
+        with_period = mann_kendall_test(
+            np.arange(10, dtype=float), test="original", period=24
+        )
+
+        for key in ["trend", "p", "z", "tau", "std_error"]:
+            assert _equal_or_both_nan(baseline[key], with_period[key])
+        assert baseline["h"] == with_period["h"]
+
     @pytest.mark.parametrize(
         "data",
         [
