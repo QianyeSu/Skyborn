@@ -703,7 +703,7 @@ contains
 
         integer :: i, j, n
         real(real64) :: x_score, y_score, k_value, sigma, rho
-        real(real64) :: delta_x, delta_y, sign_sum_x, sign_sum_y
+        real(real64) :: delta_x, delta_y, sign_x, sign_y
         real(real64) :: var_no_ties, n_real
 
         n = size(x)
@@ -714,45 +714,47 @@ contains
             return
         end if
 
-        call compute_s_value(x, x_score)
-        call compute_s_value(y, y_score)
-
         n_real = real(n, real64)
         var_no_ties = n_real * real(n - 1, real64) * real(2 * n + 5, real64) / 18.0_real64
 
-        do i = 1, n
-            sign_sum_x = 0.0_real64
-            sign_sum_y = 0.0_real64
-            do j = 1, n
-                delta_x = x(i) - x(j)
-                if (delta_x > 0.0_real64) then
-                    sign_sum_x = sign_sum_x + 1.0_real64
-                else if (delta_x < 0.0_real64) then
-                    sign_sum_x = sign_sum_x - 1.0_real64
-                end if
-
-                delta_y = y(i) - y(j)
-                if (delta_y > 0.0_real64) then
-                    sign_sum_y = sign_sum_y + 1.0_real64
-                else if (delta_y < 0.0_real64) then
-                    sign_sum_y = sign_sum_y - 1.0_real64
-                end if
-            end do
-            rank_x(i) = (n_real + 1.0_real64 + sign_sum_x) / 2.0_real64
-            rank_y(i) = (n_real + 1.0_real64 + sign_sum_y) / 2.0_real64
-        end do
-
+        x_score = 0.0_real64
+        y_score = 0.0_real64
         k_value = 0.0_real64
+        rank_x(:n) = 0.0_real64
+        rank_y(:n) = 0.0_real64
+
         do i = 1, n - 1
-            do j = i, n
-                delta_x = (x(j) - x(i)) * (y(j) - y(i))
+            do j = i + 1, n
+                delta_x = x(j) - x(i)
                 if (delta_x > 0.0_real64) then
-                    k_value = k_value + 1.0_real64
+                    sign_x = 1.0_real64
                 else if (delta_x < 0.0_real64) then
-                    k_value = k_value - 1.0_real64
+                    sign_x = -1.0_real64
+                else
+                    sign_x = 0.0_real64
                 end if
+                x_score = x_score + sign_x
+                rank_x(i) = rank_x(i) - sign_x
+                rank_x(j) = rank_x(j) + sign_x
+
+                delta_y = y(j) - y(i)
+                if (delta_y > 0.0_real64) then
+                    sign_y = 1.0_real64
+                else if (delta_y < 0.0_real64) then
+                    sign_y = -1.0_real64
+                else
+                    sign_y = 0.0_real64
+                end if
+                y_score = y_score + sign_y
+                rank_y(i) = rank_y(i) - sign_y
+                rank_y(j) = rank_y(j) + sign_y
+
+                k_value = k_value + sign_x * sign_y
             end do
         end do
+
+        rank_x(:n) = (n_real + 1.0_real64 + rank_x(:n)) / 2.0_real64
+        rank_y(:n) = (n_real + 1.0_real64 + rank_y(:n)) / 2.0_real64
 
         sigma = ( &
             k_value + 4.0_real64 * sum(rank_x(:n) * rank_y(:n)) - n_real * (n_real + 1.0_real64) ** 2 &
