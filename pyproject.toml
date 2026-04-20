@@ -56,6 +56,14 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+exclude = [
+    "*.tests",
+    "*.tests.*",
+    "*.examples",
+    "*.examples.*",
+    "*.build",
+    "*.build.*",
+]
 
 [tool.setuptools.package-data]
 "skyborn.spharm" = ["src/*.f", "src/*.pyf", "meson.build"]
