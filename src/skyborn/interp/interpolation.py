@@ -366,7 +366,7 @@ def delta_pressure_hybrid(
     if np.ndim(hya) != 1:
         raise ValueError(f"hya and hyb must be 1-dimensional: {hya.shape}")
 
-    _require_compiled_interp_backend(
+    _require_compiled_interp(
         "delta_pressure_hybrid",
         _ddelta_pressure_hybrid_pa,
         _ddelta_pressure_hybrid_pa_into,
@@ -380,9 +380,7 @@ def delta_pressure_hybrid(
             )
         hya_values = np.asarray(hya.data if isinstance(hya, xr.DataArray) else hya)
         hyb_values = np.asarray(hyb.data if isinstance(hyb, xr.DataArray) else hyb)
-        output_columns = _delta_pressure_hybrid_fortran_flat(
-            ps, hya_values, hyb_values, p0
-        )
+        output_columns = _delta_pressure_hybrid_flat(ps, hya_values, hyb_values, p0)
         return output_columns.reshape((hya_values.shape[0] - 1,) + ps.shape, order="C")
 
     _reject_lazy_or_unit_backed_inputs("delta_pressure_hybrid", ps, hya, hyb)
@@ -404,9 +402,7 @@ def delta_pressure_hybrid(
 
     lev_name = hya.dims[0]
     lev_coord = _dimension_coord_or_default(hya, lev_name, size=hya.shape[0] - 1)
-    output_columns = _delta_pressure_hybrid_fortran_flat(
-        ps.data, hya.data, hyb.data, p0
-    )
+    output_columns = _delta_pressure_hybrid_flat(ps.data, hya.data, hyb.data, p0)
     output_values = output_columns.reshape((hya.shape[0] - 1,) + ps.shape, order="C")
     coords = {name: coord for name, coord in ps.coords.items()}
     coords[lev_name] = lev_coord
@@ -745,7 +741,7 @@ def _is_pint_backed(array):
     )
 
 
-def _require_compiled_interp_backend(function_name: str, *handles) -> None:
+def _require_compiled_interp(function_name: str, *handles) -> None:
     """Raise a clear error when a compiled interpolation backend is unavailable."""
 
     if not any(handle is not None for handle in handles):
@@ -887,9 +883,7 @@ def _compiled_float64_output(shape, order: str = "F") -> np.ndarray:
     return np.empty(shape, dtype=np.float64, order=order)
 
 
-def _delta_pressure_hybrid_fortran_flat(
-    ps_values, hya_values, hyb_values, p0
-) -> np.ndarray:
+def _delta_pressure_hybrid_flat(ps_values, hya_values, hyb_values, p0) -> np.ndarray:
     """Run eager hybrid layer-thickness calculation through the compiled backend."""
 
     if _ddelta_pressure_hybrid_pa is None:
@@ -1003,7 +997,7 @@ def _build_vinth2p_output(data, interp_axis, new_levels, output_values, base_tem
     )
 
 
-def _interp_hybrid_to_pressure_fortran_corder(
+def _interp_hybrid_to_pressure_corder(
     data: xr.DataArray,
     ps: xr.DataArray,
     hyam: xr.DataArray,
@@ -1119,7 +1113,7 @@ def _interp_hybrid_to_pressure_fortran_corder(
     )
 
 
-def _interp_hybrid_to_pressure_fortran(
+def _interp_hybrid_to_pressure(
     data: xr.DataArray,
     ps: xr.DataArray,
     hyam: xr.DataArray,
@@ -1138,7 +1132,7 @@ def _interp_hybrid_to_pressure_fortran(
     if _dvinth2p_nodes_pa is None:
         raise RuntimeError("vinth2p backend is not available")
 
-    corder_output = _interp_hybrid_to_pressure_fortran_corder(
+    corder_output = _interp_hybrid_to_pressure_corder(
         data=data,
         ps=ps,
         hyam=hyam,
@@ -1265,7 +1259,7 @@ def _interp_hybrid_to_pressure_fortran(
     return output.transpose(*dims)
 
 
-def _interp_sigma_to_hybrid_fortran(
+def _interp_sigma_to_hybrid(
     data: xr.DataArray,
     sig_coords: xr.DataArray,
     ps: xr.DataArray,
@@ -1291,7 +1285,7 @@ def _interp_sigma_to_hybrid_fortran(
     ):
         raise ValueError("sigma2hybrid backend requires monotonic sigma coordinates")
 
-    corder_output = _interp_sigma_to_hybrid_fortran_corder(
+    corder_output = _interp_sigma_to_hybrid_corder(
         data=data,
         ps=ps,
         hyam=hyam,
@@ -1368,7 +1362,7 @@ def _interp_sigma_to_hybrid_fortran(
     return output.transpose(*dims)
 
 
-def _interp_sigma_to_hybrid_fortran_corder(
+def _interp_sigma_to_hybrid_corder(
     data: xr.DataArray,
     ps: xr.DataArray,
     hyam: xr.DataArray,
@@ -1568,7 +1562,7 @@ def interp_hybrid_to_pressure(
     if not all(isinstance(x, xr.DataArray) for x in (data, ps, hyam, hybm)):
         raise TypeError("data, ps, hyam, and hybm must be xarray DataArray objects")
 
-    _require_compiled_interp_backend(
+    _require_compiled_interp(
         "interp_hybrid_to_pressure",
         _dvinth2p_nodes_pa,
         _dvinth2p_nodes_pa_into,
@@ -1614,7 +1608,7 @@ def interp_hybrid_to_pressure(
 
     hyam, hybm = _align_hybrid_level_dimension(hyam, hybm, lev_dim)
     method = _normalize_interp_method(method)
-    return _interp_hybrid_to_pressure_fortran(
+    return _interp_hybrid_to_pressure(
         data=data,
         ps=ps,
         hyam=hyam,
@@ -1703,7 +1697,7 @@ def interp_sigma_to_hybrid(
     `sigma2hybrid <https://www.ncl.ucar.edu/Document/Functions/Built-in/sigma2hybrid.shtml>`__
     """
 
-    _require_compiled_interp_backend(
+    _require_compiled_interp(
         "interp_sigma_to_hybrid",
         _dsigma2hybrid_nodes,
         _dsigma2hybrid_nodes_into,
@@ -1723,7 +1717,7 @@ def interp_sigma_to_hybrid(
             )
 
     method = _normalize_interp_method(method)
-    return _interp_sigma_to_hybrid_fortran(
+    return _interp_sigma_to_hybrid(
         data=data,
         sig_coords=sig_coords,
         ps=ps,
