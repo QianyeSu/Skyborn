@@ -17,7 +17,8 @@ from numpy.testing import assert_allclose, assert_array_almost_equal, assert_arr
 import skyborn.interp.interpolation as interpolation_module
 from skyborn.interp.interpolation import (
     __pres_lev_mandatory__,
-    _func_interpolate,
+    _post_interp_multidim,
+    _pre_interp_multidim,
     _pressure_from_hybrid,
     _sigma_from_hybrid,
     delta_pressure_hybrid,
@@ -26,21 +27,6 @@ from skyborn.interp.interpolation import (
     interp_sigma_to_hybrid,
     pressure_at_hybrid_levels,
 )
-
-# Try to import private functions - they may not be available in all versions
-try:
-    from skyborn.interp.interpolation import (
-        _geo_height_extrapolate,
-        _post_interp_multidim,
-        _pre_interp_multidim,
-        _temp_extrapolate,
-        _vertical_remap,
-        _vertical_remap_extrap,
-    )
-
-    PRIVATE_FUNCTIONS_AVAILABLE = True
-except ImportError:
-    PRIVATE_FUNCTIONS_AVAILABLE = False
 
 
 class TestInterpolationHelpers:
@@ -110,20 +96,6 @@ class TestInterpolationHelpers:
             rtol=0.0,
             atol=1e-10,
         )
-
-    def test_func_interpolate(self):
-        """Test interpolation function selection."""
-        # Test linear interpolation function
-        func_linear = _func_interpolate("linear")
-        assert func_linear is not None
-
-        # Test log interpolation function
-        func_log = _func_interpolate("log")
-        assert func_log is not None
-
-        # Test invalid method
-        with pytest.raises(ValueError, match="Unknown interpolation method"):
-            _func_interpolate("invalid_method")
 
 
 class TestMandatoryPressureLevels:
