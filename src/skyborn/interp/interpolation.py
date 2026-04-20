@@ -15,7 +15,6 @@ from __future__ import annotations
 import typing
 import warnings
 
-import metpy.interpolate
 import numpy as np
 import xarray as xr
 
@@ -114,36 +113,6 @@ def _normalize_interp_method(method: str) -> str:
     if normalized == "loglog":
         return "log-log"
     return normalized
-
-
-def _func_interpolate(method="linear"):
-    """Define interpolation function."""
-
-    method = _normalize_interp_method(method)
-
-    if method == "linear":
-        func_interpolate = metpy.interpolate.interpolate_1d
-    elif method == "log":
-        func_interpolate = metpy.interpolate.log_interpolate_1d
-    elif method == "log-log":
-        raise ValueError(
-            'Interpolation method "log-log" requires the compiled Fortran backend. '
-            'Python fallback supports only "linear" and "log".'
-        )
-    else:
-        raise ValueError(
-            f"Unknown interpolation method: {method}. "
-            f'Supported methods are: "log" and "linear".'
-        )
-
-    return func_interpolate
-
-
-def _interpolate_mb(data, curr_levels, new_levels, axis, method="linear"):
-    """Wrapper used by ``xarray.map_blocks`` for vertical interpolation."""
-
-    func_interpolate = _func_interpolate(method)
-    return func_interpolate(new_levels, curr_levels, data, axis=axis)
 
 
 def _rename_colliding_coeff_dim(target, hya, hyb):
@@ -529,197 +498,6 @@ def _sigma_from_hybrid(psfc, hya, hyb, p0=100000.0):
     return hya * p0 / psfc + hyb
 
 
-def _vertical_remap(func_interpolate, new_levels, xcoords, data, interp_axis=0):
-    """Execute the defined interpolation function on data."""
-
-    if (
-        not isinstance(xcoords, xr.DataArray)
-        and np.ndim(xcoords) == 1
-        and np.ndim(data) > 1
-    ):
-        reshape = [1] * np.ndim(data)
-        reshape[interp_axis] = np.shape(xcoords)[0]
-        xcoords = np.reshape(xcoords, tuple(reshape))
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore", r"Interpolation point out of data bounds encountered"
-        )
-        return func_interpolate(new_levels, xcoords, data, axis=interp_axis)
-
-
-def _temp_extrapolate(data_or_t_bot, *args):
-    r"""Extrapolate temperature below ground.
-
-    This helper accepts both the upstream-style call
-    ``_temp_extrapolate(t_bot, lev, p_sfc, ps, phi_sfc)`` and the legacy
-    Skyborn call ``_temp_extrapolate(data, lev_dim, lev, p_sfc, ps, phi_sfc)``.
-
-    .. math::
-        T = T_* \left( 1 + \alpha ln \frac{p}{p_s} + \frac{1}{2}\left( \alpha ln \frac{p}{p_s} \right)^2 + \frac{1}{6} \left( \alpha ln \frac{p}{p_s} \right)^3 \right)
-    """
-    if len(args) == 4:
-        lev, p_sfc, ps, phi_sfc = args
-        t_bot = data_or_t_bot
-    elif len(args) == 5 and isinstance(args[0], str):
-        lev_dim, lev, p_sfc, ps, phi_sfc = args
-        t_bot = data_or_t_bot.isel({lev_dim: -1}, drop=True)
-    else:
-        raise TypeError(
-            "_temp_extrapolate accepts either "
-            "(t_bot, lev, p_sfc, ps, phi_sfc) or "
-            "(data, lev_dim, lev, p_sfc, ps, phi_sfc)"
-        )
-
-    R_d = 287.04  # dry air gas constant
-    g_inv = 1 / 9.80616  # inverse of standard gravity
-    alpha = 0.0065 * R_d * g_inv
-
-    tstar = t_bot * (1 + alpha * (ps / p_sfc - 1))
-    hgt = phi_sfc * g_inv
-    t0 = tstar + 0.0065 * hgt
-    tplat = xr.apply_ufunc(np.minimum, 298, t0, dask="parallelized")
-
-    tprime0 = xr.where(
-        (2000 <= hgt) & (hgt <= 2500),
-        0.002 * ((2500 - hgt) * t0 + ((hgt - 2000) * tplat)),
-        np.nan,
-    )
-    tprime0 = xr.where(2500 < hgt, tplat, tprime0)
-
-    alnp = xr.where(
-        hgt < 2000,
-        alpha * np.log(lev / ps),
-        R_d * (tprime0 - tstar) / phi_sfc * np.log(lev / ps),
-    )
-    alnp = xr.where(tprime0 < tstar, 0, alnp)
-
-    return tstar * (1 + alnp + (0.5 * (alnp**2)) + (1 / 6 * (alnp**3)))
-
-
-def _geo_height_extrapolate(t_bot, lev, p_sfc, ps, phi_sfc):
-    r"""This helper function extrapolates geopotential height below ground using
-    the ECMWF formulation described in `Vertical Interpolation and Truncation
-    of Model-Coordinate Data <https://dx.doi.org/10.5065/D6HX19NH>`__ by
-    Trenberth, Berry, & Buja [NCAR/TN-396, 1993]. Specifically equation 15 is
-    used:
-
-    .. math::
-        \Phi = \Phi_s - R_d T_* ln \frac{p}{p_s} \left[ 1 + \frac{1}{2}\alpha ln\frac{p}{p_s} + \frac{1}{6} \left( \alpha ln \frac{p}{p_s} \right)^2 \right]
-
-    Parameters
-    ----------
-    t_bot: :class:`xarray.DataArray`
-        Temperature at the lowest (bottom) level of the model.
-
-    lev: int
-        The pressure level of interest. Must be in the same units as ``ps`` and ``p_sfc``
-
-    p_sfc: :class:`xarray.DataArray`
-        The pressure at the lowest level of the model. Must be in the same units as ``lev`` and ``ps``
-
-    ps : :class:`xarray.DataArray`
-        An array of surface pressures. Must be in the same units as ``lev`` and ``p_sfc``
-
-    phi_sfc:
-        The geopotential at the lowest level of the model.
-
-    Returns
-    -------
-    result: :class:`xarray.DataArray`
-        The extrapolated geopotential height in geopotential meters at the provided pressure levels.
-    """
-    R_d = 287.04  # dry air gas constant
-    g_inv = 1 / 9.80616  # inverse of standard gravity
-    alpha = 0.0065 * R_d * g_inv
-
-    tstar = t_bot * (1 + alpha * (ps / p_sfc - 1))
-    hgt = phi_sfc * g_inv
-    t0 = tstar + 0.0065 * hgt
-
-    alph = xr.where(
-        (tstar <= 290.5) & (t0 > 290.5), R_d / phi_sfc * (290.5 - tstar), alpha
-    )
-
-    alph = xr.where((tstar > 290.5) & (t0 > 290.5), 0, alph)
-    tstar = xr.where((tstar > 290.5) & (t0 > 290.5), 0.5 * (290.5 + tstar), tstar)
-
-    tstar = xr.where((tstar < 255), 0.5 * (tstar + 255), tstar)
-
-    alnp = alph * np.log(lev / ps)
-    return hgt - R_d * tstar * g_inv * np.log(lev / ps) * (
-        1 + 0.5 * alnp + 1 / 6 * alnp**2
-    )
-
-
-def _vertical_remap_extrap(
-    new_levels, lev_dim, data, output, pressure, ps, variable, t_bot, phi_sfc
-):
-    """A helper function to call the appropriate extrapolation function based
-    on the user's inputs.
-
-    Parameters
-    ----------
-    new_levels: array-like
-        The desired pressure levels for extrapolation in Pascals.
-
-    lev_dim: str
-        The name of the vertical dimension.
-
-    data: :class:`xarray.DataArray`
-        The data to extrapolate
-
-    output: :class:`xarray.DataArray`
-        An array to hold the output data
-
-    pressure: :class:`xarray.DataArray`
-        The pressure at the lowest level of the model. Must be in the same units as ``lev`` and ``ps``
-
-    ps : :class:`xarray.DataArray`
-        An array of surface pressures. Must be in the same units as ``lev`` and ``p_sfc``
-
-    variable : str, optional
-        String representing what variable is extrapolated below surface level.
-        Temperature extrapolation = "temperature". Geopotential height
-        extrapolation = "geopotential". All other variables = "other". If
-        "other", the value of ``data`` at the lowest model level will be used
-        as the below ground fill value. Required if extrapolate is True.
-
-    t_bot: :class:`xarray.DataArray`
-        Temperature at the lowest (bottom) level of the model.
-
-    phi_sfc:
-        The geopotential at the lowest level of the model.
-
-    Returns
-    -------
-    output: :class:`xarray.DataArray`
-        A DataArray containing the data after extrapolation.
-    """
-
-    sfc_index = pressure[lev_dim].argmax(dim=lev_dim)  # index of the model surface
-    p_sfc = pressure.isel(
-        {lev_dim: sfc_index}, drop=True
-    )  # extract pressure at lowest level
-
-    if variable == "temperature":
-        output = output.where(
-            output.plev <= p_sfc,
-            _temp_extrapolate(t_bot, output.plev, p_sfc, ps, phi_sfc),
-        )
-    elif variable == "geopotential":
-        output = output.where(
-            output.plev <= p_sfc,
-            _geo_height_extrapolate(t_bot, output.plev, p_sfc, ps, phi_sfc),
-        )
-    else:
-        output = output.where(
-            output.plev <= p_sfc, data.isel({lev_dim: sfc_index}, drop=True)
-        )
-
-    return output
-
-
 def _is_dask_backed(array):
     """Return True when an xarray object is backed by a dask array."""
 
@@ -767,18 +545,6 @@ def _reject_lazy_or_unit_backed_inputs(function_name: str, *arrays) -> None:
             f"{function_name} no longer provides a Pint/MetPy fallback path. "
             "Use eager NumPy/xarray inputs backed by the compiled Fortran kernels."
         )
-
-
-def _strip_unexpected_pint_units(output, in_pint):
-    """Remove unexpected pint wrapping introduced by MetPy."""
-
-    if in_pint:
-        return output
-
-    if hasattr(output.data, "magnitude"):
-        output.data = output.data.magnitude
-
-    return output
 
 
 def _align_hybrid_level_dimension(hyam, hybm, lev_dim):
