@@ -1077,7 +1077,7 @@ class TestInterpolationFortranFallbacks:
             lambda *a, **k: None,
         )
 
-        result = interpolation_module._interp_hybrid_to_pressure_fortran_corder(
+        result = interpolation_module._interp_hybrid_to_pressure_corder(
             data=data,
             ps=ps,
             hyam=hyam,
@@ -1094,7 +1094,7 @@ class TestInterpolationFortranFallbacks:
 
         assert result is None
 
-    def test_interp_hybrid_to_pressure_fortran_fallback_broadcasts_ecmwf_inputs(
+    def test_interp_hybrid_to_pressure_helper_broadcasts_ecmwf_inputs(
         self, monkeypatch
     ):
         """Fallback Fortran path should accept broadcasted ECMWF auxiliaries."""
@@ -1133,14 +1133,14 @@ class TestInterpolationFortranFallbacks:
         monkeypatch.setattr(interpolation_module, "_dvinth2p_nodes_pa", object())
         monkeypatch.setattr(
             interpolation_module,
-            "_interp_hybrid_to_pressure_fortran_corder",
+            "_interp_hybrid_to_pressure_corder",
             lambda **kwargs: None,
         )
         monkeypatch.setattr(
             interpolation_module, "_dvinth2p_ecmwf_nodes_pa_into", fake_ecmwf_into
         )
 
-        result = interpolation_module._interp_hybrid_to_pressure_fortran(
+        result = interpolation_module._interp_hybrid_to_pressure(
             data=data,
             ps=ps,
             hyam=hyam,
@@ -1160,7 +1160,7 @@ class TestInterpolationFortranFallbacks:
         assert np.array_equal(captured["t_bot"], np.full(3, 290.0))
         assert np.array_equal(captured["phi"], np.full(3, 50.0))
 
-    def test_interp_sigma_to_hybrid_fortran_requires_backend(self, monkeypatch):
+    def test_interp_sigma_to_hybrid_helper_requires_backend(self, monkeypatch):
         """Private eager helper should fail clearly when backend is absent."""
 
         data = xr.DataArray(np.array([280.0, 275.0], dtype=np.float64), dims=["sigma"])
@@ -1174,7 +1174,7 @@ class TestInterpolationFortranFallbacks:
         monkeypatch.setattr(interpolation_module, "_dsigma2hybrid_nodes", None)
 
         with pytest.raises(RuntimeError, match="sigma2hybrid backend is not available"):
-            interpolation_module._interp_sigma_to_hybrid_fortran(
+            interpolation_module._interp_sigma_to_hybrid(
                 data=data,
                 sig_coords=sig_coords,
                 ps=ps,
@@ -1185,7 +1185,7 @@ class TestInterpolationFortranFallbacks:
                 method="linear",
             )
 
-    def test_interp_sigma_to_hybrid_fortran_requires_monotonic_sigma(self, monkeypatch):
+    def test_interp_sigma_to_hybrid_helper_requires_monotonic_sigma(self, monkeypatch):
         """Non-monotonic sigma coordinates should be rejected before backend use."""
 
         data = xr.DataArray(
@@ -1202,7 +1202,7 @@ class TestInterpolationFortranFallbacks:
         monkeypatch.setattr(interpolation_module, "_dsigma2hybrid_nodes", object())
 
         with pytest.raises(ValueError, match="requires monotonic sigma coordinates"):
-            interpolation_module._interp_sigma_to_hybrid_fortran(
+            interpolation_module._interp_sigma_to_hybrid(
                 data=data,
                 sig_coords=sig_coords,
                 ps=ps,
@@ -1231,7 +1231,7 @@ class TestInterpolationFortranFallbacks:
             lambda *a, **k: None,
         )
 
-        result = interpolation_module._interp_sigma_to_hybrid_fortran_corder(
+        result = interpolation_module._interp_sigma_to_hybrid_corder(
             data=data,
             ps=ps,
             hyam=hyam,
@@ -1264,7 +1264,7 @@ class TestInterpolationFortranFallbacks:
             lambda *a, **k: None,
         )
 
-        result = interpolation_module._interp_sigma_to_hybrid_fortran_corder(
+        result = interpolation_module._interp_sigma_to_hybrid_corder(
             data=data,
             ps=ps,
             hyam=hyam,
