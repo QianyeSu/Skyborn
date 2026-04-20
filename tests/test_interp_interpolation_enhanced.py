@@ -17,34 +17,15 @@ import skyborn.interp.interpolation as interpolation_mod
 from skyborn.interp.interpolation import (
     __pres_lev_mandatory__,
     _align_hybrid_level_dimension,
-    _func_interpolate,
-    _interpolate_mb,
-    _is_pint_backed,
     _pressure_from_hybrid,
     _rename_colliding_coeff_dim,
     _sigma_from_hybrid,
-    _strip_unexpected_pint_units,
     delta_pressure_hybrid,
     interp_hybrid_to_pressure,
     interp_multidim,
     interp_sigma_to_hybrid,
     pressure_at_hybrid_levels,
 )
-
-# Try to import private functions - they may not be available
-try:
-    from skyborn.interp.interpolation import (
-        _geo_height_extrapolate,
-        _post_interp_multidim,
-        _pre_interp_multidim,
-        _temp_extrapolate,
-        _vertical_remap,
-        _vertical_remap_extrap,
-    )
-
-    PRIVATE_FUNCTIONS_AVAILABLE = True
-except ImportError:
-    PRIVATE_FUNCTIONS_AVAILABLE = False
 
 
 class TestInterpolationEdgeCases:
@@ -94,32 +75,6 @@ class TestInterpolationEdgeCases:
         )  # Pure pressure
         # At reference pressure
         assert_array_almost_equal(sigma[2, 0], 1.0, decimal=10)
-
-    def test_func_interpolate_function_properties(self):
-        """Test properties of interpolation functions."""
-        # Test linear interpolation
-        func_linear = _func_interpolate("linear")
-
-        # Create test data
-        x = np.array([1.0, 2.0, 3.0])
-        y = np.array([10.0, 20.0, 30.0])
-        xi = np.array([1.5, 2.5])
-
-        result = func_linear(xi, x, y)
-        expected = np.array([15.0, 25.0])  # Linear interpolation
-        assert_array_almost_equal(result, expected)
-
-        # Test log interpolation
-        func_log = _func_interpolate("log")
-
-        # Positive values for log interpolation
-        x_log = np.array([1.0, 10.0, 100.0])
-        y_log = np.array([1.0, 10.0, 100.0])
-        xi_log = np.array([3.16227766])  # sqrt(10)
-
-        result_log = func_log(xi_log, x_log, y_log)
-        assert len(result_log) == 1
-        assert result_log[0] > 1.0 and result_log[0] < 100.0
 
     def test_hybrid_to_pressure_exact_surface_match(self):
         """Test hybrid to pressure interpolation for an exact surface-pressure match."""
@@ -618,8 +573,6 @@ class TestInterpolationEdgeCases:
         """Private vinth helpers should reject unsupported methods and array layouts."""
         assert interpolation_mod._vinth2p_intyp("log-log") == 3
         assert interpolation_mod._vinth2p_intyp("loglog") == 3
-        with pytest.raises(ValueError, match="requires the compiled Fortran backend"):
-            interpolation_mod._func_interpolate("loglog")
 
         with pytest.raises(ValueError, match="Unknown interpolation method"):
             interpolation_mod._vinth2p_intyp("cubic")
@@ -1168,9 +1121,6 @@ class TestInterpolationEdgeCases:
                 method="log-log",
             )
 
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
     def test_sigma_to_hybrid_edge_coordinates(self):
         """Test sigma to hybrid with edge coordinate values."""
         # Single time step, simple spatial grid
@@ -1780,27 +1730,6 @@ class TestInterpolationGeoCatSyncCoverage:
         assert dph.shape == (2, 2)
         assert np.all(dph.values >= 0)
 
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
-    def test_temp_extrapolate_supports_legacy_and_explicit_t_bot_calls(self):
-        """Temperature extrapolation should accept both Skyborn and GeoCAT call styles."""
-
-        full = xr.DataArray(
-            np.array([[[280.0]], [[260.0]]]),
-            dims=["lev", "lat", "lon"],
-            coords={"lev": [85000.0, 70000.0], "lat": [0.0], "lon": [0.0]},
-        )
-        t_bot = full.isel(lev=-1, drop=True)
-        p_sfc = xr.DataArray([[85000.0]], dims=["lat", "lon"], coords=t_bot.coords)
-        ps = xr.DataArray([[100000.0]], dims=["lat", "lon"], coords=t_bot.coords)
-        phi_sfc = xr.DataArray([[0.0]], dims=["lat", "lon"], coords=t_bot.coords)
-
-        explicit = _temp_extrapolate(t_bot, 100000.0, p_sfc, ps, phi_sfc)
-        legacy = _temp_extrapolate(full, "lev", 100000.0, p_sfc, ps, phi_sfc)
-
-        assert_allclose(explicit.values, legacy.values)
-
     def test_interp_hybrid_to_pressure_accepts_different_coeff_dimension_name(self):
         """Hybrid coefficients should be renamed onto the data lev dim when needed."""
 
@@ -1873,16 +1802,6 @@ class TestInterpolationGeoCatSyncCoverage:
 
 class TestInterpolationHelperCoverage:
     """Extra helper and branch coverage for interpolation internals."""
-
-    def test_interpolate_mb_wrapper_uses_requested_method(self):
-        """The map-block helper should dispatch to the selected interpolation func."""
-        data = np.array([280.0, 250.0, 220.0])
-        curr_levels = np.array([1000.0, 700.0, 400.0])
-        new_levels = np.array([850.0, 550.0])
-
-        result = _interpolate_mb(data, curr_levels, new_levels, axis=0, method="linear")
-
-        assert_array_almost_equal(result, np.array([265.0, 235.0]))
 
     def test_rename_colliding_coeff_dim_passthrough_for_non_dataarrays(self):
         """Non-xarray inputs should be returned unchanged by the rename guard."""
@@ -2284,32 +2203,6 @@ class TestInterpolationHelperCoverage:
 
         assert sigma.dims == ("a", "x")
         assert sigma.shape == (2, 1)
-
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
-    def test_temp_extrapolate_rejects_invalid_call_signature(self):
-        """Temperature extrapolation should reject unsupported legacy signatures."""
-        with pytest.raises(TypeError, match="accepts either"):
-            _temp_extrapolate(xr.DataArray([280.0], dims=["lev"]), 100000.0)
-
-    def test_pint_detection_and_strip_helpers(self):
-        """Pint helper utilities should preserve expected quantity semantics."""
-        pint = pytest.importorskip("pint")
-        ureg = pint.UnitRegistry()
-        quantity = xr.DataArray(np.array([1.0, 2.0]) * ureg.kelvin, dims=["x"])
-
-        assert _is_pint_backed(np.array([1.0, 2.0])) is False
-        assert _is_pint_backed(quantity) is True
-
-        kept = _strip_unexpected_pint_units(quantity.copy(deep=False), in_pint=True)
-        assert hasattr(kept.data, "magnitude")
-
-        stripped = _strip_unexpected_pint_units(
-            quantity.copy(deep=False), in_pint=False
-        )
-        assert isinstance(stripped.data, np.ndarray)
-        assert_array_equal(stripped.values, np.array([1.0, 2.0]))
 
     def test_align_hybrid_level_dimension_validation_and_warning_paths(self):
         """Coefficient alignment helper should validate and rename as needed."""
