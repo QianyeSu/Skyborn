@@ -302,7 +302,7 @@ class TestInterpolationEdgeCases:
 
     @pytest.mark.parametrize("method", ["linear", "log"])
     def test_compiled_ecmwf_path_matches_python_fallback(self, monkeypatch, method):
-        """Compiled ECMWF interpolation should preserve the GeoCAT-style fallback semantics."""
+        """Compiled ECMWF interpolation should fail clearly if the backend is removed."""
 
         if not callable(
             getattr(interpolation_mod, "_dvinth2p_ecmwf_nodes_pa_into", None)
@@ -357,23 +357,25 @@ class TestInterpolationEdgeCases:
             interpolation_mod, "_dvinth2p_ecmwf_nodes_corder_pa_into", None
         )
 
-        fallback = interp_hybrid_to_pressure(
-            data=data,
-            ps=ps,
-            hyam=hyam,
-            hybm=hybm,
-            p0=100000.0,
-            new_levels=new_levels,
-            lev_dim="lev",
-            method=method,
-            extrapolate=True,
-            variable="geopotential",
-            t_bot=t_bot,
-            phi_sfc=phi_sfc,
-        )
+        assert compiled.dims == ("time", "plev", "x")
+        assert compiled.shape == (1, 3, 1)
+        assert np.all(np.isfinite(compiled.values))
 
-        assert_array_equal(compiled.plev.values, fallback.plev.values)
-        assert_allclose(compiled.values, fallback.values, rtol=0.0, atol=1e-12)
+        with pytest.raises(RuntimeError, match="requires the compiled Fortran backend"):
+            interp_hybrid_to_pressure(
+                data=data,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                p0=100000.0,
+                new_levels=new_levels,
+                lev_dim="lev",
+                method=method,
+                extrapolate=True,
+                variable="geopotential",
+                t_bot=t_bot,
+                phi_sfc=phi_sfc,
+            )
 
     def test_fortran_path_prefers_preallocated_output_buffer(self, monkeypatch):
         """Test that the Fortran fast path reuses a caller-allocated output buffer."""
@@ -985,8 +987,8 @@ class TestInterpolationEdgeCases:
         assert result.dtype == np.float32
         assert_array_equal(result.values, np.full((2, 1, 2), np.float32(55.5)))
 
-    def test_interp_hybrid_to_pressure_python_fallback_extrapolation(self, monkeypatch):
-        """Public helper should still use the Python remap and extrapolation path."""
+    def test_interp_hybrid_to_pressure_requires_compiled_backend(self, monkeypatch):
+        """Public helper should fail clearly when the compiled backend is unavailable."""
         data = xr.DataArray(
             np.array([[[280.0, 285.0]], [[240.0, 245.0]]], dtype=np.float64),
             dims=["lev", "lat", "lon"],
@@ -999,21 +1001,6 @@ class TestInterpolationEdgeCases:
         )
         hyam = xr.DataArray([0.0, 0.2], dims=["lev"])
         hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
-        captured = {}
-
-        def fake_vertical_remap(
-            func, new_levels, pressure_data, data_data, interp_axis
-        ):
-            captured["vertical_interp_axis"] = interp_axis
-            captured["vertical_shape"] = pressure_data.shape
-            return np.zeros((2, 1, 2), dtype=np.float64)
-
-        def fake_vertical_remap_extrap(
-            new_levels, lev_dim, data, output, pressure, ps, variable, t_bot, phi_sfc
-        ):
-            captured["extrap_variable"] = variable
-            return output + 5.0
-
         monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", None)
         monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa_into", None)
         monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_corder_pa_into", None)
@@ -1022,27 +1009,19 @@ class TestInterpolationEdgeCases:
         monkeypatch.setattr(
             interpolation_mod, "_dvinth2p_ecmwf_nodes_corder_pa_into", None
         )
-        monkeypatch.setattr(interpolation_mod, "_vertical_remap", fake_vertical_remap)
-        monkeypatch.setattr(
-            interpolation_mod, "_vertical_remap_extrap", fake_vertical_remap_extrap
-        )
 
-        result = interp_hybrid_to_pressure(
-            data=data,
-            ps=ps,
-            hyam=hyam,
-            hybm=hybm,
-            new_levels=np.array([90000.0, 80000.0], dtype=np.float64),
-            lev_dim="lev",
-            method="linear",
-            extrapolate=True,
-            variable="other",
-        )
-
-        assert captured["vertical_interp_axis"] == 0
-        assert captured["vertical_shape"] == (2, 1, 2)
-        assert captured["extrap_variable"] == "other"
-        assert_array_equal(result.values, np.full((2, 1, 2), 5.0))
+        with pytest.raises(RuntimeError, match="requires the compiled Fortran backend"):
+            interp_hybrid_to_pressure(
+                data=data,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                new_levels=np.array([90000.0, 80000.0], dtype=np.float64),
+                lev_dim="lev",
+                method="linear",
+                extrapolate=True,
+                variable="other",
+            )
 
     def test_interp_hybrid_to_pressure_loglog_dispatches_to_fortran(self, monkeypatch):
         """Public hybrid-pressure helper should route log-log through the Fortran path."""
@@ -1099,8 +1078,15 @@ class TestInterpolationEdgeCases:
         hybm = xr.DataArray([1.0, 0.0], dims=["lev"])
 
         monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_corder_pa_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_ecmwf_nodes_pa", None)
+        monkeypatch.setattr(interpolation_mod, "_dvinth2p_ecmwf_nodes_pa_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dvinth2p_ecmwf_nodes_corder_pa_into", None
+        )
 
-        with pytest.raises(ValueError, match="requires the compiled Fortran backend"):
+        with pytest.raises(RuntimeError, match="requires the compiled Fortran backend"):
             interp_hybrid_to_pressure(
                 data=data,
                 ps=ps,
@@ -1168,8 +1154,10 @@ class TestInterpolationEdgeCases:
         hybm = xr.DataArray([1.0, 0.0], dims=["hlev"])
 
         monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes", None)
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes_corder_into", None)
 
-        with pytest.raises(ValueError, match="requires the compiled Fortran backend"):
+        with pytest.raises(RuntimeError, match="requires the compiled Fortran backend"):
             interp_sigma_to_hybrid(
                 data=data,
                 sig_coords=sig_coords,
@@ -1345,7 +1333,7 @@ class TestInterpolationEdgeCases:
     def test_interp_sigma_to_hybrid_python_fallback_preserves_hybrid_level_coords(
         self, monkeypatch
     ):
-        """Fallback sigma-to-hybrid should expose stable hybrid-level coords."""
+        """Compiled-only sigma-to-hybrid should fail clearly without the backend."""
 
         monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes", None)
 
@@ -1370,18 +1358,19 @@ class TestInterpolationEdgeCases:
             coords={"model_level": [101, 102]},
         )
 
-        result = interp_sigma_to_hybrid(
-            data=data,
-            sig_coords=sig_coords,
-            ps=ps,
-            hyam=hya,
-            hybm=hyb,
-            lev_dim="sigma",
-        )
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes", None)
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes_into", None)
+        monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes_corder_into", None)
 
-        assert result.dims == ("time", "hlev", "spatial")
-        assert_array_equal(result.hlev.values, np.array([101, 102]))
-        assert np.all(np.isfinite(result.values))
+        with pytest.raises(RuntimeError, match="requires the compiled Fortran backend"):
+            interp_sigma_to_hybrid(
+                data=data,
+                sig_coords=sig_coords,
+                ps=ps,
+                hyam=hya,
+                hybm=hyb,
+                lev_dim="sigma",
+            )
 
     def test_sigma_to_hybrid_fortran_corder_fast_path_accepts_float32(
         self, monkeypatch
@@ -1729,13 +1718,15 @@ class TestInterpolationSpecialCases:
         hya = xr.DataArray([0.0, 0.2], dims=["hlev"])
         hyb = xr.DataArray([0.8, 0.0], dims=["hlev"])
 
-        # Should handle non-monotonic coordinates
-        result = interp_sigma_to_hybrid(
-            data=data, sig_coords=sig_coords, ps=ps, hyam=hya, hybm=hyb, lev_dim="sigma"
-        )
-
-        assert result.shape == (1, 2, 1)
-        assert np.all(np.isfinite(result.values))
+        with pytest.raises(ValueError, match="requires monotonic sigma coordinates"):
+            interp_sigma_to_hybrid(
+                data=data,
+                sig_coords=sig_coords,
+                ps=ps,
+                hyam=hya,
+                hybm=hyb,
+                lev_dim="sigma",
+            )
 
     def test_interpolation_with_unlimited_dimensions(self):
         """Test interpolation with datasets having unlimited dimensions."""
@@ -2096,10 +2087,7 @@ class TestInterpolationHelperCoverage:
     def test_delta_pressure_hybrid_xarray_python_path_preserves_level_coords(
         self, monkeypatch
     ):
-        """The pure-xarray delta-pressure path should keep the original level coords."""
-
-        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa", None)
-        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa_into", None)
+        """The compiled delta-pressure path should keep the original level coords."""
 
         ps = xr.DataArray(
             np.array([[100000.0, 90000.0]]),
@@ -2132,9 +2120,6 @@ class TestInterpolationHelperCoverage:
     ):
         """Standard time/lat/lon xarray inputs should default to time,lev,lat,lon."""
 
-        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa", None)
-        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa_into", None)
-
         ps = xr.DataArray(
             np.array([[[100000.0, 90000.0]]]),
             dims=["time", "lat", "lon"],
@@ -2164,10 +2149,7 @@ class TestInterpolationHelperCoverage:
     def test_delta_pressure_hybrid_xarray_python_path_allows_output_dim_controls(
         self, monkeypatch
     ):
-        """Pure-xarray delta-pressure output can be renamed and transposed."""
-
-        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa", None)
-        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa_into", None)
+        """Compiled delta-pressure output can be renamed and transposed."""
 
         ps = xr.DataArray(
             np.array([[[100000.0, 90000.0]]]),
@@ -2243,7 +2225,7 @@ class TestInterpolationHelperCoverage:
     def test_delta_pressure_hybrid_dask_input_skips_fortran_fast_path(
         self, monkeypatch
     ):
-        """Dask-backed pressure inputs should keep the existing lazy xarray path."""
+        """Dask-backed pressure inputs should now be rejected explicitly."""
 
         da = pytest.importorskip("dask.array")
 
@@ -2261,17 +2243,12 @@ class TestInterpolationHelperCoverage:
             dims=["lat", "lon"],
         )
 
-        result = delta_pressure_hybrid(
-            ps,
-            np.array([0.0, 0.2, 0.5]),
-            np.array([1.0, 0.5, 0.0]),
-        )
-
-        assert getattr(result.data, "chunks", None) is not None
-        assert_array_equal(
-            result.compute().values,
-            np.array([[[30000.0, 25000.0]], [[20000.0, 15000.0]]]),
-        )
+        with pytest.raises(NotImplementedError, match="Dask fallback path"):
+            delta_pressure_hybrid(
+                ps,
+                np.array([0.0, 0.2, 0.5]),
+                np.array([1.0, 0.5, 0.0]),
+            )
 
     def test_delta_pressure_hybrid_warns_on_coeff_dim_name_mismatch(self):
         """Xarray coeff dim mismatches should be normalized with a warning."""
@@ -2418,7 +2395,7 @@ class TestInterpolationHelperCoverage:
     def test_interp_hybrid_to_pressure_dask_single_vertical_chunk_preserves_metadata(
         self,
     ):
-        """Single-chunk vertical dask inputs should use the xarray map-block path."""
+        """Single-chunk dask inputs should now be rejected explicitly."""
         pytest.importorskip("dask")
 
         data = xr.DataArray(
@@ -2436,22 +2413,18 @@ class TestInterpolationHelperCoverage:
         hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["lev"])
         hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["lev"])
 
-        result = interp_hybrid_to_pressure(
-            data=data,
-            ps=ps,
-            hyam=hyam,
-            hybm=hybm,
-            new_levels=np.array([95000.0, 70000.0]),
-            lev_dim="lev",
-        )
-
-        assert hasattr(result.data, "chunks")
-        assert result.name == "foo"
-        assert result.attrs["units"] == "K"
-        assert result.compute().shape == (2, 2, 2)
+        with pytest.raises(NotImplementedError, match="Dask fallback path"):
+            interp_hybrid_to_pressure(
+                data=data,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                new_levels=np.array([95000.0, 70000.0]),
+                lev_dim="lev",
+            )
 
     def test_interp_hybrid_to_pressure_dask_warns_for_chunked_vertical_dimension(self):
-        """Multi-chunk vertical dask inputs should warn and use the fallback path."""
+        """Multi-chunk vertical dask inputs should now be rejected explicitly."""
         pytest.importorskip("dask")
 
         data = xr.DataArray(
@@ -2467,8 +2440,8 @@ class TestInterpolationHelperCoverage:
         hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["lev"])
         hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["lev"])
 
-        with pytest.warns(UserWarning, match="Chunking along lev"):
-            result = interp_hybrid_to_pressure(
+        with pytest.raises(NotImplementedError, match="Dask fallback path"):
+            interp_hybrid_to_pressure(
                 data=data,
                 ps=ps,
                 hyam=hyam,
@@ -2477,13 +2450,10 @@ class TestInterpolationHelperCoverage:
                 lev_dim="lev",
             )
 
-        assert hasattr(result.data, "chunks")
-        assert result.compute().shape == (2, 2, 2)
-
     def test_interp_hybrid_to_pressure_chunks_eager_data_when_other_inputs_are_dask(
         self,
     ):
-        """Fallback dask path should chunk eager data when companion inputs are dask-backed."""
+        """Any dask-backed companion input should now be rejected explicitly."""
         pytest.importorskip("dask")
 
         data = xr.DataArray(
@@ -2499,22 +2469,20 @@ class TestInterpolationHelperCoverage:
         hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["lev"])
         hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["lev"])
 
-        result = interp_hybrid_to_pressure(
-            data=data,
-            ps=ps,
-            hyam=hyam,
-            hybm=hybm,
-            new_levels=np.array([95000.0, 70000.0]),
-            lev_dim="lev",
-        )
-
-        assert hasattr(result.data, "chunks")
-        assert result.compute().shape == (2, 2, 2)
+        with pytest.raises(NotImplementedError, match="Dask fallback path"):
+            interp_hybrid_to_pressure(
+                data=data,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                new_levels=np.array([95000.0, 70000.0]),
+                lev_dim="lev",
+            )
 
     def test_interp_hybrid_to_pressure_preserves_metadata_when_xarray_map_blocks_succeeds(
         self, monkeypatch
     ):
-        """When xr.map_blocks returns a DataArray directly, metadata should be copied."""
+        """The public API no longer routes dask inputs through xr.map_blocks."""
         pytest.importorskip("dask")
 
         data = xr.DataArray(
@@ -2532,30 +2500,15 @@ class TestInterpolationHelperCoverage:
         hyam = xr.DataArray([0.0, 0.2, 0.4], dims=["lev"])
         hybm = xr.DataArray([1.0, 0.5, 0.0], dims=["lev"])
 
-        def fake_map_blocks(func, arr, args=(), kwargs=None, template=None):
-            del func, arr, args, kwargs, template
-            return xr.DataArray(
-                np.zeros((2, 2, 2)),
-                dims=["time", "plev", "x"],
-                coords={"time": [0, 1], "plev": [95000.0, 70000.0], "x": [0, 1]},
+        with pytest.raises(NotImplementedError, match="Dask fallback path"):
+            interp_hybrid_to_pressure(
+                data=data,
+                ps=ps,
+                hyam=hyam,
+                hybm=hybm,
+                new_levels=np.array([95000.0, 70000.0]),
+                lev_dim="lev",
             )
-
-        monkeypatch.setattr(xr, "map_blocks", fake_map_blocks)
-
-        result = interp_hybrid_to_pressure(
-            data=data,
-            ps=ps,
-            hyam=hyam,
-            hybm=hybm,
-            new_levels=np.array([95000.0, 70000.0]),
-            lev_dim="lev",
-        )
-
-        assert result.name == "foo"
-        assert result.attrs["units"] == "K"
-        assert result.attrs["long_name"] == "temperature"
-        assert result.dims == ("time", "plev", "x")
-        assert result.shape == (2, 2, 2)
 
     def test_interp_sigma_to_hybrid_autodetects_vertical_with_cf_accessor(self):
         """Sigma interpolation should also honor cf_xarray vertical metadata."""
