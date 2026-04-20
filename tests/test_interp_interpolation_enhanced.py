@@ -428,7 +428,7 @@ class TestInterpolationEdgeCases:
             fail_return_allocating_nodes,
         )
 
-        result = interpolation_mod._interp_hybrid_to_pressure_fortran(
+        result = interpolation_mod._interp_hybrid_to_pressure(
             data=data,
             ps=ps,
             hyam=hyam,
@@ -508,7 +508,7 @@ class TestInterpolationEdgeCases:
             interpolation_mod, "_dvinth2p_nodes_pa", fail_column_wrapper
         )
 
-        result = interpolation_mod._interp_hybrid_to_pressure_fortran(
+        result = interpolation_mod._interp_hybrid_to_pressure(
             data=data,
             ps=ps,
             hyam=hyam,
@@ -592,7 +592,7 @@ class TestInterpolationEdgeCases:
             interpolation_mod, "_dvinth2p_ecmwf_nodes_pa", fail_generic_ecmwf
         )
 
-        result = interpolation_mod._interp_hybrid_to_pressure_fortran(
+        result = interpolation_mod._interp_hybrid_to_pressure(
             data=data,
             ps=ps,
             hyam=hyam,
@@ -674,7 +674,7 @@ class TestInterpolationEdgeCases:
             dask_array.ones((2, 1, 2), dtype=np.float64), dims=["lev", "lat", "lon"]
         )
         assert (
-            interpolation_mod._interp_hybrid_to_pressure_fortran_corder(
+            interpolation_mod._interp_hybrid_to_pressure_corder(
                 data=data_dask,
                 ps=ps,
                 hyam=hyam,
@@ -698,7 +698,7 @@ class TestInterpolationEdgeCases:
             np.array([[100000.0, np.nan]], dtype=np.float64), dims=["lat", "lon"]
         )
         assert (
-            interpolation_mod._interp_hybrid_to_pressure_fortran_corder(
+            interpolation_mod._interp_hybrid_to_pressure_corder(
                 data=data,
                 ps=ps_nan,
                 hyam=hyam,
@@ -719,7 +719,7 @@ class TestInterpolationEdgeCases:
             interpolation_mod, "_dvinth2p_ecmwf_nodes_corder_pa_into", None
         )
         assert (
-            interpolation_mod._interp_hybrid_to_pressure_fortran_corder(
+            interpolation_mod._interp_hybrid_to_pressure_corder(
                 data=data,
                 ps=ps,
                 hyam=hyam,
@@ -754,7 +754,7 @@ class TestInterpolationEdgeCases:
         monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", None)
 
         with pytest.raises(RuntimeError, match="backend is not available"):
-            interpolation_mod._interp_hybrid_to_pressure_fortran(
+            interpolation_mod._interp_hybrid_to_pressure(
                 data=data,
                 ps=ps,
                 hyam=hyam,
@@ -808,7 +808,7 @@ class TestInterpolationEdgeCases:
             interpolation_mod, "_dvinth2p_ecmwf_nodes_pa", fake_ecmwf_returning
         )
 
-        out_nodes = interpolation_mod._interp_hybrid_to_pressure_fortran(
+        out_nodes = interpolation_mod._interp_hybrid_to_pressure(
             data=data,
             ps=ps,
             hyam=hyam,
@@ -826,7 +826,7 @@ class TestInterpolationEdgeCases:
         assert out_nodes.shape == (2, 1, 2)
         assert_array_equal(out_nodes.values, np.full((2, 1, 2), 11.0))
 
-        out_ecmwf = interpolation_mod._interp_hybrid_to_pressure_fortran(
+        out_ecmwf = interpolation_mod._interp_hybrid_to_pressure(
             data=data,
             ps=ps,
             hyam=hyam,
@@ -891,7 +891,7 @@ class TestInterpolationEdgeCases:
         )
         monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", object())
 
-        result = interpolation_mod._interp_hybrid_to_pressure_fortran(
+        result = interpolation_mod._interp_hybrid_to_pressure(
             data=data,
             ps=ps,
             hyam=hyam,
@@ -965,7 +965,7 @@ class TestInterpolationEdgeCases:
         monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa_into", None)
         monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", fail_generic_nodes)
 
-        result = interpolation_mod._interp_hybrid_to_pressure_fortran(
+        result = interpolation_mod._interp_hybrid_to_pressure(
             data=data,
             ps=ps,
             hyam=hyam,
@@ -1050,7 +1050,7 @@ class TestInterpolationEdgeCases:
 
         monkeypatch.setattr(interpolation_mod, "_dvinth2p_nodes_pa", object())
         monkeypatch.setattr(
-            interpolation_mod, "_interp_hybrid_to_pressure_fortran", fake_fortran
+            interpolation_mod, "_interp_hybrid_to_pressure", fake_fortran
         )
 
         result = interp_hybrid_to_pressure(
@@ -1123,7 +1123,7 @@ class TestInterpolationEdgeCases:
 
         monkeypatch.setattr(interpolation_mod, "_dsigma2hybrid_nodes", object())
         monkeypatch.setattr(
-            interpolation_mod, "_interp_sigma_to_hybrid_fortran", fake_sigma_fortran
+            interpolation_mod, "_interp_sigma_to_hybrid", fake_sigma_fortran
         )
 
         result = interp_sigma_to_hybrid(
@@ -1526,7 +1526,7 @@ class TestInterpolationEdgeCases:
             interpolation_mod, "_dsigma2hybrid_nodes", fake_sigma_return
         )
 
-        result = interpolation_mod._interp_sigma_to_hybrid_fortran(
+        result = interpolation_mod._interp_sigma_to_hybrid(
             data=data,
             sig_coords=sig_coords,
             ps=ps,
