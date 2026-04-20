@@ -1876,7 +1876,8 @@ class TestInterpolationHelperCoverage:
         with pytest.warns(UserWarning, match="different dimension names"):
             pressure = pressure_at_hybrid_levels(ps, hya, hyb)
 
-        assert pressure.dims == ("a", "x")
+        assert pressure.dims == ("lev", "x")
+        assert_array_equal(pressure.lev.values, np.array([0, 1]))
         assert pressure.shape == (2, 2)
 
     def test_pressure_from_hybrid_requires_backend(self, monkeypatch):
@@ -1943,6 +1944,17 @@ class TestInterpolationHelperCoverage:
             np.array([[100.0, 101.0], [102.0, 103.0], [104.0, 105.0]]),
         )
 
+    def test_pressure_from_hybrid_numpy_rejects_output_dim_controls(self):
+        """Named output controls are xarray-only for hybrid-pressure diagnostics."""
+
+        with pytest.raises(TypeError, match="supported only for xarray inputs"):
+            pressure_at_hybrid_levels(
+                np.array([100000.0, 90000.0]),
+                np.array([0.0, 0.2, 0.5]),
+                np.array([1.0, 0.5, 0.0]),
+                lev_dim="model_level",
+            )
+
     def test_pressure_from_hybrid_xarray_fortran_preserves_dims_and_coords(
         self, monkeypatch
     ):
@@ -1979,14 +1991,45 @@ class TestInterpolationHelperCoverage:
 
         assert captured["psfc_shape"] == (2,)
         assert captured["pressure_shape"] == (3, 2)
-        assert result.dims == ("ilev", "lat", "lon")
-        assert_array_equal(result.ilev.values, np.array([1, 2, 3]))
+        assert result.dims == ("lev", "lat", "lon")
+        assert_array_equal(result.lev.values, np.array([1, 2, 3]))
         assert_array_equal(result.lat.values, np.array([0.0]))
         assert_array_equal(result.lon.values, np.array([0.0, 90.0]))
         assert_array_equal(
             result.values,
             np.array([[[200.0, 201.0]], [[202.0, 203.0]], [[204.0, 205.0]]]),
         )
+
+    def test_pressure_from_hybrid_xarray_allows_output_dim_controls(self):
+        """Hybrid-pressure output can be renamed and transposed like delta-pressure."""
+
+        ps = xr.DataArray(
+            np.array([[[100000.0, 90000.0]]]),
+            dims=["time", "lat", "lon"],
+            coords={"time": [0], "lat": [0.0], "lon": [0.0, 90.0]},
+        )
+        hya = xr.DataArray(
+            [0.0, 0.2, 0.5],
+            dims=["ilev"],
+            coords={"ilev": [10, 20, 30]},
+        )
+        hyb = xr.DataArray(
+            [1.0, 0.5, 0.0],
+            dims=["ilev"],
+            coords={"ilev": [10, 20, 30]},
+        )
+
+        result = pressure_at_hybrid_levels(
+            ps,
+            hya,
+            hyb,
+            lev_dim="model_level",
+            output_dims=("time", "model_level", "lat", "lon"),
+        )
+
+        assert result.dims == ("time", "model_level", "lat", "lon")
+        assert result.shape == (1, 3, 1, 2)
+        assert_array_equal(result.model_level.values, np.array([10, 20, 30]))
 
     def test_pressure_at_hybrid_levels_flat_compatibility_fallbacks(self, monkeypatch):
         """Legacy f2py signatures should still be accepted by the private helper."""
