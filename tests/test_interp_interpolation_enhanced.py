@@ -1879,6 +1879,169 @@ class TestInterpolationHelperCoverage:
         assert pressure.dims == ("a", "x")
         assert pressure.shape == (2, 2)
 
+    def test_pressure_from_hybrid_requires_backend(self, monkeypatch):
+        """Hybrid-pressure helper should fail clearly when kernels are absent."""
+
+        monkeypatch.setattr(interpolation_mod, "_dpressure_at_hybrid_levels_pa", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dpressure_at_hybrid_levels_pa_into", None
+        )
+
+        with pytest.raises(RuntimeError, match="requires the compiled Fortran backend"):
+            pressure_at_hybrid_levels(
+                np.array([100000.0]),
+                np.array([0.0, 0.2]),
+                np.array([1.0, 0.0]),
+            )
+
+    def test_pressure_from_hybrid_numpy_prefers_preallocated_fortran_buffer(
+        self, monkeypatch
+    ):
+        """Numpy hybrid-pressure helper should reuse a caller-provided buffer."""
+
+        captured = {}
+
+        def fake_pressure_into(psfc, pressure, hbcofa, hbcofb, p0, ncol, nlev):
+            captured["psfc_shape"] = psfc.shape
+            captured["pressure_shape"] = pressure.shape
+            captured["ncol"] = ncol
+            captured["nlev"] = nlev
+            pressure[:, :] = (
+                np.arange(pressure.size, dtype=np.float64).reshape(pressure.shape)
+                + 100.0
+            )
+
+        def fail_return_allocating_pressure(*args, **kwargs):
+            raise AssertionError(
+                "return-allocating pressure wrapper should not be used"
+            )
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dpressure_at_hybrid_levels_pa_into",
+            fake_pressure_into,
+        )
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dpressure_at_hybrid_levels_pa",
+            fail_return_allocating_pressure,
+        )
+
+        result = pressure_at_hybrid_levels(
+            np.array([100000.0, 90000.0]),
+            np.array([0.0, 0.2, 0.5]),
+            np.array([1.0, 0.5, 0.0]),
+        )
+
+        assert captured["psfc_shape"] == (2,)
+        assert captured["pressure_shape"] == (3, 2)
+        assert captured["ncol"] == 2
+        assert captured["nlev"] == 3
+        assert result.shape == (3, 2)
+        assert_array_equal(
+            result,
+            np.array([[100.0, 101.0], [102.0, 103.0], [104.0, 105.0]]),
+        )
+
+    def test_pressure_from_hybrid_xarray_fortran_preserves_dims_and_coords(
+        self, monkeypatch
+    ):
+        """Xarray hybrid-pressure fast path should keep public metadata semantics."""
+
+        captured = {}
+
+        def fake_pressure_into(psfc, pressure, hbcofa, hbcofb, p0, ncol, nlev):
+            captured["psfc_shape"] = psfc.shape
+            captured["pressure_shape"] = pressure.shape
+            pressure[:, :] = (
+                np.arange(pressure.size, dtype=np.float64).reshape(pressure.shape)
+                + 200.0
+            )
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dpressure_at_hybrid_levels_pa_into",
+            fake_pressure_into,
+        )
+        monkeypatch.setattr(
+            interpolation_mod, "_dpressure_at_hybrid_levels_pa", object()
+        )
+
+        ps = xr.DataArray(
+            np.array([[100000.0, 90000.0]]),
+            dims=["lat", "lon"],
+            coords={"lat": [0.0], "lon": [0.0, 90.0]},
+        )
+        hya = xr.DataArray([0.0, 0.2, 0.5], dims=["ilev"], coords={"ilev": [1, 2, 3]})
+        hyb = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"], coords={"ilev": [1, 2, 3]})
+
+        result = pressure_at_hybrid_levels(ps, hya, hyb)
+
+        assert captured["psfc_shape"] == (2,)
+        assert captured["pressure_shape"] == (3, 2)
+        assert result.dims == ("ilev", "lat", "lon")
+        assert_array_equal(result.ilev.values, np.array([1, 2, 3]))
+        assert_array_equal(result.lat.values, np.array([0.0]))
+        assert_array_equal(result.lon.values, np.array([0.0, 90.0]))
+        assert_array_equal(
+            result.values,
+            np.array([[[200.0, 201.0]], [[202.0, 203.0]], [[204.0, 205.0]]]),
+        )
+
+    def test_pressure_at_hybrid_levels_flat_compatibility_fallbacks(self, monkeypatch):
+        """Legacy f2py signatures should still be accepted by the private helper."""
+
+        into_calls = {"count": 0}
+        return_calls = {"count": 0}
+
+        def fake_pressure_into(psfc, pressure, hbcofa, hbcofb, p0, *args, **kwargs):
+            into_calls["count"] += 1
+            if kwargs:
+                raise TypeError("dpressure_at_hybrid_levels_pa_into legacy signature")
+            pressure[:, :] = 12.0
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dpressure_at_hybrid_levels_pa_into",
+            fake_pressure_into,
+        )
+        monkeypatch.setattr(
+            interpolation_mod, "_dpressure_at_hybrid_levels_pa", object()
+        )
+
+        out_into = interpolation_mod._pressure_at_hybrid_levels_flat(
+            np.array([100000.0, 90000.0], dtype=np.float64),
+            np.array([0.0, 0.2, 0.5], dtype=np.float64),
+            np.array([1.0, 0.5, 0.0], dtype=np.float64),
+            100000.0,
+        )
+
+        assert into_calls["count"] == 2
+        assert_array_equal(out_into, np.full((3, 2), 12.0))
+
+        def fake_pressure_return(psfc, hbcofa, hbcofb, p0, *args, **kwargs):
+            return_calls["count"] += 1
+            if kwargs:
+                raise TypeError("dpressure_at_hybrid_levels_pa legacy signature")
+            return np.full((3, 2), 34.0, dtype=np.float64, order="F")
+
+        monkeypatch.setattr(
+            interpolation_mod, "_dpressure_at_hybrid_levels_pa_into", None
+        )
+        monkeypatch.setattr(
+            interpolation_mod, "_dpressure_at_hybrid_levels_pa", fake_pressure_return
+        )
+
+        out_return = interpolation_mod._pressure_at_hybrid_levels_flat(
+            np.array([100000.0, 90000.0], dtype=np.float64),
+            np.array([0.0, 0.2, 0.5], dtype=np.float64),
+            np.array([1.0, 0.5, 0.0], dtype=np.float64),
+            100000.0,
+        )
+
+        assert return_calls["count"] == 2
+        assert_array_equal(out_return, np.full((3, 2), 34.0))
+
     def test_delta_pressure_hybrid_rejects_invalid_inputs(self):
         """Layer-thickness helper should validate input types, shapes, and dimensions."""
         with pytest.raises(
