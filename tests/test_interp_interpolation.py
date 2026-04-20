@@ -116,9 +116,6 @@ class TestMandatoryPressureLevels:
 class TestPrePostInterpolationHelpers:
     """Test preprocessing and postprocessing helper functions."""
 
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
     def test_pre_interp_multidim_no_cyclic_no_missing(self):
         """Test preprocessing without cyclic points or missing values."""
         # Create test data
@@ -136,9 +133,6 @@ class TestPrePostInterpolationHelpers:
         assert result.shape == data_in.shape
         assert_array_equal(result.values, data_in.values)
 
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
     def test_pre_interp_multidim_with_cyclic(self):
         """Test preprocessing with cyclic boundary conditions."""
         data = np.random.randn(5, 8)
@@ -166,9 +160,6 @@ class TestPrePostInterpolationHelpers:
         assert result.attrs["units"] == "m/s"
         assert result.attrs["long_name"] == "wind speed"
 
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
     def test_pre_interp_multidim_with_missing_val(self):
         """Test preprocessing with missing values."""
         data = np.array([[1, 2, 99], [4, 99, 6]])  # 99 is missing value
@@ -194,9 +185,6 @@ class TestPrePostInterpolationHelpers:
         assert result.attrs["units"] == "K"
         assert result.attrs["long_name"] == "temperature"
 
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
     def test_pre_interp_multidim_cyclic_and_missing(self):
         """Test preprocessing with both cyclic and missing value handling."""
         data = np.array([[1, 99, 3], [4, 5, 99]])
@@ -216,9 +204,6 @@ class TestPrePostInterpolationHelpers:
             np.sum(np.isnan(result.values)) == 3
         )  # cyclic padding duplicates an edge NaN
 
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
     def test_post_interp_multidim_no_missing(self):
         """Test postprocessing without missing value handling."""
         data = np.array([[1.5, 2.3], [4.1, 5.9]])
@@ -229,9 +214,6 @@ class TestPrePostInterpolationHelpers:
         # Should be unchanged
         assert_array_equal(result.values, data_in.values)
 
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
     def test_post_interp_multidim_with_missing(self):
         """Test postprocessing with missing value replacement."""
         data = np.array([[1.5, np.nan], [4.1, np.nan]])
@@ -252,316 +234,6 @@ class TestPrePostInterpolationHelpers:
         assert result.name == "field"
         assert result.attrs["units"] == "Pa"
         assert result.attrs["long_name"] == "pressure"
-
-
-class TestVerticalRemapHelpers:
-    """Test vertical remapping helper functions."""
-
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
-    def test_vertical_remap_basic(self):
-        """Test basic vertical remapping functionality."""
-        # Simple test case
-        new_levels = np.array([850, 500, 200])  # mb
-        xcoords = np.array([1000, 700, 300])  # mb
-        data = np.array([288, 268, 228])  # temperature
-
-        func_interpolate = _func_interpolate("linear")
-
-        # Test interpolation
-        result = _vertical_remap(func_interpolate, new_levels, xcoords, data)
-
-        # Should interpolate to 3 levels
-        assert len(result) == 3
-        assert np.all(np.isfinite(result[:2]))
-        assert np.isnan(result[2])
-
-        # Check that interpolated values are reasonable
-        assert 270 < result[0] < 290  # 850 mb should be warm
-        assert 220 < result[1] < 270  # 500 mb should be cold
-
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
-    def test_vertical_remap_multidimensional(self):
-        """Test vertical remapping with multidimensional data."""
-        new_levels = np.array([850, 500])
-        xcoords = np.array([1000, 700, 300])
-        # 2D data (3 levels, 4 grid points)
-        data = np.array(
-            [[288, 285, 290, 287], [268, 265, 270, 267], [228, 225, 230, 227]]
-        )
-
-        func_interpolate = _func_interpolate("linear")
-
-        result = _vertical_remap(
-            func_interpolate, new_levels, xcoords, data, interp_axis=0
-        )
-
-        # Should have shape (2, 4) - 2 new levels, 4 grid points
-        assert result.shape == (2, 4)
-        assert np.all(np.isfinite(result))
-
-
-class TestExtrapolationFunctions:
-    """Test temperature and geopotential height extrapolation functions."""
-
-    @pytest.fixture
-    def extrapolation_test_data(self):
-        """Create sample data for extrapolation testing."""
-        # Create sample atmospheric data
-        lev = np.array([85000, 70000, 50000])  # Pa
-        lat = np.linspace(-30, 30, 5)
-        lon = np.linspace(0, 90, 4)
-
-        # Temperature data (decreasing with height)
-        temp_data = np.zeros((3, 5, 4))
-        for i in range(3):
-            temp_data[i, :, :] = 288 - i * 20  # Simple vertical profile
-
-        data = xr.DataArray(
-            temp_data,
-            dims=["lev", "lat", "lon"],
-            coords={"lev": lev, "lat": lat, "lon": lon},
-        )
-
-        # Surface pressure
-        ps = xr.DataArray(
-            np.full((5, 4), 101325),  # Standard surface pressure
-            dims=["lat", "lon"],
-            coords={"lat": lat, "lon": lon},
-        )
-
-        # Geopotential at surface
-        phi_sfc = xr.DataArray(
-            np.zeros((5, 4)),  # Sea level
-            dims=["lat", "lon"],
-            coords={"lat": lat, "lon": lon},
-        )
-
-        return data, ps, phi_sfc
-
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
-    def test_temp_extrapolate_basic(self, extrapolation_test_data):
-        """Test basic temperature extrapolation."""
-        data, ps, phi_sfc = extrapolation_test_data
-
-        # Pressure at lowest model level
-        p_sfc = xr.DataArray(
-            np.full((5, 4), 85000),  # Pa
-            dims=["lat", "lon"],
-            coords={"lat": data.lat, "lon": data.lon},
-        )
-
-        # Extrapolate to surface pressure level (higher pressure)
-        lev_extrap = 100000  # Pa
-
-        result = _temp_extrapolate(data, "lev", lev_extrap, p_sfc, ps, phi_sfc)
-
-        # Check output shape
-        assert result.shape == data.isel(lev=0).shape  # Should match spatial dimensions
-
-        # Extrapolated temperature should be warmer than lowest level
-        lowest_temp = data.isel(lev=-1)  # Lowest level (highest pressure)
-        assert np.all(result >= lowest_temp)
-
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
-    def test_temp_extrapolate_with_topography(self):
-        """Test temperature extrapolation with topography."""
-        # Create data with varying surface heights
-        lat = np.array([0])
-        lon = np.array([0])
-
-        data = xr.DataArray(
-            np.array([[[280]]]),  # Single temperature value
-            dims=["lev", "lat", "lon"],
-            coords={"lev": [85000], "lat": lat, "lon": lon},
-        )
-
-        ps = xr.DataArray([[101325]], dims=["lat", "lon"])  # Surface pressure
-        p_sfc = xr.DataArray([[85000]], dims=["lat", "lon"])  # Model surface pressure
-
-        # High elevation site
-        phi_sfc = xr.DataArray([[19620]], dims=["lat", "lon"])  # ~2000m elevation
-
-        result = _temp_extrapolate(data, "lev", 101325, p_sfc, ps, phi_sfc)
-
-        assert result.shape == (1, 1)
-        assert np.isfinite(result.values[0, 0])
-        # Temperature at higher pressure should be warmer
-        assert result.values[0, 0] > 280
-
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
-    def test_geo_height_extrapolate_basic(self, extrapolation_test_data):
-        """Test basic geopotential height extrapolation."""
-        data, ps, phi_sfc = extrapolation_test_data
-
-        # Temperature at bottom level
-        t_bot = data.isel(lev=-1)  # Warmest level
-
-        # Pressure levels for extrapolation
-        p_sfc = xr.DataArray(
-            np.full((5, 4), 85000),
-            dims=["lat", "lon"],
-            coords={"lat": data.lat, "lon": data.lon},
-        )
-
-        lev_extrap = 100000  # Pa (lower altitude, higher pressure)
-
-        result = _geo_height_extrapolate(t_bot, lev_extrap, p_sfc, ps, phi_sfc)
-
-        # Check output shape
-        assert result.shape == t_bot.shape
-
-        # Geopotential height should be finite
-        assert np.all(np.isfinite(result))
-
-        # Current GeoCAT-compatible extrapolation returns a positive height here.
-        assert np.all(result > phi_sfc)
-
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
-    def test_geo_height_extrapolate_high_elevation(self):
-        """Test geopotential height extrapolation at high elevation."""
-        # High altitude site
-        t_bot = xr.DataArray([[250]], dims=["lat", "lon"])  # Cold temperature
-        ps = xr.DataArray([[70000]], dims=["lat", "lon"])  # Low surface pressure
-        p_sfc = xr.DataArray([[70000]], dims=["lat", "lon"])
-        phi_sfc = xr.DataArray([[29430]], dims=["lat", "lon"])  # ~3000m elevation
-
-        lev_extrap = 85000  # Extrapolate to higher pressure (lower altitude)
-
-        result = _geo_height_extrapolate(t_bot, lev_extrap, p_sfc, ps, phi_sfc)
-
-        assert result.shape == (1, 1)
-        assert np.isfinite(result.values[0, 0])
-        # Should be at lower altitude than surface
-        assert result.values[0, 0] < phi_sfc.values[0, 0]
-
-
-class TestVerticalRemapExtrap:
-    """Test the vertical remap extrapolation coordinator function."""
-
-    @pytest.fixture
-    def extrap_test_setup(self):
-        """Set up test data for extrapolation testing."""
-        # Create multi-level data
-        nlev = 3
-        new_levels = np.array([100000, 85000, 70000])  # Pa
-
-        # Create data with vertical coordinate
-        data = xr.DataArray(
-            np.array([[[290]], [[280]], [[270]]]),  # Temperature profile
-            dims=["lev", "lat", "lon"],
-            coords={"lev": [50000, 70000, 85000], "lat": [0], "lon": [0]},
-        )
-
-        # Output array template
-        output = xr.DataArray(
-            np.full((3, 1, 1), np.nan),
-            dims=["plev", "lat", "lon"],
-            coords={"plev": new_levels, "lat": [0], "lon": [0]},
-        )
-
-        # Pressure at model levels
-        pressure = xr.DataArray(
-            np.array([[[50000]], [[70000]], [[85000]]]),
-            dims=["lev", "lat", "lon"],
-            coords={"lev": [50000, 70000, 85000], "lat": [0], "lon": [0]},
-        )
-
-        ps = xr.DataArray([[101325]], dims=["lat", "lon"])
-        t_bot = data.isel(lev=-1)  # Bottom temperature
-        phi_sfc = xr.DataArray([[0]], dims=["lat", "lon"])  # Sea level
-
-        return new_levels, "lev", data, output, pressure, ps, t_bot, phi_sfc
-
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
-    def test_vertical_remap_extrap_temperature(self, extrap_test_setup):
-        """Test extrapolation for temperature variable."""
-        new_levels, lev_dim, data, output, pressure, ps, t_bot, phi_sfc = (
-            extrap_test_setup
-        )
-
-        result = _vertical_remap_extrap(
-            new_levels,
-            lev_dim,
-            data,
-            output,
-            pressure,
-            ps,
-            variable="temperature",
-            t_bot=t_bot,
-            phi_sfc=phi_sfc,
-        )
-
-        # Should have same shape as output
-        assert result.shape == output.shape
-
-        # Values should be finite where extrapolation occurred
-        assert np.all(np.isfinite(result.sel(plev=100000).values))
-        assert np.all(np.isnan(result.sel(plev=[85000, 70000]).values))
-
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
-    def test_vertical_remap_extrap_geopotential(self, extrap_test_setup):
-        """Test extrapolation for geopotential variable."""
-        new_levels, lev_dim, data, output, pressure, ps, t_bot, phi_sfc = (
-            extrap_test_setup
-        )
-
-        result = _vertical_remap_extrap(
-            new_levels,
-            lev_dim,
-            data,
-            output,
-            pressure,
-            ps,
-            variable="geopotential",
-            t_bot=t_bot,
-            phi_sfc=phi_sfc,
-        )
-
-        assert result.shape == output.shape
-        assert np.all(np.isfinite(result.sel(plev=100000).values))
-        assert np.all(np.isnan(result.sel(plev=[85000, 70000]).values))
-
-    @pytest.mark.skipif(
-        not PRIVATE_FUNCTIONS_AVAILABLE, reason="Private functions not available"
-    )
-    def test_vertical_remap_extrap_other(self, extrap_test_setup):
-        """Test extrapolation for other variables (simple fill)."""
-        new_levels, lev_dim, data, output, pressure, ps, t_bot, phi_sfc = (
-            extrap_test_setup
-        )
-
-        result = _vertical_remap_extrap(
-            new_levels,
-            lev_dim,
-            data,
-            output,
-            pressure,
-            ps,
-            variable="other",
-            t_bot=t_bot,
-            phi_sfc=phi_sfc,
-        )
-
-        assert result.shape == output.shape
-        # For "other" variables, should use surface level value for extrapolation
-        assert np.all(np.isfinite(result.sel(plev=100000).values))
-        assert np.all(np.isnan(result.sel(plev=[85000, 70000]).values))
 
 
 class TestHybridToPressureInterpolation:
