@@ -330,8 +330,8 @@ def delta_pressure_hybrid(
     -------
     :class:`xarray.DataArray`, :class:`numpy.ndarray`
         Pressure layer thickness in Pascals for each hybrid layer. The output
-        shape is ``(len(hya) - 1, *ps.shape)`` for NumPy inputs, or
-        ``(lev, *ps.dims)`` for xarray inputs.
+        shape is ``(len(hya) - 1, *ps.shape)`` for eager NumPy inputs, or
+        ``(lev, *ps.dims)`` for eager xarray inputs.
 
     Notes
     -----
@@ -366,6 +366,12 @@ def delta_pressure_hybrid(
     if np.ndim(hya) != 1:
         raise ValueError(f"hya and hyb must be 1-dimensional: {hya.shape}")
 
+    _require_compiled_interp_backend(
+        "delta_pressure_hybrid",
+        _ddelta_pressure_hybrid_pa,
+        _ddelta_pressure_hybrid_pa_into,
+    )
+
     if isinstance(ps, np.ndarray):
         default_output_dims = ("time", "lev", "lat", "lon")
         if lev_dim != "lev" or tuple(output_dims) != default_output_dims:
@@ -374,18 +380,12 @@ def delta_pressure_hybrid(
             )
         hya_values = np.asarray(hya.data if isinstance(hya, xr.DataArray) else hya)
         hyb_values = np.asarray(hyb.data if isinstance(hyb, xr.DataArray) else hyb)
-        if _ddelta_pressure_hybrid_pa is not None:
-            output_columns = _delta_pressure_hybrid_fortran_flat(
-                ps, hya_values, hyb_values, p0
-            )
-            return output_columns.reshape(
-                (hya_values.shape[0] - 1,) + ps.shape, order="C"
-            )
+        output_columns = _delta_pressure_hybrid_fortran_flat(
+            ps, hya_values, hyb_values, p0
+        )
+        return output_columns.reshape((hya_values.shape[0] - 1,) + ps.shape, order="C")
 
-        reshape = (hya_values.shape[0] - 1,) + (1,) * ps.ndim
-        delta_hya = (hya_values[:-1] - hya_values[1:]).reshape(reshape)
-        delta_hyb = (hyb_values[:-1] - hyb_values[1:]).reshape(reshape)
-        return np.abs(p0 * delta_hya + delta_hyb * ps)
+    _reject_lazy_or_unit_backed_inputs("delta_pressure_hybrid", ps, hya, hyb)
 
     if isinstance(hya, np.ndarray):
         hya = xr.DataArray(hya, dims=("lev",))
@@ -404,51 +404,17 @@ def delta_pressure_hybrid(
 
     lev_name = hya.dims[0]
     lev_coord = _dimension_coord_or_default(hya, lev_name, size=hya.shape[0] - 1)
-    hya_calc = xr.DataArray(np.asarray(hya.data), dims=hya.dims)
-    hyb_calc = xr.DataArray(np.asarray(hyb.data), dims=hyb.dims)
-    if (
-        _ddelta_pressure_hybrid_pa is not None
-        and not _is_dask_backed(ps)
-        and not _is_pint_backed(ps)
-        and lev_name not in ps.dims
-    ):
-        output_columns = _delta_pressure_hybrid_fortran_flat(
-            ps.data, hya_calc.data, hyb_calc.data, p0
-        )
-        output_values = output_columns.reshape(
-            (hya.shape[0] - 1,) + ps.shape, order="C"
-        )
-        coords = {name: coord for name, coord in ps.coords.items()}
-        coords[lev_name] = lev_coord
-        dph = xr.DataArray(
-            output_values,
-            dims=(lev_name, *ps.dims),
-            coords=coords,
-        )
-        dph.name = "dph"
-        dph.attrs = {
-            "long_name": "pressure layer thickness",
-            "units": "Pa",
-        }
-        return _finalize_delta_pressure_hybrid_output(
-            dph,
-            lev_name=lev_name,
-            lev_coord=lev_coord,
-            lev_dim=lev_dim,
-            output_dims=output_dims,
-        )
-
-    pa = (
-        p0 * hya_calc.isel({lev_name: slice(None, -1)})
-        + hyb_calc.isel({lev_name: slice(None, -1)}) * ps
+    output_columns = _delta_pressure_hybrid_fortran_flat(
+        ps.data, hya.data, hyb.data, p0
     )
-    pb = (
-        p0 * hya_calc.isel({lev_name: slice(1, None)})
-        + hyb_calc.isel({lev_name: slice(1, None)}) * ps
+    output_values = output_columns.reshape((hya.shape[0] - 1,) + ps.shape, order="C")
+    coords = {name: coord for name, coord in ps.coords.items()}
+    coords[lev_name] = lev_coord
+    dph = xr.DataArray(
+        output_values,
+        dims=(lev_name, *ps.dims),
+        coords=coords,
     )
-
-    dph = abs(pa - pb)
-    dph = dph.assign_coords({lev_name: lev_coord})
     dph.name = "dph"
     dph.attrs = {
         "long_name": "pressure layer thickness",
@@ -777,6 +743,34 @@ def _is_pint_backed(array):
     return module_name.startswith("pint") or (
         hasattr(array.data, "magnitude") and hasattr(array.data, "units")
     )
+
+
+def _require_compiled_interp_backend(function_name: str, *handles) -> None:
+    """Raise a clear error when a compiled interpolation backend is unavailable."""
+
+    if not any(handle is not None for handle in handles):
+        raise RuntimeError(
+            f"{function_name} requires the compiled Fortran backend in "
+            "`skyborn.interp.fortran.vinth2p_kernels`."
+        )
+
+
+def _reject_lazy_or_unit_backed_inputs(function_name: str, *arrays) -> None:
+    """Reject lazy or pint-backed arrays for compiled-only interpolation APIs."""
+
+    active_arrays = [array for array in arrays if array is not None]
+
+    if any(_is_dask_backed(array) for array in active_arrays):
+        raise NotImplementedError(
+            f"{function_name} no longer provides a Dask fallback path. "
+            "Use eager NumPy/xarray inputs backed by the compiled Fortran kernels."
+        )
+
+    if any(_is_pint_backed(array) for array in active_arrays):
+        raise NotImplementedError(
+            f"{function_name} no longer provides a Pint/MetPy fallback path. "
+            "Use eager NumPy/xarray inputs backed by the compiled Fortran kernels."
+        )
 
 
 def _strip_unexpected_pint_units(output, in_pint):
@@ -1514,9 +1508,9 @@ def interp_hybrid_to_pressure(
         automatically using CF conventions.
 
     method : str, optional
-        Interpolation method. Public fallback supports ``"linear"`` and ``"log"``.
-        ``"log-log"`` and its alias ``"loglog"`` are also available when the
-        compiled Fortran backend is present. Defaults to ``"linear"``.
+        Interpolation method passed to the compiled vinth2p kernels.
+        Supported values are ``"linear"``, ``"log"``, and ``"log-log"``
+        (or ``"loglog"``). Defaults to ``"linear"``.
 
     extrapolate : bool, optional
         If True, below ground extrapolation for ``variable`` will be done using
@@ -1574,9 +1568,20 @@ def interp_hybrid_to_pressure(
     if not all(isinstance(x, xr.DataArray) for x in (data, ps, hyam, hybm)):
         raise TypeError("data, ps, hyam, and hybm must be xarray DataArray objects")
 
+    _require_compiled_interp_backend(
+        "interp_hybrid_to_pressure",
+        _dvinth2p_nodes_pa,
+        _dvinth2p_nodes_pa_into,
+        _dvinth2p_nodes_corder_pa_into,
+        _dvinth2p_ecmwf_nodes_pa,
+        _dvinth2p_ecmwf_nodes_pa_into,
+        _dvinth2p_ecmwf_nodes_corder_pa_into,
+    )
+    _reject_lazy_or_unit_backed_inputs(
+        "interp_hybrid_to_pressure", data, ps, hyam, hybm, t_bot, phi_sfc
+    )
+
     new_levels = np.asarray(new_levels)
-    in_pint = any(_is_pint_backed(arr) for arr in (data, ps, hyam, hybm))
-    in_dask = any(_is_dask_backed(arr) for arr in (data, ps, hyam, hybm))
 
     # Check inputs
     if extrapolate and (variable is None):
@@ -1609,125 +1614,20 @@ def interp_hybrid_to_pressure(
 
     hyam, hybm = _align_hybrid_level_dimension(hyam, hybm, lev_dim)
     method = _normalize_interp_method(method)
-
-    if (
-        not in_dask
-        and not in_pint
-        and _dvinth2p_nodes_pa is not None
-        and method in {"linear", "log", "log-log"}
-    ):
-        return _interp_hybrid_to_pressure_fortran(
-            data=data,
-            ps=ps,
-            hyam=hyam,
-            hybm=hybm,
-            p0=p0,
-            new_levels=new_levels,
-            lev_dim=lev_dim,
-            method=method,
-            extrapolate=extrapolate,
-            variable=variable,
-            t_bot=t_bot,
-            phi_sfc=phi_sfc,
-        )
-
-    if method == "log-log":
-        raise ValueError(
-            'Interpolation method "log-log" requires the compiled Fortran backend. '
-            'Python fallback supports only "linear" and "log".'
-        )
-
-    try:
-        func_interpolate = _func_interpolate(method)
-    except ValueError as vexc:
-        raise ValueError(vexc.args[0])
-
-    interp_axis = data.dims.index(lev_dim)
-
-    # Calculate pressure levels at the hybrid levels
-    pressure = pressure_at_hybrid_levels(ps, hyam, hybm, p0)  # Pa
-
-    # Make pressure shape same as data shape
-    pressure = pressure.transpose(*data.dims)
-    output = None
-
-    chunk_sizes = getattr(data, "chunksizes", None) or {}
-    if _is_dask_backed(data) and lev_dim in chunk_sizes:
-        if len(chunk_sizes[lev_dim]) == 1:
-            try:
-                output = xr.map_blocks(
-                    _interpolate_mb,
-                    data,
-                    args=(pressure, new_levels, interp_axis, method),
-                )
-            except Exception:
-                output = None
-        else:
-            warnings.warn(
-                f"Chunking along {lev_dim} is not recommended for performance reasons.",
-                stacklevel=2,
-            )
-
-    if in_dask and output is None:
-        from dask.array.core import map_blocks
-
-        if not _is_dask_backed(data):
-            data = data.chunk({dim: size for dim, size in data.sizes.items()})
-
-        pressure = pressure.chunk(data.chunksizes)
-        out_chunks = list(data.chunks)
-        out_chunks[interp_axis] = (new_levels.size,)
-        out_chunks = tuple(out_chunks)
-
-        output = map_blocks(
-            _vertical_remap,
-            func_interpolate,
-            new_levels,
-            pressure.data,
-            data.data,
-            interp_axis,
-            chunks=out_chunks,
-            dtype=data.dtype,
-            drop_axis=[interp_axis],
-            new_axis=[interp_axis],
-        )
-    elif output is None:
-        output = _vertical_remap(
-            func_interpolate, new_levels, pressure.data, data.data, interp_axis
-        )
-
-    if isinstance(output, xr.DataArray):
-        output = output.copy(deep=False)
-        output.name = data.name
-        output.attrs = data.attrs
-    else:
-        output = xr.DataArray(output, name=data.name, attrs=data.attrs)
-
-    output = _strip_unexpected_pint_units(output, in_pint)
-
-    # Set output dims and coords
-    dims = [data.dims[i] if i != interp_axis else "plev" for i in range(data.ndim)]
-
-    # Rename output dims. This is only needed with above workaround block
-    dims_dict = {output.dims[i]: dims[i] for i in range(len(output.dims))}
-    output = output.rename(dims_dict)
-
-    coords = {}
-    for k, v in data.coords.items():
-        if k != lev_dim:
-            coords.update({k: v})
-        else:
-            coords.update({"plev": new_levels})
-
-    output = output.transpose(*dims).assign_coords(coords)
-
-    if extrapolate:
-        output = _vertical_remap_extrap(
-            new_levels, lev_dim, data, output, pressure, ps, variable, t_bot, phi_sfc
-        )
-        output = _strip_unexpected_pint_units(output, in_pint)
-
-    return output
+    return _interp_hybrid_to_pressure_fortran(
+        data=data,
+        ps=ps,
+        hyam=hyam,
+        hybm=hybm,
+        p0=p0,
+        new_levels=new_levels,
+        lev_dim=lev_dim,
+        method=method,
+        extrapolate=extrapolate,
+        variable=variable,
+        t_bot=t_bot,
+        phi_sfc=phi_sfc,
+    )
 
 
 def interp_sigma_to_hybrid(
@@ -1769,9 +1669,9 @@ def interp_sigma_to_hybrid(
         automatically using CF conventions.
 
     method : str, optional
-        Interpolation method. Public fallback supports ``"linear"`` and ``"log"``.
-        ``"log-log"`` and its alias ``"loglog"`` are also available when the
-        compiled Fortran backend is present. Defaults to ``"linear"``.
+        Interpolation method passed to the compiled sigma2hybrid kernels.
+        Supported values are ``"linear"``, ``"log"``, and ``"log-log"``
+        (or ``"loglog"``). Defaults to ``"linear"``.
 
     Returns
     -------
@@ -1803,6 +1703,16 @@ def interp_sigma_to_hybrid(
     `sigma2hybrid <https://www.ncl.ucar.edu/Document/Functions/Built-in/sigma2hybrid.shtml>`__
     """
 
+    _require_compiled_interp_backend(
+        "interp_sigma_to_hybrid",
+        _dsigma2hybrid_nodes,
+        _dsigma2hybrid_nodes_into,
+        _dsigma2hybrid_nodes_corder_into,
+    )
+    _reject_lazy_or_unit_backed_inputs(
+        "interp_sigma_to_hybrid", data, sig_coords, ps, hyam, hybm
+    )
+
     # Determine the level dimension and then the interpolation axis
     if lev_dim is None:
         try:
@@ -1813,84 +1723,16 @@ def interp_sigma_to_hybrid(
             )
 
     method = _normalize_interp_method(method)
-
-    in_dask = _is_dask_backed(data) or _is_dask_backed(ps)
-    in_pint = _is_pint_backed(data) or _is_pint_backed(ps)
-
-    if (
-        not in_dask
-        and not in_pint
-        and _dsigma2hybrid_nodes is not None
-        and method in {"linear", "log", "log-log"}
-    ):
-        sigma_source_values = np.asarray(
-            sig_coords.data if isinstance(sig_coords, xr.DataArray) else sig_coords,
-            dtype=np.float64,
-        ).reshape(-1)
-        sigma_diffs = np.diff(sigma_source_values)
-        if (
-            np.all(sigma_diffs >= 0.0)
-            or np.all(sigma_diffs <= 0.0)
-            or sigma_diffs.size == 0
-        ):
-            return _interp_sigma_to_hybrid_fortran(
-                data=data,
-                sig_coords=sig_coords,
-                ps=ps,
-                hyam=hyam,
-                hybm=hybm,
-                p0=p0,
-                lev_dim=lev_dim,
-                method=method,
-            )
-
-    if method == "log-log":
-        raise ValueError(
-            'Interpolation method "log-log" requires the compiled Fortran backend. '
-            'Python fallback supports only "linear" and "log".'
-        )
-
-    try:
-        func_interpolate = _func_interpolate(method)
-    except ValueError as vexc:
-        raise ValueError(vexc.args[0])
-
-    # Calculate sigma levels at the hybrid levels
-    sigma = _sigma_from_hybrid(ps, hyam, hybm, p0)  # Pa
-    sig_coord_values = (
-        sig_coords.data if isinstance(sig_coords, xr.DataArray) else sig_coords
+    return _interp_sigma_to_hybrid_fortran(
+        data=data,
+        sig_coords=sig_coords,
+        ps=ps,
+        hyam=hyam,
+        hybm=hybm,
+        p0=p0,
+        lev_dim=lev_dim,
+        method=method,
     )
-
-    non_lev_dims = list(data.dims)
-    if data.ndim > 1:
-        non_lev_dims.remove(lev_dim)
-        data_stacked = data.stack(combined=non_lev_dims).transpose()
-        sigma_stacked = sigma.stack(combined=non_lev_dims).transpose()
-
-        output = data_stacked[:, : len(hyam)].copy()
-
-        for idx, (d, s) in enumerate(zip(data_stacked, sigma_stacked)):
-            output[idx, :] = xr.DataArray(
-                _vertical_remap(func_interpolate, s.data, sig_coord_values, d.data),
-                dims=[lev_dim],
-            )
-
-        # Make output shape same as data shape
-        output = output.unstack().transpose(*data.dims)
-    else:
-        output = data[: len(hyam)].copy()
-        output[: len(hyam)] = xr.DataArray(
-            _vertical_remap(func_interpolate, sigma.data, sig_coord_values, data.data),
-            dims=[lev_dim],
-        )
-
-    # Set output dims and coords
-    output = output.rename({lev_dim: "hlev"})
-    output = output.assign_coords(
-        {"hlev": _dimension_coord_or_default(hyam, hyam.dims[0], output_dim="hlev")}
-    )
-
-    return output
 
 
 def interp_multidim(
