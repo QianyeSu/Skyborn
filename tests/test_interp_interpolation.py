@@ -696,6 +696,102 @@ class TestInterpolationFortranFallbacks:
         monkeypatch.setattr(xr.DataArray, "broadcast_like", raise_broadcast)
         assert interpolation_module._as_broadcast_float64_flat(array, template) is None
 
+    def test_dimension_coord_or_default_creates_index_when_coord_missing(self):
+        """Missing coordinates should fall back to a simple integer index."""
+
+        array = xr.DataArray(np.ones((3, 2), dtype=np.float64), dims=["lev", "x"])
+
+        coord = interpolation_module._dimension_coord_or_default(
+            array, "lev", output_dim="hlev", size=2
+        )
+
+        assert coord.dims == ("hlev",)
+        assert_array_equal(coord.values, np.array([0, 1]))
+
+    def test_delta_pressure_hybrid_rejects_invalid_output_dim_permutation(self):
+        """Named output dims must still be a full permutation of the result dims."""
+
+        ps = xr.DataArray(
+            np.array([[[100000.0, 90000.0]]]),
+            dims=["time", "lat", "lon"],
+        )
+        hya = xr.DataArray([0.0, 0.2, 0.5], dims=["ilev"])
+        hyb = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"])
+
+        with pytest.raises(ValueError, match="must contain each output dimension"):
+            interpolation_module.delta_pressure_hybrid(
+                ps,
+                hya,
+                hyb,
+                lev_dim="lev",
+                output_dims=("time", "lev", "lat", "lat"),
+            )
+
+    def test_delta_pressure_hybrid_flat_requires_backend(self, monkeypatch):
+        """Private eager delta-pressure helper should fail cleanly without kernels."""
+
+        monkeypatch.setattr(interpolation_module, "_ddelta_pressure_hybrid_pa", None)
+
+        with pytest.raises(RuntimeError, match="backend is not available"):
+            interpolation_module._delta_pressure_hybrid_flat(
+                np.array([100000.0], dtype=np.float64),
+                np.array([0.0, 0.2], dtype=np.float64),
+                np.array([1.0, 0.0], dtype=np.float64),
+                100000.0,
+            )
+
+    def test_delta_pressure_hybrid_flat_compatibility_fallbacks(self, monkeypatch):
+        """Legacy f2py signatures should still be accepted by the private helper."""
+
+        into_calls = {"count": 0}
+        return_calls = {"count": 0}
+
+        def fake_delta_into(psfc, dph, hbcofa, hbcofb, p0, *args, **kwargs):
+            into_calls["count"] += 1
+            if kwargs:
+                raise TypeError("ddelta_pressure_hybrid_pa_into legacy signature")
+            dph[:, :] = 12.0
+
+        monkeypatch.setattr(
+            interpolation_module, "_ddelta_pressure_hybrid_pa_into", fake_delta_into
+        )
+        monkeypatch.setattr(
+            interpolation_module, "_ddelta_pressure_hybrid_pa", object()
+        )
+
+        out_into = interpolation_module._delta_pressure_hybrid_flat(
+            np.array([100000.0, 90000.0], dtype=np.float64),
+            np.array([0.0, 0.2, 0.5], dtype=np.float64),
+            np.array([1.0, 0.5, 0.0], dtype=np.float64),
+            100000.0,
+        )
+
+        assert into_calls["count"] == 2
+        assert_array_equal(out_into, np.full((2, 2), 12.0))
+
+        def fake_delta_return(psfc, hbcofa, hbcofb, p0, *args, **kwargs):
+            return_calls["count"] += 1
+            if kwargs:
+                raise TypeError("ddelta_pressure_hybrid_pa legacy signature")
+            return np.full((2, 2), 34.0, dtype=np.float64, order="F")
+
+        monkeypatch.setattr(
+            interpolation_module, "_ddelta_pressure_hybrid_pa_into", None
+        )
+        monkeypatch.setattr(
+            interpolation_module, "_ddelta_pressure_hybrid_pa", fake_delta_return
+        )
+
+        out_return = interpolation_module._delta_pressure_hybrid_flat(
+            np.array([100000.0, 90000.0], dtype=np.float64),
+            np.array([0.0, 0.2, 0.5], dtype=np.float64),
+            np.array([1.0, 0.5, 0.0], dtype=np.float64),
+            100000.0,
+        )
+
+        assert return_calls["count"] == 2
+        assert_array_equal(out_return, np.full((2, 2), 34.0))
+
     def test_interp_hybrid_to_pressure_corder_returns_none_when_aux_inputs_missing(
         self, monkeypatch
     ):
@@ -732,6 +828,43 @@ class TestInterpolationFortranFallbacks:
             method="linear",
             extrapolate=True,
             variable="temperature",
+            t_bot=None,
+            phi_sfc=None,
+        )
+
+        assert result is None
+
+    def test_interp_hybrid_to_pressure_corder_rejects_nonfloating_numpy_data(
+        self, monkeypatch
+    ):
+        """C-order fast path should reject integer NumPy arrays before flattening."""
+
+        data = xr.DataArray(
+            np.arange(12, dtype=np.int32).reshape(2, 2, 3),
+            dims=["lev", "lat", "lon"],
+        )
+        ps = xr.DataArray(
+            np.full((2, 3), 90000.0, dtype=np.float64),
+            dims=["lat", "lon"],
+        )
+        hyam = xr.DataArray(np.array([0.1, 0.0], dtype=np.float64), dims=["lev"])
+        hybm = xr.DataArray(np.array([0.9, 1.0], dtype=np.float64), dims=["lev"])
+
+        monkeypatch.setattr(
+            interpolation_module, "_dvinth2p_nodes_corder_pa_into", object()
+        )
+
+        result = interpolation_module._interp_hybrid_to_pressure_corder(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            new_levels=np.array([85000.0], dtype=np.float64),
+            lev_dim="lev",
+            method="linear",
+            extrapolate=False,
+            variable=None,
             t_bot=None,
             phi_sfc=None,
         )
@@ -920,6 +1053,60 @@ class TestInterpolationFortranFallbacks:
         )
 
         assert result is None
+
+    def test_interp_sigma_to_hybrid_corder_broadcasts_scalar_surface_pressure(
+        self, monkeypatch
+    ):
+        """Sigma fast path should fall back to lightweight broadcast for scalar ps."""
+
+        sigma_values = np.array([0.2, 1.0], dtype=np.float64)
+        data = xr.DataArray(
+            np.array([[[280.0, 275.0], [260.0, 255.0]]], dtype=np.float64, order="C"),
+            dims=["time", "sigma", "x"],
+            coords={"time": [0], "sigma": sigma_values, "x": [0, 1]},
+        )
+        ps = xr.DataArray(np.array(100000.0, dtype=np.float64))
+        hyam = xr.DataArray(np.array([0.0, 0.1], dtype=np.float64), dims=["hlev"])
+        hybm = xr.DataArray(np.array([1.0, 0.8], dtype=np.float64), dims=["hlev"])
+        captured = {}
+
+        def fake_sigma_corder(
+            dati_flat,
+            dato_flat,
+            sigmai,
+            hyam_vals,
+            hybm_vals,
+            p0,
+            psfc,
+            intyp,
+            spvl,
+            nouter,
+            ninner,
+            nlevo,
+            nlevi,
+        ):
+            captured["psfc"] = psfc.copy()
+            dato_flat[:] = 66.0
+
+        monkeypatch.setattr(
+            interpolation_module, "_dsigma2hybrid_nodes_corder_into", fake_sigma_corder
+        )
+
+        result = interpolation_module._interp_sigma_to_hybrid_corder(
+            data=data,
+            ps=ps,
+            hyam=hyam,
+            hybm=hybm,
+            p0=100000.0,
+            lev_dim="sigma",
+            method="linear",
+            sigma_source_values=sigma_values,
+        )
+
+        assert_array_equal(captured["psfc"], np.full(2, 100000.0))
+        assert result is not None
+        assert result.dims == ("time", "hlev", "x")
+        assert_array_equal(result.values, np.full((1, 2, 2), 66.0))
 
     def test_interp_sigma_to_hybrid_1d_python_fallback(self, monkeypatch):
         """Compiled-only sigma-to-hybrid should fail clearly without the backend."""
