@@ -1,0 +1,28 @@
+include LICENSE
+include README.md
+include pyproject.toml
+include setup.py
+recursive-include requirements *.txt
+
+# Keep source distributions focused on buildable source files.
+prune tests
+prune src/skyborn/gridfill/tests
+prune src/skyborn/windspharm/tests
+prune src/skyborn/windspharm/examples
+
+# Drop transient Meson build directories from source distributions.
+prune src/skyborn/interp/build
+prune src/skyborn/gridfill/build
+prune src/skyborn/spharm/build
+prune src/skyborn/calc/mann_kendall/build
+prune src/skyborn/calc/GPI/build
+prune src/skyborn/calc/geostrophic/build
+prune src/skyborn/calc/troposphere/build
+prune src/skyborn/plot/nclcurly_native/build
+
+# Exclude generated binaries and cache files from source releases.
+global-exclude *.py[cod]
+global-exclude *.pyd
+global-exclude *.so
+global-exclude *.dll
+global-exclude __pycache__/*
