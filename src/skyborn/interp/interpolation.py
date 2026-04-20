@@ -156,8 +156,8 @@ def _dimension_coord_or_default(array, dim, *, output_dim=None, size=None):
     )
 
 
-def _finalize_delta_pressure_hybrid_output(
-    dph: xr.DataArray,
+def _finalize_hybrid_level_output(
+    result: xr.DataArray,
     *,
     lev_name: str,
     lev_coord: xr.DataArray,
@@ -175,25 +175,32 @@ def _finalize_delta_pressure_hybrid_output(
     )
 
     if target_lev_dim != lev_name:
-        dph = dph.rename({lev_name: target_lev_dim})
+        result = result.rename({lev_name: target_lev_dim})
 
-    dph = dph.assign_coords({target_lev_dim: target_lev_coord})
+    result = result.assign_coords({target_lev_dim: target_lev_coord})
 
     if output_dims is not None:
         requested_dims = tuple(output_dims)
-        output_dims = tuple(dim for dim in requested_dims if dim in dph.dims)
-        output_dims += tuple(dim for dim in dph.dims if dim not in output_dims)
-        if len(output_dims) != dph.ndim or set(output_dims) != set(dph.dims):
+        output_dims = tuple(dim for dim in requested_dims if dim in result.dims)
+        output_dims += tuple(dim for dim in result.dims if dim not in output_dims)
+        if len(output_dims) != result.ndim or set(output_dims) != set(result.dims):
             raise ValueError(
                 "`output_dims` must contain each output dimension exactly once: "
-                f"expected a permutation of {dph.dims}, got {requested_dims}"
+                f"expected a permutation of {result.dims}, got {requested_dims}"
             )
-        dph = dph.transpose(*output_dims)
+        result = result.transpose(*output_dims)
 
-    return dph
+    return result
 
 
-def pressure_at_hybrid_levels(psfc, hya, hyb, p0=100000.0):
+def pressure_at_hybrid_levels(
+    psfc,
+    hya,
+    hyb,
+    p0=100000.0,
+    lev_dim: str = "lev",
+    output_dims=("time", "lev", "lat", "lon"),
+):
     """Calculate pressure at hybrid levels.
 
     Parameters
@@ -207,10 +214,20 @@ def pressure_at_hybrid_levels(psfc, hya, hyb, p0=100000.0):
     p0 : float, optional
         Reference pressure in Pascals.
 
+    lev_dim : str, optional
+        Output vertical dimension name for xarray inputs. Defaults to ``"lev"``.
+
+    output_dims : sequence of str, optional
+        Preferred output dimension order for xarray inputs. Defaults to
+        ``("time", "lev", "lat", "lon")``; any names not present in the
+        output are ignored, and remaining dimensions keep their relative order.
+
     Returns
     -------
     :class:`xarray.DataArray`, :class:`numpy.ndarray`
-        Pressure at hybrid levels in Pascals.
+        Pressure at hybrid levels in Pascals. The output shape is
+        ``(len(hya), *psfc.shape)`` for eager NumPy inputs, or
+        ``(lev, *psfc.dims)`` for eager xarray inputs.
     """
 
     if not all(isinstance(x, (xr.DataArray, np.ndarray)) for x in (psfc, hya, hyb)):
@@ -238,6 +255,11 @@ def pressure_at_hybrid_levels(psfc, hya, hyb, p0=100000.0):
             raise ValueError(
                 f"hya and hyb must be 1-dimensional if numpy inputs: {hya.shape}"
             )
+        default_output_dims = ("time", "lev", "lat", "lon")
+        if lev_dim != "lev" or tuple(output_dims) != default_output_dims:
+            raise TypeError(
+                "`lev_dim` and `output_dims` are supported only for xarray inputs"
+            )
         output_columns = _pressure_at_hybrid_levels_flat(psfc, hya, hyb, p0)
         return output_columns.reshape((hya.shape[0],) + psfc.shape, order="C")
 
@@ -257,10 +279,17 @@ def pressure_at_hybrid_levels(psfc, hya, hyb, p0=100000.0):
     output_values = output_columns.reshape((hya.shape[0],) + psfc.shape, order="C")
     coords = {name: coord for name, coord in psfc.coords.items()}
     coords[lev_name] = lev_coord
-    return xr.DataArray(
+    pressure = xr.DataArray(
         output_values,
         dims=(lev_name, *psfc.dims),
         coords=coords,
+    )
+    return _finalize_hybrid_level_output(
+        pressure,
+        lev_name=lev_name,
+        lev_coord=lev_coord,
+        lev_dim=lev_dim,
+        output_dims=output_dims,
     )
 
 
@@ -386,7 +415,7 @@ def delta_pressure_hybrid(
         "long_name": "pressure layer thickness",
         "units": "Pa",
     }
-    return _finalize_delta_pressure_hybrid_output(
+    return _finalize_hybrid_level_output(
         dph,
         lev_name=lev_name,
         lev_coord=lev_coord,
@@ -398,7 +427,14 @@ def delta_pressure_hybrid(
 def _pressure_from_hybrid(psfc, hya, hyb, p0=100000.0):
     """Backward-compatible wrapper for :func:`pressure_at_hybrid_levels`."""
 
-    return pressure_at_hybrid_levels(psfc, hya, hyb, p0)
+    return pressure_at_hybrid_levels(
+        psfc,
+        hya,
+        hyb,
+        p0,
+        lev_dim=None,
+        output_dims=None,
+    )
 
 
 def _pre_interp_multidim(
