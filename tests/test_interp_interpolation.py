@@ -1278,7 +1278,7 @@ class TestInterpolationFortranFallbacks:
         assert result is None
 
     def test_interp_sigma_to_hybrid_1d_python_fallback(self, monkeypatch):
-        """Cover the 1D pure-Python fallback branch when Fortran is unavailable."""
+        """Compiled-only sigma-to-hybrid should fail clearly without the backend."""
 
         sigma_coords = np.array([0.2, 0.5, 0.8, 1.0], dtype=np.float64)
         data = xr.DataArray(
@@ -1299,20 +1299,20 @@ class TestInterpolationFortranFallbacks:
         )
 
         monkeypatch.setattr(interpolation_module, "_dsigma2hybrid_nodes", None)
-
-        result = interp_sigma_to_hybrid(
-            data=data,
-            sig_coords=sigma_coords,
-            ps=ps,
-            hyam=hya,
-            hybm=hyb,
-            lev_dim="sigma",
+        monkeypatch.setattr(interpolation_module, "_dsigma2hybrid_nodes_into", None)
+        monkeypatch.setattr(
+            interpolation_module, "_dsigma2hybrid_nodes_corder_into", None
         )
 
-        assert result.dims == ("hlev",)
-        assert result.shape == (2,)
-        assert_array_equal(result.hlev.values, np.array([101, 102]))
-        assert np.all(np.isfinite(result.values))
+        with pytest.raises(RuntimeError, match="requires the compiled Fortran backend"):
+            interp_sigma_to_hybrid(
+                data=data,
+                sig_coords=sigma_coords,
+                ps=ps,
+                hyam=hya,
+                hybm=hyb,
+                lev_dim="sigma",
+            )
 
 
 class TestMultidimensionalInterpolation:
