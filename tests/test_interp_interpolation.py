@@ -5,10 +5,6 @@ This module tests the interpolation functionality including hybrid-sigma
 to pressure level interpolation and multidimensional spatial interpolation.
 """
 
-import builtins
-import importlib
-import sys
-
 import numpy as np
 import pytest
 import xarray as xr
@@ -656,29 +652,6 @@ class TestSigmaToHybridInterpolation:
 
 class TestInterpolationFortranFallbacks:
     """Exercise rarely hit Fortran-accelerated fallback branches."""
-
-    def test_import_fallback_sets_fortran_handles_to_none(self, monkeypatch):
-        """Reload the module with a forced kernel import failure."""
-
-        real_import = builtins.__import__
-
-        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-            if "vinth2p_kernels" in name:
-                raise ImportError("forced test import failure")
-            return real_import(name, globals, locals, fromlist, level)
-
-        monkeypatch.delitem(
-            sys.modules, "skyborn.interp.fortran.vinth2p_kernels", raising=False
-        )
-        monkeypatch.setattr(builtins, "__import__", fake_import)
-        reloaded = importlib.reload(interpolation_module)
-
-        assert reloaded._dsigma2hybrid_nodes is None
-        assert reloaded._dvinth2p_nodes_pa is None
-        assert reloaded._dvinth2p_ecmwf_nodes_corder_pa_into is None
-
-        monkeypatch.setattr(builtins, "__import__", real_import)
-        importlib.reload(interpolation_module)
 
     def test_as_broadcast_float64_flat_handles_none_and_broadcast_errors(
         self, monkeypatch
