@@ -172,6 +172,26 @@ python module vinth2p_kernels ! in
             double precision dimension(nlev), intent(in) :: hbcofb
             double precision intent(in) :: p0
         end subroutine ddelta_pressure_hybrid_pa_into
+        ! signature : pressure = dpressure_at_hybrid_levels_pa(psfc,hbcofa,hbcofb,p0)
+        subroutine dpressure_at_hybrid_levels_pa(psfc,pressure,hbcofa,hbcofb,p0,ncol,nlev) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer intent(in) :: ncol
+            integer intent(in) :: nlev
+            double precision dimension(ncol), intent(in) :: psfc
+            double precision dimension(nlev,ncol), intent(out) :: pressure
+            double precision dimension(nlev), intent(in) :: hbcofa
+            double precision dimension(nlev), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+        end subroutine dpressure_at_hybrid_levels_pa
+        ! signature : dpressure_at_hybrid_levels_pa_into(psfc,pressure,hbcofa,hbcofb,p0)
+        subroutine dpressure_at_hybrid_levels_pa_into(psfc,pressure,hbcofa,hbcofb,p0,ncol,nlev) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer intent(in) :: ncol
+            integer intent(in) :: nlev
+            double precision dimension(ncol), intent(in) :: psfc
+            double precision dimension(nlev,ncol), intent(in,out) :: pressure
+            double precision dimension(nlev), intent(in) :: hbcofa
+            double precision dimension(nlev), intent(in) :: hbcofb
+            double precision intent(in) :: p0
+        end subroutine dpressure_at_hybrid_levels_pa_into
     end interface
 end python module vinth2p_kernels
 
