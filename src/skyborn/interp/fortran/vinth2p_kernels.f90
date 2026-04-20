@@ -25,6 +25,7 @@ module vinth2p_kernels_core
     public :: build_input_pressures
     public :: build_double_log_levels
     public :: compute_delta_pressure_columns
+    public :: compute_pressure_at_hybrid_levels_columns
     public :: convert_levels_to_mb
     public :: extrapolate_geopotential
     public :: extrapolate_temperature
@@ -86,6 +87,21 @@ contains
             end do
         end do
     end subroutine compute_delta_pressure_columns
+
+
+    ! Compute hybrid pressures directly for every output level and column.
+    pure subroutine compute_pressure_at_hybrid_levels_columns(psfc, hbcofa, hbcofb, p0, pressure)
+        real(real64), intent(in) :: psfc(:), hbcofa(:), hbcofb(:), p0
+        real(real64), intent(out) :: pressure(size(hbcofa), size(psfc))
+
+        integer :: col
+        real(real64) :: scaled_a(size(hbcofa))
+
+        scaled_a = p0 * hbcofa
+        do col = 1, size(psfc)
+            pressure(:, col) = scaled_a + hbcofb * psfc(col)
+        end do
+    end subroutine compute_pressure_at_hybrid_levels_columns
 
 
     ! Build the flat-buffer input offsets for one physical column so the hot
@@ -1688,6 +1704,49 @@ subroutine ddelta_pressure_hybrid_pa_into(psfc, dph, hbcofa, hbcofb, p0, ncol, n
 
     call ddelta_pressure_hybrid_pa(psfc, dph, hbcofa, hbcofb, p0, ncol, nlev, nlevo)
 end subroutine ddelta_pressure_hybrid_pa_into
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    GENERIC ENTRY POINT FOR HYBRID PRESSURE CALCULATION USING A
+!    COLUMN-MAJOR [NLEV, NCOL] OUTPUT BUFFER.
+!
+! EXPECTED INPUT SHAPES
+!    PSFC(NCOL)                 - SURFACE PRESSURE FOR EACH COLUMN
+!    PRESSURE(NLEV,NCOL)        - OUTPUT PRESSURE AT EACH HYBRID LEVEL
+!    HBCOFA(NLEV)               - HYBRID "A" COEFFICIENTS
+!    HBCOFB(NLEV)               - HYBRID "B" COEFFICIENTS
+!
+! UNITS
+!    P0        - PA
+!    PSFC      - PA
+!    PRESSURE  - PA
+subroutine dpressure_at_hybrid_levels_pa(psfc, pressure, hbcofa, hbcofb, p0, ncol, nlev)
+    use vinth2p_kernels_core, only : real64, compute_pressure_at_hybrid_levels_columns
+    implicit none
+
+    integer, intent(in) :: ncol, nlev
+    real(real64), intent(in) :: psfc(ncol), hbcofa(nlev), hbcofb(nlev), p0
+    real(real64), intent(out) :: pressure(nlev, ncol)
+
+    call compute_pressure_at_hybrid_levels_columns(psfc, hbcofa, hbcofb, p0, pressure)
+end subroutine dpressure_at_hybrid_levels_pa
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    THIN F2PY-FRIENDLY WRAPPER THAT WRITES HYBRID PRESSURES INTO A
+!    CALLER-PROVIDED COLUMN-MAJOR OUTPUT BUFFER.
+subroutine dpressure_at_hybrid_levels_pa_into(psfc, pressure, hbcofa, hbcofb, p0, ncol, nlev)
+    use vinth2p_kernels_core, only : real64
+    implicit none
+
+    integer, intent(in) :: ncol, nlev
+    real(real64), intent(in) :: psfc(ncol), hbcofa(nlev), hbcofb(nlev), p0
+    real(real64), intent(inout) :: pressure(nlev, ncol)
+
+    call dpressure_at_hybrid_levels_pa(psfc, pressure, hbcofa, hbcofb, p0, ncol, nlev)
+end subroutine dpressure_at_hybrid_levels_pa_into
 
 
 ! QUICK REFERENCE
