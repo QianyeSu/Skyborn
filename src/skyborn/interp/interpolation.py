@@ -18,56 +18,37 @@ import warnings
 import numpy as np
 import xarray as xr
 
-try:
-    from .fortran.vinth2p_kernels import (
-        ddelta_pressure_hybrid_pa as _ddelta_pressure_hybrid_pa,
-    )
-    from .fortran.vinth2p_kernels import (
-        ddelta_pressure_hybrid_pa_into as _ddelta_pressure_hybrid_pa_into,
-    )
-    from .fortran.vinth2p_kernels import (
-        dpressure_at_hybrid_levels_pa as _dpressure_at_hybrid_levels_pa,
-    )
-    from .fortran.vinth2p_kernels import (
-        dpressure_at_hybrid_levels_pa_into as _dpressure_at_hybrid_levels_pa_into,
-    )
-    from .fortran.vinth2p_kernels import dsigma2hybrid_nodes as _dsigma2hybrid_nodes
-    from .fortran.vinth2p_kernels import (
-        dsigma2hybrid_nodes_corder_into as _dsigma2hybrid_nodes_corder_into,
-    )
-    from .fortran.vinth2p_kernels import (
-        dsigma2hybrid_nodes_into as _dsigma2hybrid_nodes_into,
-    )
-    from .fortran.vinth2p_kernels import (
-        dvinth2p_ecmwf_nodes_corder_pa_into as _dvinth2p_ecmwf_nodes_corder_pa_into,
-    )
-    from .fortran.vinth2p_kernels import (
-        dvinth2p_ecmwf_nodes_pa as _dvinth2p_ecmwf_nodes_pa,
-    )
-    from .fortran.vinth2p_kernels import (
-        dvinth2p_ecmwf_nodes_pa_into as _dvinth2p_ecmwf_nodes_pa_into,
-    )
-    from .fortran.vinth2p_kernels import (
-        dvinth2p_nodes_corder_pa_into as _dvinth2p_nodes_corder_pa_into,
-    )
-    from .fortran.vinth2p_kernels import dvinth2p_nodes_pa as _dvinth2p_nodes_pa
-    from .fortran.vinth2p_kernels import (
-        dvinth2p_nodes_pa_into as _dvinth2p_nodes_pa_into,
-    )
-except Exception:
-    _dpressure_at_hybrid_levels_pa = None
-    _dpressure_at_hybrid_levels_pa_into = None
-    _ddelta_pressure_hybrid_pa = None
-    _ddelta_pressure_hybrid_pa_into = None
-    _dsigma2hybrid_nodes = None
-    _dsigma2hybrid_nodes_corder_into = None
-    _dsigma2hybrid_nodes_into = None
-    _dvinth2p_nodes_pa = None
-    _dvinth2p_ecmwf_nodes_pa = None
-    _dvinth2p_nodes_pa_into = None
-    _dvinth2p_ecmwf_nodes_pa_into = None
-    _dvinth2p_nodes_corder_pa_into = None
-    _dvinth2p_ecmwf_nodes_corder_pa_into = None
+from .fortran.vinth2p_kernels import (
+    ddelta_pressure_hybrid_pa as _ddelta_pressure_hybrid_pa,
+)
+from .fortran.vinth2p_kernels import (
+    ddelta_pressure_hybrid_pa_into as _ddelta_pressure_hybrid_pa_into,
+)
+from .fortran.vinth2p_kernels import (
+    dpressure_at_hybrid_levels_pa as _dpressure_at_hybrid_levels_pa,
+)
+from .fortran.vinth2p_kernels import (
+    dpressure_at_hybrid_levels_pa_into as _dpressure_at_hybrid_levels_pa_into,
+)
+from .fortran.vinth2p_kernels import dsigma2hybrid_nodes as _dsigma2hybrid_nodes
+from .fortran.vinth2p_kernels import (
+    dsigma2hybrid_nodes_corder_into as _dsigma2hybrid_nodes_corder_into,
+)
+from .fortran.vinth2p_kernels import (
+    dsigma2hybrid_nodes_into as _dsigma2hybrid_nodes_into,
+)
+from .fortran.vinth2p_kernels import (
+    dvinth2p_ecmwf_nodes_corder_pa_into as _dvinth2p_ecmwf_nodes_corder_pa_into,
+)
+from .fortran.vinth2p_kernels import dvinth2p_ecmwf_nodes_pa as _dvinth2p_ecmwf_nodes_pa
+from .fortran.vinth2p_kernels import (
+    dvinth2p_ecmwf_nodes_pa_into as _dvinth2p_ecmwf_nodes_pa_into,
+)
+from .fortran.vinth2p_kernels import (
+    dvinth2p_nodes_corder_pa_into as _dvinth2p_nodes_corder_pa_into,
+)
+from .fortran.vinth2p_kernels import dvinth2p_nodes_pa as _dvinth2p_nodes_pa
+from .fortran.vinth2p_kernels import dvinth2p_nodes_pa_into as _dvinth2p_nodes_pa_into
 
 __all__ = [
     "pressure_at_hybrid_levels",
