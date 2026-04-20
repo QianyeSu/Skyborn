@@ -25,6 +25,12 @@ try:
     from .fortran.vinth2p_kernels import (
         ddelta_pressure_hybrid_pa_into as _ddelta_pressure_hybrid_pa_into,
     )
+    from .fortran.vinth2p_kernels import (
+        dpressure_at_hybrid_levels_pa as _dpressure_at_hybrid_levels_pa,
+    )
+    from .fortran.vinth2p_kernels import (
+        dpressure_at_hybrid_levels_pa_into as _dpressure_at_hybrid_levels_pa_into,
+    )
     from .fortran.vinth2p_kernels import dsigma2hybrid_nodes as _dsigma2hybrid_nodes
     from .fortran.vinth2p_kernels import (
         dsigma2hybrid_nodes_corder_into as _dsigma2hybrid_nodes_corder_into,
@@ -49,6 +55,8 @@ try:
         dvinth2p_nodes_pa_into as _dvinth2p_nodes_pa_into,
     )
 except Exception:
+    _dpressure_at_hybrid_levels_pa = None
+    _dpressure_at_hybrid_levels_pa_into = None
     _ddelta_pressure_hybrid_pa = None
     _ddelta_pressure_hybrid_pa_into = None
     _dsigma2hybrid_nodes = None
@@ -238,15 +246,21 @@ def pressure_at_hybrid_levels(psfc, hya, hyb, p0=100000.0):
     if hya.shape != hyb.shape:
         raise ValueError(f"dimension mismatch: hya: {hya.shape} hyb: {hyb.shape}")
 
+    _require_compiled_interp(
+        "pressure_at_hybrid_levels",
+        _dpressure_at_hybrid_levels_pa,
+        _dpressure_at_hybrid_levels_pa_into,
+    )
+
     if isinstance(hya, np.ndarray):
         if hya.ndim != 1:
             raise ValueError(
                 f"hya and hyb must be 1-dimensional if numpy inputs: {hya.shape}"
             )
-        reshape = (hya.shape[0],) + (1,) * np.ndim(psfc)
-        hya = hya.reshape(reshape)
-        hyb = hyb.reshape(reshape)
-        return hya * p0 + hyb * psfc
+        output_columns = _pressure_at_hybrid_levels_flat(psfc, hya, hyb, p0)
+        return output_columns.reshape((hya.shape[0],) + psfc.shape, order="C")
+
+    _reject_lazy_or_unit_backed_inputs("pressure_at_hybrid_levels", psfc, hya, hyb)
 
     if hya.dims != hyb.dims:
         warnings.warn(
@@ -256,11 +270,17 @@ def pressure_at_hybrid_levels(psfc, hya, hyb, p0=100000.0):
         hyb = hyb.rename({b: a for a, b in zip(hya.dims, hyb.dims)})
 
     hya, hyb = _rename_colliding_coeff_dim(psfc, hya, hyb)
-
-    # p(k) = hya(k) * p0 + hyb(k) * psfc
-
-    # This will be in Pa
-    return hya * p0 + hyb * psfc
+    lev_name = hya.dims[0]
+    lev_coord = _dimension_coord_or_default(hya, lev_name)
+    output_columns = _pressure_at_hybrid_levels_flat(psfc.data, hya.data, hyb.data, p0)
+    output_values = output_columns.reshape((hya.shape[0],) + psfc.shape, order="C")
+    coords = {name: coord for name, coord in psfc.coords.items()}
+    coords[lev_name] = lev_coord
+    return xr.DataArray(
+        output_values,
+        dims=(lev_name, *psfc.dims),
+        coords=coords,
+    )
 
 
 def delta_pressure_hybrid(
@@ -707,6 +727,64 @@ def _delta_pressure_hybrid_flat(ps_values, hya_values, hyb_values, p0) -> np.nda
             hyb_vector,
             float(p0),
             nlevo,
+        )
+
+
+def _pressure_at_hybrid_levels_flat(
+    ps_values, hya_values, hyb_values, p0
+) -> np.ndarray:
+    """Run eager hybrid-pressure calculation through the compiled backend."""
+
+    if _dpressure_at_hybrid_levels_pa is None:
+        raise RuntimeError("pressure-at-hybrid-levels backend is not available")
+
+    ps_flat = _compiled_float64_flat(ps_values)
+    hya_vector = _compiled_float64_vector(hya_values)
+    hyb_vector = _compiled_float64_vector(hyb_values)
+    ncol = ps_flat.size
+    nlev = hya_vector.size
+    output_columns = _compiled_float64_output((nlev, ncol), order="F")
+
+    if _dpressure_at_hybrid_levels_pa_into is not None:
+        try:
+            _dpressure_at_hybrid_levels_pa_into(
+                ps_flat,
+                output_columns,
+                hya_vector,
+                hyb_vector,
+                float(p0),
+                ncol=ncol,
+                nlev=nlev,
+            )
+        except Exception as exc:
+            if "dpressure_at_hybrid_levels_pa_into" not in str(exc):
+                raise
+            _dpressure_at_hybrid_levels_pa_into(
+                ps_flat,
+                output_columns,
+                hya_vector,
+                hyb_vector,
+                float(p0),
+            )
+        return output_columns
+
+    try:
+        return _dpressure_at_hybrid_levels_pa(
+            ps_flat,
+            hya_vector,
+            hyb_vector,
+            float(p0),
+            ncol=ncol,
+            nlev=nlev,
+        )
+    except Exception as exc:
+        if "dpressure_at_hybrid_levels_pa" not in str(exc):
+            raise
+        return _dpressure_at_hybrid_levels_pa(
+            ps_flat,
+            hya_vector,
+            hyb_vector,
+            float(p0),
         )
 
 
