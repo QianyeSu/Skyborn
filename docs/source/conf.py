@@ -63,7 +63,7 @@ autosummary_imported_members = True
 # Support for multiple file types (moved to end of file)
 
 templates_path = ['_templates']
-exclude_patterns = []
+exclude_patterns = ['images/**']
 
 # Suppress specific warnings
 suppress_warnings = [
