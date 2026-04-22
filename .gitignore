@@ -27,6 +27,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.conda-smoke/
+.pkg-audit/
 
 # Meson build directories
 **/build/
