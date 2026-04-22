@@ -2404,6 +2404,77 @@ button.copybtn svg {
     border-bottom: 1px solid #60a5fa !important;
 }
 
+/* ========== Tutorial Card Cover Reset ========== */
+/* Keep tutorial covers isolated from the site-wide image chrome rules below. */
+.skyborn-tutorial-card__media {
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+    min-height: 210px;
+}
+
+.skyborn-tutorial-card .skyborn-tutorial-card__cover,
+.bd-content .skyborn-tutorial-card .skyborn-tutorial-card__cover,
+.bd-article .skyborn-tutorial-card .skyborn-tutorial-card__cover,
+article .skyborn-tutorial-card .skyborn-tutorial-card__cover,
+.document .skyborn-tutorial-card .skyborn-tutorial-card__cover,
+[data-theme="dark"] .skyborn-tutorial-card .skyborn-tutorial-card__cover,
+[data-theme="dark"] .bd-content .skyborn-tutorial-card .skyborn-tutorial-card__cover,
+[data-theme="dark"] .bd-article .skyborn-tutorial-card .skyborn-tutorial-card__cover,
+[data-theme="dark"] article .skyborn-tutorial-card .skyborn-tutorial-card__cover,
+[data-theme="dark"] .document .skyborn-tutorial-card .skyborn-tutorial-card__cover {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: cover !important;
+    object-position: center center !important;
+    display: block !important;
+    flex: 1 1 auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+    cursor: default !important;
+}
+
+.skyborn-tutorial-card .skyborn-tutorial-card__cover::before,
+.skyborn-tutorial-card .skyborn-tutorial-card__cover::after,
+.bd-content .skyborn-tutorial-card .skyborn-tutorial-card__cover::before,
+.bd-content .skyborn-tutorial-card .skyborn-tutorial-card__cover::after,
+.bd-article .skyborn-tutorial-card .skyborn-tutorial-card__cover::before,
+.bd-article .skyborn-tutorial-card .skyborn-tutorial-card__cover::after,
+article .skyborn-tutorial-card .skyborn-tutorial-card__cover::before,
+article .skyborn-tutorial-card .skyborn-tutorial-card__cover::after,
+.document .skyborn-tutorial-card .skyborn-tutorial-card__cover::before,
+.document .skyborn-tutorial-card .skyborn-tutorial-card__cover::after {
+    display: none !important;
+    content: none !important;
+}
+
+.skyborn-tutorial-card .skyborn-tutorial-card__cover:hover,
+.bd-content .skyborn-tutorial-card .skyborn-tutorial-card__cover:hover,
+.bd-article .skyborn-tutorial-card .skyborn-tutorial-card__cover:hover,
+article .skyborn-tutorial-card .skyborn-tutorial-card__cover:hover,
+.document .skyborn-tutorial-card .skyborn-tutorial-card__cover:hover {
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: none !important;
+    box-shadow: none !important;
+}
+
+@media (max-width: 768px) {
+    .skyborn-tutorial-card__media {
+        min-height: 180px;
+    }
+}
+
 /* Animation keyframes */
 @keyframes tableScale {
     0% {
