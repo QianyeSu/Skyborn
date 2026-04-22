@@ -12,6 +12,7 @@ This module contains various calculation functions including:
 """
 
 from .calculations import (
+    calculate_dcape,
     calculate_potential_temperature,
     convert_longitude_range,
     kendall_correlation,
