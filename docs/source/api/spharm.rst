@@ -10,6 +10,48 @@ Overview
 
 The ``skyborn.spharm`` module provides a Python interface to the NCAR SPHEREPACK library for spherical harmonic transforms and analysis. This module is particularly useful for atmospheric and oceanic data analysis, offering efficient spectral transforms and vector field decomposition capabilities.
 
+Origins And Lineage
+-------------------
+
+Skyborn's ``spharm`` module is derived from the original
+`pyspharm <https://github.com/jswhit/pyspharm>`_ interface written by
+Jeff Whitaker. The original package exposed a high-level Python API over
+NCAR SPHEREPACK and documented it with an ``epydoc`` HTML bundle.
+
+In Skyborn, that legacy interface has been carried forward into the package's
+main Sphinx documentation and integrated with the modern build system. The
+older generated HTML files under ``src/skyborn/spharm/html`` are no longer the
+canonical documentation source.
+
+Skyborn keeps the same core user-facing concepts:
+
+- ``Spharmt`` as the main transform object
+- scalar transforms between grid space and spectral space
+- vector diagnostics such as vorticity, divergence, streamfunction, and
+  velocity potential
+- spectral utilities such as regridding, Gaussian latitudes, geodesic points,
+  Legendre functions, and point interpolation
+
+Attribution
+~~~~~~~~~~~
+
+- Original Python interface: Jeff Whitaker
+- Original spectral backend: NCAR SPHEREPACK
+- Skyborn integration and maintenance: Qianye Su
+
+Documentation Note
+~~~~~~~~~~~~~~~~~~
+
+The historical ``epydoc`` pages summarized:
+
+- module introduction and usage conventions
+- method and function inventories
+- grid and spectral storage conventions
+- Legendre normalization details
+
+Those topics are now maintained here in the Sphinx docs so that the published
+documentation, API reference, and packaging stay in one place.
+
 Key Features
 ------------
 
@@ -28,6 +70,110 @@ The spharm module requires:
 - NumPy with F2PY support
 - A Fortran compiler (gfortran, ifort, etc.)
 - SPHEREPACK library (automatically handled during installation)
+
+Compared With Legacy pyspharm Packaging
+---------------------------------------
+
+The original ``pyspharm`` installation flow relied on ``setup.py``-driven
+fetch/build steps around SPHEREPACK. In Skyborn this module is built as part of
+the package's normal extension build, so users should install ``skyborn``
+instead of following the old standalone ``pyspharm`` instructions from the
+historical HTML pages.
+
+Legacy Interface Notes
+----------------------
+
+The historical ``pyspharm`` HTML pages were not just API stubs; they also
+described what the module was for, how the original ``Spharmt`` object was
+intended to be used, and which data conventions users were expected to follow.
+Those interface notes are kept here so the current documentation preserves the
+same context.
+
+Original Interface Scope
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The original ``pyspharm`` docs described the module as a high-level Python
+interface to NCAR SPHEREPACK, rather than a one-to-one wrapper around every
+Fortran routine. That design is still true in Skyborn:
+
+- the public API is organized around atmospheric and oceanic analysis tasks
+- the ``Spharmt`` class is the main working object
+- scalar and vector transforms are exposed as direct analysis/synthesis methods
+- helper functions handle Gaussian grids, spectral indexing, interpolation, and
+  spectral regridding
+
+Original Usage Pattern
+~~~~~~~~~~~~~~~~~~~~~~
+
+The legacy HTML documentation used a compact example like this:
+
+.. code-block:: python
+
+    from skyborn.spharm import Spharmt
+
+    spharm = Spharmt(
+        144,
+        72,
+        rsphere=8.0e6,
+        gridtype="gaussian",
+        legfunc="computed",
+    )
+
+This example still captures the intended interface:
+
+- ``nlon`` and ``nlat`` define the transform grid
+- ``rsphere`` sets the sphere radius
+- ``gridtype`` selects ``"regular"`` or ``"gaussian"``
+- ``legfunc`` selects ``"stored"`` or ``"computed"``
+
+The historical note that accompanied this example is still relevant:
+
+- default values are tuned for Earth-scale applications
+- ``legfunc="computed"`` reduces persistent memory usage
+- ``legfunc="stored"`` is usually faster when transforms are repeated many times
+
+Legacy Method Inventory
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The original class page grouped the core ``Spharmt`` methods as the standard
+analysis workflow:
+
+- ``grdtospec``: grid-to-spectral transform
+- ``spectogrd``: spectral-to-grid transform
+- ``getvrtdivspec``: vorticity/divergence spectra from ``u``/``v`` winds
+- ``getuv``: wind components from vorticity/divergence spectra
+- ``getgrad``: vector gradient from scalar spectral coefficients
+- ``getpsichi``: streamfunction and velocity potential from winds
+- ``specsmooth``: isotropic spectral smoothing
+
+Legacy Utility Inventory
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The original module page also highlighted the same utility functions now
+documented below:
+
+- ``regrid``: spectral regridding with optional smoothing and truncation
+- ``gaussian_lats_wts``: Gaussian latitudes and quadrature weights
+- ``getspecindx``: spectral coefficient index mapping
+- ``legendre``: associated Legendre functions
+- ``getgeodesicpts``: icosahedral geodesic points on the sphere
+- ``specintrp``: interpolation to an arbitrary point from spectral coefficients
+
+Legacy Conventions Carried Forward
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Several conventions in the old HTML docs remain important and are preserved in
+Skyborn:
+
+- gridded data is treated as north-to-south in latitude and eastward in longitude
+- the Greenwich meridian is the first longitude
+- the northernmost latitude is the first row
+- odd ``nlat`` includes the equator; even ``nlat`` places it between two rows
+- regular grids include poles only when the latitude count is odd
+- spectral coefficients follow triangular truncation ordering
+
+These conventions are restated in the formal sections below so users do not
+need the historical HTML bundle to understand the interface.
 
 Quick Start
 -----------
