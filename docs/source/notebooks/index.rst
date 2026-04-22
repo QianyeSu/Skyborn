@@ -1,103 +1,67 @@
-.. _notebooks:
+Tutorials
+=========
 
-Jupyter Notebooks
-=================
+Skyborn keeps tutorial notebooks as full documentation pages, but this page is
+the only tutorial entry shown in the global sidebar. Individual notebooks are
+linked from the tutorial hub below instead of being expanded into a long
+left-hand navigation tree.
 
-This section contains interactive Jupyter notebooks demonstrating various Skyborn capabilities.
+.. raw:: html
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Available Notebooks:
+   <div class="skyborn-tutorial-grid">
+     <a class="skyborn-tutorial-card" href="mann_kendall_tutorial.html">
+       <span class="skyborn-tutorial-card__eyebrow">Statistics</span>
+       <h2>Mann-Kendall Tutorial</h2>
+       <p>Real GPCP precipitation trends, four-method speed comparison, and multiple Mann-Kendall test families on global data.</p>
+       <span class="skyborn-tutorial-card__meta">Notebook tutorial</span>
+     </a>
+     <a class="skyborn-tutorial-card" href="gridfill_tutorial.html">
+       <span class="skyborn-tutorial-card__eyebrow">Interpolation</span>
+       <h2>GridFill Tutorial</h2>
+       <p>Gap-filling workflows for atmospheric grids, including validation, method comparison, and publication-style figures.</p>
+       <span class="skyborn-tutorial-card__meta">Notebook tutorial</span>
+     </a>
+     <a class="skyborn-tutorial-card" href="windspharm_tutorial.html">
+       <span class="skyborn-tutorial-card__eyebrow">Dynamics</span>
+       <h2>Windspharm Tutorial</h2>
+       <p>Spherical-harmonic wind analysis with real data, vorticity, divergence, Helmholtz decomposition, and related diagnostics.</p>
+       <span class="skyborn-tutorial-card__meta">Notebook tutorial</span>
+     </a>
+     <a class="skyborn-tutorial-card" href="ecs_emergent_constraints_analysis.html">
+       <span class="skyborn-tutorial-card__eyebrow">Climate Constraints</span>
+       <h2>Emergent Constraints Tutorial</h2>
+       <p>Interactive climate-sensitivity analysis with observational constraints, uncertainty reduction, and reproducible figures.</p>
+       <span class="skyborn-tutorial-card__meta">Notebook tutorial</span>
+     </a>
+   </div>
 
-   ecs_emergent_constraints_analysis.ipynb
-   windspharm_tutorial.ipynb
-   gridfill_tutorial.ipynb
-   mann_kendall_tutorial.ipynb
-
-Emergent Constraints Analysis
------------------------------
-
-The :doc:`ecs_emergent_constraints_analysis` notebook provides a comprehensive
-demonstration of emergent constraint methods for climate sensitivity analysis.
-
-**Key Features:**
-
-* Interactive data visualization
-* Step-by-step constraint methodology
-* Real climate model data analysis
-* Uncertainty quantification
-* Statistical validation
-
-**Topics Covered:**
-
-* Loading and preprocessing climate data
-* Calculating inter-model relationships
-* Applying observational constraints
-* Quantifying uncertainty reduction
-* Visualizing results
-
-Vector Wind Analysis
---------------------
-
-The :doc:`windspharm_tutorial` notebook demonstrates spherical harmonic vector wind
-analysis using the Skyborn windspharm module.
-
-**Key Features:**
-
-* Spherical harmonic transforms
-* Vorticity and divergence calculations
-* Helmholtz decomposition
-* Streamfunction and velocity potential
-* Time series analysis
-
-**Topics Covered:**
-
-* Creating realistic wind data
-* Computing dynamical quantities
-* Decomposing wind into components
-* Visualizing results
-* Performance optimization
-* Error handling
-
-GridFill Data Interpolation
----------------------------
-
-The :doc:`gridfill_tutorial` notebook demonstrates advanced data interpolation
-techniques for filling missing values in atmospheric datasets using Poisson equation solvers.
-
-**Key Features:**
-
-* Multiple interpolation algorithms
-* Physical constraint preservation
-* Component-wise vs direct approaches
-* Quality assessment and validation
-* Publication-quality visualizations
-
-**Topics Covered:**
-
-* Creating realistic missing data scenarios
-* Applying different GridFill methods
-* Component-wise wind field filling
-* Performance analysis and comparison
-* Best practices for atmospheric data
-
-Getting Started
+Why This Layout
 ---------------
 
-To run these notebooks locally:
+This tutorial hub keeps the global navigation compact:
 
-1. Install Skyborn with development dependencies
-2. Launch Jupyter Lab or Notebook
-3. Navigate to the notebooks directory
-4. Execute cells step by step
+* The sidebar shows a single ``Tutorials`` entry instead of one button per
+  notebook.
+* New notebooks can be added here as cards without making the left navigation
+  tree longer.
+* Notebook pages still build as normal HTML pages and remain directly linkable.
+
+Tutorial List
+-------------
+
+If you prefer a plain list of links:
+
+* `Mann-Kendall Tutorial <mann_kendall_tutorial.html>`_
+* `GridFill Tutorial <gridfill_tutorial.html>`_
+* `Windspharm Tutorial <windspharm_tutorial.html>`_
+* `Emergent Constraints Tutorial <ecs_emergent_constraints_analysis.html>`_
+
+Run Tutorials Locally
+---------------------
 
 .. code-block:: bash
 
    pip install skyborn[dev]
    jupyter lab docs/source/notebooks/
 
-Note
-----
-
-All notebooks include fallback synthetic data generation in case the required
-data files are not available, ensuring they can be executed in any environment.
+Each notebook keeps its own data-loading notes near the top of the page.
