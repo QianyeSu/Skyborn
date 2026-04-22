@@ -19,7 +19,7 @@ sidebar stays compact with a single ``Tutorials`` entry.
    <div class="skyborn-tutorial-grid">
      <a class="skyborn-tutorial-card" href="mann_kendall_tutorial.html">
        <span class="skyborn-tutorial-card__media">
-         <img class="skyborn-tutorial-card__cover" src="../images/precipitation_trends_comparison_1979_2014.png" alt="Global precipitation trend comparison figure used for the Mann-Kendall tutorial" loading="lazy">
+         <img class="skyborn-tutorial-card__cover" src="../_images/precipitation_trends_comparison_1979_2014.png" alt="Global precipitation trend comparison figure used for the Mann-Kendall tutorial" loading="lazy">
        </span>
        <span class="skyborn-tutorial-card__body">
          <span class="skyborn-tutorial-card__eyebrow">Statistics</span>
@@ -30,7 +30,7 @@ sidebar stays compact with a single ``Tutorials`` entry.
      </a>
      <a class="skyborn-tutorial-card" href="gridfill_tutorial.html">
        <span class="skyborn-tutorial-card__media">
-         <img class="skyborn-tutorial-card__cover" src="../images/gridfill_comprehensive_comparison.png" alt="GridFill comparison figure used for the GridFill tutorial" loading="lazy">
+         <img class="skyborn-tutorial-card__cover" src="../_images/gridfill_demo_result.png" alt="GridFill demonstration result used for the GridFill tutorial" loading="lazy">
        </span>
        <span class="skyborn-tutorial-card__body">
          <span class="skyborn-tutorial-card__eyebrow">Interpolation</span>
@@ -41,7 +41,7 @@ sidebar stays compact with a single ``Tutorials`` entry.
      </a>
      <a class="skyborn-tutorial-card" href="windspharm_tutorial.html">
        <span class="skyborn-tutorial-card__media">
-         <img class="skyborn-tutorial-card__cover" src="../images/windspharm_sfvp_analysis.png" alt="Streamfunction and velocity potential figure used for the Windspharm tutorial" loading="lazy">
+         <img class="skyborn-tutorial-card__cover" src="../_images/windspharm_sfvp_analysis.png" alt="Streamfunction and velocity potential figure used for the Windspharm tutorial" loading="lazy">
        </span>
        <span class="skyborn-tutorial-card__body">
          <span class="skyborn-tutorial-card__eyebrow">Dynamics</span>
@@ -52,7 +52,7 @@ sidebar stays compact with a single ``Tutorials`` entry.
      </a>
      <a class="skyborn-tutorial-card" href="ecs_emergent_constraints_analysis.html">
        <span class="skyborn-tutorial-card__media">
-         <img class="skyborn-tutorial-card__cover" src="../images/ecs_emergent_constraints_analysis.png" alt="Emergent constraints dashboard used for the emergent constraints tutorial" loading="lazy">
+         <img class="skyborn-tutorial-card__cover" src="../_images/ecs_emergent_constraints_analysis.png" alt="Emergent constraints dashboard used for the emergent constraints tutorial" loading="lazy">
        </span>
        <span class="skyborn-tutorial-card__body">
          <span class="skyborn-tutorial-card__eyebrow">Climate Constraints</span>
@@ -85,13 +85,3 @@ If you prefer a plain list of links:
 * `GridFill Tutorial <gridfill_tutorial.html>`_
 * `Windspharm Tutorial <windspharm_tutorial.html>`_
 * `Emergent Constraints Tutorial <ecs_emergent_constraints_analysis.html>`_
-
-Run Tutorials Locally
----------------------
-
-.. code-block:: bash
-
-   pip install skyborn[dev]
-   jupyter lab docs/source/notebooks/
-
-Each notebook keeps its own data-loading notes near the top of the page.
