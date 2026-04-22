@@ -18,11 +18,6 @@ Skyborn's ``spharm`` module is derived from the original
 Jeff Whitaker. The original package exposed a high-level Python API over
 NCAR SPHEREPACK and documented it with an ``epydoc`` HTML bundle.
 
-In Skyborn, that legacy interface has been carried forward into the package's
-main Sphinx documentation and integrated with the modern build system. The
-older generated HTML files under ``src/skyborn/spharm/html`` are no longer the
-canonical documentation source.
-
 Skyborn keeps the same core user-facing concepts:
 
 - ``Spharmt`` as the main transform object
