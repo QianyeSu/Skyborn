@@ -70,6 +70,7 @@ suppress_warnings = [
     'myst.mathjax',
     'ref.ref',
     'ref.python',
+    'toc',
     # 'autodoc.duplicate_object',
     # 'autodoc',  # Add more general autodoc suppression
 ]
