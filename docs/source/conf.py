@@ -70,7 +70,6 @@ suppress_warnings = [
     'myst.mathjax',
     'ref.ref',
     'ref.python',
-    'toc',
     # 'autodoc.duplicate_object',
     # 'autodoc',  # Add more general autodoc suppression
 ]
@@ -97,6 +96,7 @@ html_js_files = [
     'copybutton_fix.js',
     'latex_formula_manager.js',
     'table_responsive.js',
+    'tutorial_hub.js',
 ]
 
 # Theme options for sphinx_book_theme
