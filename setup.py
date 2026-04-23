@@ -26,43 +26,68 @@ except ImportError:
 DOCS_BUILD_MODE = (
     os.environ.get("SKYBORN_DOCS_BUILD") == "1" or os.environ.get("SKIP_FORTRAN") == "1"
 )
+CONDA_BUILD_MODE = os.environ.get("CONDA_BUILD") == "1"
+
+
+def configure_compiler_environment():
+    """Configure local compiler defaults without overriding conda-build."""
+    if DOCS_BUILD_MODE:
+        print("馃摎 Documentation build mode detected - skipping compiler setup")
+        return
+
+    if CONDA_BUILD_MODE:
+        print("Conda-build environment detected - using externally provided compilers")
+        return
+
+    os.environ.setdefault("FC", "gfortran")
+    os.environ.setdefault("F77", os.environ["FC"])
+    os.environ.setdefault("F90", os.environ["FC"])
+    os.environ.setdefault("CC", "gcc")
+    print(
+        "Using local default compilers: "
+        f"FC={os.environ['FC']}, F77={os.environ['F77']}, "
+        f"F90={os.environ['F90']}, CC={os.environ['CC']}"
+    )
+
 
 if DOCS_BUILD_MODE:
     print("📚 Documentation build mode detected - skipping Fortran compilation")
 else:
-    # Force gfortran compiler usage
-    os.environ["FC"] = os.environ.get("FC", "gfortran")
-    os.environ["F77"] = os.environ.get("F77", "gfortran")
-    os.environ["F90"] = os.environ.get("F90", "gfortran")
-    os.environ["CC"] = os.environ.get("CC", "gcc")
+    configure_compiler_environment()
 
 
-# Check if gfortran is available
-def check_gfortran():
-    """Check if gfortran is available"""
+# Check if the active Fortran compiler is available
+def check_fortran_compiler():
+    """Check whether the selected Fortran compiler can be executed."""
+    compiler = os.environ.get("FC", "gfortran")
     try:
         result = subprocess.run(
-            ["gfortran", "--version"], capture_output=True, text=True, timeout=10
+            [compiler, "--version"], capture_output=True, text=True, timeout=10
         )
         if result.returncode == 0:
             print(
-                f"Found gfortran: {result.stdout.split()[4] if len(result.stdout.split()) > 4 else 'unknown version'}"
+                f"Found Fortran compiler ({compiler}): "
+                f"{result.stdout.split()[4] if len(result.stdout.split()) > 4 else 'unknown version'}"
             )
             return True
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
         pass
 
-    print("Warning: gfortran not found. Fortran extensions may not build correctly.")
+    print(
+        f"Warning: Fortran compiler '{compiler}' not found. "
+        "Fortran extensions may not build correctly."
+    )
     print("Please install gfortran:")
     print("  Linux: sudo apt-get install gfortran")
     print("  macOS: brew install gcc")
     print("  Windows: conda install m2w64-toolchain")
+    print("  Conda-build / conda-forge: rely on the recipe-provided compiler toolchain")
     return False
 
 
 # Check gfortran availability at setup time (skip in docs mode)
 if not DOCS_BUILD_MODE:
-    check_gfortran()
+    check_fortran_compiler()
 else:
     print("📚 Skipping gfortran check in documentation build mode")
 
@@ -80,6 +105,27 @@ class MesonBuildExt(build_ext):
         self.build_meson_modules()
         # Then run the standard build_ext
         super().run()
+        self.prune_installed_import_libraries()
+
+    def prune_installed_import_libraries(self):
+        """Remove Windows import libraries from the wheel/install staging area."""
+        if self.inplace or not getattr(self, "build_lib", None):
+            return
+
+        build_lib_path = Path(self.build_lib)
+        if not build_lib_path.exists():
+            return
+
+        removed = []
+        for import_lib in build_lib_path.rglob("*.dll.a"):
+            import_lib.unlink()
+            removed.append(import_lib)
+
+        if removed:
+            print(
+                "Removed Windows import libraries from staged package contents: "
+                + ", ".join(str(path.relative_to(build_lib_path)) for path in removed)
+            )
 
     def build_meson_modules(self):
         """Build modules that use meson (like spharm)"""
@@ -300,6 +346,8 @@ class MesonBuildExt(build_ext):
                         "This should not happen with the new setup. Please check meson configuration."
                     )
                     raise
+
+                self.prune_installed_import_libraries()
             else:
                 print("Inplace build - extensions handled by meson custom_target")
 
