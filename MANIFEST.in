@@ -4,6 +4,9 @@ include pyproject.toml
 include setup.py
 recursive-include requirements *.txt
 
+recursive-include src/skyborn *.py *.pyi *.pyx *.pxd *.pxi *.pyf *.f *.f90 *.c *.h meson.build
+recursive-include src/skyborn/gridfill/tests/data *.npy
+
 # Keep source distributions focused on buildable source files.
 prune tests
 prune src/skyborn/gridfill/tests
@@ -20,9 +23,12 @@ prune src/skyborn/calc/geostrophic/build
 prune src/skyborn/calc/troposphere/build
 prune src/skyborn/plot/nclcurly_native/build
 
-# Exclude generated binaries and cache files from source releases.
+global-exclude __pycache__ *
 global-exclude *.py[cod]
-global-exclude *.pyd
 global-exclude *.so
+global-exclude *.pyd
 global-exclude *.dll
-global-exclude __pycache__/*
+global-exclude *.dylib
+global-exclude *.dll.a
+global-exclude *.o
+global-exclude *.obj
