@@ -467,10 +467,14 @@ class MesonBuildExt(build_ext):
 
                 # Meson should detect its own linker / archiver from the
                 # compiler driver. On conda-build macOS these environment
-                # variables can cause Meson to treat `ar` as the linker during
-                # configure.
+                # variables can cause Meson to treat the archiver itself as the
+                # linker during configure.
                 if CONDA_BUILD_MODE and system == "Darwin":
                     for key in (
+                        "AR",
+                        "RANLIB",
+                        "GCC_AR",
+                        "GCC_RANLIB",
                         "LD",
                         "LDSHARED",
                         "CC_LD",
