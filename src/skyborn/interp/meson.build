@@ -347,14 +347,15 @@ else:
     #
     # On Windows/MinGW, Meson + GNU LTO has been less reliable when these
     # helpers are archived separately and then re-linked into the final .pyd.
-    # In that case, compile the helpers directly into each extension target to
-    # avoid unresolved external references during conda-forge style builds.
+    # On macOS conda-build, Meson can also fail while probing the archiver for
+    # these helper archives. In both cases, compile the helpers directly into
+    # each extension target to avoid packaging-specific linker/archiver issues.
     rcm2points_support_sources = []
     rcm2rgrid_support_sources = []
     rcm2points_support_libs = []
     rcm2rgrid_support_libs = []
 
-    if host_system == 'windows'
+    if host_system == 'windows' or host_system == 'darwin'
         rcm2points_support_sources = [
             'fortran/linint2.f90',
             'fortran/rcm_geodesy.f90',

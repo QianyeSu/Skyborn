@@ -66,12 +66,12 @@ message('Host system: ' + host_system)
 message('Host CPU family: ' + host_cpu)
 
 openmp_dependencies = []
-openmp_link_args = []
+openmp_fortran_args = []
+openmp_c_args = []
 if host_system == 'windows'
-    # Meson can inject MSVC-style `/openmp` into MinGW Fortran builds here.
-    # Keep Windows on explicit GCC-compatible flags instead.
-    openmp_link_args += ['-fopenmp']
-    message('Using explicit -fopenmp link arguments on Windows')
+    # These kernels do not contain OpenMP directives, so enabling `-fopenmp`
+    # on Windows only creates an unnecessary libgomp/MSVC linker mismatch.
+    message('Skipping OpenMP flags on Windows for GPI build')
 else
     openmp_dep = dependency('openmp', required: false)
     if openmp_dep.found()
@@ -80,6 +80,8 @@ else
     else
         warning('OpenMP dependency not found - relying on compiler flags only')
     endif
+    openmp_fortran_args += ['-fopenmp']
+    openmp_c_args += ['-fopenmp']
 endif
 
 # Optimization flags
@@ -93,15 +95,16 @@ fortran_args = [
     '-ffree-line-length-none',
     '-fno-common',
     '-std=legacy',
-    '-fopenmp',
 ]
 
 c_args = [
     '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',
     '-fPIC',
     '-fno-trapping-math',
-    '-fopenmp',
 ]
+
+fortran_args += openmp_fortran_args
+c_args += openmp_c_args
 
 if host_system == 'darwin' and host_cpu == 'aarch64'
     # Apple Silicon optimizations
@@ -210,7 +213,6 @@ else:
         ],
         include_directories: inc_np,
         dependencies: dependencies,
-        link_args: openmp_link_args,
         fortran_args: fortran_args,
         c_args: c_args,
         install: true,   # Install to custom location if provided
