@@ -66,8 +66,7 @@ exclude = [
 ]
 
 [tool.setuptools.package-data]
-"skyborn.spharm" = ["src/*.f", "src/*.pyf", "meson.build"]
-"skyborn.gridfill" = ["*.pyx", "tests/data/*.npy"]
+"skyborn.gridfill" = ["tests/data/*.npy"]
 
 [tool.setuptools.dynamic]
 version = { attr = "skyborn.__version__" }
