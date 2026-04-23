@@ -147,6 +147,7 @@ end module rcm2points_core
 subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, ncrit, kval, ier)
     use rcm2points_core, only : is_strictly_increasing, earliest_stride_candidate, find_curv_cell_local, &
         find_curv_cell_full
+    use rcm_geodesy_core, only : dgcdist_core
     implicit none
 
     ! QUICK REFERENCE
@@ -195,8 +196,6 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
     double precision :: row_min_lat(nyi), row_max_lat(nyi), col_min_lon(nxi), col_max_lon(nxi)
     double precision, allocatable :: candidate_weight(:)
     double precision :: wx, wy, rearth, dlat, pi, dkm, dist, xo_n, yo_n, y_lower, y_upper
-    double precision :: dgcdist
-
     external dmonoinc
 
     ! Match the historical input-size guard before any monotonicity or
@@ -328,10 +327,10 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
                     w(1, 2) = (1.0d0 - wx) * wy
                     w(2, 2) = wx * wy
                 else
-                    w(1, 1) = (1.0d0 / dgcdist(yo_n, xo_n, yi(ix, iy), xi(ix, iy), 2)) ** 2
-                    w(2, 1) = (1.0d0 / dgcdist(yo_n, xo_n, yi(ix + k, iy), xi(ix + k, iy), 2)) ** 2
-                    w(1, 2) = (1.0d0 / dgcdist(yo_n, xo_n, yi(ix, iy + k), xi(ix, iy + k), 2)) ** 2
-                    w(2, 2) = (1.0d0 / dgcdist(yo_n, xo_n, yi(ix + k, iy + k), xi(ix + k, iy + k), 2)) ** 2
+                    w(1, 1) = (1.0d0 / dgcdist_core(yo_n, xo_n, yi(ix, iy), xi(ix, iy), 2)) ** 2
+                    w(2, 1) = (1.0d0 / dgcdist_core(yo_n, xo_n, yi(ix + k, iy), xi(ix + k, iy), 2)) ** 2
+                    w(1, 2) = (1.0d0 / dgcdist_core(yo_n, xo_n, yi(ix, iy + k), xi(ix, iy + k), 2)) ** 2
+                    w(2, 2) = (1.0d0 / dgcdist_core(yo_n, xo_n, yi(ix + k, iy + k), xi(ix + k, iy + k), 2)) ** 2
                 end if
 
                 do ng = 1, ngrd
@@ -406,7 +405,7 @@ subroutine drcm2points(ngrd, nyi, nxi, yi, xi, fi, nxyo, yo, xo, fo, xmsg, opt, 
                 if (row_max_lat(iy) >= y_lower .and. row_min_lat(iy) <= y_upper) then
                     do ix = 1, nxi
                         if (yi(ix, iy) >= y_lower .and. yi(ix, iy) <= y_upper) then
-                            dist = dgcdist(yo_n, xo_n, yi(ix, iy), xi(ix, iy), 2)
+                            dist = dgcdist_core(yo_n, xo_n, yi(ix, iy), xi(ix, iy), 2)
                             if (dist <= dkm .and. dist > 0.0d0) then
                                 ncand = ncand + 1
                                 candidate_ix(ncand) = ix

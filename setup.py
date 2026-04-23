@@ -232,8 +232,21 @@ class MesonBuildExt(build_ext):
                 "build",  # build directory inside module_path
                 ".",  # source is current directory (module_path)
                 "--buildtype=release",
-                "-Db_lto=true",
             ]
+
+            # Conda-forge toolchains already provide aggressive release flags.
+            # Leaving Meson LTO enabled has caused two packaging-specific
+            # failures:
+            # 1. Linux static archives of Fortran helper objects were created
+            #    with plain `ar`, which left unresolved symbols behind.
+            # 2. macOS Meson configure mis-detected the linker under the
+            #    conda-build toolchain environment.
+            # Keep local editable/wheel builds on LTO, but turn it off under
+            # conda-build for cross-platform package stability.
+            if CONDA_BUILD_MODE:
+                setup_cmd.append("-Db_lto=false")
+            else:
+                setup_cmd.append("-Db_lto=true")
 
             # For wheel builds, configure custom install directory
             if not self.inplace and hasattr(self, "build_lib") and self.build_lib:
@@ -302,6 +315,24 @@ class MesonBuildExt(build_ext):
                     )
                     conda_bin = os.path.join(conda_prefix, "bin")
                     env["PATH"] = f"{conda_bin}:{current_path}"
+
+                # Meson should detect its own linker / archiver from the
+                # compiler driver. On conda-build macOS these environment
+                # variables can cause Meson to treat `ar` as the linker during
+                # configure.
+                if CONDA_BUILD_MODE and system == "Darwin":
+                    for key in (
+                        "AR",
+                        "LD",
+                        "LDSHARED",
+                        "CC_LD",
+                        "CXX_LD",
+                        "FC_LD",
+                        "F77_LD",
+                        "F90_LD",
+                    ):
+                        if key in env:
+                            env.pop(key, None)
 
             subprocess.run(setup_cmd, cwd=str(module_path), check=True, env=env)
 

@@ -15,8 +15,7 @@ build:
 
 requirements:
   build:
-    - {{ stdlib('m2w64_c') }}  # [win]
-    - {{ stdlib('c') }}  # [not win]
+    - {{ stdlib('c') }}
     - {{ compiler('c') }}
     - {{ compiler('fortran') }}
   host:
