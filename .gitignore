@@ -29,6 +29,7 @@ wheels/
 *.egg
 .conda-smoke/
 .pkg-audit/
+recipe-local/
 
 # Meson build directories
 **/build/
