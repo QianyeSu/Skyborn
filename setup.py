@@ -275,10 +275,52 @@ class MesonBuildExt(build_ext):
                     # Windows conda environment setup
                     conda_bin = os.path.join(conda_prefix, "bin")
                     conda_library_bin = os.path.join(conda_prefix, "Library", "bin")
-                    env["PATH"] = f"{conda_bin};{conda_library_bin};{current_path}"
+                    mingw_bin = os.path.join(
+                        conda_prefix, "Library", "mingw-w64", "bin"
+                    )
+                    usr_bin = os.path.join(conda_prefix, "Library", "usr", "bin")
+                    path_entries = [conda_bin, conda_library_bin, mingw_bin, usr_bin]
+                    env["PATH"] = ";".join(path_entries + [current_path])
                     print(
                         f"Enhanced PATH for Windows conda environment: {conda_prefix}"
                     )
+
+                    if CONDA_BUILD_MODE:
+                        # conda-build activation can still point CC/CXX at MSVC on
+                        # Windows even when gcc/gfortran packages are installed.
+                        # Meson then mixes `cl/link` with MinGW Fortran objects and
+                        # fails to link `gfortran.lib`. Keep the Meson subprocess on
+                        # one MinGW toolchain so mixed-language extensions link
+                        # consistently under conda-forge.
+                        toolchain = {
+                            "CC": "x86_64-w64-mingw32-gcc.exe",
+                            "CXX": "x86_64-w64-mingw32-g++.exe",
+                            "FC": "x86_64-w64-mingw32-gfortran.exe",
+                            "F77": "x86_64-w64-mingw32-gfortran.exe",
+                            "F90": "x86_64-w64-mingw32-gfortran.exe",
+                            "AR": "x86_64-w64-mingw32-ar.exe",
+                            "RANLIB": "x86_64-w64-mingw32-ranlib.exe",
+                        }
+                        resolved = {}
+                        for key, exe in toolchain.items():
+                            path = shutil.which(exe, path=env["PATH"])
+                            if path:
+                                env[key] = path
+                                resolved[key] = path
+
+                        if {"CC", "CXX", "FC"} <= resolved.keys():
+                            print(
+                                "Overriding Windows conda-build compiler environment for Meson: "
+                                + ", ".join(
+                                    f"{key}={resolved[key]}"
+                                    for key in ("CC", "CXX", "FC")
+                                )
+                            )
+                        else:
+                            print(
+                                "Warning: could not fully resolve MinGW compilers for Meson on Windows; "
+                                "keeping existing compiler environment"
+                            )
 
                 elif system in ["Linux", "Darwin"]:
                     # Linux and macOS conda environment setup
