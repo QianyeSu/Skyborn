@@ -8,9 +8,6 @@ py_mod = import('python')
 py = py_mod.find_installation('python', pure: false)
 py_dep = py.dependency()
 
-# Find OpenMP dependency
-openmp_dep = dependency('openmp', required: false)
-
 # Install Python module files
 py.install_sources([
     '__init__.py',
@@ -67,6 +64,23 @@ host_cpu = host_machine.cpu_family()
 
 message('Host system: ' + host_system)
 message('Host CPU family: ' + host_cpu)
+
+openmp_dependencies = []
+openmp_link_args = []
+if host_system == 'windows'
+    # Meson can inject MSVC-style `/openmp` into MinGW Fortran builds here.
+    # Keep Windows on explicit GCC-compatible flags instead.
+    openmp_link_args += ['-fopenmp']
+    message('Using explicit -fopenmp link arguments on Windows')
+else
+    openmp_dep = dependency('openmp', required: false)
+    if openmp_dep.found()
+        openmp_dependencies += openmp_dep
+        message('Using OpenMP dependency for parallel processing')
+    else
+        warning('OpenMP dependency not found - relying on compiler flags only')
+    endif
+endif
 
 # Optimization flags
 fortran_args = [
@@ -183,13 +197,7 @@ else:
     endif
 
     # Build dependency list
-    dependencies = [py_dep]
-    if openmp_dep.found()
-        dependencies += openmp_dep
-        message('Using OpenMP for parallel processing')
-    else
-        warning('OpenMP not found - building without parallel support')
-    endif
+    dependencies = [py_dep] + openmp_dependencies
 
     # Build the GPI extension module
     # Use subdir parameter to install directly into the Python package structure
@@ -202,6 +210,7 @@ else:
         ],
         include_directories: inc_np,
         dependencies: dependencies,
+        link_args: openmp_link_args,
         fortran_args: fortran_args,
         c_args: c_args,
         install: true,   # Install to custom location if provided
