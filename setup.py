@@ -351,6 +351,85 @@ class MesonBuildExt(build_ext):
                             f"Enhanced PATH and DYLD_LIBRARY_PATH for macOS conda environment: {conda_prefix}"
                         )
 
+                        if CONDA_BUILD_MODE:
+                            # Meson's Fortran toolchain probe still needs a working
+                            # archiver on macOS. Keep the compiler-provided `ar` and
+                            # `ranlib` visible, but continue clearing the linker
+                            # variables below that can cause Meson to mis-detect `ar`
+                            # itself as the linker.
+                            ar_candidates = []
+                            ranlib_candidates = []
+
+                            for compiler_key in ("CC", "CXX", "FC", "F77", "F90"):
+                                compiler_path = env.get(compiler_key)
+                                if not compiler_path:
+                                    continue
+
+                                compiler_name = os.path.basename(compiler_path)
+                                compiler_dir = os.path.dirname(compiler_path)
+                                if compiler_name.endswith(
+                                    ("clang", "clang++", "gfortran", "gcc", "g++")
+                                ):
+                                    prefix = compiler_name.rsplit("-", 1)[0] + "-"
+                                    ar_candidates.extend(
+                                        [
+                                            os.path.join(compiler_dir, prefix + "ar"),
+                                            os.path.join(
+                                                compiler_dir, prefix + "gcc-ar"
+                                            ),
+                                        ]
+                                    )
+                                    ranlib_candidates.append(
+                                        os.path.join(compiler_dir, prefix + "ranlib")
+                                    )
+
+                            ar_candidates.extend(
+                                [
+                                    os.path.join(conda_bin, "llvm-ar"),
+                                    os.path.join(conda_bin, "ar"),
+                                    "/usr/bin/ar",
+                                ]
+                            )
+                            ranlib_candidates.extend(
+                                [
+                                    os.path.join(conda_bin, "llvm-ranlib"),
+                                    os.path.join(conda_bin, "ranlib"),
+                                    "/usr/bin/ranlib",
+                                ]
+                            )
+
+                            ar_path = next(
+                                (
+                                    candidate
+                                    for candidate in ar_candidates
+                                    if os.path.exists(candidate)
+                                ),
+                                None,
+                            )
+                            ranlib_path = next(
+                                (
+                                    candidate
+                                    for candidate in ranlib_candidates
+                                    if os.path.exists(candidate)
+                                ),
+                                None,
+                            )
+
+                            if ar_path:
+                                env["AR"] = ar_path
+                            if ranlib_path:
+                                env["RANLIB"] = ranlib_path
+
+                            if ar_path or ranlib_path:
+                                print(
+                                    "Resolved macOS archiver tools for Meson: "
+                                    + ", ".join(
+                                        f"{key}={env[key]}"
+                                        for key in ("AR", "RANLIB")
+                                        if key in env
+                                    )
+                                )
+
                 else:
                     print(
                         f"Warning: Unknown platform {system}, using basic conda PATH setup"
@@ -364,7 +443,6 @@ class MesonBuildExt(build_ext):
                 # configure.
                 if CONDA_BUILD_MODE and system == "Darwin":
                     for key in (
-                        "AR",
                         "LD",
                         "LDSHARED",
                         "CC_LD",

@@ -42,6 +42,7 @@ requirements:
     - scipy
     - scikit-learn
     - dask
+    - libgomp  # [win]
 
 test:
   requires:
