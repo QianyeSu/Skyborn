@@ -344,40 +344,65 @@ else:
     # Keep shared support libraries aligned with the real dependency graph so
     # edits to one helper do not force unrelated interpolation extensions to
     # relink. `rcm_geodesy` is the only helper shared by both kernels.
-    rcm_geodesy_support = static_library(
-        'rcm_geodesy_support',
-        ['fortran/rcm_geodesy.f90'],
-        fortran_args: fortran_args,
-        build_by_default: true,
-        install: false,
-    )
+    #
+    # On Windows/MinGW, Meson + GNU LTO has been less reliable when these
+    # helpers are archived separately and then re-linked into the final .pyd.
+    # In that case, compile the helpers directly into each extension target to
+    # avoid unresolved external references during conda-forge style builds.
+    rcm2points_support_sources = []
+    rcm2rgrid_support_sources = []
+    rcm2points_support_libs = []
+    rcm2rgrid_support_libs = []
 
-    rcm2points_support = static_library(
-        'rcm2points_support',
-        ['fortran/linint2.f90'],
-        fortran_args: fortran_args,
-        build_by_default: true,
-        install: false,
-    )
+    if host_system == 'windows'
+        rcm2points_support_sources = [
+            'fortran/linint2.f90',
+            'fortran/rcm_geodesy.f90',
+        ]
+        rcm2rgrid_support_sources = [
+            'fortran/linmsg_dp.f90',
+            'fortran/rcm_geodesy.f90',
+        ]
+    else
+        rcm_geodesy_support = static_library(
+            'rcm_geodesy_support',
+            ['fortran/rcm_geodesy.f90'],
+            fortran_args: fortran_args,
+            build_by_default: true,
+            install: false,
+        )
 
-    rcm2rgrid_support = static_library(
-        'rcm2rgrid_support',
-        ['fortran/linmsg_dp.f90'],
-        fortran_args: fortran_args,
-        build_by_default: true,
-        install: false,
-    )
+        rcm2points_support = static_library(
+            'rcm2points_support',
+            ['fortran/linint2.f90'],
+            fortran_args: fortran_args,
+            build_by_default: true,
+            install: false,
+        )
+
+        rcm2rgrid_support = static_library(
+            'rcm2rgrid_support',
+            ['fortran/linmsg_dp.f90'],
+            fortran_args: fortran_args,
+            build_by_default: true,
+            install: false,
+        )
+
+        rcm2points_support_libs = [rcm2points_support, rcm_geodesy_support]
+        rcm2rgrid_support_libs = [rcm2rgrid_support, rcm_geodesy_support]
+    endif
 
     # Build the rcm2points extension module
     rcm2points_ext = py.extension_module(
         'rcm2points',
         [
             'fortran/rcm2points.f90',
+            rcm2points_support_sources,
             rcm2points_sources,
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
-        link_with: [rcm2points_support, rcm_geodesy_support],
+        link_with: rcm2points_support_libs,
         fortran_args: fortran_args,
         c_args: c_args,
         install: true,
@@ -390,11 +415,12 @@ else:
         'rcm2rgrid',
         [
             'fortran/rcm2rgrid.f90',
+            rcm2rgrid_support_sources,
             rcm2rgrid_sources,
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
-        link_with: [rcm2rgrid_support, rcm_geodesy_support],
+        link_with: rcm2rgrid_support_libs,
         fortran_args: fortran_args,
         c_args: c_args,
         install: true,
