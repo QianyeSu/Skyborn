@@ -359,8 +359,19 @@ class MesonBuildExt(build_ext):
                             # expects and let its default discovery succeed.
                             import tempfile
 
-                            ar_candidates = []
-                            ranlib_candidates = []
+                            # Prefer the generic LLVM/binutils programs shipped by
+                            # conda-build. The prefixed cross-tool wrappers can
+                            # exist but still confuse Meson's `--version`
+                            # detection on macOS when a mixed C/Fortran project
+                            # probes the static archiver during `project()`.
+                            ar_candidates = [
+                                os.path.join(conda_bin, "llvm-ar"),
+                                os.path.join(conda_bin, "ar"),
+                            ]
+                            ranlib_candidates = [
+                                os.path.join(conda_bin, "llvm-ranlib"),
+                                os.path.join(conda_bin, "ranlib"),
+                            ]
 
                             for compiler_key in ("CC", "CXX", "FC", "F77", "F90"):
                                 compiler_path = env.get(compiler_key)
@@ -392,44 +403,30 @@ class MesonBuildExt(build_ext):
                                         ]
                                     )
 
-                            ar_candidates.extend(
-                                [
-                                    os.path.join(conda_bin, "llvm-ar"),
-                                    os.path.join(conda_bin, "ar"),
-                                    "/usr/bin/ar",
-                                ]
-                            )
-                            ranlib_candidates.extend(
-                                [
-                                    os.path.join(conda_bin, "llvm-ranlib"),
-                                    os.path.join(conda_bin, "ranlib"),
-                                    "/usr/bin/ranlib",
-                                ]
-                            )
+                            ar_candidates.append("/usr/bin/ar")
+                            ranlib_candidates.append("/usr/bin/ranlib")
 
-                            ar_path = next(
-                                (
-                                    candidate
-                                    for candidate in ar_candidates
-                                    if os.path.exists(candidate)
-                                ),
-                                None,
-                            )
-                            ranlib_path = next(
-                                (
-                                    candidate
-                                    for candidate in ranlib_candidates
-                                    if os.path.exists(candidate)
-                                ),
-                                None,
-                            )
+                            def _pick_first_executable(candidates):
+                                seen = set()
+                                for candidate in candidates:
+                                    if not candidate or candidate in seen:
+                                        continue
+                                    seen.add(candidate)
+                                    if os.path.exists(candidate) and os.access(
+                                        candidate, os.X_OK
+                                    ):
+                                        return candidate
+                                return None
+
+                            ar_path = _pick_first_executable(ar_candidates)
+                            ranlib_path = _pick_first_executable(ranlib_candidates)
 
                             if ar_path or ranlib_path:
                                 shim_dir = tempfile.mkdtemp(
                                     prefix="skyborn-meson-tools-"
                                 )
 
-                                def _write_tool_shim(name, target):
+                                def _write_tool_shim(name, target, version_banner=None):
                                     if not target:
                                         return None
                                     shim_path = os.path.join(shim_dir, name)
@@ -437,18 +434,33 @@ class MesonBuildExt(build_ext):
                                         shim_path, "w", encoding="utf-8", newline="\n"
                                     ) as handle:
                                         handle.write("#!/bin/sh\n")
+                                        if version_banner:
+                                            handle.write(
+                                                'if [ "x$1" = "x--version" ]; then\n'
+                                            )
+                                            handle.write(f'  echo "{version_banner}"\n')
+                                            handle.write("  exit 0\n")
+                                            handle.write("fi\n")
                                         handle.write(f'exec "{target}" "$@"\n')
                                     os.chmod(shim_path, 0o755)
                                     return shim_path
 
                                 created = []
                                 for shim_name in ("ar", "gcc-ar", "gar"):
-                                    shim_path = _write_tool_shim(shim_name, ar_path)
+                                    shim_path = _write_tool_shim(
+                                        shim_name,
+                                        ar_path,
+                                        "GNU ar (Skyborn Meson shim)",
+                                    )
                                     if shim_path:
                                         created.append(f"{shim_name}={shim_path}")
 
                                 for shim_name in ("ranlib", "gcc-ranlib"):
-                                    shim_path = _write_tool_shim(shim_name, ranlib_path)
+                                    shim_path = _write_tool_shim(
+                                        shim_name,
+                                        ranlib_path,
+                                        "GNU ranlib (Skyborn Meson shim)",
+                                    )
                                     if shim_path:
                                         created.append(f"{shim_name}={shim_path}")
 
@@ -456,6 +468,10 @@ class MesonBuildExt(build_ext):
                                 print(
                                     "Prepared macOS Meson tool shims: "
                                     + ", ".join(created)
+                                )
+                                print(
+                                    "Selected macOS archiver tools for Meson: "
+                                    f"ar_target={ar_path}, ranlib_target={ranlib_path}"
                                 )
 
                 else:
