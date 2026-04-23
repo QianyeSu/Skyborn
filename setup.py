@@ -352,11 +352,13 @@ class MesonBuildExt(build_ext):
                         )
 
                         if CONDA_BUILD_MODE:
-                            # Meson's Fortran toolchain probe still needs a working
-                            # archiver on macOS. Keep the compiler-provided `ar` and
-                            # `ranlib` visible, but continue clearing the linker
-                            # variables below that can cause Meson to mis-detect `ar`
-                            # itself as the linker.
+                            # Meson on macOS + gfortran may probe for GNU-style tool
+                            # names such as `gcc-ar` and plain `ar`. Exporting `AR`
+                            # directly causes Meson to treat it as a linker candidate,
+                            # so instead provide tiny PATH shims with the names Meson
+                            # expects and let its default discovery succeed.
+                            import tempfile
+
                             ar_candidates = []
                             ranlib_candidates = []
 
@@ -379,8 +381,15 @@ class MesonBuildExt(build_ext):
                                             ),
                                         ]
                                     )
-                                    ranlib_candidates.append(
-                                        os.path.join(compiler_dir, prefix + "ranlib")
+                                    ranlib_candidates.extend(
+                                        [
+                                            os.path.join(
+                                                compiler_dir, prefix + "ranlib"
+                                            ),
+                                            os.path.join(
+                                                compiler_dir, prefix + "gcc-ranlib"
+                                            ),
+                                        ]
                                     )
 
                             ar_candidates.extend(
@@ -415,19 +424,38 @@ class MesonBuildExt(build_ext):
                                 None,
                             )
 
-                            if ar_path:
-                                env["AR"] = ar_path
-                            if ranlib_path:
-                                env["RANLIB"] = ranlib_path
-
                             if ar_path or ranlib_path:
+                                shim_dir = tempfile.mkdtemp(
+                                    prefix="skyborn-meson-tools-"
+                                )
+
+                                def _write_tool_shim(name, target):
+                                    if not target:
+                                        return None
+                                    shim_path = os.path.join(shim_dir, name)
+                                    with open(
+                                        shim_path, "w", encoding="utf-8", newline="\n"
+                                    ) as handle:
+                                        handle.write("#!/bin/sh\n")
+                                        handle.write(f'exec "{target}" "$@"\n')
+                                    os.chmod(shim_path, 0o755)
+                                    return shim_path
+
+                                created = []
+                                for shim_name in ("ar", "gcc-ar", "gar"):
+                                    shim_path = _write_tool_shim(shim_name, ar_path)
+                                    if shim_path:
+                                        created.append(f"{shim_name}={shim_path}")
+
+                                for shim_name in ("ranlib", "gcc-ranlib"):
+                                    shim_path = _write_tool_shim(shim_name, ranlib_path)
+                                    if shim_path:
+                                        created.append(f"{shim_name}={shim_path}")
+
+                                env["PATH"] = f"{shim_dir}:{env['PATH']}"
                                 print(
-                                    "Resolved macOS archiver tools for Meson: "
-                                    + ", ".join(
-                                        f"{key}={env[key]}"
-                                        for key in ("AR", "RANLIB")
-                                        if key in env
-                                    )
+                                    "Prepared macOS Meson tool shims: "
+                                    + ", ".join(created)
                                 )
 
                 else:
