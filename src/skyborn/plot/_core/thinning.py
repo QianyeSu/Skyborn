@@ -82,31 +82,13 @@ def _thin_ncl_mapped_candidates_python(mapped_points, spacing_frac):
 def _thin_ncl_mapped_candidates(
     mapped_points,
     spacing_frac,
-    *,
-    native_thinner=None,
-    try_native_thin_fn=None,
-    on_error=None,
 ):
-    """Thin mapped candidates with optional native acceleration."""
+    """Thin mapped candidates using the Python reference implementation."""
     mapped_points = np.asarray(mapped_points, dtype=float)
     if len(mapped_points) == 0:
         return []
 
     spacing_frac = max(float(spacing_frac), 1e-6)
-    if (
-        native_thinner is not None
-        and try_native_thin_fn is not None
-        and on_error is not None
-    ):
-        selected = try_native_thin_fn(
-            native_thinner=native_thinner,
-            mapped_points=mapped_points,
-            spacing_frac=spacing_frac,
-            on_error=on_error,
-        )
-        if selected is not None:
-            return selected
-
     return _thin_ncl_mapped_candidates_python(mapped_points, spacing_frac)
 
 
