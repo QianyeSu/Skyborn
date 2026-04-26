@@ -2238,10 +2238,6 @@ class TestScatterCoverage:
         assert (
             _resolve_placement(
                 None,
-                grid_like=False,
-                where=None,
-                mask=None,
-                distance=None,
                 cell_geometry=None,
             )
             == "points"
@@ -2250,10 +2246,6 @@ class TestScatterCoverage:
         with pytest.raises(ValueError, match="placement must be one of"):
             _resolve_placement(
                 "invalid",
-                grid_like=True,
-                where=None,
-                mask=None,
-                distance=None,
                 cell_geometry={"kind": np.array("rectilinear")},
             )
 
@@ -2262,10 +2254,6 @@ class TestScatterCoverage:
         ):
             _resolve_placement(
                 "cells",
-                grid_like=True,
-                where=np.array([[True]]),
-                mask=None,
-                distance=None,
                 cell_geometry=None,
             )
 
