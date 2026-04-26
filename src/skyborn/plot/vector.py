@@ -44,7 +44,7 @@ from ._shared.style import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover
-    from matplotlib.axes import Axes
+    from matplotlib.axes import Axes  # pragma: no cover
 
 __all__ = [
     "CurlyVectorKey",
