@@ -12,10 +12,10 @@ from .types import CoordinateShape, TargetDims
 
 def _filled_float_array(values: Any) -> np.ndarray:
     """Return a plain float array with masked values replaced by NaN."""
-    array = np.ma.asarray(values, dtype=float)
-    if np.ma.isMaskedArray(array):
+    if np.ma.isMaskedArray(values):
+        array = np.ma.asarray(values, dtype=float)
         return np.asarray(array.filled(np.nan), dtype=float)
-    return np.asarray(array, dtype=float)
+    return np.asarray(values, dtype=float)
 
 
 _filled_scalar_field_array = _filled_float_array
@@ -23,11 +23,11 @@ _filled_scalar_field_array = _filled_float_array
 
 def _subset_ready_array(value: Any) -> np.ndarray:
     """Normalize one array so it can be subset safely by retained points."""
-    array = np.ma.asarray(value)
-    if np.ma.isMaskedArray(array):
+    if np.ma.isMaskedArray(value):
+        array = np.ma.asarray(value)
         fill_value = np.nan if np.issubdtype(array.dtype, np.number) else None
         return np.asarray(array.filled(fill_value))
-    return np.asarray(array)
+    return np.asarray(value)
 
 
 def _maybe_squeezed_dataarray(value: Any) -> xr.DataArray | None:
