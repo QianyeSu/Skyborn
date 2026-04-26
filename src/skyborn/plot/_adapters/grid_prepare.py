@@ -65,30 +65,6 @@ def _build_curvilinear_target_grid(x, y, target_shape):
     return lon1d, lat1d
 
 
-def _rcm2rgrid_2d(lat2d, lon2d, field, lat1d, lon1d):
-    try:
-        from skyborn.interp import rcm2rgrid
-    except ImportError as err:
-        raise ImportError(
-            "Curvilinear vector support requires skyborn.interp.rcm2rgrid to be available."
-        ) from err
-
-    field = np.asarray(field, dtype=float)
-    regridded = rcm2rgrid(
-        np.asarray(lat2d, dtype=float),
-        np.asarray(lon2d, dtype=float),
-        field[np.newaxis, :, :],
-        np.asarray(lat1d, dtype=float),
-        np.asarray(lon1d, dtype=float),
-        msg=np.nan,
-        meta=False,
-    )
-    regridded = np.asarray(regridded, dtype=float)
-    if regridded.ndim == 3:
-        regridded = regridded[0]
-    return regridded
-
-
 def _rcm2rgrid_fields(lat2d, lon2d, fields, lat1d, lon1d):
     try:
         from skyborn.interp import rcm2rgrid
