@@ -43,7 +43,7 @@ from ._shared.style import (
     _resolve_curly_style_aliases,
 )
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from matplotlib.axes import Axes
 
 __all__ = [
