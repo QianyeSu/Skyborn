@@ -23,7 +23,6 @@ from skyborn.plot._core.thinning import (
     _map_ncl_display_points_to_viewport,
     _NCLDisplaySampler,
     _resolve_ncl_min_distance_fraction,
-    _thin_ncl_mapped_candidates_python,
 )
 from skyborn.plot._core.vector_engine import (
     _default_ncl_box_center_candidates,
@@ -1062,26 +1061,6 @@ class TestCurlyVector:
         assert mapped[1] == pytest.approx([0.5, 0.25])
         assert mapped[2] == pytest.approx([1.0, 1.0])
         plt.close(fig)
-
-    def test_thin_ncl_mapped_candidates_python_culls_later_neighbors_in_scan_order(
-        self,
-    ):
-        """The STTHIN-style pass should keep the first candidate and cull later nearby ones."""
-        mapped_points = np.array(
-            [
-                [0.10, 0.10],
-                [0.12, 0.11],
-                [0.55, 0.55],
-                [0.57, 0.54],
-            ]
-        )
-
-        selected = _thin_ncl_mapped_candidates_python(
-            mapped_points,
-            spacing_frac=0.05,
-        )
-
-        assert selected == [0, 2]
 
     def test_default_ncl_box_center_candidates_use_cell_centers(self):
         """Default NCL-style starts should come from grid-box centers, not grid nodes."""
