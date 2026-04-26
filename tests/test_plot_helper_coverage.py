@@ -32,7 +32,6 @@ from skyborn.plot._adapters.grid_prepare import (
     _build_curvilinear_target_grid,
     _maybe_as_scalar_field,
     _prepare_source_vector_grid,
-    _rcm2rgrid_2d,
     _rcm2rgrid_fields,
     _regrid_curvilinear_vectors,
     _wrap_periodic_grid_queries,
@@ -47,21 +46,14 @@ from skyborn.plot._artists.vector_artists import (
 )
 from skyborn.plot._artists.vector_key_artist import CurlyVectorKey
 from skyborn.plot._core.geometry import (
-    _acceptable_ncl_display_curve,
     _candidate_data_from_display_step,
-    _chaikin_smooth_display_curve,
-    _curve_shape_is_acceptable,
-    _curve_to_display,
     _display_points_to_data,
     _display_step_to_data,
     _display_to_data,
     _evaluate_ncl_display_curve,
     _finite_difference_step,
-    _fit_single_bend_display_curve,
     _local_display_jacobian,
     _point_at_arc_distance_from_end,
-    _point_at_arc_fraction,
-    _postprocess_ncl_curve,
     _tip_display_geometry,
     _tip_display_geometry_from_display_curve,
     _trim_display_curve_from_end,
@@ -73,10 +65,6 @@ from skyborn.plot._core.native import (
     _call_native_trace_ncl_direction,
 )
 from skyborn.plot._core.result import CurlyVectorPlotSet
-from skyborn.plot._core.sampling import (
-    _sample_grid_field_array_python,
-    _sample_grid_field_python,
-)
 from skyborn.plot._core.scatter_engine import (
     _generate_cell_candidates,
     _resolve_placement,
@@ -125,10 +113,6 @@ from skyborn.plot.vector import (
     _regrid_non_uniform_vectors_to_uniform,
     curly_vector,
 )
-
-
-class _StopSampling(Exception):
-    """Marker exception for masked sampling tests."""
 
 
 class _BadTransform:
@@ -425,7 +409,7 @@ class TestGridPrepareAndEntryHelpers:
                 **base_kwargs,
             )
 
-    def test_rcm2rgrid_helpers_handle_import_errors_and_shape_normalization(self):
+    def test_rcm2rgrid_fields_handles_import_errors_and_shape_normalization(self):
         real_import = builtins.__import__
 
         def _raising_import(name, *args, **kwargs):
@@ -434,14 +418,6 @@ class TestGridPrepareAndEntryHelpers:
             return real_import(name, *args, **kwargs)
 
         with patch("builtins.__import__", side_effect=_raising_import):
-            with pytest.raises(ImportError, match="requires skyborn.interp.rcm2rgrid"):
-                _rcm2rgrid_2d(
-                    np.zeros((2, 2)),
-                    np.zeros((2, 2)),
-                    np.zeros((2, 2)),
-                    np.array([0.0, 1.0]),
-                    np.array([0.0, 1.0]),
-                )
             with pytest.raises(ImportError, match="requires skyborn.interp.rcm2rgrid"):
                 _rcm2rgrid_fields(
                     np.zeros((2, 2)),
@@ -458,18 +434,6 @@ class TestGridPrepareAndEntryHelpers:
             )
         )
         with patch.dict(sys.modules, {"skyborn.interp": fake_interp}):
-            regridded_2d = _rcm2rgrid_2d(
-                np.zeros((2, 2)),
-                np.zeros((2, 2)),
-                np.array([[1.0, 2.0], [3.0, 4.0]]),
-                np.array([0.0, 1.0]),
-                np.array([0.0, 1.0]),
-            )
-            np.testing.assert_allclose(
-                regridded_2d,
-                np.array([[1.0, 2.0], [3.0, 4.0]]),
-            )
-
             fields = _rcm2rgrid_fields(
                 np.zeros((2, 2)),
                 np.zeros((2, 2)),
@@ -517,126 +481,17 @@ class TestGridPrepareAndEntryHelpers:
         np.testing.assert_allclose(scalar_reg, np.ones((2, 3)) * 3.0)
 
 
-class TestSamplingHelpers:
-    def test_sample_grid_field_python_handles_out_of_bounds_and_masked_paths(self):
-        grid = _make_test_grid()
-        field = np.arange(9.0).reshape(3, 3)
-
-        assert (
-            _sample_grid_field_python(
-                grid,
-                field,
-                -1.0,
-                0.5,
-                interpgrid_fn=lambda field, xi, yi: 0.0,
-                terminate_trajectory_exc=_StopSampling,
-            )
-            is None
-        )
-
-        masked = np.ma.array(field, mask=False)
-
-        assert (
-            _sample_grid_field_python(
-                grid,
-                masked,
-                0.5,
-                0.5,
-                interpgrid_fn=lambda field, xi, yi: (_ for _ in ()).throw(
-                    _StopSampling()
-                ),
-                terminate_trajectory_exc=_StopSampling,
-            )
-            is None
-        )
-        assert (
-            _sample_grid_field_python(
-                grid,
-                masked,
-                0.5,
-                0.5,
-                interpgrid_fn=lambda field, xi, yi: np.ma.masked,
-                terminate_trajectory_exc=_StopSampling,
-            )
-            is None
-        )
-        assert _sample_grid_field_python(
-            grid,
-            masked,
-            0.5,
-            0.5,
-            interpgrid_fn=lambda field, xi, yi: 7.0,
-            terminate_trajectory_exc=_StopSampling,
-        ) == pytest.approx(7.0)
-
-    def test_sample_grid_field_python_returns_none_for_nonfinite_bilinear_value(self):
-        grid = _make_test_grid()
-        field = np.arange(9.0).reshape(3, 3)
-        field[1, 1] = np.nan
-
-        assert (
-            _sample_grid_field_python(
-                grid,
-                field,
-                0.5,
-                0.5,
-                interpgrid_fn=lambda field, xi, yi: 0.0,
-                terminate_trajectory_exc=_StopSampling,
-            )
-            is None
-        )
-
-    def test_sample_grid_field_array_python_handles_empty_1d_and_invalid_points(self):
-        grid = _make_test_grid()
-        field = np.arange(9.0).reshape(3, 3)
-
-        empty = _sample_grid_field_array_python(
-            grid,
-            field,
-            np.empty((0, 2)),
-            interpgrid_fn=lambda field, xi, yi: np.array([], dtype=float),
-        )
-        assert empty.size == 0
-
-        one_point = _sample_grid_field_array_python(
-            grid,
-            field,
-            np.array([0.5, 0.5]),
-            interpgrid_fn=lambda field, xi, yi: np.array([1.25], dtype=float),
-        )
-        np.testing.assert_allclose(one_point, np.array([1.25]))
-
-        invalid = _sample_grid_field_array_python(
-            grid,
-            field,
-            np.array([[-5.0, -5.0], [9.0, 9.0]]),
-            interpgrid_fn=lambda field, xi, yi: np.array([], dtype=float),
-        )
-        assert np.isnan(invalid).all()
-
-    def test_sample_grid_field_array_python_replaces_nonfinite_samples(self):
-        grid = _make_test_grid()
-        field = np.arange(9.0).reshape(3, 3)
-        points = np.array([[0.5, 0.5], [1.0, 1.0]])
-
-        sampled = _sample_grid_field_array_python(
-            grid,
-            field,
-            points,
-            interpgrid_fn=lambda field, xi, yi: np.ma.array([3.5, np.nan]),
-        )
-
-        assert sampled[0] == pytest.approx(3.5)
-        assert np.isnan(sampled[1])
-
-
 class TestNativeHelpers:
     def test_call_native_sample_grid_field_handles_masked_and_nonfinite_results(self):
         grid = SimpleNamespace(x_origin=1.0, y_origin=2.0, dx=3.0, dy=4.0)
 
+        def _masked_sampler(**kwargs):
+            assert np.isnan(kwargs["field"]).all()
+            return np.nan
+
         assert (
             _call_native_sample_grid_field(
-                lambda **kwargs: 1.0,
+                _masked_sampler,
                 grid,
                 np.ma.array(np.ones((2, 2)), mask=True),
                 1.0,
@@ -803,26 +658,6 @@ class TestNativeHelpers:
 
 
 class TestGeometryHelpers:
-    def test_curve_to_display_uses_sampler_then_falls_back_to_transform(self):
-        curve = np.array([[0.0, 0.0], [1.0, 1.0]])
-        transform = Affine2D().scale(2.0)
-
-        sampler = SimpleNamespace(sample_display_points=lambda curve: curve + 3.0)
-        np.testing.assert_allclose(
-            _curve_to_display(curve, transform, sampler), curve + 3.0
-        )
-
-        sampler = SimpleNamespace(
-            sample_display_points=lambda curve: (_ for _ in ()).throw(
-                RuntimeError("bad")
-            )
-        )
-        np.testing.assert_allclose(
-            _curve_to_display(curve, transform, sampler), curve * 2.0
-        )
-
-        assert _curve_to_display(curve, _BadTransform(), None) is None
-
     def test_display_points_to_data_validates_inputs_and_inverse_transform(self):
         transform = Affine2D().scale(2.0)
 
@@ -865,29 +700,10 @@ class TestGeometryHelpers:
         )
         np.testing.assert_allclose(candidate, np.array([2.0, 3.0]))
 
-    def test_postprocess_curve_and_arc_helpers_cover_edge_cases(self):
-        curve = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]])
-
-        class NoInverseTransform:
-            def transform(self, values):
-                return np.asarray(values, dtype=float)
-
-            def inverted(self):
-                raise RuntimeError("no inverse")
-
-        np.testing.assert_allclose(
-            _postprocess_ncl_curve(curve, NoInverseTransform()), curve
-        )
-
-        with pytest.raises(ValueError, match="at least one point"):
-            _point_at_arc_fraction(np.empty((0, 2)), 0.5)
+    def test_arc_helpers_cover_edge_cases(self):
         with pytest.raises(ValueError, match="at least one point"):
             _point_at_arc_distance_from_end(np.empty((0, 2)), 1.0)
 
-        np.testing.assert_allclose(
-            _point_at_arc_fraction(np.array([[5.0, 6.0]]), 0.5),
-            np.array([5.0, 6.0]),
-        )
         np.testing.assert_allclose(
             _point_at_arc_distance_from_end(np.array([[5.0, 6.0]]), 10.0),
             np.array([5.0, 6.0]),
@@ -908,7 +724,11 @@ class TestGeometryHelpers:
         )
         assert display_curve is None
         assert transform_failed is False
-        assert _curve_shape_is_acceptable(curve, _BadTransform()) is True
+        display_curve, transform_failed = _evaluate_ncl_display_curve(
+            curve, _BadTransform()
+        )
+        assert display_curve is None
+        assert transform_failed is True
 
         assert (
             _tip_display_geometry_from_display_curve(
@@ -960,27 +780,6 @@ class TestGeometryHelpers:
 
     def test_geometry_wrappers_cover_short_curves_and_display_quality_filters(self):
         assert _display_to_data(_BadTransform(), np.array([1.0, 2.0])) is None
-        assert _postprocess_ncl_curve(np.array([[0.0, 0.0]]), _BadTransform()) is None
-
-        short_curve = np.array([[0.0, 0.0], [1.0, 1.0]])
-        np.testing.assert_allclose(
-            _chaikin_smooth_display_curve(short_curve),
-            short_curve,
-        )
-        np.testing.assert_allclose(
-            _fit_single_bend_display_curve(short_curve),
-            short_curve,
-        )
-        degenerate_curve = np.array([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
-        np.testing.assert_allclose(
-            _fit_single_bend_display_curve(degenerate_curve),
-            degenerate_curve,
-        )
-
-        flat_curve = np.array([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
-        np.testing.assert_allclose(
-            _point_at_arc_fraction(flat_curve, 0.5), flat_curve[0]
-        )
 
         single_segment_curve = np.array([[0.0, 0.0], [1.0, 0.0]])
         display_curve, transform_failed = _evaluate_ncl_display_curve(
@@ -989,13 +788,10 @@ class TestGeometryHelpers:
         )
         assert transform_failed is False
         np.testing.assert_allclose(display_curve, single_segment_curve)
-        np.testing.assert_allclose(
-            _acceptable_ncl_display_curve(single_segment_curve, Affine2D()),
-            single_segment_curve,
-        )
 
         invalid_curve = np.array([[0.0, 0.0]])
         assert _evaluate_ncl_display_curve(invalid_curve, Affine2D()) == (None, False)
+        flat_curve = np.array([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
         assert _evaluate_ncl_display_curve(flat_curve, Affine2D()) == (None, False)
 
         tortuous_curve = np.array(
