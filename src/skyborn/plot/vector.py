@@ -7,7 +7,6 @@ Created: 2026-03-01 14:58:56
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Hashable
 from typing import TYPE_CHECKING, Any
 
@@ -77,8 +76,6 @@ _trim_display_curve_from_end = _geometry._trim_display_curve_from_end
 _corrected_ncl_display_origin = _vector_engine._corrected_ncl_display_origin
 _clip_display_step_to_viewport = _vector_engine._clip_display_step_to_viewport
 
-_ISSUED_NATIVE_WARNINGS: set[str] = set()
-_NATIVE_IMPORT_ERROR: Exception | None = None
 _ARRAY_CURLY_VECTOR_KWARG_NAMES = (
     "density",
     "linewidth",
@@ -154,50 +151,15 @@ _extract_regular_grid_from_regridded_vectors = (
 )
 _regrid_cartopy_vectors = _cartopy_adapter._regrid_cartopy_vectors
 
-try:
-    from .nclcurly_native import sample_grid_field as _sample_grid_field_native
-    from .nclcurly_native import (
-        sample_grid_field_array as _sample_grid_field_array_native,
-    )
-    from .nclcurly_native import (
-        thin_mapped_candidates as _thin_ncl_mapped_candidates_native,
-    )
-    from .nclcurly_native import trace_ncl_direction as _trace_ncl_direction_native
-except Exception as err:
-    _NATIVE_IMPORT_ERROR = err
-    _sample_grid_field_native = None
-    _sample_grid_field_array_native = None
-    _thin_ncl_mapped_candidates_native = None
-    _trace_ncl_direction_native = None
-
-
-def _warn_native_once(key: str, message: str) -> None:
-    if key in _ISSUED_NATIVE_WARNINGS:
-        return
-    _ISSUED_NATIVE_WARNINGS.add(key)
-    warnings.warn(message, RuntimeWarning, stacklevel=3)
-
-
-def _warn_if_native_backend_unavailable() -> None:
-    if _NATIVE_IMPORT_ERROR is None:
-        return
-    detail = f"{type(_NATIVE_IMPORT_ERROR).__name__}: {_NATIVE_IMPORT_ERROR}"
-    _warn_native_once(
-        "native_backend_unavailable",
-        "skyborn.plot curly_vector native backend is unavailable "
-        f"({detail}); falling back to the Python implementation.",
-    )
-
-
-def _disable_native_helper(global_name: str, helper_label: str, err: Exception) -> None:
-    globals()[global_name] = None
-    detail = f"{type(err).__name__}: {err}"
-    _warn_native_once(
-        f"{global_name}_failed",
-        "skyborn.plot curly_vector native "
-        f"{helper_label} failed ({detail}); disabling that accelerated path "
-        "for the rest of this session and falling back to Python.",
-    )
+from .nclcurly_native import sample_grid_field as _sample_grid_field_native
+from .nclcurly_native import sample_grid_field_array as _sample_grid_field_array_native
+from .nclcurly_native import (
+    thin_display_candidates as _thin_ncl_display_candidates_native,
+)
+from .nclcurly_native import (
+    thin_mapped_candidates as _thin_ncl_mapped_candidates_native,
+)
+from .nclcurly_native import trace_ncl_direction as _trace_ncl_direction_native
 
 
 def _normalize_ncl_preset(ncl_preset):
@@ -662,7 +624,6 @@ def _curly_vector_ncl(
         min_distance=min_distance,
         allow_non_uniform_grid=allow_non_uniform_grid,
         ncl_preset=ncl_preset,
-        warn_if_native_backend_unavailable_fn=_warn_if_native_backend_unavailable,
         grid_cls=Grid,
         prepare_ncl_display_sampler_fn=_prepare_ncl_display_sampler,
         prepare_ncl_native_trace_context_fn=_prepare_ncl_native_trace_context,
@@ -676,23 +637,15 @@ def _curly_vector_ncl(
 
 
 def _prepare_ncl_native_trace_context(grid, u, v, viewport, display_sampler):
-    if _trace_ncl_direction_native is None or display_sampler is None:
+    if display_sampler is None:
         return None
-    try:
-        return _NCLNativeTraceContext(
-            grid=grid,
-            u=u,
-            v=v,
-            viewport=viewport,
-            display_sampler=display_sampler,
-        )
-    except Exception as err:
-        _warn_native_once(
-            "native_trace_context_failed",
-            "skyborn.plot curly_vector native trace context setup failed "
-            f"({type(err).__name__}: {err}); falling back to Python tracing.",
-        )
-        return None
+    return _NCLNativeTraceContext(
+        grid=grid,
+        u=u,
+        v=v,
+        viewport=viewport,
+        display_sampler=display_sampler,
+    )
 
 
 def _select_ncl_centers(
@@ -718,6 +671,7 @@ def _select_ncl_centers(
         ncl_preset=ncl_preset,
         sample_grid_field_array=_sample_grid_field_array,
         thin_ncl_mapped_candidates=_thin_ncl_mapped_candidates,
+        thin_ncl_display_candidates=_thin_ncl_display_candidates,
     )
 
 
@@ -733,12 +687,19 @@ def _prepare_ncl_center_candidates(grid, magnitude, density, start_points, ncl_p
 
 
 def _thin_ncl_mapped_candidates(mapped_points, spacing_frac):
-    return _thinning._thin_ncl_mapped_candidates(
+    return _native_helpers._call_native_thin_ncl_mapped_candidates(
+        _thin_ncl_mapped_candidates_native,
         mapped_points,
         spacing_frac,
-        native_thinner=_thin_ncl_mapped_candidates_native,
-        try_native_thin_fn=_native_helpers._try_native_thin_ncl_mapped_candidates,
-        on_error=_disable_native_helper,
+    )
+
+
+def _thin_ncl_display_candidates(display_points, viewport, spacing_frac):
+    return _native_helpers._call_native_thin_ncl_display_candidates(
+        _thin_ncl_display_candidates_native,
+        display_points,
+        viewport,
+        spacing_frac,
     )
 
 
@@ -813,15 +774,14 @@ def _trace_ncl_direction_via_native(
     speed_scale,
     native_trace_context=None,
 ):
-    return _native_helpers._try_native_trace_ncl_direction(
-        native_tracer=_trace_ncl_direction_native,
-        native_trace_context=native_trace_context,
-        start_point=start_point,
-        max_length_px=max_length_px,
-        direction_sign=direction_sign,
-        step_px=step_px,
-        speed_scale=speed_scale,
-        on_error=_disable_native_helper,
+    return _native_helpers._call_native_trace_ncl_direction(
+        _trace_ncl_direction_native,
+        native_trace_context,
+        start_point,
+        max_length_px,
+        direction_sign,
+        step_px,
+        speed_scale,
     )
 
 
@@ -922,13 +882,12 @@ def _sample_local_vector_state(grid, u, v, transform, point, display_sampler=Non
 
 
 def _sample_grid_field(grid, field, xd, yd):
-    value = _native_helpers._try_native_sample_grid_field(
-        native_sampler=_sample_grid_field_native,
-        grid=grid,
-        field=field,
-        xd=xd,
-        yd=yd,
-        on_error=_disable_native_helper,
+    value = _native_helpers._call_native_sample_grid_field(
+        _sample_grid_field_native,
+        grid,
+        field,
+        xd,
+        yd,
     )
     if value is not None:
         return value
@@ -952,13 +911,12 @@ def _sample_grid_field_array(grid, field, points):
     if len(points) == 0:
         return sampled
 
-    sampled_native = _native_helpers._try_native_sample_grid_field_array(
-        native_sampler=_sample_grid_field_array_native,
-        grid=grid,
-        field=field,
-        points=points,
-        expected_shape=sampled.shape,
-        on_error=_disable_native_helper,
+    sampled_native = _native_helpers._call_native_sample_grid_field_array(
+        _sample_grid_field_array_native,
+        grid,
+        field,
+        points,
+        sampled.shape,
     )
     if sampled_native is not None:
         return sampled_native
