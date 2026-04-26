@@ -58,15 +58,19 @@ from skyborn.plot._core.geometry import (
     _tip_display_geometry_from_display_curve,
     _trim_display_curve_from_end,
 )
+from skyborn.plot._core.legacy_stream import DomainMap, InvalidIndexError
 from skyborn.plot._core.native import (
     _call_native_sample_grid_field,
     _call_native_sample_grid_field_array,
+    _call_native_thin_ncl_display_candidates,
     _call_native_thin_ncl_mapped_candidates,
     _call_native_trace_ncl_direction,
 )
 from skyborn.plot._core.result import CurlyVectorPlotSet
 from skyborn.plot._core.scatter_engine import (
+    _as_1d_axis,
     _generate_cell_candidates,
+    _prepare_1d_grid_candidates,
     _resolve_placement,
     _scatter_impl,
     _subset_scatter_value,
@@ -74,12 +78,15 @@ from skyborn.plot._core.scatter_engine import (
 from skyborn.plot._core.vector_engine import (
     Grid,
     _build_ncl_curve,
+    _curly_vector_ncl_impl,
     _prepare_ncl_center_candidates,
     _resolve_artist_coordinate_context,
     _resolve_ncl_length_scale,
     _resolve_ncl_reference_length_px,
     _sample_local_vector_state,
+    _select_ncl_centers,
     _trace_ncl_curve,
+    _valid_ncl_center_candidates,
 )
 from skyborn.plot._shared.coords import (
     _axis_coordinate_1d,
@@ -593,6 +600,18 @@ class TestNativeHelpers:
             0.1,
         ) == [1, 0]
 
+    def test_call_native_thin_ncl_display_candidates_handles_none(self):
+        viewport = Bbox.from_bounds(1.0, 2.0, 3.0, 4.0)
+        assert (
+            _call_native_thin_ncl_display_candidates(
+                lambda **kwargs: None,
+                np.array([[1.0, 2.0]]),
+                viewport,
+                0.1,
+            )
+            is None
+        )
+
     def test_call_native_trace_ncl_direction_handles_missing_context_and_shape_validation(
         self,
     ):
@@ -1049,6 +1068,25 @@ class TestVectorArtistHelpers:
         )
         assert polygon.get_linewidth() == pytest.approx(0.5)
 
+    def test_trim_curve_for_open_head_returns_trimmed_curve_when_transform_inverts(
+        self,
+    ):
+        curve = np.array([[0.0, 0.0], [3.0, 0.0]], dtype=float)
+        geometry = {
+            "display_curve": curve.copy(),
+            "base_center_display": np.array([2.0, 0.0], dtype=float),
+        }
+
+        trimmed = _trim_curve_for_open_head(
+            curve,
+            Affine2D(),
+            head_length_px=1.0,
+            open_arrow_geometry_fn=lambda *args, **kwargs: geometry,
+            trim_display_curve_from_end_fn=lambda display_curve, distance: display_curve,
+        )
+
+        np.testing.assert_allclose(trimmed[-1], np.array([2.0, 0.0]))
+
     def test_build_ncl_arrow_artists_dispatches_open_and_filled_heads(self):
         head_segments, polygon = _build_ncl_arrow_artists(
             curve=np.array([[0.0, 0.0], [1.0, 0.0]]),
@@ -1390,6 +1428,13 @@ class TestCoordinateHelpers:
         x2d = np.array([[0.0, 1.0], [0.0, 2.0]])
         y2d = np.array([[10.0, 10.0], [20.0, 20.0]])
         assert _rectilinear_cell_edges(x2d, y2d) is None
+        assert (
+            _rectilinear_cell_edges(
+                np.array([[0.0, 1.0], [0.0, 1.0]]),
+                np.array([[10.0, 10.0], [20.0, 21.0]]),
+            )
+            is None
+        )
 
         with pytest.raises(ValueError, match="non-empty 2D center grid"):
             _center_grid_to_corner_grid(np.array([1.0, 2.0]))
@@ -1566,6 +1611,53 @@ class TestVectorEngineHelpers:
         assert implicit_ref["ref_length_px"] == pytest.approx(7.2)
         assert implicit_ref["min_length_px"] == pytest.approx(2.4)
 
+    def test_ncl_center_selection_covers_empty_and_mapped_thinning_paths(self):
+        grid = _make_test_grid()
+        magnitude = np.ones(grid.shape)
+        axes = SimpleNamespace(bbox=Bbox.from_bounds(0.0, 0.0, 100.0, 80.0))
+
+        empty = _select_ncl_centers(
+            grid=grid,
+            magnitude=magnitude,
+            transform=Affine2D(),
+            axes=axes,
+            density=1.0,
+            start_points=None,
+            min_distance=None,
+            sample_grid_field_array=lambda grid, field, points: np.full(
+                len(points), np.nan
+            ),
+            thin_ncl_mapped_candidates=lambda mapped_points, spacing: np.array(
+                [], dtype=int
+            ),
+        )
+        assert empty == []
+
+        selected = _select_ncl_centers(
+            grid=grid,
+            magnitude=magnitude,
+            transform=Affine2D(),
+            axes=axes,
+            density=1.0,
+            start_points=None,
+            min_distance=None,
+            sample_grid_field_array=lambda grid, field, points: np.ones(len(points)),
+            thin_ncl_display_candidates=lambda display_points, bbox, spacing: None,
+            thin_ncl_mapped_candidates=lambda mapped_points, spacing: np.array(
+                [0], dtype=int
+            ),
+        )
+        assert len(selected) == 1
+
+        valid = _valid_ncl_center_candidates(
+            grid,
+            np.array([[0.5, 0.5], [5.0, 5.0]]),
+            np.array([1.0, 1.0]),
+            np.array([[1.0, 1.0], [2.0, 2.0]]),
+            start_points=None,
+        )
+        np.testing.assert_array_equal(valid, np.array([True, False]))
+
     def test_prepare_centers_trace_curve_and_build_curve_cover_error_paths(self):
         grid = _make_test_grid()
         magnitude = np.arange(9.0).reshape(3, 3)
@@ -1610,6 +1702,22 @@ class TestVectorEngineHelpers:
             trace_ncl_direction_fn=trace_fn,
         )
         np.testing.assert_allclose(forward, np.array([[0.0, 0.0], [1.0, 0.0]]))
+
+        trace_fn = Mock(side_effect=[np.array([[0.0, 0.0], [1.0, 0.0]]), None])
+        backward = _trace_ncl_curve(
+            start_point=np.array([0.0, 0.0]),
+            total_length_px=4.0,
+            anchor="center",
+            grid=grid,
+            u=np.ones(grid.shape),
+            v=np.ones(grid.shape),
+            transform=Affine2D(),
+            step_px=1.0,
+            speed_scale=1.0,
+            viewport=Bbox.from_bounds(0.0, 0.0, 10.0, 10.0),
+            trace_ncl_direction_fn=trace_fn,
+        )
+        np.testing.assert_allclose(backward, np.array([[1.0, 0.0], [0.0, 0.0]]))
 
         backward_only = _trace_ncl_curve(
             start_point=np.array([0.0, 0.0]),
@@ -1708,6 +1816,18 @@ class TestVectorEngineHelpers:
                 np.ones(grid.shape),
                 transform,
                 point,
+                sample_grid_field_fn=lambda grid, field, x, y: None,
+                local_display_jacobian_fn=lambda transform, point, grid: np.eye(2),
+            )
+            is None
+        )
+        assert (
+            _sample_local_vector_state(
+                grid,
+                np.ones(grid.shape),
+                np.ones(grid.shape),
+                transform,
+                point,
                 display_sampler=SimpleNamespace(sample=lambda point: None),
                 sample_grid_field_fn=lambda grid, field, x, y: 1.0,
                 local_display_jacobian_fn=lambda transform, point, grid: np.eye(2),
@@ -1797,6 +1917,62 @@ class TestVectorEngineHelpers:
         )
         assert grid.dx == pytest.approx(1.5)
         assert grid.dy == pytest.approx(2.5)
+
+    def test_curly_vector_ncl_impl_covers_empty_short_and_color_default_paths(self):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            empty = _curly_vector_ncl_impl(
+                ax,
+                np.array([0.0, 1.0]),
+                np.array([0.0, 1.0]),
+                np.full((2, 2), np.nan),
+                np.full((2, 2), np.nan),
+                rasterized=True,
+                result_cls=CurlyVectorPlotSet,
+            )
+            assert empty.lines.get_rasterized() is True
+            assert len(empty.lines.get_segments()) == 0
+
+            common_kwargs = dict(
+                prepare_ncl_display_sampler_fn=lambda grid, transform: None,
+                prepare_ncl_native_trace_context_fn=lambda **kwargs: None,
+                select_ncl_centers_fn=lambda **kwargs: [(np.array([0.5, 0.5]), 1.0)],
+                sample_grid_field_fn=lambda grid, field, x, y: None,
+                build_ncl_arrow_artists_fn=lambda **kwargs: ([], None),
+                display_points_to_data_fn=lambda *args, **kwargs: None,
+                result_cls=CurlyVectorPlotSet,
+            )
+
+            short_curve = _curly_vector_ncl_impl(
+                ax,
+                np.array([0.0, 1.0]),
+                np.array([0.0, 1.0]),
+                np.ones((2, 2)),
+                np.ones((2, 2)),
+                build_ncl_curve_fn=lambda **kwargs: (
+                    np.array([[0.5, 0.5]]),
+                    np.array([[0.5, 0.5]]),
+                ),
+                **common_kwargs,
+            )
+            assert len(short_curve.lines.get_segments()) == 0
+
+            multicolor = _curly_vector_ncl_impl(
+                ax,
+                np.array([0.0, 1.0]),
+                np.array([0.0, 1.0]),
+                np.ones((2, 2)),
+                np.ones((2, 2)),
+                color=np.array([[1.0, 2.0], [3.0, 4.0]]),
+                build_ncl_curve_fn=lambda **kwargs: (
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                ),
+                **common_kwargs,
+            )
+            assert len(multicolor.lines.get_segments()) == 1
+        finally:
+            plt.close(fig)
 
 
 class TestResultHelpers:
@@ -1954,6 +2130,49 @@ class TestDatasetVectorCoverage:
 
 
 class TestScatterCoverage:
+    def test_scatter_grid_axis_and_display_filter_branches(self):
+        assert _as_1d_axis(xr.DataArray(np.ones((2, 2)), dims=("y", "x"))) is None
+
+        grid_state = _prepare_1d_grid_candidates(
+            np.array([0.0, np.nan, 2.0]),
+            np.array([10.0, 20.0]),
+            reference_fields=(np.ones((2, 3), dtype=bool),),
+            where=None,
+            mask=None,
+            resolved_placement="points",
+        )
+        assert grid_state is not None
+        np.testing.assert_allclose(
+            grid_state["source_points"],
+            np.array(
+                [
+                    [0.0, 10.0],
+                    [2.0, 10.0],
+                    [0.0, 20.0],
+                    [2.0, 20.0],
+                ]
+            ),
+        )
+
+        class _PartlyNonfiniteTransform(Affine2D):
+            def transform(self, values):
+                transformed = np.asarray(super().transform(values), dtype=float)
+                if transformed.shape[0] > 1:
+                    transformed[1, 0] = np.nan
+                return transformed
+
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            collection = _scatter_impl(
+                ax,
+                np.array([0.0, 1.0]),
+                np.array([0.0, 1.0]),
+                transform=_PartlyNonfiniteTransform(),
+            )
+            assert collection.get_offsets().shape[0] == 1
+        finally:
+            plt.close(fig)
+
     def test_public_scatter_argument_validation(self):
         fig, ax = plt.subplots(figsize=(4, 3))
         try:
@@ -2154,6 +2373,21 @@ class TestStyleAndGeometryCoverage:
             _normalize_curly_pivot("corner")
 
         assert _resolve_curly_anchor_alias("center", "mid") == "center"
+
+
+class TestLegacyStreamCoverage:
+    def test_domain_map_rejects_out_of_grid_trajectory_updates(self):
+        grid = SimpleNamespace(nx=3, ny=3, dx=1.0, dy=1.0)
+        grid.within_grid = lambda xg, yg: 0.0 <= xg <= 2.0 and 0.0 <= yg <= 2.0
+        mask = SimpleNamespace(
+            nx=3,
+            ny=3,
+            _update_trajectory=Mock(),
+        )
+
+        domain = DomainMap(grid, mask)
+        with pytest.raises(InvalidIndexError):
+            domain.update_trajectory(3.0, 1.0)
 
 
 class TestVectorArtistCoverage:
