@@ -109,10 +109,6 @@ def _normalize_coordinates(
         x_grid, y_grid = np.meshgrid(x_values, y_values, indexing="xy")
         return x_grid, y_grid, grid_shape, True, target_dims
 
-    if x_values.shape != y_values.shape:
-        raise ValueError(
-            "Paired scatter points require x and y to have the same 1D length"
-        )
     return x_values, y_values, x_values.shape, False, target_dims
 
 
