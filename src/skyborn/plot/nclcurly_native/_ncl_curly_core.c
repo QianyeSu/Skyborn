@@ -421,6 +421,168 @@ static npy_intp lower_bound_bucket(
     return left;
 }
 
+/*
+ * Shared implementation for display-space thinning.
+ *
+ * The input coordinates can already be normalized viewport coordinates
+ * (origin 0, scale 1), or raw display/pixel coordinates paired with a viewport
+ * origin and inverse width/height. Keeping the scaling here lets callers avoid
+ * building an intermediate mapped_points array when they already have display
+ * coordinates.
+ */
+static PyObject *thin_scaled_points(
+    PyArrayObject *points_arr,
+    double origin_x,
+    double origin_y,
+    double inv_width,
+    double inv_height,
+    double spacing_frac)
+{
+    PyArrayObject *selected_arr = NULL;
+    PyObject *result = NULL;
+    double spacing_sq;
+    double bucket_scale;
+    double bucket_scale_x;
+    double bucket_scale_y;
+    npy_intp point_count;
+    BucketEntry *entries = NULL;
+    unsigned char *culled = NULL;
+    npy_intp *selected_indices = NULL;
+    npy_intp selected_count = 0;
+    const double *points_data;
+    npy_intp idx;
+
+    point_count = PyArray_DIM(points_arr, 0);
+    if (point_count == 0)
+    {
+        npy_intp dims[1] = {0};
+        selected_arr = (PyArrayObject *)PyArray_SimpleNew(1, dims, NPY_INTP);
+        if (selected_arr == NULL)
+        {
+            goto cleanup;
+        }
+        result = (PyObject *)selected_arr;
+        selected_arr = NULL;
+        goto cleanup;
+    }
+
+    spacing_frac = fmax(spacing_frac, 1e-6);
+    spacing_sq = spacing_frac * spacing_frac;
+    bucket_scale = 1.0 / spacing_frac;
+    bucket_scale_x = inv_width * bucket_scale;
+    bucket_scale_y = inv_height * bucket_scale;
+    points_data = (const double *)PyArray_DATA(points_arr);
+
+    entries = (BucketEntry *)PyMem_Malloc((size_t)point_count * sizeof(BucketEntry));
+    culled = (unsigned char *)PyMem_Calloc((size_t)point_count, sizeof(unsigned char));
+    selected_indices = (npy_intp *)PyMem_Malloc((size_t)point_count * sizeof(npy_intp));
+    if (entries == NULL || culled == NULL || selected_indices == NULL)
+    {
+        PyErr_NoMemory();
+        goto cleanup;
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+
+    for (idx = 0; idx < point_count; ++idx)
+    {
+        const double px = points_data[idx * 2];
+        const double py = points_data[idx * 2 + 1];
+        entries[idx].bx = (long)floor((px - origin_x) * bucket_scale_x);
+        entries[idx].by = (long)floor((py - origin_y) * bucket_scale_y);
+        entries[idx].idx = idx;
+    }
+
+    /*
+     * Sorting by bucket lets lower_bound_bucket jump straight to the first
+     * entry in a bucket. The final keep/cull decision still follows the
+     * original candidate order because idx drives the outer loop below.
+     */
+    qsort(entries, (size_t)point_count, sizeof(BucketEntry), compare_bucket_entries);
+
+    for (idx = 0; idx < point_count; ++idx)
+    {
+        npy_intp pos;
+        const double base_x = points_data[idx * 2];
+        const double base_y = points_data[idx * 2 + 1];
+        const long bx = (long)floor((base_x - origin_x) * bucket_scale_x);
+        const long by = (long)floor((base_y - origin_y) * bucket_scale_y);
+        long search_x;
+
+        if (culled[idx])
+        {
+            continue;
+        }
+
+        selected_indices[selected_count++] = idx;
+
+        /*
+         * A point closer than spacing_frac must fall in the same bucket or one
+         * of the eight neighbors because bucket width equals the target spacing.
+         * That is why a 3x3 neighborhood is sufficient here.
+         */
+        for (search_x = bx - 1; search_x <= bx + 1; ++search_x)
+        {
+            long search_y;
+            for (search_y = by - 1; search_y <= by + 1; ++search_y)
+            {
+                npy_intp lower = lower_bound_bucket(entries, point_count, search_x, search_y);
+                for (pos = lower; pos < point_count; ++pos)
+                {
+                    npy_intp other_idx;
+                    double dx_value;
+                    double dy_value;
+                    const BucketEntry *entry = &entries[pos];
+
+                    if (entry->bx != search_x || entry->by != search_y)
+                    {
+                        break;
+                    }
+
+                    other_idx = entry->idx;
+                    if (other_idx <= idx || culled[other_idx])
+                    {
+                        continue;
+                    }
+
+                    dx_value = (base_x - points_data[other_idx * 2]) * inv_width;
+                    dy_value = (base_y - points_data[other_idx * 2 + 1]) * inv_height;
+                    /* Cull any later candidate that violates the spacing rule. */
+                    if (dx_value * dx_value + dy_value * dy_value < spacing_sq)
+                    {
+                        culled[other_idx] = 1;
+                    }
+                }
+            }
+        }
+    }
+
+    Py_END_ALLOW_THREADS
+
+    {
+        npy_intp dims[1] = {selected_count};
+        selected_arr = (PyArrayObject *)PyArray_SimpleNew(1, dims, NPY_INTP);
+        if (selected_arr == NULL)
+        {
+            goto cleanup;
+        }
+        memcpy(
+            PyArray_DATA(selected_arr),
+            selected_indices,
+            (size_t)selected_count * sizeof(npy_intp));
+    }
+
+    result = (PyObject *)selected_arr;
+    selected_arr = NULL;
+
+cleanup:
+    Py_XDECREF(selected_arr);
+    PyMem_Free(entries);
+    PyMem_Free(culled);
+    PyMem_Free(selected_indices);
+    return result;
+}
+
 static int viewport_contains(double x0, double y0, double x1, double y1, double x, double y)
 {
     return isfinite(x) && isfinite(y) && x0 <= x && x <= x1 && y0 <= y && y <= y1;
@@ -1214,20 +1376,8 @@ static PyObject *thin_mapped_candidates(PyObject *self, PyObject *args, PyObject
 {
     PyObject *mapped_points_obj;
     PyArrayObject *mapped_points_arr = NULL;
-    PyArrayObject *selected_arr = NULL;
     PyObject *result = NULL;
     double spacing_frac;
-    double spacing_sq;
-    double bucket_scale;
-    npy_intp point_count;
-    BucketEntry *entries = NULL;
-    long *bucket_x = NULL;
-    long *bucket_y = NULL;
-    unsigned char *culled = NULL;
-    npy_intp *selected_indices = NULL;
-    npy_intp selected_count = 0;
-    double *mapped_points_data;
-    npy_intp idx;
     static char *kwlist[] = {
         "mapped_points",
         "spacing_frac",
@@ -1258,140 +1408,84 @@ static PyObject *thin_mapped_candidates(PyObject *self, PyObject *args, PyObject
         goto cleanup;
     }
 
-    point_count = PyArray_DIM(mapped_points_arr, 0);
-    if (point_count == 0)
-    {
-        npy_intp dims[1] = {0};
-        selected_arr = (PyArrayObject *)PyArray_SimpleNew(1, dims, NPY_INTP);
-        if (selected_arr == NULL)
-        {
-            goto cleanup;
-        }
-        result = (PyObject *)selected_arr;
-        selected_arr = NULL;
-        goto cleanup;
-    }
-
-    spacing_frac = fmax(spacing_frac, 1e-6);
-    spacing_sq = spacing_frac * spacing_frac;
-    bucket_scale = 1.0 / spacing_frac;
-    mapped_points_data = (double *)PyArray_DATA(mapped_points_arr);
-
-    entries = (BucketEntry *)PyMem_Malloc((size_t)point_count * sizeof(BucketEntry));
-    bucket_x = (long *)PyMem_Malloc((size_t)point_count * sizeof(long));
-    bucket_y = (long *)PyMem_Malloc((size_t)point_count * sizeof(long));
-    culled = (unsigned char *)PyMem_Calloc((size_t)point_count, sizeof(unsigned char));
-    selected_indices = (npy_intp *)PyMem_Malloc((size_t)point_count * sizeof(npy_intp));
-    if (
-        entries == NULL || bucket_x == NULL || bucket_y == NULL || culled == NULL || selected_indices == NULL)
-    {
-        PyErr_NoMemory();
-        goto cleanup;
-    }
-
-    for (idx = 0; idx < point_count; ++idx)
-    {
-        long bx = (long)floor(mapped_points_data[idx * 2] * bucket_scale);
-        long by = (long)floor(mapped_points_data[idx * 2 + 1] * bucket_scale);
-        bucket_x[idx] = bx;
-        bucket_y[idx] = by;
-        entries[idx].bx = bx;
-        entries[idx].by = by;
-        entries[idx].idx = idx;
-    }
-
-    /*
-     * Sorting by bucket lets lower_bound_bucket jump straight to the first
-     * entry in a bucket. The final keep/cull decision still follows the
-     * original candidate order because idx drives the outer loop below.
-     */
-    qsort(entries, (size_t)point_count, sizeof(BucketEntry), compare_bucket_entries);
-
-    for (idx = 0; idx < point_count; ++idx)
-    {
-        npy_intp pos;
-        double base_x;
-        double base_y;
-        long bx;
-        long by;
-        long search_x;
-
-        if (culled[idx])
-        {
-            continue;
-        }
-
-        selected_indices[selected_count++] = idx;
-        base_x = mapped_points_data[idx * 2];
-        base_y = mapped_points_data[idx * 2 + 1];
-        bx = bucket_x[idx];
-        by = bucket_y[idx];
-
-        /*
-         * A point closer than spacing_frac must fall in the same bucket or one
-         * of the eight neighbors because bucket width equals the target spacing.
-         * That is why a 3x3 neighborhood is sufficient here.
-         */
-        for (search_x = bx - 1; search_x <= bx + 1; ++search_x)
-        {
-            long search_y;
-            for (search_y = by - 1; search_y <= by + 1; ++search_y)
-            {
-                npy_intp lower = lower_bound_bucket(entries, point_count, search_x, search_y);
-                for (pos = lower; pos < point_count; ++pos)
-                {
-                    npy_intp other_idx;
-                    double dx_value;
-                    double dy_value;
-                    const BucketEntry *entry = &entries[pos];
-
-                    if (entry->bx != search_x || entry->by != search_y)
-                    {
-                        break;
-                    }
-
-                    other_idx = entry->idx;
-                    if (other_idx <= idx || culled[other_idx])
-                    {
-                        continue;
-                    }
-
-                    dx_value = base_x - mapped_points_data[other_idx * 2];
-                    dy_value = base_y - mapped_points_data[other_idx * 2 + 1];
-                    /* Cull any later candidate that violates the spacing rule. */
-                    if (dx_value * dx_value + dy_value * dy_value < spacing_sq)
-                    {
-                        culled[other_idx] = 1;
-                    }
-                }
-            }
-        }
-    }
-
-    {
-        npy_intp dims[1] = {selected_count};
-        selected_arr = (PyArrayObject *)PyArray_SimpleNew(1, dims, NPY_INTP);
-        if (selected_arr == NULL)
-        {
-            goto cleanup;
-        }
-        memcpy(
-            PyArray_DATA(selected_arr),
-            selected_indices,
-            (size_t)selected_count * sizeof(npy_intp));
-    }
-
-    result = (PyObject *)selected_arr;
-    selected_arr = NULL;
+    result = thin_scaled_points(
+        mapped_points_arr,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        spacing_frac);
 
 cleanup:
     Py_XDECREF(mapped_points_arr);
-    Py_XDECREF(selected_arr);
-    PyMem_Free(entries);
-    PyMem_Free(bucket_x);
-    PyMem_Free(bucket_y);
-    PyMem_Free(culled);
-    PyMem_Free(selected_indices);
+    return result;
+}
+
+/*
+ * Thin display/pixel-space candidate centers using the same viewport mapping
+ * as _map_ncl_display_points_to_viewport, but without allocating mapped_points
+ * on the Python side.
+ */
+static PyObject *thin_display_candidates(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    PyObject *display_points_obj;
+    PyArrayObject *display_points_arr = NULL;
+    PyObject *result = NULL;
+    double viewport_x0;
+    double viewport_y0;
+    double viewport_width;
+    double viewport_height;
+    double spacing_frac;
+    static char *kwlist[] = {
+        "display_points",
+        "viewport_x0",
+        "viewport_y0",
+        "viewport_width",
+        "viewport_height",
+        "spacing_frac",
+        NULL,
+    };
+    (void)self;
+
+    if (!PyArg_ParseTupleAndKeywords(
+            args,
+            kwargs,
+            "Oddddd:thin_display_candidates",
+            kwlist,
+            &display_points_obj,
+            &viewport_x0,
+            &viewport_y0,
+            &viewport_width,
+            &viewport_height,
+            &spacing_frac))
+    {
+        return NULL;
+    }
+
+    display_points_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        display_points_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    if (display_points_arr == NULL)
+    {
+        goto cleanup;
+    }
+    if (PyArray_NDIM(display_points_arr) != 2 || PyArray_DIM(display_points_arr, 1) != 2)
+    {
+        PyErr_SetString(PyExc_ValueError, "display_points must have shape (N, 2)");
+        goto cleanup;
+    }
+
+    viewport_width = viewport_width > 1.0 ? viewport_width : 1.0;
+    viewport_height = viewport_height > 1.0 ? viewport_height : 1.0;
+    result = thin_scaled_points(
+        display_points_arr,
+        viewport_x0,
+        viewport_y0,
+        1.0 / viewport_width,
+        1.0 / viewport_height,
+        spacing_frac);
+
+cleanup:
+    Py_XDECREF(display_points_arr);
     return result;
 }
 
@@ -1420,6 +1514,12 @@ static PyMethodDef module_methods[] = {
         (PyCFunction)thin_mapped_candidates,
         METH_VARARGS | METH_KEYWORDS,
         PyDoc_STR("Cull later nearby mapped candidate points in scan order."),
+    },
+    {
+        "thin_display_candidates",
+        (PyCFunction)thin_display_candidates,
+        METH_VARARGS | METH_KEYWORDS,
+        PyDoc_STR("Cull later nearby display candidate points after viewport normalization."),
     },
     {NULL, NULL, 0, NULL},
 };
