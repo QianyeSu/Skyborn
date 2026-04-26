@@ -1,6 +1,5 @@
 """Tests for the low-level curly-vector rendering engine."""
 
-import warnings
 from unittest.mock import Mock, patch
 
 import matplotlib.pyplot as plt
@@ -960,40 +959,6 @@ class TestCurlyVector:
 
         np.testing.assert_allclose(curve, expected)
 
-    def test_curly_vector_warns_once_when_native_backend_is_unavailable(
-        self, sample_vector_field, monkeypatch
-    ):
-        """Missing native extension should be visible to the user but not alter rendering."""
-        x, y, u, v = sample_vector_field
-        vector_plot_module._ISSUED_NATIVE_WARNINGS.clear()
-        monkeypatch.setattr(
-            vector_plot_module,
-            "_NATIVE_IMPORT_ERROR",
-            ImportError("native backend missing"),
-        )
-        monkeypatch.setattr(vector_plot_module, "_sample_grid_field_native", None)
-        monkeypatch.setattr(vector_plot_module, "_sample_grid_field_array_native", None)
-        monkeypatch.setattr(
-            vector_plot_module, "_thin_ncl_mapped_candidates_native", None
-        )
-        monkeypatch.setattr(vector_plot_module, "_trace_ncl_direction_native", None)
-
-        fig, ax = plt.subplots(figsize=(6, 4))
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            curly_vector(ax, x, y, u, v, density=0.6, color="k")
-            curly_vector(ax, x, y, u, v, density=0.6, color="k")
-
-        messages = [
-            str(item.message)
-            for item in caught
-            if "native backend is unavailable" in str(item.message)
-        ]
-        assert len(messages) == 1
-
-        plt.close(fig)
-
     def test_sample_grid_field_prefers_native_when_available(self, monkeypatch):
         """Scalar sampling should use the native helper when it returns a value."""
         grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0, 2.0]))
@@ -1006,36 +971,6 @@ class TestCurlyVector:
         value = vector_plot_module._sample_grid_field(grid, field, 0.5, 0.5)
 
         assert value == pytest.approx(4.25)
-
-    def test_sample_grid_field_warns_once_and_disables_native_helper_on_failure(
-        self, monkeypatch
-    ):
-        """A failing native sampler should warn once, disable itself, and keep Python output."""
-        grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0, 2.0]))
-        field = np.arange(9.0).reshape(3, 3)
-        vector_plot_module._ISSUED_NATIVE_WARNINGS.clear()
-
-        def _broken_native(**kwargs):
-            raise RuntimeError("boom")
-
-        monkeypatch.setattr(
-            vector_plot_module, "_sample_grid_field_native", _broken_native
-        )
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            value1 = vector_plot_module._sample_grid_field(grid, field, 0.5, 0.5)
-            value2 = vector_plot_module._sample_grid_field(grid, field, 0.5, 0.5)
-
-        assert value1 == pytest.approx(2.0)
-        assert value2 == pytest.approx(2.0)
-        assert vector_plot_module._sample_grid_field_native is None
-        messages = [
-            str(item.message)
-            for item in caught
-            if "native scalar sampling failed" in str(item.message)
-        ]
-        assert len(messages) == 1
 
     def test_sample_grid_field_array_prefers_native_when_available(self, monkeypatch):
         """Vectorized scalar sampling should use the native helper when available."""
@@ -1105,31 +1040,6 @@ class TestCurlyVector:
         )
 
         assert selected == [1]
-
-    def test_thin_ncl_mapped_candidates_falls_back_when_native_returns_none(
-        self, monkeypatch
-    ):
-        """Mapped thinning should preserve the Python fallback when native declines."""
-        mapped_points = np.array(
-            [
-                [0.10, 0.10],
-                [0.12, 0.11],
-                [0.55, 0.55],
-                [0.57, 0.54],
-            ]
-        )
-
-        monkeypatch.setattr(
-            vector_plot_module,
-            "_thin_ncl_mapped_candidates_native",
-            lambda **kwargs: None,
-        )
-
-        selected = vector_plot_module._thin_ncl_mapped_candidates(
-            mapped_points, spacing_frac=0.05
-        )
-
-        assert selected == [0, 2]
 
     def test_map_ncl_display_points_to_viewport_normalizes_bbox(self):
         """Mapped thinning coordinates should be normalized to the active viewport."""
@@ -1233,6 +1143,58 @@ class TestCurlyVector:
         )
 
         selected = _select_ncl_centers(
+            grid=grid,
+            magnitude=magnitude,
+            transform=ax.transData,
+            axes=ax,
+            density=1.0,
+            start_points=start_points,
+            min_distance=0.08,
+        )
+
+        assert len(selected) == 2
+        np.testing.assert_allclose(selected[0][0], [0.0, 0.5])
+        np.testing.assert_allclose(selected[1][0], [2.0, 0.5])
+        plt.close(fig)
+
+    def test_select_ncl_centers_prefers_display_native_thinning(self, monkeypatch):
+        """Center selection should avoid mapped-point allocation when display thinning is available."""
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.set_xlim(0.0, 4.0)
+        ax.set_ylim(0.0, 1.0)
+
+        x = np.linspace(0.0, 4.0, 5)
+        y = np.array([0.0, 1.0])
+        grid = Grid(x, y)
+        magnitude = np.ones(grid.shape)
+        start_points = np.array(
+            [
+                [0.0, 0.5],
+                [0.1, 0.5],
+                [2.0, 0.5],
+            ]
+        )
+
+        def _display_thinner(display_points, viewport, spacing_frac):
+            assert display_points.shape == (3, 2)
+            assert viewport is ax.bbox
+            assert spacing_frac == pytest.approx(0.08)
+            return [0, 2]
+
+        monkeypatch.setattr(
+            vector_plot_module,
+            "_thin_ncl_display_candidates",
+            _display_thinner,
+        )
+        monkeypatch.setattr(
+            vector_plot_module,
+            "_thin_ncl_mapped_candidates",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("mapped thinning should not run")
+            ),
+        )
+
+        selected = vector_plot_module._select_ncl_centers(
             grid=grid,
             magnitude=magnitude,
             transform=ax.transData,
@@ -1838,23 +1800,10 @@ class TestInternalHelperFunctions:
         assert _prepare_ncl_display_sampler(grid, BadTransform()) is None
         assert _prepare_ncl_display_sampler(grid, NaNTransform()) is None
 
-    def test_prepare_ncl_native_trace_context_requires_native_backend_and_sampler(
-        self, monkeypatch
-    ):
+    def test_prepare_ncl_native_trace_context_requires_display_sampler(self):
         grid = Grid(np.array([0.0, 1.0]), np.array([0.0, 1.0]))
         viewport = Bbox.from_extents(0.0, 0.0, 10.0, 10.0)
 
-        monkeypatch.setattr(vector_plot_module, "_trace_ncl_direction_native", None)
-        assert (
-            _prepare_ncl_native_trace_context(
-                grid,
-                np.ones((2, 2)),
-                np.ones((2, 2)),
-                viewport,
-                display_sampler=Mock(),
-            )
-            is None
-        )
         assert (
             _prepare_ncl_native_trace_context(
                 grid,
