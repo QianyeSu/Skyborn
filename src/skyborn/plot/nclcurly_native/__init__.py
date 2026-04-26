@@ -8,6 +8,7 @@ Created: 2026-03-01 14:58:56
 from ._ncl_curly_core import (
     sample_grid_field,
     sample_grid_field_array,
+    thin_display_candidates,
     thin_mapped_candidates,
     trace_ncl_direction,
 )
@@ -16,5 +17,6 @@ __all__ = [
     "trace_ncl_direction",
     "sample_grid_field",
     "sample_grid_field_array",
+    "thin_display_candidates",
     "thin_mapped_candidates",
 ]
