@@ -9,11 +9,42 @@ import xarray as xr
 from matplotlib.collections import PathCollection
 
 from skyborn.plot import scatter as public_scatter
+from skyborn.plot.nclcurly_native import thin_display_candidates, thin_mapped_candidates
 from skyborn.plot.scatter import _array_scatter as array_scatter
 
 
 class TestScatterPlot:
     """Tests for the low-level scatter plotting core."""
+
+    def test_native_display_thinning_matches_mapped_thinning(self):
+        display_points = np.array(
+            [
+                [10.0, 20.0],
+                [12.0, 22.0],
+                [50.0, 80.0],
+                [52.0, 83.0],
+                [95.0, 110.0],
+            ],
+            dtype=float,
+        )
+        mapped_points = display_points.copy()
+        mapped_points[:, 0] = (mapped_points[:, 0] - 10.0) / 100.0
+        mapped_points[:, 1] = (mapped_points[:, 1] - 20.0) / 200.0
+
+        expected = thin_mapped_candidates(
+            mapped_points=mapped_points,
+            spacing_frac=0.05,
+        )
+        actual = thin_display_candidates(
+            display_points=display_points,
+            viewport_x0=10.0,
+            viewport_y0=20.0,
+            viewport_width=100.0,
+            viewport_height=200.0,
+            spacing_frac=0.05,
+        )
+
+        np.testing.assert_array_equal(actual, expected)
 
     def test_array_scatter_grid_mask_uses_default_display_thinning(self):
         x = np.linspace(0.0, 359.0, 72)
@@ -66,19 +97,53 @@ class TestScatterPlot:
 
         plt.close(fig)
 
-    def test_array_scatter_auto_cells_place_points_between_rectilinear_centers(self):
+    def test_array_scatter_cells_place_points_between_rectilinear_centers(self):
         x = np.arange(1.0, 13.0, dtype=float)
         y = np.linspace(-30.0, 30.0, 3)
         mask = np.ones((3, 12), dtype=bool)
 
         fig, ax = plt.subplots(figsize=(6, 4))
-        result = array_scatter(ax, x, y, where=mask, density=1.0, s=4.0, c="k")
+        result = array_scatter(
+            ax,
+            x,
+            y,
+            where=mask,
+            placement="cells",
+            density=1.0,
+            s=4.0,
+            c="k",
+        )
         offsets = np.asarray(result.get_offsets(), dtype=float)
 
         assert isinstance(result, PathCollection)
         assert np.any(np.abs(offsets[:, 0] - np.rint(offsets[:, 0])) > 1e-6)
 
         plt.close(fig)
+
+    def test_array_scatter_auto_uses_points_for_gridded_mask(self):
+        x = np.linspace(0.0, 4.0, 5)
+        y = np.linspace(-1.0, 1.0, 3)
+        mask = np.zeros((3, 5), dtype=bool)
+        mask[1, 2] = True
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        try:
+            with (
+                patch(
+                    "skyborn.plot._core.scatter_engine._generate_cell_candidates",
+                    side_effect=AssertionError("auto should use point coordinates"),
+                ),
+                patch(
+                    "skyborn.plot._shared.coords._scatter_cell_geometry",
+                    side_effect=AssertionError("auto should not infer cell geometry"),
+                ),
+            ):
+                result = array_scatter(ax, x, y, where=mask, distance=1e-6)
+        finally:
+            plt.close(fig)
+
+        offsets = np.asarray(result.get_offsets(), dtype=float)
+        np.testing.assert_allclose(offsets, np.array([[x[2], y[1]]]))
 
     def test_array_scatter_points_placement_preserves_selected_grid_nodes(self):
         x = np.arange(1.0, 6.0, dtype=float)
@@ -139,7 +204,7 @@ class TestScatterPlot:
 
         plt.close(fig)
 
-    def test_array_scatter_auto_cells_supports_curvilinear_2d_coordinates(self):
+    def test_array_scatter_cells_supports_curvilinear_2d_coordinates(self):
         x_base, y_base = np.meshgrid(
             np.linspace(100.0, 112.0, 5),
             np.linspace(10.0, 22.0, 4),
@@ -150,7 +215,16 @@ class TestScatterPlot:
         mask = np.ones(x2d.shape, dtype=bool)
 
         fig, ax = plt.subplots(figsize=(6, 4))
-        result = array_scatter(ax, x2d, y2d, where=mask, density=2.0, s=4.0, c="k")
+        result = array_scatter(
+            ax,
+            x2d,
+            y2d,
+            where=mask,
+            placement="cells",
+            density=2.0,
+            s=4.0,
+            c="k",
+        )
         offsets = np.asarray(result.get_offsets(), dtype=float)
         centers = np.column_stack([x2d.ravel(), y2d.ravel()])
         min_distance_sq = np.min(
