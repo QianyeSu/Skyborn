@@ -67,10 +67,10 @@ from skyborn.plot._core.geometry import (
     _trim_display_curve_from_end,
 )
 from skyborn.plot._core.native import (
-    _try_native_sample_grid_field,
-    _try_native_sample_grid_field_array,
-    _try_native_thin_ncl_mapped_candidates,
-    _try_native_trace_ncl_direction,
+    _call_native_sample_grid_field,
+    _call_native_sample_grid_field_array,
+    _call_native_thin_ncl_mapped_candidates,
+    _call_native_trace_ncl_direction,
 )
 from skyborn.plot._core.result import CurlyVectorPlotSet
 from skyborn.plot._core.sampling import (
@@ -632,156 +632,114 @@ class TestSamplingHelpers:
 
 
 class TestNativeHelpers:
-    def test_try_native_sample_grid_field_handles_error_and_nonfinite_results(self):
+    def test_call_native_sample_grid_field_handles_masked_and_nonfinite_results(self):
         grid = SimpleNamespace(x_origin=1.0, y_origin=2.0, dx=3.0, dy=4.0)
-        on_error = Mock()
 
         assert (
-            _try_native_sample_grid_field(
-                None,
-                grid,
-                np.ones((2, 2)),
-                1.0,
-                2.0,
-                on_error,
-            )
-            is None
-        )
-        assert (
-            _try_native_sample_grid_field(
+            _call_native_sample_grid_field(
                 lambda **kwargs: 1.0,
                 grid,
                 np.ma.array(np.ones((2, 2)), mask=True),
                 1.0,
                 2.0,
-                on_error,
             )
             is None
         )
-        assert (
-            _try_native_sample_grid_field(
+        with pytest.raises(RuntimeError, match="boom"):
+            _call_native_sample_grid_field(
                 lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
                 grid,
                 np.ones((2, 2)),
                 1.0,
                 2.0,
-                on_error,
             )
-            is None
-        )
-        on_error.assert_called_once()
         assert (
-            _try_native_sample_grid_field(
+            _call_native_sample_grid_field(
                 lambda **kwargs: np.nan,
                 grid,
                 np.ones((2, 2)),
                 1.0,
                 2.0,
-                Mock(),
             )
             is None
         )
-        assert _try_native_sample_grid_field(
+        assert _call_native_sample_grid_field(
             lambda **kwargs: 5.5,
             grid,
             np.ones((2, 2)),
             1.0,
             2.0,
-            Mock(),
         ) == pytest.approx(5.5)
 
-    def test_try_native_sample_grid_field_array_handles_shape_errors_and_nonfinite_values(
+    def test_call_native_sample_grid_field_array_handles_shape_errors_and_nonfinite_values(
         self,
     ):
         grid = SimpleNamespace(x_origin=1.0, y_origin=2.0, dx=3.0, dy=4.0)
-        on_error = Mock()
         points = np.array([[0.0, 0.0], [1.0, 1.0]])
 
-        assert (
-            _try_native_sample_grid_field_array(
-                None, grid, np.ones((2, 2)), points, (2,), on_error
-            )
-            is None
-        )
-        assert (
-            _try_native_sample_grid_field_array(
+        with pytest.raises(RuntimeError, match="boom"):
+            _call_native_sample_grid_field_array(
                 lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
                 grid,
                 np.ones((2, 2)),
                 points,
                 (2,),
-                on_error,
             )
-            is None
-        )
-        on_error.assert_called_once()
+
         assert (
-            _try_native_sample_grid_field_array(
+            _call_native_sample_grid_field_array(
                 lambda **kwargs: None,
                 grid,
                 np.ones((2, 2)),
                 points,
                 (2,),
-                Mock(),
             )
             is None
         )
         assert (
-            _try_native_sample_grid_field_array(
+            _call_native_sample_grid_field_array(
                 lambda **kwargs: np.array([[1.0, 2.0]]),
                 grid,
                 np.ones((2, 2)),
                 points,
                 (2,),
-                Mock(),
             )
             is None
         )
-        sampled = _try_native_sample_grid_field_array(
+        sampled = _call_native_sample_grid_field_array(
             lambda **kwargs: np.array([1.0, np.nan]),
             grid,
             np.ones((2, 2)),
             points,
             (2,),
-            Mock(),
         )
         assert sampled[0] == pytest.approx(1.0)
         assert np.isnan(sampled[1])
 
-    def test_try_native_thin_ncl_mapped_candidates_handles_error_and_success(self):
-        on_error = Mock()
+    def test_call_native_thin_ncl_mapped_candidates_handles_none_and_success(self):
         points = np.array([[0.1, 0.2], [0.3, 0.4]])
 
         assert (
-            _try_native_thin_ncl_mapped_candidates(None, points, 0.1, on_error) is None
-        )
-        assert (
-            _try_native_thin_ncl_mapped_candidates(
-                lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
-                points,
-                0.1,
-                on_error,
-            )
-            is None
-        )
-        on_error.assert_called_once()
-        assert (
-            _try_native_thin_ncl_mapped_candidates(
+            _call_native_thin_ncl_mapped_candidates(
                 lambda **kwargs: None,
                 points,
                 0.1,
-                Mock(),
             )
             is None
         )
-        assert _try_native_thin_ncl_mapped_candidates(
+        with pytest.raises(RuntimeError, match="boom"):
+            _call_native_thin_ncl_mapped_candidates(
+                lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+                points,
+                0.1,
+            )
+        assert _call_native_thin_ncl_mapped_candidates(
             lambda **kwargs: np.array([1, 0], dtype=int),
             points,
             0.1,
-            Mock(),
         ) == [1, 0]
 
-    def test_try_native_trace_ncl_direction_handles_missing_context_error_and_shape_validation(
+    def test_call_native_trace_ncl_direction_handles_missing_context_and_shape_validation(
         self,
     ):
         context = SimpleNamespace(
@@ -798,23 +756,21 @@ class TestNativeHelpers:
             viewport_x1=1.0,
             viewport_y1=1.0,
         )
-        on_error = Mock()
 
         assert (
-            _try_native_trace_ncl_direction(
+            _call_native_trace_ncl_direction(
+                lambda **kwargs: np.array([[0.0, 0.0], [1.0, 1.0]]),
                 None,
-                context,
                 np.array([0.0, 0.0]),
                 10.0,
                 1.0,
                 1.0,
                 1.0,
-                on_error,
             )
             is None
         )
-        assert (
-            _try_native_trace_ncl_direction(
+        with pytest.raises(RuntimeError, match="boom"):
+            _call_native_trace_ncl_direction(
                 lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
                 context,
                 np.array([0.0, 0.0]),
@@ -822,13 +778,9 @@ class TestNativeHelpers:
                 1.0,
                 1.0,
                 1.0,
-                on_error,
             )
-            is None
-        )
-        on_error.assert_called_once()
         assert (
-            _try_native_trace_ncl_direction(
+            _call_native_trace_ncl_direction(
                 lambda **kwargs: np.array([1.0, 2.0]),
                 context,
                 np.array([0.0, 0.0]),
@@ -836,11 +788,10 @@ class TestNativeHelpers:
                 1.0,
                 1.0,
                 1.0,
-                Mock(),
             )
             is None
         )
-        curve = _try_native_trace_ncl_direction(
+        curve = _call_native_trace_ncl_direction(
             lambda **kwargs: np.array([[0.0, 0.0], [1.0, 1.0]]),
             context,
             np.array([0.0, 0.0]),
@@ -848,7 +799,6 @@ class TestNativeHelpers:
             1.0,
             1.0,
             1.0,
-            Mock(),
         )
         np.testing.assert_allclose(curve, np.array([[0.0, 0.0], [1.0, 1.0]]))
 
