@@ -380,6 +380,7 @@ def _select_ncl_centers(
     ncl_preset=None,
     sample_grid_field_array=None,
     thin_ncl_mapped_candidates=None,
+    thin_ncl_display_candidates=None,
 ):
     candidates, candidate_magnitudes = _prepare_ncl_center_candidates(
         grid=grid,
@@ -407,12 +408,23 @@ def _select_ncl_centers(
     if candidates.size == 0:
         return []
 
-    mapped_points = _map_ncl_display_points_to_viewport(display_points, axes.bbox)
     spacing_frac = _resolve_ncl_min_distance_fraction(
         density=density,
         min_distance=min_distance,
         ncl_preset=ncl_preset,
     )
+    if thin_ncl_display_candidates is not None:
+        selected_indices = thin_ncl_display_candidates(
+            display_points,
+            axes.bbox,
+            spacing_frac,
+        )
+        if selected_indices is not None:
+            return [
+                (candidates[idx], candidate_magnitudes[idx]) for idx in selected_indices
+            ]
+
+    mapped_points = _map_ncl_display_points_to_viewport(display_points, axes.bbox)
     selected_indices = thin_ncl_mapped_candidates(mapped_points, spacing_frac)
     return [(candidates[idx], candidate_magnitudes[idx]) for idx in selected_indices]
 
@@ -797,7 +809,6 @@ def _curly_vector_ncl_impl(
     allow_non_uniform_grid=False,
     ncl_preset=None,
     *,
-    warn_if_native_backend_unavailable_fn=None,
     grid_cls=Grid,
     prepare_ncl_display_sampler_fn=None,
     prepare_ncl_native_trace_context_fn=None,
@@ -808,7 +819,6 @@ def _curly_vector_ncl_impl(
     display_points_to_data_fn=None,
     result_cls=None,
 ):
-    warn_if_native_backend_unavailable_fn()
     grid = grid_cls(x, y, allow_non_uniform=allow_non_uniform_grid)
 
     if zorder is None:
