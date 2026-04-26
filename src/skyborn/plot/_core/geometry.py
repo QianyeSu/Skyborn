@@ -5,26 +5,6 @@ from __future__ import annotations
 import numpy as np
 
 
-def _curve_to_display(curve, transform, display_sampler=None):
-    if display_sampler is not None:
-        try:
-            display_curve = display_sampler.sample_display_points(curve)
-        except Exception:
-            display_curve = None
-        if display_curve is not None:
-            display_curve = np.asarray(display_curve, dtype=float)
-            if np.all(np.isfinite(display_curve)):
-                return display_curve
-
-    try:
-        display_curve = transform.transform(curve)
-    except Exception:
-        return None
-    if not np.all(np.isfinite(display_curve)):
-        return None
-    return np.asarray(display_curve, dtype=float)
-
-
 def _display_points_to_data(transform, display_points, inverse_transform=None):
     display_points = np.asarray(display_points, dtype=float)
     if display_points.ndim == 1:
@@ -94,94 +74,6 @@ def _candidate_data_from_display_step(
     return _display_to_data(transform, candidate_display)
 
 
-def _postprocess_ncl_curve(curve, transform, display_sampler=None):
-    display_curve = _curve_to_display(curve, transform, display_sampler=display_sampler)
-    if display_curve is None:
-        return None
-
-    smoothed_display = _chaikin_smooth_display_curve(display_curve, refinements=1)
-    smoothed_display = _fit_single_bend_display_curve(smoothed_display)
-    try:
-        return transform.inverted().transform(smoothed_display)
-    except Exception:
-        return curve
-
-
-def _chaikin_smooth_display_curve(display_curve, refinements=1):
-    curve = np.asarray(display_curve, dtype=float)
-    if len(curve) < 3:
-        return curve
-
-    for _ in range(refinements):
-        refined = [curve[0]]
-        for left, right in zip(curve[:-1], curve[1:]):
-            refined.append(0.75 * left + 0.25 * right)
-            refined.append(0.25 * left + 0.75 * right)
-        refined.append(curve[-1])
-        curve = np.asarray(refined, dtype=float)
-    return curve
-
-
-def _fit_single_bend_display_curve(display_curve, samples=11, max_offset_frac=0.22):
-    curve = np.asarray(display_curve, dtype=float)
-    if len(curve) < 3:
-        return curve
-
-    start = curve[0]
-    end = curve[-1]
-    chord = end - start
-    chord_length = np.hypot(*chord)
-    if chord_length <= 1e-6:
-        return curve
-
-    unit = chord / chord_length
-    normal = np.array([-unit[1], unit[0]])
-    midpoint = _point_at_arc_fraction(curve, 0.5)
-    chord_midpoint = 0.5 * (start + end)
-    midpoint_offset = midpoint - chord_midpoint
-
-    perpendicular_offset = float(np.dot(midpoint_offset, normal))
-    max_offset = chord_length * max_offset_frac
-    perpendicular_offset = float(np.clip(perpendicular_offset, -max_offset, max_offset))
-
-    target_midpoint = chord_midpoint + normal * perpendicular_offset
-    control = 2.0 * target_midpoint - 0.5 * (start + end)
-
-    t = np.linspace(0.0, 1.0, max(int(samples), 3))
-    one_minus_t = 1.0 - t
-    return (
-        (one_minus_t**2)[:, None] * start
-        + (2.0 * one_minus_t * t)[:, None] * control
-        + (t**2)[:, None] * end
-    )
-
-
-def _point_at_arc_fraction(curve, fraction):
-    curve = np.asarray(curve, dtype=float)
-    if len(curve) == 0:
-        raise ValueError("curve must contain at least one point")
-    if len(curve) == 1:
-        return curve[0]
-
-    segment_vectors = np.diff(curve, axis=0)
-    segment_lengths = np.hypot(segment_vectors[:, 0], segment_vectors[:, 1])
-    cumulative = np.concatenate([[0.0], np.cumsum(segment_lengths)])
-    total_length = cumulative[-1]
-    if total_length <= 1e-12:
-        return curve[0]
-
-    target = float(np.clip(fraction, 0.0, 1.0)) * total_length
-    idx = np.searchsorted(cumulative, target, side="right") - 1
-    idx = int(np.clip(idx, 0, len(segment_lengths) - 1))
-
-    seg_length = segment_lengths[idx]
-    if seg_length <= 1e-12:
-        return curve[idx]
-
-    local_frac = (target - cumulative[idx]) / seg_length
-    return curve[idx] + local_frac * segment_vectors[idx]
-
-
 def _evaluate_ncl_display_curve(curve, transform, viewport=None):
     try:
         display_curve = transform.transform(np.asarray(curve, dtype=float))
@@ -240,19 +132,6 @@ def _evaluate_ncl_display_curve(curve, transform, viewport=None):
     if sign_changes > 0 and total_turn > 70.0:
         return None, False
     return display_curve, False
-
-
-def _acceptable_ncl_display_curve(curve, transform):
-    display_curve, _ = _evaluate_ncl_display_curve(curve, transform)
-    return display_curve
-
-
-def _curve_shape_is_acceptable(curve, transform, display_sampler=None):
-    del display_sampler
-    display_curve, transform_failed = _evaluate_ncl_display_curve(curve, transform)
-    if display_curve is not None:
-        return True
-    return transform_failed
 
 
 def _finite_difference_step(value, lower, upper, base_step):
