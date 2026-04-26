@@ -6,13 +6,14 @@ from typing import Any
 
 import numpy as np
 
+from .._core.native import _call_native_thin_ncl_display_candidates
 from .._core.thinning import (
     _map_ncl_display_points_to_viewport,
     _resolve_ncl_min_distance_fraction,
-    _thin_ncl_mapped_candidates,
 )
 from .._shared import coords as _coord_helpers
 from .._shared.style import _resolve_scatter_aliases
+from ..nclcurly_native import thin_display_candidates as _thin_display_candidates
 
 
 def _resolve_spacing_fraction(
@@ -32,13 +33,21 @@ def _resolve_spacing_fraction(
 def _resolve_placement(
     placement: Any,
     *,
-    grid_like: bool,
-    where: Any,
-    mask: Any,
-    distance: float | None,
     cell_geometry: dict[str, np.ndarray] | None,
 ) -> str:
     """Resolve how gridded stipple candidates should be positioned."""
+    placement_name = _normalize_placement_name(placement)
+    if placement_name == "cells" and cell_geometry is None:
+        raise ValueError(
+            "placement='cells' requires gridded coordinates with inferable "
+            "cell geometry"
+        )
+
+    return placement_name
+
+
+def _normalize_placement_name(placement: Any) -> str:
+    """Normalize the requested candidate-placement mode."""
     if placement is None:
         placement_name = "auto"
     else:
@@ -47,23 +56,103 @@ def _resolve_placement(
     if placement_name not in {"auto", "points", "cells"}:
         raise ValueError("placement must be one of 'auto', 'points', or 'cells'")
 
-    supports_cells = cell_geometry is not None
     if placement_name == "auto":
-        if (
-            grid_like
-            and supports_cells
-            and (where is not None or mask is not None)
-            and distance is None
-        ):
-            return "cells"
+        # NCL polymarker/scatter primitives draw the supplied marker
+        # coordinates directly. Cell-interior stippling is a separate fill-like
+        # mode in Skyborn, so callers must request it explicitly.
         return "points"
 
-    if placement_name == "cells" and not supports_cells:
-        raise ValueError(
-            "placement='cells' requires gridded coordinates with inferable cell geometry"
-        )
-
     return placement_name
+
+
+def _as_1d_axis(values: Any) -> tuple[np.ndarray, str | None] | None:
+    """Return a 1D numeric axis and optional DataArray dimension name."""
+    data_array = _coord_helpers._maybe_squeezed_dataarray(values)
+    if data_array is not None:
+        if data_array.ndim != 1:
+            return None
+        return _coord_helpers._filled_float_array(data_array.data), data_array.dims[0]
+
+    axis = _coord_helpers._filled_float_array(values)
+    if axis.ndim != 1:
+        return None
+    return axis, None
+
+
+def _field_implies_grid(
+    value: Any,
+    *,
+    grid_shape: tuple[int, int],
+    target_dims: tuple[Any, ...] | None,
+) -> bool:
+    """Return whether a companion field requests 1D axes as a rectilinear grid."""
+    if value is None:
+        return False
+    array = _coord_helpers._normalized_field_array(value, target_dims=target_dims)
+    return array.ndim == 2 and array.shape == grid_shape
+
+
+def _prepare_1d_grid_candidates(
+    x: Any,
+    y: Any,
+    *,
+    reference_fields: tuple[Any, ...],
+    where: Any,
+    mask: Any,
+    resolved_placement: str,
+) -> dict[str, Any] | None:
+    """Prepare selected points from 1D rectilinear axes without a full meshgrid."""
+    x_axis_info = _as_1d_axis(x)
+    y_axis_info = _as_1d_axis(y)
+    if x_axis_info is None or y_axis_info is None:
+        return None
+
+    x_axis, x_dim = x_axis_info
+    y_axis, y_dim = y_axis_info
+    target_dims = (y_dim, x_dim) if x_dim is not None and y_dim is not None else None
+    candidate_shape = (int(y_axis.size), int(x_axis.size))
+    grid_like = x_axis.size != y_axis.size or any(
+        _field_implies_grid(
+            field,
+            grid_shape=candidate_shape,
+            target_dims=target_dims,
+        )
+        for field in reference_fields
+    )
+    if not grid_like:
+        return None
+
+    selection = _coord_helpers._normalize_selection_mask(
+        where=where,
+        mask=mask,
+        candidate_shape=candidate_shape,
+        target_dims=target_dims,
+    )
+    source_indices = np.flatnonzero(selection.ravel())
+    if source_indices.size == 0:
+        source_points = np.empty((0, 2), dtype=float)
+    else:
+        iy, ix = np.unravel_index(source_indices, candidate_shape)
+        finite = np.isfinite(x_axis[ix]) & np.isfinite(y_axis[iy])
+        if not np.all(finite):
+            source_indices = source_indices[finite]
+            iy = iy[finite]
+            ix = ix[finite]
+        source_points = np.column_stack([x_axis[ix], y_axis[iy]])
+
+    cell_geometry = (
+        _coord_helpers._scatter_cell_geometry(x_axis, y_axis)
+        if resolved_placement == "cells"
+        else None
+    )
+    return {
+        "candidate_shape": candidate_shape,
+        "grid_like": True,
+        "target_dims": target_dims,
+        "cell_geometry": cell_geometry,
+        "source_indices": source_indices,
+        "source_points": source_points,
+    }
 
 
 def _subset_scatter_value(
@@ -273,25 +362,55 @@ def _scatter_impl(
     if distance is None:
         distance = min_distance
 
-    x_values, y_values, candidate_shape, grid_like, target_dims = (
-        _coord_helpers._normalize_coordinates(
-            x,
-            y,
-            reference_fields=(where, mask, s, c, *tuple(kwargs.values())),
-        )
-    )
-    selection = _coord_helpers._normalize_selection_mask(
+    resolved_placement = _normalize_placement_name(placement)
+    reference_fields = (where, mask, s, c, *tuple(kwargs.values()))
+    grid_state = _prepare_1d_grid_candidates(
+        x,
+        y,
+        reference_fields=reference_fields,
         where=where,
         mask=mask,
-        candidate_shape=candidate_shape,
-        target_dims=target_dims,
+        resolved_placement=resolved_placement,
     )
-    cell_geometry = _coord_helpers._scatter_cell_geometry(x_values, y_values)
+    if grid_state is None:
+        x_values, y_values, candidate_shape, grid_like, target_dims = (
+            _coord_helpers._normalize_coordinates(
+                x,
+                y,
+                reference_fields=reference_fields,
+            )
+        )
+        selection = _coord_helpers._normalize_selection_mask(
+            where=where,
+            mask=mask,
+            candidate_shape=candidate_shape,
+            target_dims=target_dims,
+        )
+        cell_geometry = (
+            _coord_helpers._scatter_cell_geometry(x_values, y_values)
+            if resolved_placement == "cells"
+            else None
+        )
 
-    x_flat = np.ravel(np.asarray(x_values, dtype=float))
-    y_flat = np.ravel(np.asarray(y_values, dtype=float))
-    source_valid = selection.ravel() & np.isfinite(x_flat) & np.isfinite(y_flat)
-    source_indices = np.flatnonzero(source_valid)
+        x_flat = np.ravel(np.asarray(x_values, dtype=float))
+        y_flat = np.ravel(np.asarray(y_values, dtype=float))
+        source_valid = selection.ravel() & np.isfinite(x_flat) & np.isfinite(y_flat)
+        source_indices = np.flatnonzero(source_valid)
+        source_points = np.column_stack(
+            [x_flat[source_indices], y_flat[source_indices]]
+        )
+    else:
+        candidate_shape = grid_state["candidate_shape"]
+        grid_like = grid_state["grid_like"]
+        target_dims = grid_state["target_dims"]
+        cell_geometry = grid_state["cell_geometry"]
+        source_indices = grid_state["source_indices"]
+        source_points = grid_state["source_points"]
+
+    resolved_placement = _resolve_placement(
+        resolved_placement,
+        cell_geometry=cell_geometry,
+    )
 
     if source_indices.size == 0:
         empty_indices = np.empty(0, dtype=int)
@@ -335,16 +454,6 @@ def _scatter_impl(
         distance=distance,
         grid_like=grid_like,
     )
-    resolved_placement = _resolve_placement(
-        placement,
-        grid_like=grid_like,
-        where=where,
-        mask=mask,
-        distance=distance,
-        cell_geometry=cell_geometry,
-    )
-
-    source_points = np.column_stack([x_flat[source_indices], y_flat[source_indices]])
     if transform is ax.transData:
         if resolved_placement == "cells" and cell_geometry is not None:
             kind = str(np.asarray(cell_geometry["kind"]).item())
@@ -394,16 +503,21 @@ def _scatter_impl(
     display_points = np.asarray(transform.transform(candidate_points), dtype=float)
     display_valid = np.isfinite(display_points).all(axis=1)
 
-    candidate_points = candidate_points[display_valid]
-    candidate_source_positions = candidate_source_positions[display_valid]
-    display_points = display_points[display_valid]
+    if not np.all(display_valid):
+        candidate_points = candidate_points[display_valid]
+        candidate_source_positions = candidate_source_positions[display_valid]
+        display_points = display_points[display_valid]
 
     if spacing_fraction is None or candidate_points.shape[0] <= 1:
         retained_indices = np.arange(candidate_points.shape[0], dtype=int)
     else:
-        mapped_points = _map_ncl_display_points_to_viewport(display_points, ax.bbox)
         retained_indices = np.asarray(
-            _thin_ncl_mapped_candidates(mapped_points, spacing_fraction),
+            _call_native_thin_ncl_display_candidates(
+                _thin_display_candidates,
+                display_points,
+                ax.bbox,
+                spacing_fraction,
+            ),
             dtype=int,
         )
 
