@@ -23,7 +23,6 @@ from ._artists.vector_key_artist import CurlyVectorKey
 from ._core import geometry as _geometry
 from ._core import legacy_stream as _legacy_stream
 from ._core import native as _native_helpers
-from ._core import sampling as _sampling
 from ._core import thinning as _thinning
 from ._core import vector_engine as _vector_engine
 from ._core.result import CurlyVectorPlotSet
@@ -816,56 +815,7 @@ def _trace_ncl_direction(
         speed_scale=speed_scale,
         native_trace_context=native_trace_context,
     )
-    if native_curve is not None:
-        return native_curve
-
-    return _trace_ncl_direction_python(
-        start_point=start_point,
-        max_length_px=max_length_px,
-        direction_sign=direction_sign,
-        grid=grid,
-        u=u,
-        v=v,
-        transform=transform,
-        step_px=step_px,
-        speed_scale=speed_scale,
-        viewport=viewport,
-        display_sampler=display_sampler,
-    )
-
-
-def _trace_ncl_direction_python(
-    start_point,
-    max_length_px,
-    direction_sign,
-    grid,
-    u,
-    v,
-    transform,
-    step_px,
-    speed_scale,
-    viewport,
-    display_sampler=None,
-):
-    return _vector_engine._trace_ncl_direction_python(
-        start_point=start_point,
-        max_length_px=max_length_px,
-        direction_sign=direction_sign,
-        grid=grid,
-        u=u,
-        v=v,
-        transform=transform,
-        step_px=step_px,
-        speed_scale=speed_scale,
-        viewport=viewport,
-        display_sampler=display_sampler,
-        sample_local_vector_state_fn=_sample_local_vector_state,
-        ncl_step_length_px_fn=_ncl_step_length_px,
-        corrected_ncl_display_origin_fn=_corrected_ncl_display_origin,
-        clip_display_step_to_viewport_fn=_clip_display_step_to_viewport,
-        candidate_data_from_display_step_fn=_candidate_data_from_display_step,
-        point_within_grid_data_fn=_point_within_grid_data,
-    )
+    return native_curve
 
 
 def _sample_local_vector_state(grid, u, v, transform, point, display_sampler=None):
@@ -882,23 +832,12 @@ def _sample_local_vector_state(grid, u, v, transform, point, display_sampler=Non
 
 
 def _sample_grid_field(grid, field, xd, yd):
-    value = _native_helpers._call_native_sample_grid_field(
+    return _native_helpers._call_native_sample_grid_field(
         _sample_grid_field_native,
         grid,
         field,
         xd,
         yd,
-    )
-    if value is not None:
-        return value
-
-    return _sampling._sample_grid_field_python(
-        grid=grid,
-        field=field,
-        xd=xd,
-        yd=yd,
-        interpgrid_fn=interpgrid,
-        terminate_trajectory_exc=TerminateTrajectory,
     )
 
 
@@ -911,21 +850,12 @@ def _sample_grid_field_array(grid, field, points):
     if len(points) == 0:
         return sampled
 
-    sampled_native = _native_helpers._call_native_sample_grid_field_array(
+    return _native_helpers._call_native_sample_grid_field_array(
         _sample_grid_field_array_native,
         grid,
         field,
         points,
         sampled.shape,
-    )
-    if sampled_native is not None:
-        return sampled_native
-
-    return _sampling._sample_grid_field_array_python(
-        grid=grid,
-        field=field,
-        points=points,
-        interpgrid_fn=interpgrid,
     )
 
 
