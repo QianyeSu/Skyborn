@@ -12,13 +12,11 @@ from matplotlib.transforms import Bbox
 
 import skyborn.plot.vector as vector_plot_module
 from skyborn.plot._core.geometry import (
-    _curve_shape_is_acceptable,
     _display_step_to_data,
+    _evaluate_ncl_display_curve,
     _finite_difference_step,
-    _fit_single_bend_display_curve,
     _point_at_arc_distance_from_end,
 )
-from skyborn.plot._core.legacy_stream import _gen_starting_points
 from skyborn.plot._core.thinning import (
     _map_ncl_display_points_to_viewport,
     _NCLDisplaySampler,
@@ -27,7 +25,6 @@ from skyborn.plot._core.thinning import (
 from skyborn.plot._core.vector_engine import (
     _default_ncl_box_center_candidates,
     _default_ncl_candidate_shape,
-    _density_scalar,
     _density_xy,
 )
 from skyborn.plot.vector import (
@@ -45,7 +42,6 @@ from skyborn.plot.vector import (
     _axis_coordinate_1d,
     _axis_is_uniform,
     _candidate_data_from_display_step,
-    _evaluate_ncl_display_curve,
     _infer_profile_ncl_ref_magnitude,
     _local_display_jacobian,
     _ncl_step_length_px,
@@ -892,15 +888,6 @@ class TestCurlyVector:
             lambda **kwargs: expected.copy(),
         )
 
-        def _should_not_fallback(**kwargs):
-            raise AssertionError(
-                "native tracer should have short-circuited the Python fallback"
-            )
-
-        monkeypatch.setattr(
-            vector_plot_module, "_trace_ncl_direction_python", _should_not_fallback
-        )
-
         curve = vector_plot_module._trace_ncl_direction(
             start_point=np.array([0.5, 0.5]),
             max_length_px=10.0,
@@ -917,8 +904,10 @@ class TestCurlyVector:
 
         np.testing.assert_allclose(curve, expected)
 
-    def test_trace_ncl_direction_falls_back_when_native_returns_none(self, monkeypatch):
-        """The wrapper should preserve the Python path when the native call does not yield a curve."""
+    def test_trace_ncl_direction_returns_none_when_native_returns_none(
+        self, monkeypatch
+    ):
+        """The wrapper should not use a Python trace path when native returns no curve."""
         grid = Grid(np.linspace(0.0, 2.0, 3), np.linspace(0.0, 2.0, 3))
         u = np.ones(grid.shape, dtype=float)
         v = np.zeros(grid.shape, dtype=float)
@@ -932,14 +921,8 @@ class TestCurlyVector:
         display_sampler.display_grid = display_grid
         display_sampler.cell_valid = np.ones((2, 2), dtype=bool)
 
-        expected = np.array([[0.5, 0.5], [1.0, 0.5]], dtype=float)
         monkeypatch.setattr(
             vector_plot_module, "_trace_ncl_direction_native", lambda **kwargs: None
-        )
-        monkeypatch.setattr(
-            vector_plot_module,
-            "_trace_ncl_direction_python",
-            lambda **kwargs: expected.copy(),
         )
 
         curve = vector_plot_module._trace_ncl_direction(
@@ -956,7 +939,7 @@ class TestCurlyVector:
             display_sampler=display_sampler,
         )
 
-        np.testing.assert_allclose(curve, expected)
+        assert curve is None
 
     def test_sample_grid_field_prefers_native_when_available(self, monkeypatch):
         """Scalar sampling should use the native helper when it returns a value."""
@@ -988,10 +971,10 @@ class TestCurlyVector:
 
         np.testing.assert_allclose(sampled, expected)
 
-    def test_sample_grid_field_array_falls_back_when_native_returns_none(
+    def test_sample_grid_field_array_returns_none_when_native_returns_none(
         self, monkeypatch
     ):
-        """Vectorized scalar sampling should preserve the Python fallback path."""
+        """Vectorized scalar sampling should return the native result directly."""
         grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0, 2.0]))
         field = np.array(
             [
@@ -1008,13 +991,7 @@ class TestCurlyVector:
 
         sampled = vector_plot_module._sample_grid_field_array(grid, field, points)
 
-        assert sampled[0] == pytest.approx(
-            vector_plot_module._sample_grid_field(grid, field, 0.5, 0.5)
-        )
-        assert sampled[1] == pytest.approx(
-            vector_plot_module._sample_grid_field(grid, field, 1.5, 1.5)
-        )
-        assert np.isnan(sampled[2])
+        assert sampled is None
 
     def test_thin_ncl_mapped_candidates_prefers_native_when_available(
         self, monkeypatch
@@ -1366,7 +1343,11 @@ class TestCurlyVector:
                 [1.2, 0.7],
             ]
         )
-        assert _curve_shape_is_acceptable(curve, ax.transData)
+        display_curve, transform_failed = _evaluate_ncl_display_curve(
+            curve, ax.transData
+        )
+        assert display_curve is not None
+        assert transform_failed is False
         plt.close(fig)
 
     def test_curve_shape_rejects_wormy_s_curve(self):
@@ -1381,7 +1362,11 @@ class TestCurlyVector:
                 [1.2, -0.05],
             ]
         )
-        assert not _curve_shape_is_acceptable(curve, ax.transData)
+        display_curve, transform_failed = _evaluate_ncl_display_curve(
+            curve, ax.transData
+        )
+        assert display_curve is None
+        assert transform_failed is False
         plt.close(fig)
 
     def test_evaluate_ncl_display_curve_rejects_projection_seam_jump(self):
@@ -1481,28 +1466,6 @@ class TestCurlyVector:
         assert ax.patches
         assert all(patch.get_transform() is ax.transData for patch in ax.patches)
         plt.close(fig)
-
-    def test_fit_single_bend_display_curve_removes_turn_sign_changes(self):
-        """The single-bend fitter should remove S-shaped inflection changes."""
-        curve = np.array(
-            [
-                [0.0, 0.0],
-                [0.3, 0.25],
-                [0.6, -0.2],
-                [0.9, 0.22],
-                [1.2, -0.05],
-            ]
-        )
-        fitted = _fit_single_bend_display_curve(curve)
-        segments = np.diff(fitted, axis=0)
-        lengths = np.hypot(segments[:, 0], segments[:, 1])
-        directions = segments[lengths > 1e-6] / lengths[lengths > 1e-6, None]
-        cross = (
-            directions[:-1, 0] * directions[1:, 1]
-            - directions[:-1, 1] * directions[1:, 0]
-        )
-        turn_sign = np.sign(cross[np.abs(cross) > 1e-6])
-        assert np.count_nonzero(turn_sign[1:] * turn_sign[:-1] < 0) == 0
 
     def test_curly_vector_integration_directions(self, sample_vector_field):
         """Test different integration directions."""
@@ -1674,8 +1637,6 @@ class TestInternalHelperFunctions:
 
     def test_density_helpers_clip_small_values(self):
         np.testing.assert_allclose(_density_xy((0.0, 0.05)), np.array([0.1, 0.1]))
-        assert _density_scalar(0.0) == pytest.approx(0.1)
-        assert _density_scalar((0.2, 0.4)) == pytest.approx(0.3)
 
     def test_finite_difference_step_chooses_valid_direction_or_span_fraction(self):
         assert _finite_difference_step(5.0, 0.0, 10.0, 2.0) == pytest.approx(2.0)
@@ -2213,30 +2174,6 @@ class TestUtilityFunctions:
         # This should raise TerminateTrajectory for masked values
         with pytest.raises(TerminateTrajectory):
             interpgrid(a, 1, 0)  # Access masked location
-
-    def test_gen_starting_points_integer_grains(self):
-        """Test _gen_starting_points with integer grains."""
-        x = np.linspace(0, 10, 11)
-        y = np.linspace(0, 5, 6)
-
-        points = _gen_starting_points(x, y, 3)
-
-        assert points.shape == (9, 2)  # 3x3 grid
-
-        # Check that points are within bounds
-        assert np.all(points[:, 0] >= x.min())
-        assert np.all(points[:, 0] <= x.max())
-        assert np.all(points[:, 1] >= y.min())
-        assert np.all(points[:, 1] <= y.max())
-
-    def test_gen_starting_points_tuple_grains(self):
-        """Test _gen_starting_points with tuple grains."""
-        x = np.linspace(0, 10, 11)
-        y = np.linspace(0, 5, 6)
-
-        points = _gen_starting_points(x, y, (4, 2))
-
-        assert points.shape == (8, 2)  # 4x2 grid
 
 
 class TestExceptionClasses:
