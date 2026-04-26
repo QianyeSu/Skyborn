@@ -83,7 +83,6 @@ from skyborn.plot._core.scatter_engine import (
     _scatter_impl,
     _subset_scatter_value,
 )
-from skyborn.plot._core.thinning import _thin_ncl_mapped_candidates
 from skyborn.plot._core.vector_engine import (
     Grid,
     _build_ncl_curve,
@@ -2359,7 +2358,6 @@ class TestStyleAndGeometryCoverage:
             _normalize_curly_pivot("corner")
 
         assert _resolve_curly_anchor_alias("center", "mid") == "center"
-        assert _thin_ncl_mapped_candidates(np.empty((0, 2), dtype=float), 0.1) == []
 
 
 class TestVectorArtistCoverage:
