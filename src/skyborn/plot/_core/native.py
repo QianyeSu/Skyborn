@@ -25,17 +25,6 @@ def _call_native_sample_grid_field(native_sampler, grid, field, xd, yd):
     return value if np.isfinite(value) else None
 
 
-def _try_native_sample_grid_field(native_sampler, grid, field, xd, yd, on_error):
-    if native_sampler is None:
-        return None
-
-    try:
-        return _call_native_sample_grid_field(native_sampler, grid, field, xd, yd)
-    except Exception as err:
-        on_error("_sample_grid_field_native", "scalar sampling", err)
-        return None
-
-
 def _call_native_sample_grid_field_array(
     native_sampler,
     grid,
@@ -62,30 +51,6 @@ def _call_native_sample_grid_field_array(
         return None
     sampled[~np.isfinite(sampled)] = np.nan
     return sampled
-
-
-def _try_native_sample_grid_field_array(
-    native_sampler,
-    grid,
-    field,
-    points,
-    expected_shape,
-    on_error,
-):
-    if native_sampler is None:
-        return None
-
-    try:
-        return _call_native_sample_grid_field_array(
-            native_sampler,
-            grid,
-            field,
-            points,
-            expected_shape,
-        )
-    except Exception as err:
-        on_error("_sample_grid_field_array_native", "vectorized sampling", err)
-        return None
 
 
 def _call_native_thin_ncl_mapped_candidates(
@@ -119,26 +84,6 @@ def _call_native_thin_ncl_display_candidates(
     if selected is None:
         return None
     return np.asarray(selected, dtype=int).tolist()
-
-
-def _try_native_thin_ncl_mapped_candidates(
-    native_thinner,
-    mapped_points,
-    spacing_frac,
-    on_error,
-):
-    if native_thinner is None:
-        return None
-
-    try:
-        return _call_native_thin_ncl_mapped_candidates(
-            native_thinner,
-            mapped_points,
-            spacing_frac,
-        )
-    except Exception as err:
-        on_error("_thin_ncl_mapped_candidates_native", "candidate thinning", err)
-        return None
 
 
 def _call_native_trace_ncl_direction(
@@ -182,31 +127,3 @@ def _call_native_trace_ncl_direction(
         if curve.ndim == 2 and curve.shape[0] >= 2 and curve.shape[1] == 2
         else None
     )
-
-
-def _try_native_trace_ncl_direction(
-    native_tracer,
-    native_trace_context,
-    start_point,
-    max_length_px,
-    direction_sign,
-    step_px,
-    speed_scale,
-    on_error,
-):
-    if native_tracer is None:
-        return None
-
-    try:
-        return _call_native_trace_ncl_direction(
-            native_tracer,
-            native_trace_context,
-            start_point,
-            max_length_px,
-            direction_sign,
-            step_px,
-            speed_scale,
-        )
-    except Exception as err:
-        on_error("_trace_ncl_direction_native", "trace", err)
-        return None
