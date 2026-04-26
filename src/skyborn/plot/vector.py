@@ -846,16 +846,15 @@ def _sample_grid_field_array(grid, field, points):
     if points.ndim == 1:
         points = points[np.newaxis, :]
 
-    sampled = np.full(len(points), np.nan, dtype=float)
     if len(points) == 0:
-        return sampled
+        return np.empty(0, dtype=float)
 
     return _native_helpers._call_native_sample_grid_field_array(
         _sample_grid_field_array_native,
         grid,
         field,
         points,
-        sampled.shape,
+        (len(points),),
     )
 
 
