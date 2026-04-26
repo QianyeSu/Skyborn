@@ -110,11 +110,10 @@ def scatter(*args: Any, **kwargs: Any):
         Controls where gridded stipple candidates are generated before
         thinning. ``"points"`` keeps the original node-based behavior.
         ``"cells"`` fills the selected grid cells with interior candidates so
-        dots can appear between coordinate centers, which is closer to NCL
-        stipple fill behavior. The default ``"auto"`` enables ``"cells"`` for
-        masked grids with inferable cell geometry when spacing is controlled by
-        ``density`` or the default NCL-style rule, and otherwise falls back to
-        ``"points"``.
+        dots can appear between coordinate centers. The default ``"auto"``
+        follows the NCL polymarker/scatter convention and uses ``"points"``;
+        request ``"cells"`` explicitly when you want fill-like stippling inside
+        selected grid cells.
     transform : optional
         Source coordinate transform. Standard Matplotlib transforms are passed
         through directly. Cartopy CRS-like objects are converted to the
