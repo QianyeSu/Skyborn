@@ -5,12 +5,15 @@ from __future__ import annotations
 import numpy as np
 
 
-def _call_native_sample_grid_field(native_sampler, grid, field, xd, yd):
+def _native_field_array(field):
     if np.ma.isMaskedArray(field):
-        return None
+        return np.asarray(np.ma.filled(field, np.nan), dtype=float)
+    return np.asarray(field, dtype=float)
 
+
+def _call_native_sample_grid_field(native_sampler, grid, field, xd, yd):
     value = native_sampler(
-        field=np.asarray(field, dtype=float),
+        field=_native_field_array(field),
         x_origin=float(grid.x_origin),
         y_origin=float(grid.y_origin),
         dx=float(grid.dx),
@@ -32,11 +35,8 @@ def _call_native_sample_grid_field_array(
     points,
     expected_shape,
 ):
-    if np.ma.isMaskedArray(field):
-        return None
-
     sampled = native_sampler(
-        field=np.asarray(field, dtype=float),
+        field=_native_field_array(field),
         x_origin=float(grid.x_origin),
         y_origin=float(grid.y_origin),
         dx=float(grid.dx),
