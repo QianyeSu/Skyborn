@@ -86,6 +86,26 @@ def _call_native_thin_ncl_display_candidates(
     return np.asarray(selected, dtype=int).tolist()
 
 
+def _call_native_generate_cell_candidates(
+    native_generator,
+    corners,
+    mapped_corners,
+    source_points,
+    spacing_fraction,
+):
+    generated = native_generator(
+        corners=np.asarray(corners, dtype=float),
+        mapped_corners=np.asarray(mapped_corners, dtype=float),
+        source_points=np.asarray(source_points, dtype=float),
+        spacing_frac=float(spacing_fraction),
+    )
+    candidate_points, source_positions = generated
+    return (
+        np.asarray(candidate_points, dtype=float),
+        np.asarray(source_positions, dtype=int),
+    )
+
+
 def _call_native_trace_ncl_direction(
     native_tracer,
     native_trace_context,
