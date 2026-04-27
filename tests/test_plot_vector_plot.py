@@ -12,10 +12,23 @@ from matplotlib.transforms import Bbox
 
 import skyborn.plot.vector as vector_plot_module
 from skyborn.plot._core.geometry import (
+    _candidate_data_from_display_step,
     _display_step_to_data,
     _evaluate_ncl_display_curve,
     _finite_difference_step,
+    _local_display_jacobian,
     _point_at_arc_distance_from_end,
+    _point_within_grid_data,
+    _tip_display_geometry_from_display_curve,
+    _trim_display_curve_from_end,
+)
+from skyborn.plot._core.legacy_stream import (
+    DomainMap,
+    InvalidIndexError,
+    OutOfBounds,
+    StreamMask,
+    TerminateTrajectory,
+    interpgrid,
 )
 from skyborn.plot._core.thinning import (
     _map_ncl_display_points_to_viewport,
@@ -23,41 +36,27 @@ from skyborn.plot._core.thinning import (
     _resolve_ncl_min_distance_fraction,
 )
 from skyborn.plot._core.vector_engine import (
+    Grid,
     _default_ncl_box_center_candidates,
     _default_ncl_candidate_shape,
     _density_xy,
+    _ncl_step_length_px,
 )
-from skyborn.plot.vector import (
-    CurlyVectorPlotSet,
-    DomainMap,
-    Grid,
-    InvalidIndexError,
-    OutOfBounds,
-    StreamMask,
-    TerminateTrajectory,
-    _apply_ncl_preset_defaults,
-)
+from skyborn.plot.vector import CurlyVectorPlotSet, _apply_ncl_preset_defaults
 from skyborn.plot.vector import _array_curly_vector as curly_vector
 from skyborn.plot.vector import (
     _axis_coordinate_1d,
     _axis_is_uniform,
-    _candidate_data_from_display_step,
     _infer_profile_ncl_ref_magnitude,
-    _local_display_jacobian,
-    _ncl_step_length_px,
     _normalize_ncl_preset,
     _open_arrow_geometry,
-    _point_within_grid_data,
     _prepare_ncl_display_sampler,
     _prepare_ncl_native_trace_context,
     _resolve_default_ncl_preset,
     _sample_grid_field,
     _sample_grid_field_array,
     _select_ncl_centers,
-    _tip_display_geometry_from_display_curve,
     _trim_curve_for_open_head,
-    _trim_display_curve_from_end,
-    interpgrid,
 )
 
 
