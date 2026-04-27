@@ -21,7 +21,6 @@ from ._adapters import grid_prepare as _grid_prepare_adapter
 from ._artists import vector_artists as _artist_helpers
 from ._artists.vector_key_artist import CurlyVectorKey
 from ._core import geometry as _geometry
-from ._core import legacy_stream as _legacy_stream
 from ._core import native as _native_helpers
 from ._core import thinning as _thinning
 from ._core import vector_engine as _vector_engine
@@ -53,27 +52,15 @@ __all__ = [
     "curly_vector_key",
 ]
 
-_candidate_data_from_display_step = _geometry._candidate_data_from_display_step
 _display_points_to_data = _geometry._display_points_to_data
-_evaluate_ncl_display_curve = _geometry._evaluate_ncl_display_curve
-DomainMap = _legacy_stream.DomainMap
-interpgrid = _legacy_stream.interpgrid
-InvalidIndexError = _legacy_stream.InvalidIndexError
 _local_display_jacobian = _geometry._local_display_jacobian
 _NCLNativeTraceContext = _thinning._NCLNativeTraceContext
-_ncl_step_length_px = _vector_engine._ncl_step_length_px
-OutOfBounds = _legacy_stream.OutOfBounds
-_point_within_grid_data = _geometry._point_within_grid_data
 _prepare_ncl_display_sampler = _thinning._prepare_ncl_display_sampler
 Grid = _vector_engine.Grid
-StreamMask = _legacy_stream.StreamMask
-TerminateTrajectory = _legacy_stream.TerminateTrajectory
 _tip_display_geometry_from_display_curve = (
     _geometry._tip_display_geometry_from_display_curve
 )
 _trim_display_curve_from_end = _geometry._trim_display_curve_from_end
-_corrected_ncl_display_origin = _vector_engine._corrected_ncl_display_origin
-_clip_display_step_to_viewport = _vector_engine._clip_display_step_to_viewport
 
 _ARRAY_CURLY_VECTOR_KWARG_NAMES = (
     "density",
@@ -159,6 +146,7 @@ from .nclcurly_native import (
     thin_mapped_candidates as _thin_ncl_mapped_candidates_native,
 )
 from .nclcurly_native import trace_ncl_direction as _trace_ncl_direction_native
+from .nclcurly_native import validate_display_curve as _validate_display_curve_native
 
 
 def _normalize_ncl_preset(ncl_preset):
@@ -747,22 +735,127 @@ def _build_ncl_curve(
     display_sampler=None,
     native_trace_context=None,
 ):
-    return _vector_engine._build_ncl_curve(
-        start_point=start_point,
-        total_length_px=total_length_px,
-        anchor=anchor,
-        grid=grid,
-        u=u,
-        v=v,
-        transform=transform,
-        step_px=step_px,
-        speed_scale=speed_scale,
-        viewport=viewport,
+    current_length_px = float(total_length_px)
+
+    for _ in range(4):
+        curve_result = _trace_ncl_curve_with_display(
+            start_point=start_point,
+            total_length_px=current_length_px,
+            anchor=anchor,
+            grid=grid,
+            u=u,
+            v=v,
+            transform=transform,
+            step_px=step_px,
+            speed_scale=speed_scale,
+            viewport=viewport,
+            display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
+        )
+        if curve_result is not None:
+            curve, display_curve = curve_result
+            if len(curve) >= 2 and _validate_display_curve(display_curve, viewport):
+                return curve, display_curve
+
+        current_length_px *= 0.78
+        if current_length_px <= step_px:
+            break
+
+    return None
+
+
+def _trace_ncl_curve_with_display(
+    start_point,
+    total_length_px,
+    anchor,
+    grid,
+    u,
+    v,
+    transform,
+    step_px,
+    speed_scale,
+    viewport,
+    display_sampler=None,
+    native_trace_context=None,
+):
+    del transform
+    if total_length_px <= 0:
+        return None
+
+    if anchor == "center":
+        backward = _trace_ncl_direction_with_display(
+            start_point,
+            total_length_px / 2.0,
+            -1.0,
+            grid,
+            u,
+            v,
+            step_px,
+            speed_scale,
+            viewport,
+            display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
+        )
+        forward = _trace_ncl_direction_with_display(
+            start_point,
+            total_length_px / 2.0,
+            1.0,
+            grid,
+            u,
+            v,
+            step_px,
+            speed_scale,
+            viewport,
+            display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
+        )
+        if backward is None and forward is None:
+            return None
+        if backward is None:
+            return forward
+        if forward is None:
+            curve, display_curve = backward
+            return curve[::-1], display_curve[::-1]
+
+        backward_curve, backward_display = backward
+        forward_curve, forward_display = forward
+        return (
+            np.vstack([backward_curve[::-1], forward_curve[1:]]),
+            np.vstack([backward_display[::-1], forward_display[1:]]),
+        )
+
+    if anchor == "tail":
+        return _trace_ncl_direction_with_display(
+            start_point,
+            total_length_px,
+            1.0,
+            grid,
+            u,
+            v,
+            step_px,
+            speed_scale,
+            viewport,
+            display_sampler=display_sampler,
+            native_trace_context=native_trace_context,
+        )
+
+    backward = _trace_ncl_direction_with_display(
+        start_point,
+        total_length_px,
+        -1.0,
+        grid,
+        u,
+        v,
+        step_px,
+        speed_scale,
+        viewport,
         display_sampler=display_sampler,
         native_trace_context=native_trace_context,
-        trace_ncl_curve_fn=_trace_ncl_curve,
-        evaluate_ncl_display_curve_fn=_evaluate_ncl_display_curve,
     )
+    if backward is None:
+        return None
+    curve, display_curve = backward
+    return curve[::-1], display_curve[::-1]
 
 
 def _trace_ncl_direction_via_native(
@@ -781,6 +874,57 @@ def _trace_ncl_direction_via_native(
         direction_sign,
         step_px,
         speed_scale,
+    )
+
+
+def _trace_ncl_direction_with_display_via_native(
+    start_point,
+    max_length_px,
+    direction_sign,
+    step_px,
+    speed_scale,
+    native_trace_context=None,
+):
+    return _native_helpers._call_native_trace_ncl_direction_with_display(
+        _trace_ncl_direction_native,
+        native_trace_context,
+        start_point,
+        max_length_px,
+        direction_sign,
+        step_px,
+        speed_scale,
+    )
+
+
+def _trace_ncl_direction_with_display(
+    start_point,
+    max_length_px,
+    direction_sign,
+    grid,
+    u,
+    v,
+    step_px,
+    speed_scale,
+    viewport,
+    display_sampler=None,
+    native_trace_context=None,
+):
+    start_point = np.asarray(start_point, dtype=float)
+    if native_trace_context is None and display_sampler is not None:
+        native_trace_context = _prepare_ncl_native_trace_context(
+            grid=grid,
+            u=u,
+            v=v,
+            viewport=viewport,
+            display_sampler=display_sampler,
+        )
+    return _trace_ncl_direction_with_display_via_native(
+        start_point=start_point,
+        max_length_px=max_length_px,
+        direction_sign=direction_sign,
+        step_px=step_px,
+        speed_scale=speed_scale,
+        native_trace_context=native_trace_context,
     )
 
 
@@ -816,6 +960,14 @@ def _trace_ncl_direction(
         native_trace_context=native_trace_context,
     )
     return native_curve
+
+
+def _validate_display_curve(display_curve, viewport):
+    return _native_helpers._call_native_validate_display_curve(
+        _validate_display_curve_native,
+        display_curve,
+        viewport,
+    )
 
 
 def _sample_local_vector_state(grid, u, v, transform, point, display_sampler=None):
