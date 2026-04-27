@@ -1211,6 +1211,475 @@ cleanup:
     return result;
 }
 
+/*
+ * Compute display-grid cell validity in C.
+ *
+ * This mirrors _NCLDisplaySampler._compute_cell_valid: a cell is valid only when
+ * all four display nodes are finite and none of the four cell edges crosses a
+ * projection seam according to the same robust jump threshold.
+ */
+static PyObject *compute_display_cell_valid(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    PyObject *display_grid_obj;
+    PyArrayObject *display_arr = NULL;
+    PyArrayObject *cell_valid_arr = NULL;
+    PyObject *result = NULL;
+    static char *kwlist[] = {
+        "display_grid",
+        NULL,
+    };
+    npy_intp ny;
+    npy_intp nx;
+    npy_intp n_edges;
+    npy_intp edge_count = 0;
+    double *edges = NULL;
+    double jump_limit = 0.0;
+    int has_jump_limit = 0;
+    const double *display;
+    npy_bool *cell_valid;
+    (void)self;
+
+    if (!PyArg_ParseTupleAndKeywords(
+            args,
+            kwargs,
+            "O:compute_display_cell_valid",
+            kwlist,
+            &display_grid_obj))
+    {
+        return NULL;
+    }
+
+    display_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        display_grid_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    if (display_arr == NULL)
+    {
+        goto cleanup;
+    }
+    if (PyArray_NDIM(display_arr) != 3 ||
+        PyArray_DIM(display_arr, 2) != 2)
+    {
+        PyErr_SetString(PyExc_ValueError, "display_grid must have shape (ny, nx, 2)");
+        goto cleanup;
+    }
+
+    ny = PyArray_DIM(display_arr, 0);
+    nx = PyArray_DIM(display_arr, 1);
+    if (ny < 2 || nx < 2)
+    {
+        PyErr_SetString(PyExc_ValueError, "display_grid must contain at least one cell");
+        goto cleanup;
+    }
+
+    {
+        npy_intp output_dims[2] = {ny - 1, nx - 1};
+        cell_valid_arr = (PyArrayObject *)PyArray_SimpleNew(2, output_dims, NPY_BOOL);
+        if (cell_valid_arr == NULL)
+        {
+            goto cleanup;
+        }
+    }
+
+    display = (const double *)PyArray_DATA(display_arr);
+    cell_valid = (npy_bool *)PyArray_DATA(cell_valid_arr);
+    n_edges = ny * (nx - 1) + (ny - 1) * nx;
+    edges = (double *)malloc((size_t)n_edges * sizeof(double));
+    if (edges == NULL)
+    {
+        PyErr_NoMemory();
+        goto cleanup;
+    }
+
+    for (npy_intp iy = 0; iy < ny; ++iy)
+    {
+        for (npy_intp ix = 0; ix < nx - 1; ++ix)
+        {
+            npy_intp left_idx = (iy * nx + ix) * 2;
+            npy_intp right_idx = (iy * nx + ix + 1) * 2;
+            double length = hypot(
+                display[right_idx] - display[left_idx],
+                display[right_idx + 1] - display[left_idx + 1]);
+            if (isfinite(length) && length > 1e-9)
+            {
+                edges[edge_count++] = length;
+            }
+        }
+    }
+    for (npy_intp iy = 0; iy < ny - 1; ++iy)
+    {
+        for (npy_intp ix = 0; ix < nx; ++ix)
+        {
+            npy_intp top_idx = (iy * nx + ix) * 2;
+            npy_intp bottom_idx = ((iy + 1) * nx + ix) * 2;
+            double length = hypot(
+                display[bottom_idx] - display[top_idx],
+                display[bottom_idx + 1] - display[top_idx + 1]);
+            if (isfinite(length) && length > 1e-9)
+            {
+                edges[edge_count++] = length;
+            }
+        }
+    }
+
+    if (edge_count > 0)
+    {
+        npy_intp lower_count = edge_count / 2;
+        if (lower_count < 1)
+        {
+            lower_count = 1;
+        }
+        qsort(edges, (size_t)edge_count, sizeof(double), compare_double_values);
+        if (lower_count % 2 == 1)
+        {
+            jump_limit = edges[lower_count / 2];
+        }
+        else
+        {
+            jump_limit = 0.5 * (edges[lower_count / 2 - 1] + edges[lower_count / 2]);
+        }
+        jump_limit = fmax(jump_limit * 12.0, 1e-6);
+        has_jump_limit = 1;
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    for (npy_intp iy = 0; iy < ny - 1; ++iy)
+    {
+        for (npy_intp ix = 0; ix < nx - 1; ++ix)
+        {
+            npy_intp cell_idx = iy * (nx - 1) + ix;
+            npy_intp idx00 = (iy * nx + ix) * 2;
+            npy_intp idx01 = (iy * nx + ix + 1) * 2;
+            npy_intp idx10 = ((iy + 1) * nx + ix) * 2;
+            npy_intp idx11 = ((iy + 1) * nx + ix + 1) * 2;
+            double top_edge;
+            double bottom_edge;
+            double left_edge;
+            double right_edge;
+            double max_edge;
+            int finite_cell =
+                isfinite(display[idx00]) &&
+                isfinite(display[idx00 + 1]) &&
+                isfinite(display[idx01]) &&
+                isfinite(display[idx01 + 1]) &&
+                isfinite(display[idx10]) &&
+                isfinite(display[idx10 + 1]) &&
+                isfinite(display[idx11]) &&
+                isfinite(display[idx11 + 1]);
+
+            if (!finite_cell)
+            {
+                cell_valid[cell_idx] = NPY_FALSE;
+                continue;
+            }
+            if (!has_jump_limit)
+            {
+                cell_valid[cell_idx] = NPY_TRUE;
+                continue;
+            }
+
+            top_edge = hypot(display[idx01] - display[idx00], display[idx01 + 1] - display[idx00 + 1]);
+            bottom_edge = hypot(display[idx11] - display[idx10], display[idx11 + 1] - display[idx10 + 1]);
+            left_edge = hypot(display[idx10] - display[idx00], display[idx10 + 1] - display[idx00 + 1]);
+            right_edge = hypot(display[idx11] - display[idx01], display[idx11 + 1] - display[idx01 + 1]);
+            max_edge = fmax(fmax(top_edge, bottom_edge), fmax(left_edge, right_edge));
+            cell_valid[cell_idx] = (isfinite(max_edge) && max_edge <= jump_limit) ? NPY_TRUE : NPY_FALSE;
+        }
+    }
+    Py_END_ALLOW_THREADS
+
+    result = (PyObject *)cell_valid_arr;
+    cell_valid_arr = NULL;
+
+cleanup:
+    free(edges);
+    Py_XDECREF(display_arr);
+    Py_XDECREF(cell_valid_arr);
+    return result;
+}
+
+/*
+ * Bilinearly sample display-grid positions and optional local Jacobians for a
+ * batch of data-space points. Invalid rows remain NaN and false in the validity
+ * mask, matching the previous Python vectorized implementation.
+ */
+static PyObject *sample_display_grid(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    PyObject *display_grid_obj;
+    PyObject *cell_valid_obj;
+    PyObject *points_obj;
+    PyArrayObject *display_arr = NULL;
+    PyArrayObject *cell_valid_arr = NULL;
+    PyArrayObject *points_arr = NULL;
+    PyArrayObject *display_points_arr = NULL;
+    PyArrayObject *jacobians_arr = NULL;
+    PyArrayObject *valid_arr = NULL;
+    PyObject *result = NULL;
+    double x_origin;
+    double y_origin;
+    double dx;
+    double dy;
+    int include_jacobian = 0;
+    GridInfo grid;
+    npy_intp point_count;
+    static char *kwlist[] = {
+        "display_grid",
+        "cell_valid",
+        "x_origin",
+        "y_origin",
+        "dx",
+        "dy",
+        "points",
+        "include_jacobian",
+        NULL,
+    };
+    (void)self;
+
+    if (!PyArg_ParseTupleAndKeywords(
+            args,
+            kwargs,
+            "OOddddO|p:sample_display_grid",
+            kwlist,
+            &display_grid_obj,
+            &cell_valid_obj,
+            &x_origin,
+            &y_origin,
+            &dx,
+            &dy,
+            &points_obj,
+            &include_jacobian))
+    {
+        return NULL;
+    }
+
+    display_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        display_grid_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    cell_valid_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        cell_valid_obj, NPY_BOOL, NPY_ARRAY_IN_ARRAY);
+    points_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        points_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    if (display_arr == NULL || cell_valid_arr == NULL || points_arr == NULL)
+    {
+        goto cleanup;
+    }
+
+    if (PyArray_NDIM(display_arr) != 3 ||
+        PyArray_DIM(display_arr, 2) != 2)
+    {
+        PyErr_SetString(PyExc_ValueError, "display_grid must have shape (ny, nx, 2)");
+        goto cleanup;
+    }
+    if (PyArray_NDIM(cell_valid_arr) != 2)
+    {
+        PyErr_SetString(PyExc_ValueError, "cell_valid must be a 2D boolean array");
+        goto cleanup;
+    }
+    if (PyArray_NDIM(points_arr) == 1)
+    {
+        if (PyArray_DIM(points_arr, 0) != 2)
+        {
+            PyErr_SetString(PyExc_ValueError, "1D points must have length 2");
+            goto cleanup;
+        }
+        point_count = 1;
+    }
+    else if (PyArray_NDIM(points_arr) == 2 && PyArray_DIM(points_arr, 1) == 2)
+    {
+        point_count = PyArray_DIM(points_arr, 0);
+    }
+    else
+    {
+        PyErr_SetString(PyExc_ValueError, "points must have shape (N, 2) or (2,)");
+        goto cleanup;
+    }
+
+    grid.ny = PyArray_DIM(display_arr, 0);
+    grid.nx = PyArray_DIM(display_arr, 1);
+    if (PyArray_DIM(cell_valid_arr, 0) != grid.ny - 1 ||
+        PyArray_DIM(cell_valid_arr, 1) != grid.nx - 1)
+    {
+        PyErr_SetString(PyExc_ValueError, "cell_valid must have shape (ny-1, nx-1)");
+        goto cleanup;
+    }
+
+    grid.x_origin = x_origin;
+    grid.y_origin = y_origin;
+    grid.dx_safe = fabs(dx) > 1e-12 ? fabs(dx) : 1e-12;
+    grid.dy_safe = fabs(dy) > 1e-12 ? fabs(dy) : 1e-12;
+    grid.inv_dx = 1.0 / grid.dx_safe;
+    grid.inv_dy = 1.0 / grid.dy_safe;
+    grid.max_x_index = (double)(grid.nx - 1);
+    grid.max_y_index = (double)(grid.ny - 1);
+    grid.max_cell_x = (double)(grid.nx - 2);
+    grid.max_cell_y = (double)(grid.ny - 2);
+
+    {
+        npy_intp display_dims[2] = {point_count, 2};
+        npy_intp valid_dims[1] = {point_count};
+        display_points_arr = (PyArrayObject *)PyArray_SimpleNew(2, display_dims, NPY_DOUBLE);
+        valid_arr = (PyArrayObject *)PyArray_SimpleNew(1, valid_dims, NPY_BOOL);
+        if (display_points_arr == NULL || valid_arr == NULL)
+        {
+            goto cleanup;
+        }
+        if (include_jacobian)
+        {
+            npy_intp jacobian_dims[3] = {point_count, 2, 2};
+            jacobians_arr = (PyArrayObject *)PyArray_SimpleNew(3, jacobian_dims, NPY_DOUBLE);
+            if (jacobians_arr == NULL)
+            {
+                goto cleanup;
+            }
+        }
+    }
+
+    {
+        const double *display = (const double *)PyArray_DATA(display_arr);
+        const npy_bool *cell_valid = (const npy_bool *)PyArray_DATA(cell_valid_arr);
+        const double *points = (const double *)PyArray_DATA(points_arr);
+        double *display_points = (double *)PyArray_DATA(display_points_arr);
+        double *jacobians = include_jacobian ? (double *)PyArray_DATA(jacobians_arr) : NULL;
+        npy_bool *valid = (npy_bool *)PyArray_DATA(valid_arr);
+
+        Py_BEGIN_ALLOW_THREADS
+        for (npy_intp idx = 0; idx < point_count; ++idx)
+        {
+            display_points[idx * 2] = Py_NAN;
+            display_points[idx * 2 + 1] = Py_NAN;
+            valid[idx] = NPY_FALSE;
+            if (include_jacobian)
+            {
+                for (int jidx = 0; jidx < 4; ++jidx)
+                {
+                    jacobians[idx * 4 + jidx] = Py_NAN;
+                }
+            }
+        }
+
+        if (grid.nx >= 2 && grid.ny >= 2)
+        {
+            for (npy_intp idx = 0; idx < point_count; ++idx)
+            {
+                double point_x = points[idx * 2];
+                double point_y = points[idx * 2 + 1];
+                double xi = (point_x - grid.x_origin) * grid.inv_dx;
+                double yi = (point_y - grid.y_origin) * grid.inv_dy;
+                npy_intp ix;
+                npy_intp iy;
+                npy_intp idx00;
+                npy_intp idx01;
+                npy_intp idx10;
+                npy_intp idx11;
+                double sx;
+                double sy;
+                double one_minus_sx;
+                double one_minus_sy;
+                double p00x;
+                double p00y;
+                double p01x;
+                double p01y;
+                double p10x;
+                double p10y;
+                double p11x;
+                double p11y;
+                double display_x;
+                double display_y;
+                double dfdx_x;
+                double dfdx_y;
+                double dfdy_x;
+                double dfdy_y;
+                double det;
+
+                if (!(0.0 <= xi && xi <= grid.max_x_index && 0.0 <= yi && yi <= grid.max_y_index))
+                {
+                    continue;
+                }
+                ix = (npy_intp)floor(fmin(fmax(xi, 0.0), grid.max_cell_x));
+                iy = (npy_intp)floor(fmin(fmax(yi, 0.0), grid.max_cell_y));
+                if (!cell_valid[iy * (grid.nx - 1) + ix])
+                {
+                    continue;
+                }
+
+                sx = xi - (double)ix;
+                sy = yi - (double)iy;
+                one_minus_sx = 1.0 - sx;
+                one_minus_sy = 1.0 - sy;
+                idx00 = (iy * grid.nx + ix) * 2;
+                idx01 = (iy * grid.nx + ix + 1) * 2;
+                idx10 = ((iy + 1) * grid.nx + ix) * 2;
+                idx11 = ((iy + 1) * grid.nx + ix + 1) * 2;
+
+                p00x = display[idx00];
+                p00y = display[idx00 + 1];
+                p01x = display[idx01];
+                p01y = display[idx01 + 1];
+                p10x = display[idx10];
+                p10y = display[idx10 + 1];
+                p11x = display[idx11];
+                p11y = display[idx11 + 1];
+
+                display_x = p00x * one_minus_sx * one_minus_sy + p01x * sx * one_minus_sy + p10x * one_minus_sx * sy + p11x * sx * sy;
+                display_y = p00y * one_minus_sx * one_minus_sy + p01y * sx * one_minus_sy + p10y * one_minus_sx * sy + p11y * sx * sy;
+                if (!isfinite(display_x) || !isfinite(display_y))
+                {
+                    continue;
+                }
+                display_points[idx * 2] = display_x;
+                display_points[idx * 2 + 1] = display_y;
+
+                if (!include_jacobian)
+                {
+                    valid[idx] = NPY_TRUE;
+                    continue;
+                }
+
+                dfdx_x = ((p01x - p00x) * one_minus_sy + (p11x - p10x) * sy) / grid.dx_safe;
+                dfdx_y = ((p01y - p00y) * one_minus_sy + (p11y - p10y) * sy) / grid.dx_safe;
+                dfdy_x = ((p10x - p00x) * one_minus_sx + (p11x - p01x) * sx) / grid.dy_safe;
+                dfdy_y = ((p10y - p00y) * one_minus_sx + (p11y - p01y) * sx) / grid.dy_safe;
+                det = dfdx_x * dfdy_y - dfdy_x * dfdx_y;
+                if (!isfinite(dfdx_x) || !isfinite(dfdx_y) ||
+                    !isfinite(dfdy_x) || !isfinite(dfdy_y) ||
+                    !isfinite(det) || fabs(det) <= 1e-12)
+                {
+                    display_points[idx * 2] = Py_NAN;
+                    display_points[idx * 2 + 1] = Py_NAN;
+                    continue;
+                }
+
+                jacobians[idx * 4] = dfdx_x;
+                jacobians[idx * 4 + 1] = dfdy_x;
+                jacobians[idx * 4 + 2] = dfdx_y;
+                jacobians[idx * 4 + 3] = dfdy_y;
+                valid[idx] = NPY_TRUE;
+            }
+        }
+        Py_END_ALLOW_THREADS
+    }
+
+    if (include_jacobian)
+    {
+        result = Py_BuildValue("NNN", (PyObject *)display_points_arr, (PyObject *)jacobians_arr, (PyObject *)valid_arr);
+        display_points_arr = NULL;
+        jacobians_arr = NULL;
+        valid_arr = NULL;
+    }
+    else
+    {
+        result = Py_BuildValue("NON", (PyObject *)display_points_arr, Py_None, (PyObject *)valid_arr);
+        display_points_arr = NULL;
+        valid_arr = NULL;
+    }
+
+cleanup:
+    Py_XDECREF(display_arr);
+    Py_XDECREF(cell_valid_arr);
+    Py_XDECREF(points_arr);
+    Py_XDECREF(display_points_arr);
+    Py_XDECREF(jacobians_arr);
+    Py_XDECREF(valid_arr);
+    return result;
+}
+
 /* Python wrapper for scalar sampling at one point. */
 static PyObject *sample_grid_field(PyObject *self, PyObject *args, PyObject *kwargs)
 {
@@ -2055,6 +2524,18 @@ static PyMethodDef module_methods[] = {
         (PyCFunction)sample_grid_field,
         METH_VARARGS | METH_KEYWORDS,
         PyDoc_STR("Sample one scalar field value on a regular 2D grid."),
+    },
+    {
+        "compute_display_cell_valid",
+        (PyCFunction)compute_display_cell_valid,
+        METH_VARARGS | METH_KEYWORDS,
+        PyDoc_STR("Compute valid display-grid cells for NCL-like tracing."),
+    },
+    {
+        "sample_display_grid",
+        (PyCFunction)sample_display_grid,
+        METH_VARARGS | METH_KEYWORDS,
+        PyDoc_STR("Bilinearly sample display-grid positions and Jacobians."),
     },
     {
         "sample_grid_field_array",
