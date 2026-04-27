@@ -1489,6 +1489,300 @@ cleanup:
     return result;
 }
 
+/*
+ * Expand selected scatter cells into interior stipple candidates.
+ *
+ * Python still owns coordinate extraction and Matplotlib/Cartopy transforms.
+ * This native loop only consumes already-built data-space corners and
+ * viewport-normalized display corners, then emits the same candidate lattice as
+ * the previous Python implementation without per-cell np.linspace/meshgrid
+ * allocations.
+ */
+static PyObject *generate_cell_candidates(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    PyObject *corners_obj;
+    PyObject *mapped_corners_obj;
+    PyObject *source_points_obj;
+    PyArrayObject *corners_arr = NULL;
+    PyArrayObject *mapped_corners_arr = NULL;
+    PyArrayObject *source_points_arr = NULL;
+    PyArrayObject *candidate_points_arr = NULL;
+    PyArrayObject *source_positions_arr = NULL;
+    PyObject *result = NULL;
+    double spacing_frac;
+    double spacing;
+    npy_intp n_cells;
+    npy_intp total_count = 0;
+    npy_intp output_dims_points[2];
+    npy_intp output_dims_positions[1];
+    const double *corners;
+    const double *mapped_corners;
+    const double *source_points;
+    double *candidate_points;
+    npy_intp *source_positions;
+    static char *kwlist[] = {
+        "corners",
+        "mapped_corners",
+        "source_points",
+        "spacing_frac",
+        NULL,
+    };
+    (void)self;
+
+    if (!PyArg_ParseTupleAndKeywords(
+            args,
+            kwargs,
+            "OOOd:generate_cell_candidates",
+            kwlist,
+            &corners_obj,
+            &mapped_corners_obj,
+            &source_points_obj,
+            &spacing_frac))
+    {
+        return NULL;
+    }
+
+    corners_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        corners_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    mapped_corners_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        mapped_corners_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    source_points_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        source_points_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    if (corners_arr == NULL || mapped_corners_arr == NULL || source_points_arr == NULL)
+    {
+        goto cleanup;
+    }
+
+    if (PyArray_NDIM(corners_arr) != 3 ||
+        PyArray_DIM(corners_arr, 1) != 4 ||
+        PyArray_DIM(corners_arr, 2) != 2)
+    {
+        PyErr_SetString(PyExc_ValueError, "corners must have shape (N, 4, 2)");
+        goto cleanup;
+    }
+    if (PyArray_NDIM(mapped_corners_arr) != 3 ||
+        PyArray_DIM(mapped_corners_arr, 1) != 4 ||
+        PyArray_DIM(mapped_corners_arr, 2) != 2)
+    {
+        PyErr_SetString(PyExc_ValueError, "mapped_corners must have shape (N, 4, 2)");
+        goto cleanup;
+    }
+    if (PyArray_NDIM(source_points_arr) != 2 || PyArray_DIM(source_points_arr, 1) != 2)
+    {
+        PyErr_SetString(PyExc_ValueError, "source_points must have shape (N, 2)");
+        goto cleanup;
+    }
+
+    n_cells = PyArray_DIM(corners_arr, 0);
+    if (PyArray_DIM(mapped_corners_arr, 0) != n_cells ||
+        PyArray_DIM(source_points_arr, 0) != n_cells)
+    {
+        PyErr_SetString(PyExc_ValueError, "corners, mapped_corners, and source_points must share N");
+        goto cleanup;
+    }
+
+    spacing = isfinite(spacing_frac) ? spacing_frac : 0.03;
+    if (spacing < 1e-6)
+    {
+        spacing = 1e-6;
+    }
+
+    corners = (const double *)PyArray_DATA(corners_arr);
+    mapped_corners = (const double *)PyArray_DATA(mapped_corners_arr);
+    source_points = (const double *)PyArray_DATA(source_points_arr);
+
+    /* First pass: count exactly how many candidate rows are needed. */
+    for (npy_intp cell = 0; cell < n_cells; ++cell)
+    {
+        const double *mapped = mapped_corners + cell * 8;
+        int valid = 1;
+        double min_x = mapped[0];
+        double max_x = mapped[0];
+        double min_y = mapped[1];
+        double max_y = mapped[1];
+        int sub_x;
+        int sub_y;
+
+        for (int corner = 0; corner < 4; ++corner)
+        {
+            double x = mapped[corner * 2];
+            double y = mapped[corner * 2 + 1];
+            if (!isfinite(x) || !isfinite(y))
+            {
+                valid = 0;
+                break;
+            }
+            if (x < min_x)
+            {
+                min_x = x;
+            }
+            if (x > max_x)
+            {
+                max_x = x;
+            }
+            if (y < min_y)
+            {
+                min_y = y;
+            }
+            if (y > max_y)
+            {
+                max_y = y;
+            }
+        }
+
+        if (!valid)
+        {
+            total_count += 1;
+            continue;
+        }
+
+        sub_x = (int)ceil((max_x - min_x) / spacing);
+        sub_y = (int)ceil((max_y - min_y) / spacing);
+        if (sub_x < 1)
+        {
+            sub_x = 1;
+        }
+        else if (sub_x > 12)
+        {
+            sub_x = 12;
+        }
+        if (sub_y < 1)
+        {
+            sub_y = 1;
+        }
+        else if (sub_y > 12)
+        {
+            sub_y = 12;
+        }
+        total_count += (npy_intp)sub_x * (npy_intp)sub_y;
+    }
+
+    output_dims_points[0] = total_count;
+    output_dims_points[1] = 2;
+    output_dims_positions[0] = total_count;
+    candidate_points_arr = (PyArrayObject *)PyArray_SimpleNew(2, output_dims_points, NPY_DOUBLE);
+    source_positions_arr = (PyArrayObject *)PyArray_SimpleNew(1, output_dims_positions, NPY_INTP);
+    if (candidate_points_arr == NULL || source_positions_arr == NULL)
+    {
+        goto cleanup;
+    }
+
+    candidate_points = (double *)PyArray_DATA(candidate_points_arr);
+    source_positions = (npy_intp *)PyArray_DATA(source_positions_arr);
+
+    /* Second pass: fill the output arrays in the same scan order as Python. */
+    {
+        npy_intp out_pos = 0;
+        for (npy_intp cell = 0; cell < n_cells; ++cell)
+        {
+            const double *corner_data = corners + cell * 8;
+            const double *mapped = mapped_corners + cell * 8;
+            int valid = 1;
+            double min_x = mapped[0];
+            double max_x = mapped[0];
+            double min_y = mapped[1];
+            double max_y = mapped[1];
+            int sub_x;
+            int sub_y;
+
+            for (int corner = 0; corner < 4; ++corner)
+            {
+                double x = mapped[corner * 2];
+                double y = mapped[corner * 2 + 1];
+                if (!isfinite(x) || !isfinite(y))
+                {
+                    valid = 0;
+                    break;
+                }
+                if (x < min_x)
+                {
+                    min_x = x;
+                }
+                if (x > max_x)
+                {
+                    max_x = x;
+                }
+                if (y < min_y)
+                {
+                    min_y = y;
+                }
+                if (y > max_y)
+                {
+                    max_y = y;
+                }
+            }
+
+            if (!valid)
+            {
+                candidate_points[out_pos * 2] = source_points[cell * 2];
+                candidate_points[out_pos * 2 + 1] = source_points[cell * 2 + 1];
+                source_positions[out_pos] = cell;
+                out_pos += 1;
+                continue;
+            }
+
+            sub_x = (int)ceil((max_x - min_x) / spacing);
+            sub_y = (int)ceil((max_y - min_y) / spacing);
+            if (sub_x < 1)
+            {
+                sub_x = 1;
+            }
+            else if (sub_x > 12)
+            {
+                sub_x = 12;
+            }
+            if (sub_y < 1)
+            {
+                sub_y = 1;
+            }
+            else if (sub_y > 12)
+            {
+                sub_y = 12;
+            }
+
+            for (int row = 0; row < sub_y; ++row)
+            {
+                double vv = ((double)row + 0.5) / (double)sub_y;
+                double one_minus_v = 1.0 - vv;
+                for (int col = 0; col < sub_x; ++col)
+                {
+                    double uu = ((double)col + 0.5) / (double)sub_x;
+                    double one_minus_u = 1.0 - uu;
+                    double weight00 = one_minus_u * one_minus_v;
+                    double weight10 = uu * one_minus_v;
+                    double weight11 = uu * vv;
+                    double weight01 = one_minus_u * vv;
+
+                    candidate_points[out_pos * 2] =
+                        weight00 * corner_data[0] +
+                        weight10 * corner_data[2] +
+                        weight11 * corner_data[4] +
+                        weight01 * corner_data[6];
+                    candidate_points[out_pos * 2 + 1] =
+                        weight00 * corner_data[1] +
+                        weight10 * corner_data[3] +
+                        weight11 * corner_data[5] +
+                        weight01 * corner_data[7];
+                    source_positions[out_pos] = cell;
+                    out_pos += 1;
+                }
+            }
+        }
+    }
+
+    result = Py_BuildValue("NN", (PyObject *)candidate_points_arr, (PyObject *)source_positions_arr);
+    candidate_points_arr = NULL;
+    source_positions_arr = NULL;
+
+cleanup:
+    Py_XDECREF(corners_arr);
+    Py_XDECREF(mapped_corners_arr);
+    Py_XDECREF(source_points_arr);
+    Py_XDECREF(candidate_points_arr);
+    Py_XDECREF(source_positions_arr);
+    return result;
+}
+
 /* Native methods exported to Python. */
 static PyMethodDef module_methods[] = {
     {
@@ -1520,6 +1814,12 @@ static PyMethodDef module_methods[] = {
         (PyCFunction)thin_display_candidates,
         METH_VARARGS | METH_KEYWORDS,
         PyDoc_STR("Cull later nearby display candidate points after viewport normalization."),
+    },
+    {
+        "generate_cell_candidates",
+        (PyCFunction)generate_cell_candidates,
+        METH_VARARGS | METH_KEYWORDS,
+        PyDoc_STR("Expand selected scatter cells into interior candidate points."),
     },
     {NULL, NULL, 0, NULL},
 };
