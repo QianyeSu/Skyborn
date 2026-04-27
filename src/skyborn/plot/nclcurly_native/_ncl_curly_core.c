@@ -15,6 +15,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 /*
  * Regular rectilinear data-grid metadata shared by the sampling helpers.
  *
@@ -79,6 +83,13 @@ typedef struct
     long by;
     npy_intp idx;
 } BucketEntry;
+
+static int compare_double_values(const void *left, const void *right)
+{
+    double a = *(const double *)left;
+    double b = *(const double *)right;
+    return (a > b) - (a < b);
+}
 
 /*
  * Sample one vector state on the regular data grid.
@@ -695,6 +706,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
     PyArrayObject *display_arr = NULL;
     PyArrayObject *cell_valid_arr = NULL;
     PyArrayObject *full_output = NULL;
+    PyArrayObject *full_display_output = NULL;
     PyObject *result = NULL;
     double x_origin;
     double y_origin;
@@ -711,6 +723,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
     double viewport_x1;
     double viewport_y1;
     int max_steps = 512;
+    int return_display = 0;
     static char *kwlist[] = {
         "u",
         "v",
@@ -731,6 +744,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
         "viewport_x1",
         "viewport_y1",
         "max_steps",
+        "return_display",
         NULL,
     };
     GridInfo grid;
@@ -743,6 +757,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
     npy_intp point_count = 1;
     npy_intp output_dims[2];
     double *output_data;
+    double *display_output_data = NULL;
     double current_data_x;
     double current_data_y;
     double current_display_x;
@@ -758,7 +773,7 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
     if (!PyArg_ParseTupleAndKeywords(
             args,
             kwargs,
-            "OOOOdddddddddddddd|i:trace_ncl_direction",
+            "OOOOdddddddddddddd|ii:trace_ncl_direction",
             kwlist,
             &u_obj,
             &v_obj,
@@ -778,7 +793,8 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
             &viewport_y0,
             &viewport_x1,
             &viewport_y1,
-            &max_steps))
+            &max_steps,
+            &return_display))
     {
         return NULL;
     }
@@ -894,6 +910,15 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
     {
         goto cleanup;
     }
+    if (return_display)
+    {
+        full_display_output = (PyArrayObject *)PyArray_SimpleNew(2, output_dims, NPY_DOUBLE);
+        if (full_display_output == NULL)
+        {
+            goto cleanup;
+        }
+        display_output_data = (double *)PyArray_DATA(full_display_output);
+    }
 
     output_data = (double *)PyArray_DATA(full_output);
     output_data[0] = start_x;
@@ -902,6 +927,11 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
     current_data_y = start_y;
     current_display_x = initial_state.display_x;
     current_display_y = initial_state.display_y;
+    if (return_display)
+    {
+        display_output_data[0] = current_display_x;
+        display_output_data[1] = current_display_y;
+    }
 
     /* The numeric stepping loop is CPU-bound and does not need the GIL. */
     Py_BEGIN_ALLOW_THREADS
@@ -1089,6 +1119,11 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
 
         output_data[point_count * 2] = candidate_x;
         output_data[point_count * 2 + 1] = candidate_y;
+        if (return_display)
+        {
+            display_output_data[point_count * 2] = candidate_display_x;
+            display_output_data[point_count * 2 + 1] = candidate_display_y;
+        }
         point_count += 1;
 
         previous_display_x = current_display_x;
@@ -1115,14 +1150,24 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
 
     if (point_count == output_dims[0])
     {
-        result = (PyObject *)full_output;
-        full_output = NULL;
+        if (return_display)
+        {
+            result = Py_BuildValue("NN", (PyObject *)full_output, (PyObject *)full_display_output);
+            full_output = NULL;
+            full_display_output = NULL;
+        }
+        else
+        {
+            result = (PyObject *)full_output;
+            full_output = NULL;
+        }
         goto cleanup;
     }
 
     {
         npy_intp trimmed_dims[2];
-        PyArrayObject *trimmed_output;
+        PyArrayObject *trimmed_output = NULL;
+        PyArrayObject *trimmed_display_output = NULL;
 
         /* Shrink the overallocated buffer to the exact accepted vertex count. */
         trimmed_dims[0] = point_count;
@@ -1136,7 +1181,24 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
             PyArray_DATA(trimmed_output),
             PyArray_DATA(full_output),
             (size_t)(point_count * 2) * sizeof(double));
-        result = (PyObject *)trimmed_output;
+        if (return_display)
+        {
+            trimmed_display_output = (PyArrayObject *)PyArray_SimpleNew(2, trimmed_dims, NPY_DOUBLE);
+            if (trimmed_display_output == NULL)
+            {
+                Py_DECREF(trimmed_output);
+                goto cleanup;
+            }
+            memcpy(
+                PyArray_DATA(trimmed_display_output),
+                PyArray_DATA(full_display_output),
+                (size_t)(point_count * 2) * sizeof(double));
+            result = Py_BuildValue("NN", (PyObject *)trimmed_output, (PyObject *)trimmed_display_output);
+        }
+        else
+        {
+            result = (PyObject *)trimmed_output;
+        }
     }
 
 cleanup:
@@ -1145,6 +1207,7 @@ cleanup:
     Py_XDECREF(display_arr);
     Py_XDECREF(cell_valid_arr);
     Py_XDECREF(full_output);
+    Py_XDECREF(full_display_output);
     return result;
 }
 
@@ -1783,6 +1846,202 @@ cleanup:
     return result;
 }
 
+/*
+ * Validate display-space curly-vector geometry.
+ *
+ * This mirrors skyborn.plot._core.geometry._evaluate_ncl_display_curve after the
+ * Python transform has already been applied. Keeping the thresholds identical is
+ * important because this is a visual-quality guard, not a new algorithm.
+ */
+static PyObject *validate_display_curve(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    PyObject *display_curve_obj;
+    PyArrayObject *curve_arr = NULL;
+    double viewport_width = 0.0;
+    double viewport_height = 0.0;
+    static char *kwlist[] = {
+        "display_curve",
+        "viewport_width",
+        "viewport_height",
+        NULL,
+    };
+    npy_intp n_points;
+    const double *curve;
+    double *dir_x = NULL;
+    double *dir_y = NULL;
+    npy_intp valid_count = 0;
+    double arc_length = 0.0;
+    double chord_length;
+    double tortuosity;
+    double max_turn = 0.0;
+    double total_turn = 0.0;
+    int previous_turn_sign = 0;
+    int sign_changes = 0;
+    (void)self;
+
+    if (!PyArg_ParseTupleAndKeywords(
+            args,
+            kwargs,
+            "O|dd:validate_display_curve",
+            kwlist,
+            &display_curve_obj,
+            &viewport_width,
+            &viewport_height))
+    {
+        return NULL;
+    }
+
+    curve_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        display_curve_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    if (curve_arr == NULL)
+    {
+        return NULL;
+    }
+    if (PyArray_NDIM(curve_arr) != 2 || PyArray_DIM(curve_arr, 1) != 2)
+    {
+        Py_DECREF(curve_arr);
+        PyErr_SetString(PyExc_ValueError, "display_curve must have shape (N, 2)");
+        return NULL;
+    }
+
+    n_points = PyArray_DIM(curve_arr, 0);
+    if (n_points < 2)
+    {
+        Py_DECREF(curve_arr);
+        Py_RETURN_FALSE;
+    }
+
+    curve = (const double *)PyArray_DATA(curve_arr);
+    for (npy_intp idx = 0; idx < n_points * 2; ++idx)
+    {
+        if (!isfinite(curve[idx]))
+        {
+            Py_DECREF(curve_arr);
+            Py_RETURN_FALSE;
+        }
+    }
+
+    dir_x = (double *)calloc((size_t)(n_points - 1), sizeof(double));
+    dir_y = (double *)calloc((size_t)(n_points - 1), sizeof(double));
+    if (dir_x == NULL || dir_y == NULL)
+    {
+        free(dir_x);
+        free(dir_y);
+        Py_DECREF(curve_arr);
+        return PyErr_NoMemory();
+    }
+
+    {
+        double viewport_diag = hypot(viewport_width, viewport_height);
+        double jump_limit = 0.0;
+        int use_jump_limit = isfinite(viewport_diag) && viewport_diag > 0.0;
+        if (use_jump_limit)
+        {
+            jump_limit = fmax(viewport_diag * 0.35, 1e-6);
+        }
+
+        for (npy_intp idx = 0; idx < n_points - 1; ++idx)
+        {
+            double dx = curve[(idx + 1) * 2] - curve[idx * 2];
+            double dy = curve[(idx + 1) * 2 + 1] - curve[idx * 2 + 1];
+            double length = hypot(dx, dy);
+            if (use_jump_limit && length > jump_limit)
+            {
+                free(dir_x);
+                free(dir_y);
+                Py_DECREF(curve_arr);
+                Py_RETURN_FALSE;
+            }
+            if (length > 1e-6)
+            {
+                dir_x[valid_count] = dx / length;
+                dir_y[valid_count] = dy / length;
+                arc_length += length;
+                valid_count += 1;
+            }
+        }
+    }
+
+    if (valid_count < 1)
+    {
+        free(dir_x);
+        free(dir_y);
+        Py_DECREF(curve_arr);
+        Py_RETURN_FALSE;
+    }
+
+    chord_length = hypot(
+        curve[(n_points - 1) * 2] - curve[0],
+        curve[(n_points - 1) * 2 + 1] - curve[1]);
+    if (arc_length <= 1e-6 || chord_length <= 1e-6)
+    {
+        free(dir_x);
+        free(dir_y);
+        Py_DECREF(curve_arr);
+        Py_RETURN_FALSE;
+    }
+
+    if (valid_count >= 2)
+    {
+        for (npy_intp idx = 0; idx < valid_count - 1; ++idx)
+        {
+            double dot = dir_x[idx] * dir_x[idx + 1] + dir_y[idx] * dir_y[idx + 1];
+            double angle;
+            double cross;
+            int current_turn_sign = 0;
+
+            if (dot < -1.0)
+            {
+                dot = -1.0;
+            }
+            else if (dot > 1.0)
+            {
+                dot = 1.0;
+            }
+            angle = acos(dot) * 180.0 / M_PI;
+            if (angle > max_turn)
+            {
+                max_turn = angle;
+            }
+            total_turn += angle;
+
+            cross = dir_x[idx] * dir_y[idx + 1] - dir_y[idx] * dir_x[idx + 1];
+            if (fabs(cross) > 1e-6)
+            {
+                current_turn_sign = cross > 0.0 ? 1 : -1;
+                if (previous_turn_sign != 0 && current_turn_sign * previous_turn_sign < 0)
+                {
+                    sign_changes += 1;
+                }
+                previous_turn_sign = current_turn_sign;
+            }
+        }
+    }
+
+    tortuosity = arc_length / chord_length;
+    free(dir_x);
+    free(dir_y);
+    Py_DECREF(curve_arr);
+
+    if (tortuosity > 1.28)
+    {
+        Py_RETURN_FALSE;
+    }
+    if (max_turn > 52.0)
+    {
+        Py_RETURN_FALSE;
+    }
+    if (total_turn > 120.0)
+    {
+        Py_RETURN_FALSE;
+    }
+    if (sign_changes > 0 && total_turn > 70.0)
+    {
+        Py_RETURN_FALSE;
+    }
+    Py_RETURN_TRUE;
+}
+
 /* Native methods exported to Python. */
 static PyMethodDef module_methods[] = {
     {
@@ -1820,6 +2079,12 @@ static PyMethodDef module_methods[] = {
         (PyCFunction)generate_cell_candidates,
         METH_VARARGS | METH_KEYWORDS,
         PyDoc_STR("Expand selected scatter cells into interior candidate points."),
+    },
+    {
+        "validate_display_curve",
+        (PyCFunction)validate_display_curve,
+        METH_VARARGS | METH_KEYWORDS,
+        PyDoc_STR("Validate display-space curly-vector geometry."),
     },
     {NULL, NULL, 0, NULL},
 };
