@@ -14,6 +14,7 @@ import pytest
 import xarray as xr
 from matplotlib.transforms import Affine2D, Bbox
 
+import skyborn.plot.vector as vector_module
 from skyborn.plot._adapters.cartopy_vector import (
     _build_projection_target_grid,
     _extract_regular_grid_from_regridded_vectors,
@@ -65,6 +66,8 @@ from skyborn.plot._core.native import (
     _call_native_thin_ncl_display_candidates,
     _call_native_thin_ncl_mapped_candidates,
     _call_native_trace_ncl_direction,
+    _call_native_trace_ncl_direction_with_display,
+    _call_native_validate_display_curve,
 )
 from skyborn.plot._core.result import CurlyVectorPlotSet
 from skyborn.plot._core.scatter_engine import (
@@ -674,6 +677,80 @@ class TestNativeHelpers:
             1.0,
         )
         np.testing.assert_allclose(curve, np.array([[0.0, 0.0], [1.0, 1.0]]))
+
+    def test_call_native_trace_with_display_validates_context_and_shapes(self):
+        context = SimpleNamespace(
+            u=np.ones((2, 2)),
+            v=np.ones((2, 2)),
+            display_grid=np.ones((2, 2, 2)),
+            cell_valid=np.ones((1, 1), dtype=bool),
+            x_origin=0.0,
+            y_origin=0.0,
+            dx=1.0,
+            dy=1.0,
+            viewport_x0=0.0,
+            viewport_y0=0.0,
+            viewport_x1=1.0,
+            viewport_y1=1.0,
+        )
+
+        assert (
+            _call_native_trace_ncl_direction_with_display(
+                lambda **kwargs: None,
+                None,
+                np.array([0.0, 0.0]),
+                10.0,
+                1.0,
+                1.0,
+                1.0,
+            )
+            is None
+        )
+        assert (
+            _call_native_trace_ncl_direction_with_display(
+                lambda **kwargs: (np.array([[0.0, 0.0]]), np.array([[0.0, 0.0]])),
+                context,
+                np.array([0.0, 0.0]),
+                10.0,
+                1.0,
+                1.0,
+                1.0,
+            )
+            is None
+        )
+
+        traced = _call_native_trace_ncl_direction_with_display(
+            lambda **kwargs: (
+                np.array([[0.0, 0.0], [1.0, 1.0]]),
+                np.array([[2.0, 2.0], [3.0, 3.0]]),
+            ),
+            context,
+            np.array([0.0, 0.0]),
+            10.0,
+            1.0,
+            1.0,
+            1.0,
+        )
+        assert traced is not None
+        curve, display_curve = traced
+        np.testing.assert_allclose(curve, np.array([[0.0, 0.0], [1.0, 1.0]]))
+        np.testing.assert_allclose(display_curve, np.array([[2.0, 2.0], [3.0, 3.0]]))
+
+    def test_call_native_validate_display_curve_forwards_viewport_size(self):
+        captured = {}
+
+        def validator(**kwargs):
+            captured.update(kwargs)
+            return True
+
+        viewport = Bbox.from_bounds(0.0, 0.0, 12.0, 8.0)
+        assert _call_native_validate_display_curve(
+            validator,
+            np.array([[0.0, 0.0], [1.0, 1.0]]),
+            viewport,
+        )
+        assert captured["viewport_width"] == pytest.approx(12.0)
+        assert captured["viewport_height"] == pytest.approx(8.0)
 
 
 class TestGeometryHelpers:
@@ -1736,6 +1813,82 @@ class TestVectorEngineHelpers:
         )
         np.testing.assert_allclose(backward_only, np.array([[1.0, 0.0], [0.0, 0.0]]))
 
+        trace_fn = Mock(side_effect=[None, None])
+        assert (
+            _trace_ncl_curve(
+                start_point=np.array([0.0, 0.0]),
+                total_length_px=4.0,
+                anchor="center",
+                grid=grid,
+                u=np.ones(grid.shape),
+                v=np.ones(grid.shape),
+                transform=Affine2D(),
+                step_px=1.0,
+                speed_scale=1.0,
+                viewport=Bbox.from_bounds(0.0, 0.0, 10.0, 10.0),
+                trace_ncl_direction_fn=trace_fn,
+            )
+            is None
+        )
+
+        trace_fn = Mock(
+            side_effect=[
+                np.array([[0.0, 0.0], [-1.0, 0.0]]),
+                np.array([[0.0, 0.0], [1.0, 0.0]]),
+            ]
+        )
+        centered = _trace_ncl_curve(
+            start_point=np.array([0.0, 0.0]),
+            total_length_px=4.0,
+            anchor="center",
+            grid=grid,
+            u=np.ones(grid.shape),
+            v=np.ones(grid.shape),
+            transform=Affine2D(),
+            step_px=1.0,
+            speed_scale=1.0,
+            viewport=Bbox.from_bounds(0.0, 0.0, 10.0, 10.0),
+            trace_ncl_direction_fn=trace_fn,
+        )
+        np.testing.assert_allclose(
+            centered,
+            np.array([[-1.0, 0.0], [0.0, 0.0], [1.0, 0.0]]),
+        )
+
+        tail_curve = _trace_ncl_curve(
+            start_point=np.array([0.0, 0.0]),
+            total_length_px=4.0,
+            anchor="tail",
+            grid=grid,
+            u=np.ones(grid.shape),
+            v=np.ones(grid.shape),
+            transform=Affine2D(),
+            step_px=1.0,
+            speed_scale=1.0,
+            viewport=Bbox.from_bounds(0.0, 0.0, 10.0, 10.0),
+            trace_ncl_direction_fn=lambda *args, **kwargs: np.array(
+                [[0.0, 0.0], [1.0, 0.0]]
+            ),
+        )
+        np.testing.assert_allclose(tail_curve, np.array([[0.0, 0.0], [1.0, 0.0]]))
+
+        assert (
+            _trace_ncl_curve(
+                start_point=np.array([0.0, 0.0]),
+                total_length_px=4.0,
+                anchor="head",
+                grid=grid,
+                u=np.ones(grid.shape),
+                v=np.ones(grid.shape),
+                transform=Affine2D(),
+                step_px=1.0,
+                speed_scale=1.0,
+                viewport=Bbox.from_bounds(0.0, 0.0, 10.0, 10.0),
+                trace_ncl_direction_fn=lambda *args, **kwargs: None,
+            )
+            is None
+        )
+
         assert (
             _trace_ncl_curve(
                 start_point=np.array([0.0, 0.0]),
@@ -1782,6 +1935,33 @@ class TestVectorEngineHelpers:
         )
         np.testing.assert_allclose(curve, np.array([[0.0, 0.0], [1.0, 0.0]]))
         np.testing.assert_allclose(display_curve, np.array([[0.0, 0.0], [1.0, 0.0]]))
+
+        calls = {"count": 0}
+
+        def _trace_curve_short(**kwargs):
+            calls["count"] += 1
+            return np.array([[0.0, 0.0], [0.05, 0.0]])
+
+        assert (
+            _build_ncl_curve(
+                start_point=np.array([0.0, 0.0]),
+                total_length_px=1.2,
+                anchor="tail",
+                grid=grid,
+                u=np.ones(grid.shape),
+                v=np.ones(grid.shape),
+                transform=Affine2D(),
+                step_px=1.0,
+                speed_scale=1.0,
+                viewport=Bbox.from_bounds(0.0, 0.0, 10.0, 10.0),
+                trace_ncl_curve_fn=_trace_curve_short,
+                evaluate_ncl_display_curve_fn=lambda curve, transform, viewport=None: (
+                    None,
+                    False,
+                ),
+            )
+            is None
+        )
 
         curve, display_curve = _build_ncl_curve(
             start_point=np.array([0.0, 0.0]),
@@ -2530,6 +2710,133 @@ class TestVectorKeyCoverage:
 
 
 class TestVectorWrapperCoverage:
+    def test_vector_module_trace_wrappers_cover_display_branches(self, monkeypatch):
+        grid = _make_test_grid()
+        viewport = Bbox.from_bounds(0.0, 0.0, 10.0, 10.0)
+        curve = np.array([[0.0, 0.0], [1.0, 0.0]])
+        display_curve = np.array([[2.0, 2.0], [3.0, 2.0]])
+        original_trace_with_display = vector_module._trace_ncl_direction_with_display
+
+        monkeypatch.setattr(
+            vector_module,
+            "_trace_ncl_direction",
+            lambda *args, **kwargs: curve,
+        )
+        wrapped = vector_module._trace_ncl_curve(
+            start_point=np.array([0.0, 0.0]),
+            total_length_px=4.0,
+            anchor="tail",
+            grid=grid,
+            u=np.ones(grid.shape),
+            v=np.ones(grid.shape),
+            transform=Affine2D(),
+            step_px=1.0,
+            speed_scale=1.0,
+            viewport=viewport,
+        )
+        np.testing.assert_allclose(wrapped, curve)
+
+        assert (
+            vector_module._trace_ncl_curve_with_display(
+                start_point=np.array([0.0, 0.0]),
+                total_length_px=0.0,
+                anchor="tail",
+                grid=grid,
+                u=np.ones(grid.shape),
+                v=np.ones(grid.shape),
+                transform=Affine2D(),
+                step_px=1.0,
+                speed_scale=1.0,
+                viewport=viewport,
+            )
+            is None
+        )
+
+        forward_pair = (curve, display_curve)
+        trace_with_display = Mock(side_effect=[None, forward_pair])
+        monkeypatch.setattr(
+            vector_module,
+            "_trace_ncl_direction_with_display",
+            trace_with_display,
+        )
+        forward = vector_module._trace_ncl_curve_with_display(
+            start_point=np.array([0.0, 0.0]),
+            total_length_px=4.0,
+            anchor="center",
+            grid=grid,
+            u=np.ones(grid.shape),
+            v=np.ones(grid.shape),
+            transform=Affine2D(),
+            step_px=1.0,
+            speed_scale=1.0,
+            viewport=viewport,
+        )
+        assert forward is forward_pair
+
+        backward_pair = (curve, display_curve)
+        trace_with_display = Mock(side_effect=[backward_pair, None])
+        monkeypatch.setattr(
+            vector_module,
+            "_trace_ncl_direction_with_display",
+            trace_with_display,
+        )
+        backward = vector_module._trace_ncl_curve_with_display(
+            start_point=np.array([0.0, 0.0]),
+            total_length_px=4.0,
+            anchor="center",
+            grid=grid,
+            u=np.ones(grid.shape),
+            v=np.ones(grid.shape),
+            transform=Affine2D(),
+            step_px=1.0,
+            speed_scale=1.0,
+            viewport=viewport,
+        )
+        assert backward is not None
+        backward_curve, backward_display = backward
+        np.testing.assert_allclose(backward_curve, curve[::-1])
+        np.testing.assert_allclose(backward_display, display_curve[::-1])
+
+        monkeypatch.setattr(
+            vector_module,
+            "_trace_ncl_direction_with_display",
+            original_trace_with_display,
+        )
+        sampler = SimpleNamespace()
+        context = object()
+
+        def prepare_context(**kwargs):
+            assert kwargs["display_sampler"] is sampler
+            return context
+
+        def trace_via_native(**kwargs):
+            assert kwargs["native_trace_context"] is context
+            return curve, display_curve
+
+        monkeypatch.setattr(
+            vector_module,
+            "_prepare_ncl_native_trace_context",
+            prepare_context,
+        )
+        monkeypatch.setattr(
+            vector_module,
+            "_trace_ncl_direction_with_display_via_native",
+            trace_via_native,
+        )
+        traced = vector_module._trace_ncl_direction_with_display(
+            start_point=np.array([0.0, 0.0]),
+            max_length_px=4.0,
+            direction_sign=1.0,
+            grid=grid,
+            u=np.ones(grid.shape),
+            v=np.ones(grid.shape),
+            step_px=1.0,
+            speed_scale=1.0,
+            viewport=viewport,
+            display_sampler=sampler,
+        )
+        assert traced is not None
+
     def test_regrid_non_uniform_vectors_to_uniform_covers_import_and_validation_paths(
         self,
     ):
