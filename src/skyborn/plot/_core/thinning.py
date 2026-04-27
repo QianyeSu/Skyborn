@@ -47,12 +47,6 @@ class _NCLDisplaySampler:
         self.grid = grid
         self.x_origin = float(grid.x_origin)
         self.y_origin = float(grid.y_origin)
-        self.inv_dx = float(grid.inv_dx)
-        self.inv_dy = float(grid.inv_dy)
-        self.max_x_index = float(grid.nx - 1)
-        self.max_y_index = float(grid.ny - 1)
-        self.max_cell_x = float(grid.nx - 2)
-        self.max_cell_y = float(grid.ny - 2)
         self.dx_safe = max(float(grid.dx), 1e-12)
         self.dy_safe = max(float(grid.dy), 1e-12)
         self.display_grid = np.asarray(display_grid, dtype=float)
@@ -62,46 +56,13 @@ class _NCLDisplaySampler:
         )
 
     def sample(self, point):
-        point = np.asarray(point, dtype=float)
-        xi = (point[0] - self.x_origin) * self.inv_dx
-        yi = (point[1] - self.y_origin) * self.inv_dy
-        if not (
-            0.0 <= xi <= self.max_x_index
-            and 0.0 <= yi <= self.max_y_index
-            and self.max_cell_x >= 0.0
-            and self.max_cell_y >= 0.0
-        ):
-            return None
-
-        ix = int(np.floor(np.clip(xi, 0.0, self.max_cell_x)))
-        iy = int(np.floor(np.clip(yi, 0.0, self.max_cell_y)))
-        if not self.cell_valid[iy, ix]:
-            return None
-
-        sx = float(xi - ix)
-        sy = float(yi - iy)
-        p00 = self.display_grid[iy, ix]
-        p01 = self.display_grid[iy, ix + 1]
-        p10 = self.display_grid[iy + 1, ix]
-        p11 = self.display_grid[iy + 1, ix + 1]
-
-        display_point = (
-            p00 * (1.0 - sx) * (1.0 - sy)
-            + p01 * sx * (1.0 - sy)
-            + p10 * (1.0 - sx) * sy
-            + p11 * sx * sy
+        display_points, jacobians, valid = self.sample_points(
+            np.asarray(point, dtype=float),
+            include_jacobian=True,
         )
-        dfdx = ((p01 - p00) * (1.0 - sy) + (p11 - p10) * sy) / self.dx_safe
-        dfdy = ((p10 - p00) * (1.0 - sx) + (p11 - p01) * sx) / self.dy_safe
-        jacobian = np.column_stack((dfdx, dfdy))
-        determinant = jacobian[0, 0] * jacobian[1, 1] - jacobian[0, 1] * jacobian[1, 0]
-        if (
-            not np.all(np.isfinite(display_point))
-            or not np.all(np.isfinite(jacobian))
-            or abs(determinant) <= 1e-12
-        ):
+        if not valid[0]:
             return None
-        return display_point, jacobian
+        return display_points[0], jacobians[0]
 
     def sample_display_points(self, points):
         display_points, _, valid = self.sample_points(
