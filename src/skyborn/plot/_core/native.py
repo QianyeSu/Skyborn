@@ -119,25 +119,14 @@ def _call_native_trace_ncl_direction(
         return None
 
     curve = native_tracer(
-        u=native_trace_context.u,
-        v=native_trace_context.v,
-        display_grid=native_trace_context.display_grid,
-        cell_valid=native_trace_context.cell_valid,
-        x_origin=native_trace_context.x_origin,
-        y_origin=native_trace_context.y_origin,
-        dx=native_trace_context.dx,
-        dy=native_trace_context.dy,
-        start_x=float(start_point[0]),
-        start_y=float(start_point[1]),
-        max_length_px=float(max_length_px),
-        direction_sign=float(direction_sign),
-        step_px=float(step_px),
-        speed_scale=float(speed_scale),
-        viewport_x0=native_trace_context.viewport_x0,
-        viewport_y0=native_trace_context.viewport_y0,
-        viewport_x1=native_trace_context.viewport_x1,
-        viewport_y1=native_trace_context.viewport_y1,
-        max_steps=512,
+        **_trace_kwargs(
+            native_trace_context,
+            start_point,
+            max_length_px,
+            direction_sign,
+            step_px,
+            speed_scale,
+        )
     )
     if curve is None:
         return None
@@ -146,4 +135,85 @@ def _call_native_trace_ncl_direction(
         curve
         if curve.ndim == 2 and curve.shape[0] >= 2 and curve.shape[1] == 2
         else None
+    )
+
+
+def _trace_kwargs(
+    native_trace_context,
+    start_point,
+    max_length_px,
+    direction_sign,
+    step_px,
+    speed_scale,
+):
+    return {
+        "u": native_trace_context.u,
+        "v": native_trace_context.v,
+        "display_grid": native_trace_context.display_grid,
+        "cell_valid": native_trace_context.cell_valid,
+        "x_origin": native_trace_context.x_origin,
+        "y_origin": native_trace_context.y_origin,
+        "dx": native_trace_context.dx,
+        "dy": native_trace_context.dy,
+        "start_x": float(start_point[0]),
+        "start_y": float(start_point[1]),
+        "max_length_px": float(max_length_px),
+        "direction_sign": float(direction_sign),
+        "step_px": float(step_px),
+        "speed_scale": float(speed_scale),
+        "viewport_x0": native_trace_context.viewport_x0,
+        "viewport_y0": native_trace_context.viewport_y0,
+        "viewport_x1": native_trace_context.viewport_x1,
+        "viewport_y1": native_trace_context.viewport_y1,
+        "max_steps": 512,
+    }
+
+
+def _call_native_trace_ncl_direction_with_display(
+    native_tracer,
+    native_trace_context,
+    start_point,
+    max_length_px,
+    direction_sign,
+    step_px,
+    speed_scale,
+):
+    if native_trace_context is None:
+        return None
+
+    traced = native_tracer(
+        **_trace_kwargs(
+            native_trace_context,
+            start_point,
+            max_length_px,
+            direction_sign,
+            step_px,
+            speed_scale,
+        ),
+        return_display=True,
+    )
+    if traced is None:
+        return None
+
+    curve, display_curve = traced
+    curve = np.asarray(curve, dtype=float)
+    display_curve = np.asarray(display_curve, dtype=float)
+    if (
+        curve.ndim != 2
+        or display_curve.ndim != 2
+        or curve.shape != display_curve.shape
+        or curve.shape[0] < 2
+        or curve.shape[1] != 2
+    ):
+        return None
+    return curve, display_curve
+
+
+def _call_native_validate_display_curve(native_validator, display_curve, viewport):
+    return bool(
+        native_validator(
+            display_curve=np.asarray(display_curve, dtype=float),
+            viewport_width=float(viewport.width) if viewport is not None else 0.0,
+            viewport_height=float(viewport.height) if viewport is not None else 0.0,
+        )
     )
