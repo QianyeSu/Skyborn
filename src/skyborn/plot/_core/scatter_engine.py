@@ -6,13 +6,19 @@ from typing import Any
 
 import numpy as np
 
-from .._core.native import _call_native_thin_ncl_display_candidates
+from .._core.native import (
+    _call_native_generate_cell_candidates,
+    _call_native_thin_ncl_display_candidates,
+)
 from .._core.thinning import (
     _map_ncl_display_points_to_viewport,
     _resolve_ncl_min_distance_fraction,
 )
 from .._shared import coords as _coord_helpers
 from .._shared.style import _resolve_scatter_aliases
+from ..nclcurly_native import (
+    generate_cell_candidates as _generate_cell_candidates_native,
+)
 from ..nclcurly_native import thin_display_candidates as _thin_display_candidates
 
 
@@ -292,46 +298,16 @@ def _generate_cell_candidates(
         ax.bbox,
     ).reshape(source_indices.size, 4, 2)
 
-    corner_valid = np.isfinite(mapped_corners).all(axis=(1, 2))
-    widths = np.zeros(source_indices.size, dtype=float)
-    heights = np.zeros(source_indices.size, dtype=float)
-    if np.any(corner_valid):
-        widths[corner_valid] = np.ptp(mapped_corners[corner_valid, :, 0], axis=1)
-        heights[corner_valid] = np.ptp(mapped_corners[corner_valid, :, 1], axis=1)
-
     spacing = max(
         float(spacing_fraction if spacing_fraction is not None else 0.03), 1e-6
     )
-    sub_x = np.clip(np.ceil(widths / spacing).astype(int), 1, 12)
-    sub_y = np.clip(np.ceil(heights / spacing).astype(int), 1, 12)
-
-    point_chunks: list[np.ndarray] = []
-    source_pos_chunks: list[np.ndarray] = []
-    for source_pos in range(source_indices.size):
-        if not corner_valid[source_pos]:
-            point_chunks.append(source_points[source_pos][np.newaxis, :])
-            source_pos_chunks.append(np.array([source_pos], dtype=int))
-            continue
-
-        u_edges = np.linspace(0.0, 1.0, int(sub_x[source_pos]) + 1, dtype=float)
-        v_edges = np.linspace(0.0, 1.0, int(sub_y[source_pos]) + 1, dtype=float)
-        u = 0.5 * (u_edges[:-1] + u_edges[1:])
-        v = 0.5 * (v_edges[:-1] + v_edges[1:])
-        uu, vv = np.meshgrid(u, v, indexing="xy")
-
-        p00, p10, p11, p01 = corners[source_pos]
-        one_minus_u = 1.0 - uu
-        one_minus_v = 1.0 - vv
-        cell_points = (
-            one_minus_u[..., None] * one_minus_v[..., None] * p00
-            + uu[..., None] * one_minus_v[..., None] * p10
-            + uu[..., None] * vv[..., None] * p11
-            + one_minus_u[..., None] * vv[..., None] * p01
-        ).reshape(-1, 2)
-        point_chunks.append(cell_points)
-        source_pos_chunks.append(np.full(cell_points.shape[0], source_pos, dtype=int))
-
-    return np.concatenate(point_chunks, axis=0), np.concatenate(source_pos_chunks)
+    return _call_native_generate_cell_candidates(
+        _generate_cell_candidates_native,
+        corners,
+        mapped_corners,
+        source_points,
+        spacing,
+    )
 
 
 def _scatter_impl(
