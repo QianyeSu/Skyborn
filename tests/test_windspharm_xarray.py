@@ -90,6 +90,43 @@ class TestXarrayVectorWindInitialization:
         vw = VectorWind(u, v, rsphere=6.37e6, legfunc="computed")
         assert vw is not None
 
+    def test_xarray_vectorwind_gridtype_override(self):
+        """Explicit gridtype should bypass strict latitude-pattern detection."""
+        lat = np.linspace(-90, 90, 18)
+        lon = np.linspace(0, 350, 36)
+        u_data = np.random.randn(2, 3, 18, 36)
+        v_data = np.random.randn(2, 3, 18, 36)
+
+        u = xr.DataArray(
+            u_data,
+            dims=["time", "level", "lat", "lon"],
+            coords={
+                "time": np.arange(2),
+                "level": np.arange(3),
+                "lat": lat,
+                "lon": lon,
+            },
+        )
+        v = xr.DataArray(
+            v_data,
+            dims=["time", "level", "lat", "lon"],
+            coords={
+                "time": np.arange(2),
+                "level": np.arange(3),
+                "lat": lat,
+                "lon": lon,
+            },
+        )
+
+        with pytest.raises(ValueError, match="global regular grid pattern"):
+            VectorWind(u, v)
+
+        vw = VectorWind(u, v, gridtype="regular")
+        vorticity = vw.vorticity()
+
+        assert vorticity.shape == u.shape
+        assert vorticity.dims == u.dims
+
 
 @pytest.mark.skipif(not XARRAY_AVAILABLE, reason="xarray not available")
 class TestXarrayVectorWindOperations:
@@ -757,6 +794,51 @@ class TestXarraySpecialOperations:
 @pytest.mark.skipif(not XARRAY_AVAILABLE, reason="xarray not available")
 class TestXarrayTargetedCoverage:
     """Targeted regression tests for uncovered xarray branches."""
+
+    def test_init_type_and_gridtype_error_branches(self):
+        """Exercise constructor validation branches not hit by normal workflows."""
+        lat = np.linspace(90.0, -90.0, 19)
+        lon = np.linspace(0.0, 357.5, 36)
+        v = xr.DataArray(
+            np.zeros((19, 36), dtype=np.float32),
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+        )
+
+        with pytest.raises(TypeError, match="u must be xarray.DataArray"):
+            VectorWind(np.zeros((19, 36), dtype=np.float32), v)
+
+        u = xr.DataArray(
+            np.zeros((19, 36), dtype=np.float32),
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+        )
+        with pytest.raises(ValueError, match="Invalid grid type"):
+            VectorWind(u, v, gridtype="unsupported")
+
+    def test_coordinate_validation_comparison_exception_branch(self):
+        """Exercise coordinate comparison exception handling directly."""
+
+        class ExplodingValues:
+            def __eq__(self, other):
+                raise TypeError("coordinate comparison failed")
+
+        class FakeCoordinate:
+            values = ExplodingValues()
+
+        class FakeArray:
+            dims = ("lat",)
+            coords = {"lat": FakeCoordinate()}
+
+        vw = object.__new__(VectorWind)
+        with pytest.raises(ValueError, match="Mismatched coordinates"):
+            vw._validate_coordinates(FakeArray(), FakeArray())
+
+    def test_gradient_rejects_non_dataarray(self):
+        """Exercise scalar-field type validation before metadata handling."""
+        vw = object.__new__(VectorWind)
+        with pytest.raises(TypeError, match="Scalar field must be xarray.DataArray"):
+            vw.gradient(np.zeros((19, 36), dtype=np.float32))
 
     def test_gradient_and_truncate_reverse_south_to_north_fields(self):
         """Exercise latitude-reversal branches in gradient and truncate."""
