@@ -19,6 +19,44 @@ The module is particularly useful for calculating divergent wind components from
 data (time, level, lat, lon), which is essential for understanding atmospheric circulation patterns
 and energy transport mechanisms.
 
+Interface Selection
+-------------------
+
+Skyborn provides two public ``VectorWind`` interfaces:
+
+* ``from skyborn.windspharm.standard import VectorWind``
+  Standard NumPy interface for array inputs.
+* ``from skyborn.windspharm.xarray import VectorWind``
+  xarray-aware interface for ``xarray.DataArray`` inputs that preserves dimensions,
+  coordinates, and metadata.
+
+At present, ``from skyborn.windspharm import VectorWind`` also resolves to
+``skyborn.windspharm.standard.VectorWind``. For clarity in user code and
+examples, the documentation uses the explicit ``standard`` import for NumPy
+inputs.
+
+Use the standard interface for plain arrays:
+
+.. code-block:: python
+
+    import numpy as np
+    from skyborn.windspharm.standard import VectorWind
+
+    u = np.random.randn(73, 144)
+    v = np.random.randn(73, 144)
+    vw = VectorWind(u, v, gridtype="gaussian")
+
+Use the xarray interface for DataArray inputs:
+
+.. code-block:: python
+
+    import xarray as xr
+    from skyborn.windspharm.xarray import VectorWind
+
+    u = xr.open_dataarray("u_wind.nc")
+    v = xr.open_dataarray("v_wind.nc")
+    vw = VectorWind(u, v)
+
 Main Features
 -------------
 
@@ -85,6 +123,19 @@ Standard Interface
    :undoc-members:
    :show-inheritance:
    :exclude-members: VectorWind
+
+Xarray Interface
+----------------
+
+.. automodule:: skyborn.windspharm.xarray
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :exclude-members: VectorWind
+
+.. autoclass:: skyborn.windspharm.xarray.VectorWind
+   :members:
+   :show-inheritance:
 
 Tools and Utilities
 -------------------
