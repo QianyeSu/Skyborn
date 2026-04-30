@@ -803,8 +803,7 @@ class VectorWind:
         coords = [chi.coords[n] for n in chi.dims]
 
         # Compute gradient using standard API
-        chi_data = chi.values
-        u_grad, v_grad = self._api.gradient(chi_data, truncation=truncation)
+        u_grad, v_grad = self._api.gradient(chi.values, truncation=truncation)
 
         # Reshape and create DataArrays
         u_grad = u_grad.reshape(ishape)
@@ -948,8 +947,7 @@ class VectorWind:
         ishape = field.shape
 
         # Apply truncation using standard API
-        field_data = field.values
-        field_trunc = self._api.truncate(field_data, truncation=truncation)
+        field_trunc = self._api.truncate(field.values, truncation=truncation)
 
         # Update field values and restore dimension order
         field.values = field_trunc.reshape(ishape)
