@@ -35,7 +35,7 @@ __all__ = ["VectorWind"]
 import xarray as xr
 
 from . import standard
-from ._common import get_apiorder, inspect_gridtype, to3d
+from ._common import get_apiorder, inspect_gridtype
 
 # Type aliases for better readability
 DataArray = xr.DataArray
@@ -62,6 +62,9 @@ class VectorWind:
         Legendre function computation method:
         - 'stored': precompute and store (faster, more memory)
         - 'computed': compute on-the-fly (slower, less memory)
+    gridtype : {'regular', 'gaussian'}, optional
+        Explicit grid type override. If omitted, the grid type is inferred from
+        latitude coordinates.
 
     Attributes
     ----------
@@ -100,6 +103,7 @@ class VectorWind:
         v: DataArray,
         rsphere: float = 6.3712e6,
         legfunc: LegFunc = "stored",
+        gridtype: Optional[str] = None,
     ) -> None:
         """Initialize VectorWind instance with comprehensive validation."""
         # Validate input types
@@ -121,8 +125,16 @@ class VectorWind:
             v = _reverse(v, lat_dim)
             lat, lat_dim = _find_latitude_coordinate(u)
 
-        # Determine grid type
-        gridtype = inspect_gridtype(lat.values)
+        # Determine grid type, unless the caller needs to override detection for
+        # known global grids with latitude conventions outside our strict checks.
+        if gridtype is None:
+            gridtype = inspect_gridtype(lat.values)
+        else:
+            gridtype = gridtype.lower()
+            if gridtype not in ("regular", "gaussian"):
+                raise ValueError(
+                    f"Invalid grid type: '{gridtype}'. Must be 'regular' or 'gaussian'"
+                )
 
         # Prepare data for standard API
         apiorder, _ = get_apiorder(u.ndim, lat_dim, lon_dim)
@@ -139,9 +151,9 @@ class VectorWind:
         self._ishape = u.shape
         self._coords = [u.coords[name] for name in u.dims]
 
-        # Convert to 3D and initialize standard API
-        u_data = to3d(u.values)
-        v_data = to3d(v.values)
+        # The standard API now accepts (lat, lon, *extra_dims) directly.
+        u_data = u.values
+        v_data = v.values
 
         self._api = standard.VectorWind(
             u_data, v_data, gridtype=gridtype, rsphere=rsphere, legfunc=legfunc
@@ -791,7 +803,7 @@ class VectorWind:
         coords = [chi.coords[n] for n in chi.dims]
 
         # Compute gradient using standard API
-        chi_data = to3d(chi.values)
+        chi_data = chi.values
         u_grad, v_grad = self._api.gradient(chi_data, truncation=truncation)
 
         # Reshape and create DataArrays
@@ -936,7 +948,7 @@ class VectorWind:
         ishape = field.shape
 
         # Apply truncation using standard API
-        field_data = to3d(field.values)
+        field_data = field.values
         field_trunc = self._api.truncate(field_data, truncation=truncation)
 
         # Update field values and restore dimension order
