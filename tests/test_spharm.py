@@ -125,6 +125,28 @@ class TestSpharmtGridOperations:
         assert isinstance(grid_back_3d, np.ndarray)
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_grdtospec_4d_matches_manual_flattening(self):
+        """4D grid transforms should match the established flattened-field path."""
+        sht = Spharmt(nlon=36, nlat=19)
+        rng = np.random.default_rng(12345)
+        grid_data_4d = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
+        grid_data_flat = grid_data_4d.reshape(19, 36, 6)
+
+        spectral_4d = sht.grdtospec(grid_data_4d)
+        spectral_flat = sht.grdtospec(grid_data_flat).reshape(spectral_4d.shape)
+
+        assert spectral_4d.shape == (190, 2, 3)
+        np.testing.assert_allclose(spectral_4d, spectral_flat, rtol=0, atol=0)
+
+        grid_back_4d = sht.spectogrd(spectral_4d)
+        grid_back_flat = sht.spectogrd(spectral_flat.reshape(190, 6)).reshape(
+            grid_back_4d.shape
+        )
+
+        assert grid_back_4d.shape == grid_data_4d.shape
+        np.testing.assert_allclose(grid_back_4d, grid_back_flat, rtol=0, atol=0)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_grdtospec_shape_validation(self):
         """Test shape validation for grid transforms."""
         sht = Spharmt(nlon=72, nlat=37)
@@ -172,6 +194,36 @@ class TestSpharmtVectorOperations:
         assert div_spec.shape == (expected_spec_shape,)
         assert np.iscomplexobj(vort_spec)
         assert np.iscomplexobj(div_spec)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_vector_4d_matches_manual_flattening(self):
+        """4D vector transforms should preserve shape and match flattened fields."""
+        sht = Spharmt(nlon=36, nlat=19)
+        rng = np.random.default_rng(23456)
+        u_4d = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
+        v_4d = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
+        u_flat = u_4d.reshape(19, 36, 6)
+        v_flat = v_4d.reshape(19, 36, 6)
+
+        vrt_4d, div_4d = sht.getvrtdivspec(u_4d, v_4d)
+        vrt_flat, div_flat = sht.getvrtdivspec(u_flat, v_flat)
+
+        assert vrt_4d.shape == (190, 2, 3)
+        assert div_4d.shape == (190, 2, 3)
+        np.testing.assert_allclose(
+            vrt_4d, vrt_flat.reshape(vrt_4d.shape), rtol=0, atol=0
+        )
+        np.testing.assert_allclose(
+            div_4d, div_flat.reshape(div_4d.shape), rtol=0, atol=0
+        )
+
+        psi_4d, chi_4d = sht.getpsichi(u_4d, v_4d)
+        psi_flat, chi_flat = sht.getpsichi(u_flat, v_flat)
+
+        assert psi_4d.shape == u_4d.shape
+        assert chi_4d.shape == u_4d.shape
+        np.testing.assert_allclose(psi_4d, psi_flat.reshape(u_4d.shape), rtol=0, atol=0)
+        np.testing.assert_allclose(chi_4d, chi_flat.reshape(u_4d.shape), rtol=0, atol=0)
 
 
 class TestSpharmtGradientOperations:
@@ -739,17 +791,11 @@ class TestSpharmtDataValidation:
             # Valid 2D data
             data_2d = np.random.randn(36, 72)
             result = sht._validate_grid_data(data_2d, "test_data")
-            # Handle different return formats
-            if isinstance(result, tuple):
-                validated, _ = result
-            else:
-                validated = result
+            nt, validated, extra_shape = result
 
-            if hasattr(validated, "shape"):
-                assert validated.shape == (36, 72)
-            else:
-                # Method might return something else, just check it's valid
-                assert result is not None
+            assert nt == 1
+            assert validated.shape == (36, 72, 1)
+            assert extra_shape == ()
         else:
             # Method doesn't exist, skip test
             pytest.skip("_validate_grid_data method not available")
@@ -1234,6 +1280,12 @@ class TestSpharmtAdditionalCoverage:
                 operation_name="gaqd",
             )
 
+        direct = sht._call_spherepack_safely(
+            lambda: np.arange(3, dtype=np.float32),
+            operation_name="direct",
+        )
+        np.testing.assert_array_equal(direct, np.arange(3, dtype=np.float32))
+
         def backend_failure():
             raise RuntimeError("backend exploded")
 
@@ -1252,9 +1304,7 @@ class TestSpharmtAdditionalCoverage:
         """Exercise public validation branches beyond the happy path."""
         sht = Spharmt(nlon=36, nlat=19)
 
-        with pytest.raises(
-            ValidationError, match="grdtospec needs a rank 2 or 3 array"
-        ):
+        with pytest.raises(ValidationError, match="grdtospec needs at least a rank 2"):
             sht.grdtospec(np.zeros(19, dtype=np.float32))
 
         too_large_ntrunc = (20 + 1) * (20 + 2) // 2
@@ -1286,7 +1336,7 @@ class TestSpharmtAdditionalCoverage:
             sht.specsmooth(np.zeros((19, 36), dtype=np.float32), smooth)
 
         grid_out = Spharmt(nlon=72, nlat=37)
-        with pytest.raises(ValidationError, match="regrid needs a rank 2 or 3 array"):
+        with pytest.raises(ValidationError, match="regrid needs at least a rank 2"):
             regrid(sht, grid_out, np.zeros(19, dtype=np.float32))
 
         with pytest.raises(
@@ -1302,6 +1352,86 @@ class TestSpharmtAdditionalCoverage:
                 grid_out,
                 np.zeros((19, 36), dtype=np.float32),
                 smooth=np.ones((2, 2), dtype=np.float32),
+            )
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_internal_consistency_error_branches(self, monkeypatch):
+        """Cover defensive consistency checks that public validation normally prevents."""
+        sht = object.__new__(Spharmt)
+        sht.nlat = 19
+
+        with pytest.raises(ValidationError, match="needs at least a rank 1 array"):
+            sht._validate_spectral_data(np.array(1.0 + 0.0j), "spectral")
+
+        grid_calls = iter(
+            [
+                (1, np.zeros((19, 36, 1), dtype=np.float32), ()),
+                (1, np.zeros((19, 36, 1), dtype=np.float32), (1,)),
+            ]
+        )
+        monkeypatch.setattr(
+            sht,
+            "_validate_grid_data",
+            lambda data, operation_name: next(grid_calls),
+        )
+        with pytest.raises(ValidationError, match="consistent dimensions"):
+            sht.getvrtdivspec(
+                np.zeros((19, 36), dtype=np.float32),
+                np.zeros((19, 36), dtype=np.float32),
+            )
+
+        spectral_calls = iter(
+            [
+                (1, 2, np.zeros((6, 1), dtype=np.complex64), ()),
+                (2, 2, np.zeros((6, 2), dtype=np.complex64), (2,)),
+            ]
+        )
+        monkeypatch.setattr(
+            sht,
+            "_validate_spectral_data",
+            lambda data, operation_name: next(spectral_calls),
+        )
+        with pytest.raises(ValidationError, match="consistent dimensions"):
+            sht.getuv(
+                np.zeros(6, dtype=np.complex64),
+                np.zeros(6, dtype=np.complex64),
+            )
+
+        monkeypatch.setattr(
+            sht,
+            "_validate_grid_data",
+            lambda data, operation_name: (
+                1,
+                np.zeros((19, 36, 1), dtype=np.float32),
+                (),
+            ),
+        )
+        monkeypatch.setattr(sht, "_validate_ntrunc", lambda ntrunc, max_ntrunc: 18)
+        monkeypatch.setattr(
+            sht,
+            "getvrtdivspec",
+            lambda ugrid, vgrid, ntrunc: (
+                np.zeros(190, dtype=np.complex64),
+                np.zeros(190, dtype=np.complex64),
+            ),
+        )
+        spec_calls = iter(
+            [
+                (1, 18, np.zeros((190, 1), dtype=np.complex64), (1,)),
+                (1, 18, np.zeros((190, 1), dtype=np.complex64), ()),
+            ]
+        )
+        monkeypatch.setattr(
+            sht,
+            "_validate_spectral_data",
+            lambda data, operation_name: next(spec_calls),
+        )
+        with pytest.raises(
+            ValidationError, match="spectra have inconsistent dimensions"
+        ):
+            sht.getpsichi(
+                np.zeros((19, 36), dtype=np.float32),
+                np.zeros((19, 36), dtype=np.float32),
             )
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
