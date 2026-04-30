@@ -534,11 +534,12 @@ class Spharmt:
 
     def _validate_grid_data(
         self, data: FloatArray, operation_name: str
-    ) -> Tuple[int, FloatArray]:
-        """Validate grid data dimensions and return normalized data."""
-        if data.ndim not in [2, 3]:
+    ) -> Tuple[int, FloatArray, Tuple[int, ...]]:
+        """Validate grid data and flatten non-horizontal dimensions."""
+        data = np.asarray(data)
+        if data.ndim < 2:
             raise ValidationError(
-                f"{operation_name} needs a rank 2 or 3 array, got rank {data.ndim}"
+                f"{operation_name} needs at least a rank 2 array, got rank {data.ndim}"
             )
 
         if data.shape[0] != self.nlat or data.shape[1] != self.nlon:
@@ -547,23 +548,25 @@ class Spharmt:
                 f"got {data.shape[0]} by {data.shape[1]}"
             )
 
-        # Normalize to 3D array for consistent processing
         if data.ndim == 2:
             nt = 1
             normalized_data = np.expand_dims(data, 2)
+            extra_shape: Tuple[int, ...] = ()
         else:
-            nt = data.shape[2]
-            normalized_data = data
+            extra_shape = tuple(data.shape[2:])
+            nt = int(np.prod(extra_shape, dtype=int))
+            normalized_data = data.reshape(self.nlat, self.nlon, nt)
 
-        return nt, normalized_data
+        return nt, normalized_data, extra_shape
 
     def _validate_spectral_data(
         self, data: ComplexArray, operation_name: str
-    ) -> Tuple[int, int, ComplexArray]:
-        """Validate spectral data dimensions and return normalized data with ntrunc."""
-        if data.ndim not in [1, 2]:
+    ) -> Tuple[int, int, ComplexArray, Tuple[int, ...]]:
+        """Validate spectral data and flatten non-coefficient dimensions."""
+        data = np.asarray(data)
+        if data.ndim < 1:
             raise ValidationError(
-                f"{operation_name} needs a rank 1 or 2 array, got rank {data.ndim}"
+                f"{operation_name} needs at least a rank 1 array, got rank {data.ndim}"
             )
 
         # Infer ntrunc from spectral data size
@@ -574,15 +577,32 @@ class Spharmt:
                 f"ntrunc too large - can be max of {self.nlat - 1}, got {ntrunc}"
             )
 
-        # Normalize to 2D array for consistent processing
         if data.ndim == 1:
             nt = 1
             normalized_data = np.expand_dims(data, 1)
+            extra_shape: Tuple[int, ...] = ()
         else:
-            nt = data.shape[1]
-            normalized_data = data
+            extra_shape = tuple(data.shape[1:])
+            nt = int(np.prod(extra_shape, dtype=int))
+            normalized_data = data.reshape(data.shape[0], nt)
 
-        return nt, ntrunc, normalized_data
+        return nt, ntrunc, normalized_data, extra_shape
+
+    def _restore_grid_shape(
+        self, datagrid: FloatArray, extra_shape: Tuple[int, ...]
+    ) -> FloatArray:
+        """Restore flattened grid fields to their original extra dimensions."""
+        if not extra_shape:
+            return datagrid[:, :, 0]
+        return datagrid.reshape((self.nlat, self.nlon) + extra_shape)
+
+    def _restore_spectral_shape(
+        self, dataspec: ComplexArray, extra_shape: Tuple[int, ...]
+    ) -> ComplexArray:
+        """Restore flattened spectral fields to their original extra dimensions."""
+        if not extra_shape:
+            return dataspec[:, 0]
+        return dataspec.reshape((dataspec.shape[0],) + extra_shape)
 
     def _validate_ntrunc(self, ntrunc: Optional[int], max_allowed: int) -> int:
         """Validate and return appropriate ntrunc value."""
@@ -603,7 +623,7 @@ class Spharmt:
         Grid to spectral transform (spherical harmonic analysis) with type safety.
 
         Args:
-            datagrid: Grid data with shape (nlat, nlon) or (nlat, nlon, nt)
+            datagrid: Grid data with shape (nlat, nlon) or (nlat, nlon, *extra_dims)
             ntrunc: Optional spectral truncation limit (default: nlat-1)
 
         Returns:
@@ -614,7 +634,9 @@ class Spharmt:
             SpheremackError: If SPHEREPACK transform fails
         """
         # Validate inputs
-        nt, normalized_data = self._validate_grid_data(datagrid, "grdtospec")
+        nt, normalized_data, extra_shape = self._validate_grid_data(
+            datagrid, "grdtospec"
+        )
         ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
 
         # Select transform function based on configuration
@@ -663,7 +685,7 @@ class Spharmt:
         # Convert 2D real and imaginary arrays to 1D complex array
         dataspec = _spherepack.twodtooned(a, b, ntrunc)
 
-        return np.squeeze(dataspec) if datagrid.ndim == 2 else dataspec
+        return self._restore_spectral_shape(dataspec, extra_shape)
 
     def spectogrd(self, dataspec: ComplexArray) -> FloatArray:
         """
@@ -673,14 +695,14 @@ class Spharmt:
             dataspec: Complex spectral coefficients
 
         Returns:
-            Grid data with shape (nlat, nlon) or (nlat, nlon, nt)
+            Grid data with shape (nlat, nlon) or (nlat, nlon, *extra_dims)
 
         Raises:
             ValidationError: If input data has invalid dimensions
             SpheremackError: If SPHEREPACK transform fails
         """
         # Validate inputs and get normalized data
-        nt, ntrunc, normalized_spec = self._validate_spectral_data(
+        nt, ntrunc, normalized_spec, extra_shape = self._validate_spectral_data(
             dataspec, "spectogrd"
         )
 
@@ -738,7 +760,7 @@ class Spharmt:
         transform_func = transform_functions[(self.gridtype, self.legfunc)]
         datagrid = transform_func()
 
-        return np.squeeze(datagrid) if dataspec.ndim == 1 else datagrid
+        return self._restore_grid_shape(datagrid, extra_shape)
 
     def getvrtdivspec(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
@@ -762,8 +784,12 @@ class Spharmt:
         if ugrid.shape != vgrid.shape:
             raise ValidationError("ugrid and vgrid must have the same shape")
 
-        nt, normalized_u = self._validate_grid_data(ugrid, "getvrtdivspec")
-        _, normalized_v = self._validate_grid_data(vgrid, "getvrtdivspec")
+        nt, normalized_u, extra_shape = self._validate_grid_data(ugrid, "getvrtdivspec")
+        _, normalized_v, v_extra_shape = self._validate_grid_data(
+            vgrid, "getvrtdivspec"
+        )
+        if extra_shape != v_extra_shape:
+            raise ValidationError("ugrid and vgrid must have consistent dimensions")
         ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
 
         # Convert from geographical to mathematical coordinates
@@ -822,10 +848,10 @@ class Spharmt:
             br, bi, cr, ci, ntrunc, self.rsphere
         )
 
-        if ugrid.ndim == 2:
-            return np.squeeze(vrtspec), np.squeeze(divspec)
-        else:
-            return vrtspec, divspec
+        return (
+            self._restore_spectral_shape(vrtspec, extra_shape),
+            self._restore_spectral_shape(divspec, extra_shape),
+        )
 
     def getuv(
         self, vrtspec: ComplexArray, divspec: ComplexArray
@@ -848,14 +874,21 @@ class Spharmt:
         if vrtspec.shape != divspec.shape:
             raise ValidationError("vrtspec and divspec must have the same shape")
 
-        nt_vrt, ntrunc_vrt, normalized_vrt = self._validate_spectral_data(
+        nt_vrt, ntrunc_vrt, normalized_vrt, extra_shape = self._validate_spectral_data(
             vrtspec, "getuv"
         )
-        nt_div, ntrunc_div, normalized_div = self._validate_spectral_data(
-            divspec, "getuv"
-        )
+        (
+            nt_div,
+            ntrunc_div,
+            normalized_div,
+            div_extra_shape,
+        ) = self._validate_spectral_data(divspec, "getuv")
 
-        if nt_vrt != nt_div or ntrunc_vrt != ntrunc_div:
+        if (
+            nt_vrt != nt_div
+            or ntrunc_vrt != ntrunc_div
+            or extra_shape != div_extra_shape
+        ):
             raise ValidationError("vrtspec and divspec must have consistent dimensions")
 
         # Convert 1D complex arrays to 2D vector harmonic arrays
@@ -922,13 +955,10 @@ class Spharmt:
         vhs_func = vhs_functions[(self.gridtype, self.legfunc)]
         v, w = vhs_func()
 
-        # Convert to geographical coordinates
-        if vrtspec.ndim == 1:
-            return np.reshape(w, (self.nlat, self.nlon)), -np.reshape(
-                v, (self.nlat, self.nlon)
-            )
-        else:
-            return w, -v
+        # Convert to geographical coordinates and restore flattened dimensions.
+        return self._restore_grid_shape(w, extra_shape), -self._restore_grid_shape(
+            v, extra_shape
+        )
 
     def getpsichi(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
@@ -951,29 +981,32 @@ class Spharmt:
         if ugrid.shape != vgrid.shape:
             raise ValidationError("ugrid and vgrid must have the same shape")
 
-        self._validate_grid_data(ugrid, "getpsichi")
+        _, _, extra_shape = self._validate_grid_data(ugrid, "getpsichi")
         ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
 
         # Compute spectral coefficients of vorticity and divergence
         vrtspec, divspec = self.getvrtdivspec(ugrid, vgrid, ntrunc)
 
-        # Normalize to 2D if needed for consistent processing
-        if vrtspec.ndim == 1:
-            vrtspec = np.expand_dims(vrtspec, 1)
-            divspec = np.expand_dims(divspec, 1)
+        _, _, normalized_vrt, spec_extra_shape = self._validate_spectral_data(
+            vrtspec, "getpsichi"
+        )
+        _, _, normalized_div, div_spec_extra_shape = self._validate_spectral_data(
+            divspec, "getpsichi"
+        )
+        if spec_extra_shape != extra_shape or div_spec_extra_shape != extra_shape:
+            raise ValidationError(
+                "vorticity and divergence spectra have inconsistent dimensions"
+            )
 
         # Convert to spectral coefficients of streamfunction and velocity potential
-        psispec = _spherepack.invlap(vrtspec, self.rsphere)
-        chispec = _spherepack.invlap(divspec, self.rsphere)
+        psispec = _spherepack.invlap(normalized_vrt, self.rsphere)
+        chispec = _spherepack.invlap(normalized_div, self.rsphere)
 
         # Transform back to grid
-        psigrid = self.spectogrd(psispec)
-        chigrid = self.spectogrd(chispec)
+        psigrid = self.spectogrd(self._restore_spectral_shape(psispec, extra_shape))
+        chigrid = self.spectogrd(self._restore_spectral_shape(chispec, extra_shape))
 
-        if ugrid.ndim == 2:
-            return np.squeeze(psigrid), np.squeeze(chigrid)
-        else:
-            return psigrid, chigrid
+        return psigrid, chigrid
 
     def getgrad(self, chispec: ComplexArray) -> Tuple[FloatArray, FloatArray]:
         """
@@ -988,7 +1021,9 @@ class Spharmt:
         Raises:
             ValidationError: If input data has invalid dimensions
         """
-        nt, ntrunc, normalized_spec = self._validate_spectral_data(chispec, "getgrad")
+        nt, ntrunc, normalized_spec, extra_shape = self._validate_spectral_data(
+            chispec, "getgrad"
+        )
 
         # Convert chispec to divergence spec using Laplacian
         divspec = _spherepack.lap(normalized_spec, self.rsphere)
@@ -997,12 +1032,12 @@ class Spharmt:
         vrtspec = np.zeros(normalized_spec.shape, normalized_spec.dtype)
 
         # Get gradient components using getuv
-        uchi, vchi = self.getuv(vrtspec, divspec)
+        uchi, vchi = self.getuv(
+            self._restore_spectral_shape(vrtspec, extra_shape),
+            self._restore_spectral_shape(divspec, extra_shape),
+        )
 
-        if chispec.ndim == 1:
-            return np.squeeze(uchi), np.squeeze(vchi)
-        else:
-            return uchi, vchi
+        return uchi, vchi
 
     def specsmooth(self, datagrid: FloatArray, smooth: FloatArray) -> FloatArray:
         """
@@ -1030,10 +1065,13 @@ class Spharmt:
         dataspec = self.grdtospec(datagrid, self.nlat - 1)
 
         # Apply smoothing in spectral space
-        smoothed_spec = _spherepack.multsmoothfact(dataspec, smooth)
+        _, _, normalized_spec, extra_shape = self._validate_spectral_data(
+            dataspec, "specsmooth"
+        )
+        smoothed_spec = _spherepack.multsmoothfact(normalized_spec, smooth)
 
         # Spectral to grid transform
-        return self.spectogrd(smoothed_spec)
+        return self.spectogrd(self._restore_spectral_shape(smoothed_spec, extra_shape))
 
 
 # Standalone functions with type annotations
@@ -1062,10 +1100,12 @@ def regrid(
     Raises:
         ValidationError: If input parameters are invalid
     """
+    datagrid = np.asarray(datagrid)
+
     # Validate input data dimensions
-    if datagrid.ndim not in [2, 3]:
+    if datagrid.ndim < 2:
         raise ValidationError(
-            f"regrid needs a rank 2 or 3 array, got rank {datagrid.ndim}"
+            f"regrid needs at least a rank 2 array, got rank {datagrid.ndim}"
         )
 
     if datagrid.shape[0] != grdin.nlat or datagrid.shape[1] != grdin.nlon:
@@ -1085,7 +1125,12 @@ def regrid(
     dataspec = grdin.grdtospec(datagrid, ntrunc)
 
     if smooth is not None:
-        dataspec = _spherepack.multsmoothfact(dataspec, smooth)
+        _, _, normalized_spec, extra_shape = grdin._validate_spectral_data(
+            dataspec, "regrid"
+        )
+        dataspec = grdin._restore_spectral_shape(
+            _spherepack.multsmoothfact(normalized_spec, smooth), extra_shape
+        )
 
     return grdout.spectogrd(dataspec)
 
