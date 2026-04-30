@@ -1,7 +1,32 @@
 Changelog
 =========
 
-Version 0.3.20 (Current)
+Version 0.3.21 (Current)
+------------------------
+
+**Improvements**
+
+* **Scatter Placement Acceleration**: Moved the cell-interior candidate
+  generation path in ``skyborn.plot.scatter`` into the native C helper so
+  projected stippling workflows spend less time in Python loops and
+  temporary array construction
+* **Curly-Vector Display-Space Sampling Optimization**: Moved
+  ``_NCLDisplaySampler`` display-cell validation and batch display-grid
+  sampling into the native plotting helper, reducing intermediate-array
+  overhead and lowering memory use for projected ``curly_vector``
+  workflows on larger grids
+* **Display-Curve Validation Fast Path**: Extended the native
+  curly-vector tracer so it can return both data-space and display-space
+  curves in one pass and run the display-curve quality screening in C
+  while preserving the previous plotted geometry
+
+**Cleanup**
+
+* **Plot Internal Simplification**: Removed unused internal helper aliases
+  from ``skyborn.plot.vector`` and kept the low-level plotting tests
+  importing their implementation modules directly
+
+Version 0.3.20
 ------------------------
 
 **New Features**
