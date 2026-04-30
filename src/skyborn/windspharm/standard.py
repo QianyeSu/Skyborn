@@ -33,9 +33,9 @@ class VectorWind:
     Parameters
     ----------
     u : array_like
-        Zonal wind component. Shape should be (nlat, nlon) or (nlat, nlon, nt)
-        where nlat is latitude points, nlon is longitude points, and nt is
-        number of time steps. Latitude dimension should be north-to-south.
+        Zonal wind component. Shape should be (nlat, nlon) or
+        (nlat, nlon, *extra_dims), where nlat is latitude points and nlon is
+        longitude points. Latitude dimension should be north-to-south.
     v : array_like
         Meridional wind component. Must have same shape as u.
     gridtype : {'regular', 'gaussian'}, default 'regular'
@@ -211,11 +211,11 @@ class VectorWind:
             )
 
         # Check dimensionality
-        if self.u.ndim not in (2, 3):
+        if self.u.ndim < 2:
             raise ValueError(
-                f"Wind components must be 2D or 3D arrays. "
+                f"Wind components must be at least 2D arrays. "
                 f"Got {self.u.ndim}D arrays with shape {self.u.shape}. "
-                f"Expected shapes: (nlat, nlon) or (nlat, nlon, ntime)"
+                f"Expected shape: (nlat, nlon) or (nlat, nlon, *extra_dims)"
             )
 
         # Check minimum grid size
