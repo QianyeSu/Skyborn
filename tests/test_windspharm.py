@@ -445,6 +445,52 @@ class TestVectorWindAdvancedOperations:
         assert np.all(np.isfinite(divergence))
 
 
+class TestVectorWindFourDimensionalOperations:
+    """Test native numpy 4D VectorWind behavior."""
+
+    @pytest.mark.skipif(
+        not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
+    )
+    def test_4d_operations_match_manual_flattening(self):
+        """Native 4D numpy input should match the established flattened path."""
+        nlat, nlon, ntime, nlev = 19, 36, 2, 3
+        rng = np.random.default_rng(34567)
+        u = rng.standard_normal((nlat, nlon, ntime, nlev)).astype(np.float32)
+        v = rng.standard_normal((nlat, nlon, ntime, nlev)).astype(np.float32)
+        u_flat = u.reshape(nlat, nlon, ntime * nlev)
+        v_flat = v.reshape(nlat, nlon, ntime * nlev)
+
+        vw_4d = VectorWind(u, v, gridtype="regular")
+        vw_flat = VectorWind(u_flat, v_flat, gridtype="regular")
+
+        vrt_4d, div_4d = vw_4d.vrtdiv()
+        vrt_flat, div_flat = vw_flat.vrtdiv()
+        psi_4d, chi_4d = vw_4d.sfvp()
+        psi_flat, chi_flat = vw_flat.sfvp()
+        grad_u_4d, grad_v_4d = vw_4d.gradient(vrt_4d)
+        grad_u_flat, grad_v_flat = vw_flat.gradient(vrt_flat)
+        trunc_4d = vw_4d.truncate(vrt_4d, truncation=10)
+        trunc_flat = vw_flat.truncate(vrt_flat, truncation=10)
+
+        assert vrt_4d.shape == u.shape
+        assert div_4d.shape == u.shape
+        assert psi_4d.shape == u.shape
+        assert chi_4d.shape == u.shape
+        np.testing.assert_allclose(vrt_4d, vrt_flat.reshape(u.shape), rtol=0, atol=0)
+        np.testing.assert_allclose(div_4d, div_flat.reshape(u.shape), rtol=0, atol=0)
+        np.testing.assert_allclose(psi_4d, psi_flat.reshape(u.shape), rtol=0, atol=0)
+        np.testing.assert_allclose(chi_4d, chi_flat.reshape(u.shape), rtol=0, atol=0)
+        np.testing.assert_allclose(
+            grad_u_4d, grad_u_flat.reshape(u.shape), rtol=0, atol=0
+        )
+        np.testing.assert_allclose(
+            grad_v_4d, grad_v_flat.reshape(u.shape), rtol=0, atol=0
+        )
+        np.testing.assert_allclose(
+            trunc_4d, trunc_flat.reshape(u.shape), rtol=0, atol=0
+        )
+
+
 class TestVectorWindConsistency:
     """Test consistency and mathematical properties."""
 
@@ -1237,6 +1283,25 @@ class TestWindSpharmTargetedCoverage:
         ):
             vw._initialize_spharmt(36, 19, "regular", 6.3712e6, "stored")
 
+    def test_input_validation_remaining_error_branches(self):
+        """Exercise v-only NaN, u-only inf, and rank validation branches."""
+        nlat, nlon = 19, 36
+
+        u = np.zeros((nlat, nlon), dtype=np.float32)
+        v = np.zeros((nlat, nlon), dtype=np.float32)
+        v[0, 0] = np.nan
+        with pytest.raises(ValueError, match="v: 1 NaN values"):
+            VectorWind(u, v)
+
+        u = np.zeros((nlat, nlon), dtype=np.float32)
+        v = np.zeros((nlat, nlon), dtype=np.float32)
+        u[0, 0] = np.inf
+        with pytest.raises(ValueError, match="u: 1 infinite values"):
+            VectorWind(u, v)
+
+        with pytest.raises(ValueError, match="at least 2D arrays"):
+            VectorWind(np.zeros(4, dtype=np.float32), np.zeros(4, dtype=np.float32))
+
     def test_gradient_validation_branches(self):
         """Exercise gradient masked-data and compatibility branches."""
         nlat, nlon = 19, 36
@@ -1262,6 +1327,30 @@ class TestWindSpharmTargetedCoverage:
         assert grad_x.shape == (nlat, nlon)
         assert grad_y.shape == (nlat, nlon)
 
+    def test_gradient_and_truncate_attribute_error_fallback(self):
+        """Exercise legacy masked-array fallback when filled lookup is broken."""
+
+        class FilledCallAttributeErrorArray(np.ndarray):
+            @property
+            def filled(self):
+                def _raise_attribute_error(fill_value=np.nan):
+                    raise AttributeError("filled unavailable")
+
+                return _raise_attribute_error
+
+        nlat, nlon = 19, 36
+        u = np.random.randn(nlat, nlon)
+        v = np.random.randn(nlat, nlon)
+        vw = VectorWind(u, v)
+        field = np.random.randn(nlat, nlon).view(FilledCallAttributeErrorArray)
+
+        grad_x, grad_y = vw.gradient(field)
+        truncated = vw.truncate(field)
+
+        assert grad_x.shape == (nlat, nlon)
+        assert grad_y.shape == (nlat, nlon)
+        assert truncated.shape == (nlat, nlon)
+
     def test_planetaryvorticity_even_grid_and_invalid_omega(self):
         """Exercise even-latitude grid broadcasting and invalid omega handling."""
         vw = object.__new__(StandardVectorWind)
@@ -1276,10 +1365,17 @@ class TestWindSpharmTargetedCoverage:
         with pytest.raises(ValueError, match="invalid value for omega"):
             vw.planetaryvorticity(omega="bad")
 
+        vw.gridtype = "gaussian"
+        gaussian_coriolis = vw.planetaryvorticity()
+        assert gaussian_coriolis.shape == (4, 8, 2)
+
     def test_common_and_tool_validation_branches(self, monkeypatch):
         """Exercise helper validation and recovery branches."""
         with pytest.raises(ValueError, match="Need at least 2 latitude points"):
             common_mod.inspect_gridtype(np.array([45.0]))
+
+        with pytest.raises(ValueError, match="Latitudes are neither equally-spaced"):
+            common_mod.inspect_gridtype(np.array([90.0, 30.0, -10.0, -90.0]))
 
         with pytest.raises(
             ValueError,
@@ -1299,6 +1395,9 @@ class TestWindSpharmTargetedCoverage:
 
         with pytest.raises(ValueError, match="Array must have at least 2 dimensions"):
             common_mod.to3d(np.arange(4))
+
+        flattened = common_mod.to3d(np.zeros((2, 3, 4, 5), dtype=np.float32))
+        assert flattened.shape == (2, 3, 20)
 
         with pytest.raises(ValueError, match="Data must have at least 2 dimensions"):
             prep_data(np.arange(4), "yx")
@@ -1331,6 +1430,9 @@ class TestWindSpharmTargetedCoverage:
         path = Path(example_data_path("uwnd_mean.nc"))
         assert path.name == "uwnd_mean.nc"
         assert "example_data" in path.parts
+
+        data_dir = Path(example_data_path())
+        assert data_dir.name == "example_data"
 
 
 if __name__ == "__main__":
