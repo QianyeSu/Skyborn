@@ -1537,8 +1537,8 @@ class TestWindSpharmTargetedCoverage:
         assert np.all(np.isfinite(rws))
         assert calls["count"] == 2
 
-    def test_single_potential_paths_match_legacy_sfvp_expression(self):
-        """Single-field potential paths should preserve existing discrete results."""
+    def test_component_paths_match_direct_spectral_expression(self):
+        """Component wind paths should use direct spectral reconstruction."""
         nlat, nlon = 19, 36
         rng = np.random.default_rng(24680)
         u = rng.standard_normal((nlat, nlon, 2), dtype=np.float32)
@@ -1549,8 +1549,9 @@ class TestWindSpharmTargetedCoverage:
         np.testing.assert_allclose(vw.streamfunction(), psi, rtol=0, atol=0)
         np.testing.assert_allclose(vw.velocitypotential(), chi, rtol=0, atol=0)
 
-        v_psi, u_psi = vw.s.getgrad(vw.s.grdtospec(psi))
-        u_chi, v_chi = vw.s.getgrad(vw.s.grdtospec(chi))
+        psispec, chispec = vw.s._getpsichi_spec(vw.u, vw.v)
+        v_psi, u_psi = vw.s.getgrad(psispec)
+        u_chi, v_chi = vw.s.getgrad(chispec)
         expected_nondiv = (
             vw._restore_output_dtype(-u_psi),
             vw._restore_output_dtype(v_psi),
