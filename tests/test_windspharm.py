@@ -1491,18 +1491,26 @@ class TestWindSpharmTargetedCoverage:
     def test_absolutevorticity_broadcast_branches(self, monkeypatch):
         """Exercise optimized absolute-vorticity latitude broadcast branches."""
         vw = object.__new__(StandardVectorWind)
-        vw.s = type("DummySpharm", (), {"nlat": 4})()
+        vw.s = type(
+            "DummySpharm",
+            (),
+            {
+                "nlat": 4,
+                "getvrtdivspec": lambda self, u, v, ntrunc=None: ("vrtspec", "divspec"),
+                "spectogrd": lambda self, spec: (
+                    np.ones((4, 8, 2), dtype=np.float64)
+                    if spec == "vrtspec"
+                    else (_ for _ in ()).throw(
+                        AssertionError(
+                            "absolutevorticity should only synthesize vorticity"
+                        )
+                    )
+                ),
+            },
+        )()
         vw.u = np.zeros((4, 8, 2), dtype=np.float32)
+        vw.v = np.zeros((4, 8, 2), dtype=np.float32)
         vw._output_dtype = np.dtype(np.float32)
-
-        monkeypatch.setattr(
-            vw,
-            "_vrtdiv_raw",
-            lambda truncation=None: (
-                np.ones((4, 8, 2), dtype=np.float64),
-                np.zeros((4, 8, 2), dtype=np.float64),
-            ),
-        )
 
         vw.gridtype = "regular"
         regular_abs = vw.absolutevorticity()
@@ -1514,6 +1522,30 @@ class TestWindSpharmTargetedCoverage:
 
         with pytest.raises(ValueError, match="invalid value for omega"):
             vw.absolutevorticity(omega="bad")
+
+    def test_vrtdiv_raw_batches_scalar_synthesis(self, monkeypatch):
+        """_vrtdiv_raw should synthesize vorticity/divergence together once."""
+        nlat, nlon = 19, 36
+        u = np.random.randn(nlat, nlon)
+        v = np.random.randn(nlat, nlon)
+        vw = VectorWind(u, v)
+
+        calls = {"count": 0}
+        original_spectogrd = vw.s.spectogrd
+
+        def counting_spectogrd(*args, **kwargs):
+            calls["count"] += 1
+            return original_spectogrd(*args, **kwargs)
+
+        monkeypatch.setattr(vw.s, "spectogrd", counting_spectogrd)
+
+        vrt, div = vw._vrtdiv_raw()
+
+        assert vrt.shape == (nlat, nlon)
+        assert div.shape == (nlat, nlon)
+        assert np.all(np.isfinite(vrt))
+        assert np.all(np.isfinite(div))
+        assert calls["count"] == 1
 
     def test_rossbywavesource_reuses_vrtdiv_analysis(self, monkeypatch):
         """RWS should avoid separate vorticity and divergence vector analyses."""
