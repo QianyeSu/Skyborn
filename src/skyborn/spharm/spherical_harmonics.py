@@ -604,6 +604,17 @@ class Spharmt:
             return dataspec[:, 0]
         return dataspec.reshape((dataspec.shape[0],) + extra_shape)
 
+    def _spectogrd_pair(
+        self, spec_a: ComplexArray, spec_b: ComplexArray
+    ) -> Tuple[FloatArray, FloatArray]:
+        """Synthesize two scalar spectra together through one batched call."""
+        if spec_a.shape != spec_b.shape:
+            raise ValidationError("paired spectra must have the same shape")
+
+        paired_specs = np.stack((spec_a, spec_b), axis=-1)
+        paired_grids = self.spectogrd(paired_specs)
+        return paired_grids[..., 0], paired_grids[..., 1]
+
     def _validate_ntrunc(self, ntrunc: Optional[int], max_allowed: int) -> int:
         """Validate and return appropriate ntrunc value."""
         if ntrunc is None:
@@ -1132,11 +1143,11 @@ class Spharmt:
         psispec = _spherepack.invlap(normalized_vrt, self.rsphere)
         chispec = _spherepack.invlap(normalized_div, self.rsphere)
 
-        # Transform back to grid
-        psigrid = self.spectogrd(self._restore_spectral_shape(psispec, extra_shape))
-        chigrid = self.spectogrd(self._restore_spectral_shape(chispec, extra_shape))
-
-        return psigrid, chigrid
+        # Transform both scalar spectra back to grid in one batched synthesis.
+        return self._spectogrd_pair(
+            self._restore_spectral_shape(psispec, extra_shape),
+            self._restore_spectral_shape(chispec, extra_shape),
+        )
 
     def getgrad(self, chispec: ComplexArray) -> Tuple[FloatArray, FloatArray]:
         """
