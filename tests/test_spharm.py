@@ -264,18 +264,18 @@ class TestSpharmtVectorOperations:
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     @pytest.mark.parametrize(
-        ("gridtype", "legfunc", "expected_operation"),
+        ("gridtype", "legfunc", "expected_vrt_wrapper", "expected_div_wrapper"),
         [
-            ("regular", "stored", "vhaes transform"),
-            ("regular", "computed", "vhaec transform"),
-            ("gaussian", "stored", "vhags transform"),
-            ("gaussian", "computed", "vhagc transform"),
+            ("regular", "stored", "vhaesvrt", "vhaesdiv"),
+            ("regular", "computed", "vhaecvrt", "vhaecdiv"),
+            ("gaussian", "stored", "vhagsvrt", "vhagsdiv"),
+            ("gaussian", "computed", "vhagcvrt", "vhagcdiv"),
         ],
     )
     def test_single_vrtdiv_spec_helpers_select_half_analysis_ityp(
-        self, monkeypatch, gridtype, legfunc, expected_operation
+        self, monkeypatch, gridtype, legfunc, expected_vrt_wrapper, expected_div_wrapper
     ):
-        """Single-field spectral helpers should request the matching half-analysis mode."""
+        """Single-field spectral helpers should route through dedicated thin wrappers."""
         sht = Spharmt(nlon=36, nlat=19, gridtype=gridtype, legfunc=legfunc)
         rng = np.random.default_rng(20260502)
         u = rng.standard_normal((19, 36)).astype(np.float32)
@@ -285,8 +285,7 @@ class TestSpharmtVectorOperations:
         original_call = sht._call_spherepack_safely
 
         def recording_call(func, *args, operation_name, **kwargs):
-            if operation_name == expected_operation:
-                calls.append(kwargs.get("ityp", 0))
+            calls.append(func)
             return original_call(func, *args, operation_name=operation_name, **kwargs)
 
         monkeypatch.setattr(sht, "_call_spherepack_safely", recording_call)
@@ -295,7 +294,19 @@ class TestSpharmtVectorOperations:
         sht.getdivspec(u, v)
         sht.getvrtdivspec(u, v)
 
-        assert calls == [2, 1, 0]
+        assert calls == [
+            getattr(_spherepack, expected_vrt_wrapper),
+            getattr(_spherepack, expected_div_wrapper),
+            getattr(
+                _spherepack,
+                {
+                    ("regular", "stored"): "vhaes",
+                    ("regular", "computed"): "vhaec",
+                    ("gaussian", "stored"): "vhags",
+                    ("gaussian", "computed"): "vhagc",
+                }[(gridtype, legfunc)],
+            ),
+        ]
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_psichi_spec_helpers_validate_shapes(self, monkeypatch):
