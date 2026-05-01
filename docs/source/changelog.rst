@@ -1,6 +1,25 @@
 Changelog
 =========
 
+Version 0.3.22 (Planned)
+------------------------
+
+**Improvements**
+
+* **spharm Internal Optimization**: Improved the internal spherical
+  harmonic helper flow so repeated potential-field reconstruction can
+  reuse intermediate spectral results more efficiently and avoid
+  unnecessary wrapper overhead
+* **windspharm Performance Improvements**: Reduced the Python-side
+  overhead in the tested wind-decomposition workflow family while
+  keeping the established public numerical conventions unchanged
+
+**Bug Fixes**
+
+* **spharm and windspharm Regression Coverage**: Added focused tests for
+  the updated internal spectral-helper and wind-analysis paths,
+  including shape-validation coverage for the new optimized flow
+
 Version 0.3.21 (Current)
 ------------------------
 
