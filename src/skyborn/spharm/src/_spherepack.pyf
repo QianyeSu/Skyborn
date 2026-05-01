@@ -46,6 +46,24 @@ python module _spherepack ! in
             integer optional,check(shape(vrtspec,1)==nt),depend(vrtspec) :: nt=shape(vrtspec,1)
             real :: rsphere
         end subroutine onedtotwod_vrtdiv
+        subroutine onedtotwod_vrt(vrtspec,cr,ci,nlat,nmdim,nt,rsphere) ! in :_spherepack:onedtotwod_vrt.f90
+            complex dimension(nmdim,nt) :: vrtspec
+            integer, required, intent(in) :: nlat
+            real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: cr
+            real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: ci
+            integer optional,check(shape(vrtspec,0)==nmdim),depend(vrtspec) :: nmdim=shape(vrtspec,0)
+            integer optional,check(shape(vrtspec,1)==nt),depend(vrtspec) :: nt=shape(vrtspec,1)
+            real :: rsphere
+        end subroutine onedtotwod_vrt
+        subroutine onedtotwod_div(divspec,br,bi,nlat,nmdim,nt,rsphere) ! in :_spherepack:onedtotwod_div.f90
+            complex dimension(nmdim,nt) :: divspec
+            integer, required, intent(in) :: nlat
+            real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: br
+            real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: bi
+            integer optional,check(shape(divspec,0)==nmdim),depend(divspec) :: nmdim=shape(divspec,0)
+            integer optional,check(shape(divspec,1)==nt),depend(divspec) :: nt=shape(divspec,1)
+            real :: rsphere
+        end subroutine onedtotwod_div
         subroutine twodtooned(dataspec,a,b,nlat,ntrunc,nt) ! in :_spherepack:twodtooned.f90
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: dataspec
             real dimension(nlat,nlat,nt) :: a
@@ -280,7 +298,7 @@ python module _spherepack ! in
         end subroutine vhagsi
         subroutine vhses(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhses,lvhses,work,lwork,ierror) ! in :_spherepack:vhses.f
             integer, required, intent(in) :: nlon
-            integer,intent(hide) :: ityp=0
+            integer optional, intent(in) :: ityp=0
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
             integer, intent(hide) :: idvw=nlat
@@ -312,7 +330,7 @@ python module _spherepack ! in
         end subroutine vhsesi
         subroutine vhsgs(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgs,lvhsgs,work,lwork,ierror) ! in :_spherepack:vhsgs.f
             integer, required, intent(in) :: nlon
-            integer, intent(hide) :: ityp=0
+            integer optional, intent(in) :: ityp=0
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
             integer, intent(hide) :: idvw = nlat
@@ -513,7 +531,7 @@ python module _spherepack ! in
         end subroutine vhagci
         subroutine vhsec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsec,lvhsec,work,lwork,ierror) ! in :_spherepack:vhsec.f90
             integer, required, intent(in) :: nlon
-            integer, intent(hide) :: ityp=0
+            integer optional, intent(in) :: ityp=0
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
             integer, intent(hide) :: idvw=nlat
@@ -543,7 +561,7 @@ python module _spherepack ! in
         end subroutine vhseci
         subroutine vhsgc(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgc,lvhsgc,work,lwork,ierror) ! in :_spherepack:vhsgc.f90
             integer, required, intent(in) :: nlon
-            integer, intent(hide) :: ityp=0
+            integer optional, intent(in) :: ityp=0
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
             real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
             integer, intent(hide) :: idvw = nlat
