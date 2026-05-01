@@ -34,11 +34,8 @@ jobs:
         run: |
           sudo apt-get update
 
-          # Add GCC 13+ repository for latest compiler versions
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          sudo apt-get update
-
-          # Install latest GCC/gfortran versions (13+)
+          # Ubuntu 24.04 already ships GCC 13/14 in the official repositories.
+          # Avoid Launchpad PPA network flakiness during CI bootstrap.
           sudo apt-get install -y build-essential
           sudo apt-get install -y gcc-13 gfortran-13 g++-13
           sudo apt-get install -y gcc-14 gfortran-14 g++-14 || echo "GCC-14 not available, using GCC-13"
