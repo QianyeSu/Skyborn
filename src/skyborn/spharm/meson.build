@@ -273,6 +273,8 @@ else:
             'src/getlegfunc.f90',
             'src/specintrp.f90',
             'src/onedtotwod.f90',
+            'src/onedtotwod_div.f90',
+            'src/onedtotwod_vrt.f90',
             'src/onedtotwod_vrtdiv.f90',
             'src/twodtooned.f90',
             'src/twodtooned_vrt.f90',
