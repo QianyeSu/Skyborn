@@ -29,10 +29,10 @@ from __future__ import annotations
 import warnings
 from typing import Any, Callable, List, Optional, Tuple, Union
 
-__all__ = ["VectorWind"]
-
-
+import numpy as np
 import xarray as xr
+
+__all__ = ["VectorWind"]
 
 from . import standard
 from ._common import get_apiorder, inspect_gridtype
@@ -144,8 +144,8 @@ class VectorWind:
         self._reorder = u.dims
 
         # Reorder dimensions and prepare data
-        u = u.copy().transpose(*apiorder)
-        v = v.copy().transpose(*apiorder)
+        u = u.transpose(*apiorder)
+        v = v.transpose(*apiorder)
 
         # Store shape and coordinates for reconstruction
         self._ishape = u.shape
@@ -154,9 +154,15 @@ class VectorWind:
         # The standard API now accepts (lat, lon, *extra_dims) directly.
         u_data = u.values
         v_data = v.values
+        self._u_component_dtype = standard.VectorWind._infer_output_dtype(u_data)
+        self._v_component_dtype = standard.VectorWind._infer_output_dtype(v_data)
 
-        self._api = standard.VectorWind(
-            u_data, v_data, gridtype=gridtype, rsphere=rsphere, legfunc=legfunc
+        self._api = standard.VectorWind._from_prepared(
+            u_data,
+            v_data,
+            gridtype=gridtype,
+            rsphere=rsphere,
+            legfunc=legfunc,
         )
 
     def _validate_coordinates(self, u: DataArray, v: DataArray) -> None:
@@ -232,6 +238,13 @@ class VectorWind:
 
         return result
 
+    def _component_metadata(
+        self, data: Any, dtype: np.dtype, name: str, **attributes: Any
+    ) -> DataArray:
+        """Wrap stored wind components using the public component dtype."""
+        restored = self._api._restore_output_dtype(data, dtype)
+        return self._metadata(restored, name, **attributes)
+
     def u(self) -> DataArray:
         """
         Get zonal component of vector wind.
@@ -246,8 +259,9 @@ class VectorWind:
         >>> u_wind = vw.u()
         >>> print(u_wind.attrs['standard_name'])  # 'eastward_wind'
         """
-        return self._metadata(
+        return self._component_metadata(
             self._api.u,
+            self._u_component_dtype,
             "u",
             units="m s**-1",
             standard_name="eastward_wind",
@@ -268,8 +282,9 @@ class VectorWind:
         >>> v_wind = vw.v()
         >>> print(v_wind.attrs['standard_name'])  # 'northward_wind'
         """
-        return self._metadata(
+        return self._component_metadata(
             self._api.v,
+            self._v_component_dtype,
             "v",
             units="m s**-1",
             standard_name="northward_wind",
@@ -798,7 +813,7 @@ class VectorWind:
         apiorder = [chi.dims[i] for i in apiorder]
         reorder = chi.dims
 
-        chi = chi.copy().transpose(*apiorder)
+        chi = chi.transpose(*apiorder)
         ishape = chi.shape
         coords = [chi.coords[n] for n in chi.dims]
 
@@ -943,15 +958,21 @@ class VectorWind:
         apiorder = [field.dims[i] for i in apiorder]
         reorder = field.dims
 
-        field = field.copy().transpose(*apiorder)
+        field = field.transpose(*apiorder)
         ishape = field.shape
+        coords = [field.coords[n] for n in field.dims]
 
         # Apply truncation using standard API
         field_trunc = self._api.truncate(field.values, truncation=truncation)
 
-        # Update field values and restore dimension order
-        field.values = field_trunc.reshape(ishape)
-        field = field.transpose(*reorder)
+        # Restore dimension order without coercing the computed result into the
+        # input array's dtype.
+        field = xr.DataArray(
+            field_trunc.reshape(ishape),
+            coords=coords,
+            name=field.name,
+            attrs=field.attrs,
+        ).transpose(*reorder)
 
         return field
 
