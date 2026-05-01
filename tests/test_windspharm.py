@@ -55,6 +55,8 @@ class TestVectorWindInitialization:
         assert vw.v.shape == (nlat, nlon)
         assert vw.gridtype == "regular"
         assert hasattr(vw, "s")  # Spharmt object
+        assert not np.shares_memory(vw.u, u)
+        assert not np.shares_memory(vw.v, v)
 
     @pytest.mark.skipif(
         not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
@@ -110,6 +112,110 @@ class TestVectorWindInitialization:
         vw = VectorWind(u_masked.filled(0), v_masked.filled(0))
         assert vw.u.shape == (nlat, nlon)
         assert vw.v.shape == (nlat, nlon)
+
+    @pytest.mark.skipif(
+        not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
+    )
+    @pytest.mark.parametrize(
+        "input_dtype, output_dtype",
+        [(np.float32, np.float32), (np.float64, np.float64), (np.int32, np.float64)],
+    )
+    def test_vectorwind_preserves_public_output_dtype(self, input_dtype, output_dtype):
+        """Grid-space outputs should follow interp-style public dtype restoration."""
+        nlat, nlon = 19, 36
+        rng = np.random.default_rng(20260501)
+        if np.issubdtype(input_dtype, np.integer):
+            u = rng.integers(-5, 5, size=(nlat, nlon)).astype(input_dtype)
+            v = rng.integers(-5, 5, size=(nlat, nlon)).astype(input_dtype)
+        else:
+            u = rng.standard_normal((nlat, nlon)).astype(input_dtype)
+            v = rng.standard_normal((nlat, nlon)).astype(input_dtype)
+
+        vw = VectorWind(u, v)
+
+        outputs = []
+        outputs.append(vw.magnitude())
+        outputs.extend(vw.vrtdiv())
+        outputs.append(vw.vorticity())
+        outputs.append(vw.divergence())
+        outputs.append(vw.planetaryvorticity())
+        outputs.append(vw.absolutevorticity())
+        outputs.extend(vw.sfvp())
+        outputs.append(vw.streamfunction())
+        outputs.append(vw.velocitypotential())
+        outputs.extend(vw.helmholtz())
+        outputs.extend(vw.irrotationalcomponent())
+        outputs.extend(vw.nondivergentcomponent())
+        outputs.extend(vw.gradient(outputs[2]))
+        outputs.append(vw.truncate(outputs[2]))
+        outputs.append(vw.rossbywavesource())
+
+        assert {result.dtype for result in outputs} == {np.dtype(output_dtype)}
+
+    @pytest.mark.skipif(
+        not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
+    )
+    def test_vectorwind_promotes_mixed_public_output_dtype(self):
+        """Mixed u/v precision should preserve the higher public floating precision."""
+        nlat, nlon = 19, 36
+        rng = np.random.default_rng(20260501)
+        u = rng.standard_normal((nlat, nlon)).astype(np.float32)
+        v = rng.standard_normal((nlat, nlon)).astype(np.float64)
+
+        vw = VectorWind(u, v)
+
+        assert vw.u.dtype == np.float32
+        assert vw.v.dtype == np.float64
+        assert vw.magnitude().dtype == np.float64
+        assert vw.vorticity().dtype == np.float64
+
+    @pytest.mark.skipif(
+        not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
+    )
+    def test_vectorwind_keeps_float32_working_arrays(self):
+        """Float32 inputs should not be persistently converted to float64."""
+        nlat, nlon = 19, 36
+        rng = np.random.default_rng(20260501)
+        u = rng.standard_normal((nlat, nlon)).astype(np.float32)
+        v = rng.standard_normal((nlat, nlon)).astype(np.float32)
+
+        vw = VectorWind(u, v)
+
+        assert vw.u.dtype == np.float32
+        assert vw.v.dtype == np.float32
+
+    @pytest.mark.skipif(
+        not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
+    )
+    def test_vectorwind_integer_masked_inputs_promote_to_float64(self):
+        """Integer masked arrays must become floating arrays before NaN filling."""
+        nlat, nlon = 19, 36
+        u = np.ma.array(np.ones((nlat, nlon), dtype=np.int32))
+        v = np.ma.array(np.ones((nlat, nlon), dtype=np.int32))
+
+        vw = VectorWind(u, v)
+
+        assert vw.u.dtype == np.float64
+        assert vw.v.dtype == np.float64
+
+    @pytest.mark.skipif(
+        not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
+    )
+    def test_scalar_input_methods_restore_scalar_input_dtype(self):
+        """Scalar-field diagnostics should restore precision from their own input."""
+        nlat, nlon = 19, 36
+        rng = np.random.default_rng(20260501)
+        u = rng.standard_normal((nlat, nlon)).astype(np.float64)
+        v = rng.standard_normal((nlat, nlon)).astype(np.float64)
+        scalar = rng.standard_normal((nlat, nlon)).astype(np.float32)
+
+        vw = VectorWind(u, v)
+        grad_x, grad_y = vw.gradient(scalar)
+        truncated = vw.truncate(scalar)
+
+        assert grad_x.dtype == np.float32
+        assert grad_y.dtype == np.float32
+        assert truncated.dtype == np.float32
 
 
 class TestVectorWindValidation:
@@ -1357,10 +1463,18 @@ class TestWindSpharmTargetedCoverage:
         vw.s = type("DummySpharm", (), {"nlat": 4})()
         vw.gridtype = "regular"
         vw.u = np.zeros((4, 8, 2), dtype=np.float32)
+        vw._output_dtype = np.dtype(np.float32)
 
         coriolis = vw.planetaryvorticity()
         assert coriolis.shape == (4, 8, 2)
+        assert coriolis.dtype == np.float32
         np.testing.assert_allclose(coriolis[:, 0, 0], coriolis[:, 3, 1])
+        assert coriolis.flags.writeable
+        assert len(vw._latitude_cache) == 1
+        assert len(vw._coriolis_cache) == 1
+
+        cached_coriolis = vw._coriolis_values(None, dtype=np.float32)
+        assert cached_coriolis is vw._coriolis_values(None, dtype=np.float32)
 
         with pytest.raises(ValueError, match="invalid value for omega"):
             vw.planetaryvorticity(omega="bad")
@@ -1368,6 +1482,56 @@ class TestWindSpharmTargetedCoverage:
         vw.gridtype = "gaussian"
         gaussian_coriolis = vw.planetaryvorticity()
         assert gaussian_coriolis.shape == (4, 8, 2)
+        assert len(vw._latitude_cache) == 2
+
+    def test_absolutevorticity_broadcast_branches(self, monkeypatch):
+        """Exercise optimized absolute-vorticity latitude broadcast branches."""
+        vw = object.__new__(StandardVectorWind)
+        vw.s = type("DummySpharm", (), {"nlat": 4})()
+        vw.u = np.zeros((4, 8, 2), dtype=np.float32)
+        vw._output_dtype = np.dtype(np.float32)
+
+        monkeypatch.setattr(
+            vw,
+            "_vrtdiv_raw",
+            lambda truncation=None: (
+                np.ones((4, 8, 2), dtype=np.float64),
+                np.zeros((4, 8, 2), dtype=np.float64),
+            ),
+        )
+
+        vw.gridtype = "regular"
+        regular_abs = vw.absolutevorticity()
+        assert regular_abs.shape == (4, 8, 2)
+
+        vw.gridtype = "gaussian"
+        gaussian_abs = vw.absolutevorticity()
+        assert gaussian_abs.shape == (4, 8, 2)
+
+        with pytest.raises(ValueError, match="invalid value for omega"):
+            vw.absolutevorticity(omega="bad")
+
+    def test_rossbywavesource_reuses_vrtdiv_analysis(self, monkeypatch):
+        """RWS should avoid separate vorticity and divergence vector analyses."""
+        nlat, nlon = 19, 36
+        u = np.random.randn(nlat, nlon)
+        v = np.random.randn(nlat, nlon)
+        vw = VectorWind(u, v)
+
+        calls = {"count": 0}
+        original_getvrtdivspec = vw.s.getvrtdivspec
+
+        def counting_getvrtdivspec(*args, **kwargs):
+            calls["count"] += 1
+            return original_getvrtdivspec(*args, **kwargs)
+
+        monkeypatch.setattr(vw.s, "getvrtdivspec", counting_getvrtdivspec)
+
+        rws = vw.rossbywavesource()
+
+        assert rws.shape == (nlat, nlon)
+        assert np.all(np.isfinite(rws))
+        assert calls["count"] == 2
 
     def test_common_and_tool_validation_branches(self, monkeypatch):
         """Exercise helper validation and recovery branches."""
