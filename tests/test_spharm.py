@@ -45,6 +45,21 @@ except Exception as e:
     print(f"✗ spharm module import error in test: {e}")
 
 
+VECTOR_BACKEND_CASES = [
+    ("regular", "stored"),
+    ("regular", "computed"),
+    ("gaussian", "stored"),
+    ("gaussian", "computed"),
+]
+
+VECTOR_SYNTHESIS_BACKEND_CASES = [
+    ("regular", "stored", "vhses transform", [1, 0]),
+    ("regular", "computed", "vhsec transform", [1, 0]),
+    ("gaussian", "stored", "vhsgs transform", [1, 0]),
+    ("gaussian", "computed", "vhsgc transform", [1, 0]),
+]
+
+
 class TestSpharmtInitialization:
     """Test Spharmt class initialization."""
 
@@ -160,12 +175,7 @@ class TestSpharmtGridOperations:
 class TestSpharmtVectorOperations:
     """Test Spharmt vector operations."""
 
-    _VECTOR_BACKEND_CASES = [
-        ("regular", "stored"),
-        ("regular", "computed"),
-        ("gaussian", "stored"),
-        ("gaussian", "computed"),
-    ]
+    _VECTOR_BACKEND_CASES = VECTOR_BACKEND_CASES
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_getuv_basic(self):
@@ -326,6 +336,61 @@ class TestSpharmtGradientOperations:
         assert grady.shape == (37, 72)
         assert isinstance(gradx, np.ndarray)
         assert isinstance(grady, np.ndarray)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    @pytest.mark.parametrize(("gridtype", "legfunc"), VECTOR_BACKEND_CASES)
+    def test_getgrad_single_family_synthesis_matches_pair_output(
+        self, gridtype, legfunc
+    ):
+        """getgrad() should match the legacy pair-spectrum synthesis exactly."""
+        sht = Spharmt(nlon=36, nlat=19, gridtype=gridtype, legfunc=legfunc)
+        rng = np.random.default_rng(20260503)
+        chi = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
+        chispec = sht.grdtospec(chi)
+
+        u_grad, v_grad = sht.getgrad(chispec)
+
+        _, _, normalized_spec, extra_shape = sht._validate_spectral_data(
+            chispec, "test_getgrad_single_family_synthesis_matches_pair_output"
+        )
+        divspec = spharm_mod._spherepack.lap(normalized_spec, sht.rsphere)
+        divspec = sht._restore_spectral_shape(divspec, extra_shape)
+        legacy_u, legacy_v = sht.getuv(np.zeros_like(divspec), divspec)
+
+        np.testing.assert_allclose(u_grad, legacy_u, rtol=0, atol=0)
+        np.testing.assert_allclose(v_grad, legacy_v, rtol=0, atol=0)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    @pytest.mark.parametrize(
+        ("gridtype", "legfunc", "expected_operation", "expected_calls"),
+        VECTOR_SYNTHESIS_BACKEND_CASES,
+    )
+    def test_getgrad_selects_divergence_only_half_synthesis_ityp(
+        self, monkeypatch, gridtype, legfunc, expected_operation, expected_calls
+    ):
+        """getgrad() should request ityp=1 while public getuv() stays on ityp=0."""
+        sht = Spharmt(nlon=36, nlat=19, gridtype=gridtype, legfunc=legfunc)
+        rng = np.random.default_rng(20260503)
+        chi = rng.standard_normal((19, 36)).astype(np.float32)
+        chispec = sht.grdtospec(chi)
+        u = rng.standard_normal((19, 36)).astype(np.float32)
+        v = rng.standard_normal((19, 36)).astype(np.float32)
+        vrtspec, divspec = sht.getvrtdivspec(u, v)
+
+        calls = []
+        original_call = sht._call_spherepack_safely
+
+        def recording_call(func, *args, operation_name, **kwargs):
+            if operation_name == expected_operation:
+                calls.append(kwargs.get("ityp", 0))
+            return original_call(func, *args, operation_name=operation_name, **kwargs)
+
+        monkeypatch.setattr(sht, "_call_spherepack_safely", recording_call)
+
+        sht.getgrad(chispec)
+        sht.getuv(vrtspec, divspec)
+
+        assert calls == expected_calls
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_getpsichi_basic(self):
