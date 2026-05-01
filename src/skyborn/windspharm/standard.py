@@ -96,6 +96,7 @@ class VectorWind:
         dimensional requirements.
         """
         # Step 1: Handle masked arrays and create copies
+        self._output_dtype = self._infer_output_dtype(u, v)
         self.u = self._process_input_array(u, "u")
         self.v = self._process_input_array(v, "v")
 
@@ -108,11 +109,69 @@ class VectorWind:
         # Step 4: Initialize spherical harmonic transform
         nlat, nlon = self.u.shape[0], self.u.shape[1]
         self._initialize_spharmt(nlon, nlat, gridtype, rsphere, legfunc)
+        self._setup_cached_arrays()
 
         # Step 5: Create method aliases for backward compatibility
         self._setup_method_aliases()
 
-    def _process_input_array(self, arr: ArrayLike, name: str) -> np.ndarray:
+    @classmethod
+    def _from_prepared(
+        cls,
+        u: ArrayLike,
+        v: ArrayLike,
+        gridtype: GridType = "regular",
+        rsphere: float = 6.3712e6,
+        legfunc: LegFunc = "stored",
+    ) -> "VectorWind":
+        """Create an instance from validated wrapper-owned arrays."""
+        self = cls.__new__(cls)
+        self._output_dtype = self._infer_output_dtype(u, v)
+        self.u = self._process_input_array(u, "u", copy=False)
+        self.v = self._process_input_array(v, "v", copy=False)
+        self._validate_input_data()
+        self._validate_dimensions()
+        nlat, nlon = self.u.shape[0], self.u.shape[1]
+        self._initialize_spharmt(nlon, nlat, gridtype, rsphere, legfunc)
+        self._setup_cached_arrays()
+        self._setup_method_aliases()
+        return self
+
+    # ------------------------------------------------------------------
+    # Input processing, dtype handling, and validation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _infer_output_dtype(*arrays: ArrayLike) -> np.dtype:
+        """Return the public output dtype for floating inputs."""
+        output_dtype = None
+        for arr in arrays:
+            dtype = np.dtype(np.asarray(arr).dtype)
+            if np.issubdtype(dtype, np.floating):
+                public_dtype = dtype
+            else:
+                public_dtype = np.dtype(np.float64)
+            output_dtype = (
+                public_dtype
+                if output_dtype is None
+                else np.result_type(output_dtype, public_dtype)
+            )
+        return np.dtype(np.float64 if output_dtype is None else output_dtype)
+
+    def _restore_output_dtype(
+        self, data: np.ndarray, output_dtype: Optional[np.dtype] = None
+    ) -> np.ndarray:
+        """Cast grid-space public outputs back to the input precision."""
+        array = np.asarray(data)
+        target_dtype = (
+            self._output_dtype if output_dtype is None else np.dtype(output_dtype)
+        )
+        if array.dtype == target_dtype:
+            return array
+        return array.astype(target_dtype, copy=False)
+
+    def _process_input_array(
+        self, arr: ArrayLike, name: str, copy: bool = True
+    ) -> np.ndarray:
         """
         Process input array handling masked arrays and creating copies.
 
@@ -131,9 +190,21 @@ class VectorWind:
         try:
             # Handle masked arrays
             if hasattr(arr, "filled"):
-                processed = arr.filled(fill_value=np.nan)
+                masked = np.ma.asarray(arr)
+                dtype = masked.dtype
+                if not np.issubdtype(dtype, np.floating):
+                    dtype = np.dtype(np.float64)
+                processed = np.ma.asarray(masked, dtype=dtype).filled(fill_value=np.nan)
+                if copy:
+                    processed = processed.copy()
             else:
-                processed = np.asarray(arr, dtype=np.float32).copy()
+                raw = np.asarray(arr)
+                dtype = np.dtype(raw.dtype)
+                if not np.issubdtype(dtype, np.floating):
+                    dtype = np.dtype(np.float64)
+                processed = np.asarray(raw, dtype=dtype)
+                if copy:
+                    processed = processed.copy()
         except (ValueError, TypeError) as e:
             raise ValueError(f"Cannot convert {name} to numpy array: {e}")
 
@@ -149,37 +220,15 @@ class VectorWind:
         - Shape compatibility
         - Data type compatibility
         """
-        # Check for NaN values
-        u_has_nan = np.any(np.isnan(self.u))
-        v_has_nan = np.any(np.isnan(self.v))
+        if not np.isfinite(self.u).all() or not np.isfinite(self.v).all():
+            nan_locations, inf_locations = self._invalid_value_locations()
 
-        if u_has_nan or v_has_nan:
-            nan_locations = []
-            if u_has_nan:
-                nan_count_u = np.isnan(self.u).sum()
-                nan_locations.append(f"u: {nan_count_u} NaN values")
-            if v_has_nan:
-                nan_count_v = np.isnan(self.v).sum()
-                nan_locations.append(f"v: {nan_count_v} NaN values")
-
-            raise ValueError(
-                f"Input wind components contain missing values (NaN). "
-                f"Found in {', '.join(nan_locations)}. "
-                f"Please ensure all wind data is finite and valid."
-            )
-
-        # Check for infinite values
-        u_has_inf = np.any(np.isinf(self.u))
-        v_has_inf = np.any(np.isinf(self.v))
-
-        if u_has_inf or v_has_inf:
-            inf_locations = []
-            if u_has_inf:
-                inf_count_u = np.isinf(self.u).sum()
-                inf_locations.append(f"u: {inf_count_u} infinite values")
-            if v_has_inf:
-                inf_count_v = np.isinf(self.v).sum()
-                inf_locations.append(f"v: {inf_count_v} infinite values")
+            if nan_locations:
+                raise ValueError(
+                    f"Input wind components contain missing values (NaN). "
+                    f"Found in {', '.join(nan_locations)}. "
+                    f"Please ensure all wind data is finite and valid."
+                )
 
             raise ValueError(
                 f"Input wind components contain infinite values. "
@@ -198,6 +247,27 @@ class VectorWind:
         #         f"(max |u|={u_max:.2e}, max |v|={v_max:.2e}). "
         #         f"Please check units and data validity."
         #     )
+
+    def _invalid_value_locations(self) -> Tuple[list[str], list[str]]:
+        """Count NaN and infinite values after the fast finite check fails."""
+        nan_locations: list[str] = []
+        inf_locations: list[str] = []
+
+        for name, values in (("u", self.u), ("v", self.v)):
+            invalid = ~np.isfinite(values)
+            invalid_count = int(invalid.sum())
+            if not invalid_count:
+                continue
+
+            invalid_values = values[invalid]
+            nan_count = int(np.isnan(invalid_values).sum())
+            inf_count = invalid_count - nan_count
+            if nan_count:
+                nan_locations.append(f"{name}: {nan_count} NaN values")
+            if inf_count:
+                inf_locations.append(f"{name}: {inf_count} infinite values")
+
+        return nan_locations, inf_locations
 
     def _validate_dimensions(self) -> None:
         """
@@ -236,6 +306,10 @@ class VectorWind:
         #         f"This may require significant memory and computation time.",
         #         UserWarning,
         #     )
+
+    # ------------------------------------------------------------------
+    # Transform setup and small per-instance caches
+    # ------------------------------------------------------------------
 
     def _initialize_spharmt(
         self, nlon: int, nlat: int, gridtype: str, rsphere: float, legfunc: str
@@ -312,6 +386,125 @@ class VectorWind:
         self.rotationalcomponent = self.nondivergentcomponent
         self.divergentcomponent = self.irrotationalcomponent
 
+    def _setup_cached_arrays(self) -> None:
+        """Initialize small per-instance caches for repeated wrapper work."""
+        self._latitude_cache: dict[tuple[str, int], np.ndarray] = {}
+        self._coriolis_cache: dict[tuple[str, int, float, str], np.ndarray] = {}
+
+    def _latitude_values(self) -> np.ndarray:
+        """Return latitude coordinates for this wind grid."""
+        key = (self.gridtype, self.s.nlat)
+        cache = getattr(self, "_latitude_cache", None)
+        if cache is None:
+            cache = {}
+            self._latitude_cache = cache
+
+        lat = cache.get(key)
+        if lat is not None:
+            return lat
+
+        nlat = self.s.nlat
+        if self.gridtype == "gaussian":
+            lat, _ = gaussian_lats_wts(nlat)
+        elif nlat % 2:
+            lat = np.linspace(90, -90, nlat)
+        else:
+            dlat = 180.0 / nlat
+            lat = np.arange(90 - dlat / 2.0, -90, -dlat)
+
+        cache[key] = np.asarray(lat)
+        return cache[key]
+
+    def _coriolis_values(
+        self, omega: Optional[float], dtype: Optional[np.dtype] = None
+    ) -> np.ndarray:
+        """Return cached latitude-only Coriolis values."""
+        if omega is None:
+            omega = 7.292e-05
+
+        try:
+            omega_value = float(omega)
+        except (TypeError, ValueError):
+            raise ValueError(f"invalid value for omega: {omega!r}")
+
+        output_dtype = self._output_dtype if dtype is None else np.dtype(dtype)
+        key = (self.gridtype, self.s.nlat, omega_value, output_dtype.str)
+        cache = getattr(self, "_coriolis_cache", None)
+        if cache is None:
+            cache = {}
+            self._coriolis_cache = cache
+
+        coriolis = cache.get(key)
+        if coriolis is not None:
+            return coriolis
+
+        coriolis = 2.0 * omega_value * np.sin(np.deg2rad(self._latitude_values()))
+        coriolis = coriolis.astype(output_dtype, copy=False)
+        cache[key] = coriolis
+        return coriolis
+
+    # ------------------------------------------------------------------
+    # Raw numerical helpers. These avoid public dtype restoration between
+    # intermediate steps in chained diagnostics.
+    # ------------------------------------------------------------------
+
+    def _vrtdiv_raw(
+        self, truncation: Optional[int] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Return relative vorticity and divergence before public dtype restore."""
+        vrtspec, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
+        return self.s.spectogrd(vrtspec), self.s.spectogrd(divspec)
+
+    def _planetaryvorticity_raw(
+        self,
+        omega: Optional[float] = None,
+        materialize: bool = True,
+        dtype: Optional[np.dtype] = None,
+    ) -> np.ndarray:
+        """Return planetary vorticity before public dtype restore."""
+        coriolis = self._coriolis_values(omega, dtype=dtype)
+        return self._broadcast_planetaryvorticity(coriolis, materialize=materialize)
+
+    def _broadcast_planetaryvorticity(
+        self, coriolis: np.ndarray, materialize: bool
+    ) -> np.ndarray:
+        """Broadcast latitude-only Coriolis values to the wind field shape."""
+        indices = [slice(None)] + [np.newaxis] * (len(self.u.shape) - 1)
+        broadcast = np.broadcast_to(coriolis[tuple(indices)], self.u.shape)
+        if materialize:
+            return np.array(broadcast, copy=True)
+        return broadcast
+
+    def _irrotationalcomponent_raw(
+        self, truncation: Optional[int] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Return irrotational wind components before public dtype restore."""
+        _, chi = self.s.getpsichi(self.u, self.v, ntrunc=truncation)
+        return self.s.getgrad(self.s.grdtospec(chi))
+
+    def _gradient_raw(
+        self, chi: ArrayLike, truncation: Optional[int] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Return vector gradient before public dtype restore."""
+        try:
+            chi = chi.filled(fill_value=np.nan) if hasattr(chi, "filled") else chi
+        except AttributeError:
+            pass
+
+        if np.any(np.isnan(chi)):
+            raise ValueError("chi cannot contain missing values")
+
+        try:
+            chi_spec = self.s.grdtospec(chi, ntrunc=truncation)
+        except ValueError:
+            raise ValueError("input field is not compatible")
+
+        return self.s.getgrad(chi_spec)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     @property
     def grid_info(self) -> dict:
         """
@@ -346,7 +539,7 @@ class VectorWind:
         --------
         >>> wind_speed = vw.magnitude()
         """
-        return np.hypot(self.u, self.v)
+        return self._restore_output_dtype(np.hypot(self.u, self.v))
 
     def vrtdiv(self, truncation: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -375,8 +568,11 @@ class VectorWind:
         >>> vrt, div = vw.vrtdiv()
         >>> vrt_t13, div_t13 = vw.vrtdiv(truncation=13)
         """
-        vrtspec, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
-        return self.s.spectogrd(vrtspec), self.s.spectogrd(divspec)
+        vrt, div = self._vrtdiv_raw(truncation=truncation)
+        return (
+            self._restore_output_dtype(vrt),
+            self._restore_output_dtype(div),
+        )
 
     def vorticity(self, truncation: Optional[int] = None) -> np.ndarray:
         """
@@ -403,7 +599,7 @@ class VectorWind:
         >>> vrt_t13 = vw.vorticity(truncation=13)
         """
         vrtspec, _ = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
-        return self.s.spectogrd(vrtspec)
+        return self._restore_output_dtype(self.s.spectogrd(vrtspec))
 
     def divergence(self, truncation: Optional[int] = None) -> np.ndarray:
         """
@@ -429,7 +625,7 @@ class VectorWind:
         >>> div_t13 = vw.divergence(truncation=13)
         """
         _, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
-        return self.s.spectogrd(divspec)
+        return self._restore_output_dtype(self.s.spectogrd(divspec))
 
     def planetaryvorticity(self, omega: Optional[float] = None) -> np.ndarray:
         """
@@ -454,27 +650,9 @@ class VectorWind:
         >>> f = vw.planetaryvorticity()
         >>> f_custom = vw.planetaryvorticity(omega=7.2921150e-5)
         """
-        if omega is None:
-            omega = 7.292e-05  # Earth's angular velocity
-
-        nlat = self.s.nlat
-        if self.gridtype == "gaussian":
-            lat, _ = gaussian_lats_wts(nlat)
-        else:
-            if nlat % 2:
-                lat = np.linspace(90, -90, nlat)
-            else:
-                dlat = 180.0 / nlat
-                lat = np.arange(90 - dlat / 2.0, -90, -dlat)
-
-        try:
-            coriolis = 2.0 * omega * np.sin(np.deg2rad(lat))
-        except (TypeError, ValueError):
-            raise ValueError(f"invalid value for omega: {omega!r}")
-
-        # Broadcast to match input shape
-        indices = [slice(None)] + [np.newaxis] * (len(self.u.shape) - 1)
-        return coriolis[tuple(indices)] * np.ones(self.u.shape, dtype=np.float32)
+        return self._planetaryvorticity_raw(
+            omega=omega, materialize=True, dtype=self._output_dtype
+        )
 
     def absolutevorticity(
         self, omega: Optional[float] = None, truncation: Optional[int] = None
@@ -504,8 +682,9 @@ class VectorWind:
         >>> abs_vrt = vw.absolutevorticity()
         >>> abs_vrt_t13 = vw.absolutevorticity(omega=7.2921150e-5, truncation=13)
         """
-        return self.planetaryvorticity(omega=omega) + self.vorticity(
-            truncation=truncation
+        vrt, _ = self._vrtdiv_raw(truncation=truncation)
+        return self._restore_output_dtype(
+            vrt + self._planetaryvorticity_raw(omega=omega, materialize=False)
         )
 
     def sfvp(self, truncation: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
@@ -534,7 +713,8 @@ class VectorWind:
         >>> psi, chi = vw.sfvp()
         >>> psi_t13, chi_t13 = vw.sfvp(truncation=13)
         """
-        return self.s.getpsichi(self.u, self.v, ntrunc=truncation)
+        psi, chi = self.s.getpsichi(self.u, self.v, ntrunc=truncation)
+        return self._restore_output_dtype(psi), self._restore_output_dtype(chi)
 
     def streamfunction(self, truncation: Optional[int] = None) -> np.ndarray:
         """
@@ -626,7 +806,12 @@ class VectorWind:
         psi, chi = self.s.getpsichi(self.u, self.v, ntrunc=truncation)
         v_psi, u_psi = self.s.getgrad(self.s.grdtospec(psi))
         u_chi, v_chi = self.s.getgrad(self.s.grdtospec(chi))
-        return u_chi, v_chi, -u_psi, v_psi
+        return (
+            self._restore_output_dtype(u_chi),
+            self._restore_output_dtype(v_chi),
+            self._restore_output_dtype(-u_psi),
+            self._restore_output_dtype(v_psi),
+        )
 
     def irrotationalcomponent(
         self, truncation: Optional[int] = None
@@ -661,8 +846,8 @@ class VectorWind:
         >>> u_chi, v_chi = vw.irrotationalcomponent()
         >>> u_chi_t13, v_chi_t13 = vw.irrotationalcomponent(truncation=13)
         """
-        _, chi = self.s.getpsichi(self.u, self.v, ntrunc=truncation)
-        return self.s.getgrad(self.s.grdtospec(chi))
+        u_chi, v_chi = self._irrotationalcomponent_raw(truncation=truncation)
+        return self._restore_output_dtype(u_chi), self._restore_output_dtype(v_chi)
 
     def nondivergentcomponent(
         self, truncation: Optional[int] = None
@@ -699,7 +884,7 @@ class VectorWind:
         """
         psi, _ = self.s.getpsichi(self.u, self.v, ntrunc=truncation)
         v_psi, u_psi = self.s.getgrad(self.s.grdtospec(psi))
-        return -u_psi, v_psi
+        return self._restore_output_dtype(-u_psi), self._restore_output_dtype(v_psi)
 
     def gradient(
         self, chi: ArrayLike, truncation: Optional[int] = None
@@ -728,20 +913,12 @@ class VectorWind:
         >>> avrt_u, avrt_v = vw.gradient(abs_vrt)
         >>> avrt_u_t13, avrt_v_t13 = vw.gradient(abs_vrt, truncation=13)
         """
-        try:
-            chi = chi.filled(fill_value=np.nan) if hasattr(chi, "filled") else chi
-        except AttributeError:
-            pass
-
-        if np.any(np.isnan(chi)):
-            raise ValueError("chi cannot contain missing values")
-
-        try:
-            chi_spec = self.s.grdtospec(chi, ntrunc=truncation)
-        except ValueError:
-            raise ValueError("input field is not compatible")
-
-        return self.s.getgrad(chi_spec)
+        output_dtype = self._infer_output_dtype(chi)
+        u_chi, v_chi = self._gradient_raw(chi, truncation=truncation)
+        return (
+            self._restore_output_dtype(u_chi, output_dtype),
+            self._restore_output_dtype(v_chi, output_dtype),
+        )
 
     def truncate(
         self, field: ArrayLike, truncation: Optional[int] = None
@@ -780,12 +957,14 @@ class VectorWind:
         if np.any(np.isnan(field)):
             raise ValueError("field cannot contain missing values")
 
+        output_dtype = self._infer_output_dtype(field)
+
         try:
             field_spec = self.s.grdtospec(field, ntrunc=truncation)
         except ValueError:
             raise ValueError("field is not compatible")
 
-        return self.s.spectogrd(field_spec)
+        return self._restore_output_dtype(self.s.spectogrd(field_spec), output_dtype)
 
     def rossbywavesource(
         self, truncation: Optional[int] = None, omega: Optional[float] = None
@@ -847,20 +1026,18 @@ class VectorWind:
         rotational flow by steady idealized tropical heating. Journal of the
         Atmospheric Sciences, 45(7), 1228-1251.
         """
-        # Calculate absolute vorticity
-        eta = self.absolutevorticity(omega=omega, truncation=truncation)
-
-        # Calculate divergence
-        div = self.divergence(truncation=truncation)
+        # Compute relative vorticity and divergence in a single vector analysis.
+        vrt, div = self._vrtdiv_raw(truncation=truncation)
+        eta = vrt + self._planetaryvorticity_raw(omega=omega, materialize=False)
 
         # Calculate irrotational (divergent) wind components
-        uchi, vchi = self.irrotationalcomponent(truncation=truncation)
+        uchi, vchi = self._irrotationalcomponent_raw(truncation=truncation)
 
         # Calculate gradients of absolute vorticity
-        etax, etay = self.gradient(eta, truncation=truncation)
+        etax, etay = self._gradient_raw(eta, truncation=truncation)
 
         # Combine components to form Rossby wave source
         # S = -eta * div - (uchi * etax + vchi * etay)
         rws = -eta * div - (uchi * etax + vchi * etay)
 
-        return rws
+        return self._restore_output_dtype(rws)
