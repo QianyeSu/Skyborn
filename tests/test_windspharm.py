@@ -573,6 +573,8 @@ class TestVectorWindFourDimensionalOperations:
         vrt_flat, div_flat = vw_flat.vrtdiv()
         psi_4d, chi_4d = vw_4d.sfvp()
         psi_flat, chi_flat = vw_flat.sfvp()
+        psi_only_4d = vw_4d.streamfunction()
+        chi_only_4d = vw_4d.velocitypotential()
         grad_u_4d, grad_v_4d = vw_4d.gradient(vrt_4d)
         grad_u_flat, grad_v_flat = vw_flat.gradient(vrt_flat)
         trunc_4d = vw_4d.truncate(vrt_4d, truncation=10)
@@ -586,6 +588,8 @@ class TestVectorWindFourDimensionalOperations:
         np.testing.assert_allclose(div_4d, div_flat.reshape(u.shape), rtol=0, atol=0)
         np.testing.assert_allclose(psi_4d, psi_flat.reshape(u.shape), rtol=0, atol=0)
         np.testing.assert_allclose(chi_4d, chi_flat.reshape(u.shape), rtol=0, atol=0)
+        np.testing.assert_allclose(psi_only_4d, psi_4d, rtol=0, atol=0)
+        np.testing.assert_allclose(chi_only_4d, chi_4d, rtol=0, atol=0)
         np.testing.assert_allclose(
             grad_u_4d, grad_u_flat.reshape(u.shape), rtol=0, atol=0
         )
@@ -1532,6 +1536,44 @@ class TestWindSpharmTargetedCoverage:
         assert rws.shape == (nlat, nlon)
         assert np.all(np.isfinite(rws))
         assert calls["count"] == 2
+
+    def test_single_potential_paths_match_legacy_sfvp_expression(self):
+        """Single-field potential paths should preserve existing discrete results."""
+        nlat, nlon = 19, 36
+        rng = np.random.default_rng(24680)
+        u = rng.standard_normal((nlat, nlon, 2), dtype=np.float32)
+        v = rng.standard_normal((nlat, nlon, 2), dtype=np.float32)
+        vw = VectorWind(u, v)
+
+        psi, chi = vw.sfvp()
+        np.testing.assert_allclose(vw.streamfunction(), psi, rtol=0, atol=0)
+        np.testing.assert_allclose(vw.velocitypotential(), chi, rtol=0, atol=0)
+
+        v_psi, u_psi = vw.s.getgrad(vw.s.grdtospec(psi))
+        u_chi, v_chi = vw.s.getgrad(vw.s.grdtospec(chi))
+        expected_nondiv = (
+            vw._restore_output_dtype(-u_psi),
+            vw._restore_output_dtype(v_psi),
+        )
+        expected_irrot = (
+            vw._restore_output_dtype(u_chi),
+            vw._restore_output_dtype(v_chi),
+        )
+
+        nondiv = vw.nondivergentcomponent()
+        irrot = vw.irrotationalcomponent()
+        np.testing.assert_allclose(nondiv[0], expected_nondiv[0], rtol=0, atol=0)
+        np.testing.assert_allclose(nondiv[1], expected_nondiv[1], rtol=0, atol=0)
+        np.testing.assert_allclose(irrot[0], expected_irrot[0], rtol=0, atol=0)
+        np.testing.assert_allclose(irrot[1], expected_irrot[1], rtol=0, atol=0)
+
+        vrt, div = vw._vrtdiv_raw()
+        eta = vrt + vw._planetaryvorticity_raw(materialize=False)
+        etax, etay = vw._gradient_raw(eta)
+        expected_rws = vw._restore_output_dtype(
+            -eta * div - (u_chi * etax + v_chi * etay)
+        )
+        np.testing.assert_allclose(vw.rossbywavesource(), expected_rws, rtol=0, atol=0)
 
     def test_common_and_tool_validation_branches(self, monkeypatch):
         """Exercise helper validation and recovery branches."""
