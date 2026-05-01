@@ -551,27 +551,22 @@ subroutine vhsec_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, 
 
             ! Process odd harmonics with OPTIMIZED LOOPS (only br,bi terms)
             if (mp1 <= ndo1) then
-                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, vo, ve, br, bi, vb, iv, mlat, imid)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp1, ndo1, imm1, vo, we, br, bi, vb, wb, iv, iw, mlat, imid)
                 do k = 1, nt
                     do np1 = mp1, ndo1, 2
                         !DIR$ VECTOR ALWAYS
                         !DIR$ SIMD
                         !DIR$ UNROLL(2)
                         do i = 1, imm1
-                            ! OPTIMIZATION: Only 4 operations instead of 8 (50% reduction)
-                            ! Skip all cr,ci terms since they're zero for case 1
                             vo(i, 2*mp1-2, k) = vo(i, 2*mp1-2, k) + br(mp1, np1, k) * vb(i, np1, iv)
-                            ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + bi(mp1, np1, k) * vb(i, np1, iv)
-                            ! Skip: ve(i, 2*mp1-2, k) -= ci(mp1, np1, k) * wb(i, np1, iw) (ci=0)
-                            ! Skip: vo(i, 2*mp1-1, k) += cr(mp1, np1, k) * wb(i, np1, iw) (cr=0)
-                            ! Note: wo terms with cr,ci are also zero
+                            vo(i, 2*mp1-1, k) = vo(i, 2*mp1-1, k) + bi(mp1, np1, k) * vb(i, np1, iv)
+                            we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - bi(mp1, np1, k) * wb(i, np1, iw)
+                            we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) + br(mp1, np1, k) * wb(i, np1, iw)
                         end do
 
-                        ! Handle equator point if needed - BRANCH OPTIMIZED (only br,bi terms)
                         if (mlat /= 0) then
-                            ve(imid, 2*mp1-1, k) = ve(imid, 2*mp1-1, k) + bi(mp1, np1, k) * vb(imid, np1, iv)
-                            ! Skip: ve(imid, 2*mp1-2, k) -= ci(mp1, np1, k) * wb(imid, np1, iw) (ci=0)
-                            ! Skip: we terms with cr,ci (they're zero)
+                            we(imid, 2*mp1-2, k) = we(imid, 2*mp1-2, k) - bi(mp1, np1, k) * wb(imid, np1, iw)
+                            we(imid, 2*mp1-1, k) = we(imid, 2*mp1-1, k) + br(mp1, np1, k) * wb(imid, np1, iw)
                         end if
                     end do
                 end do
@@ -580,26 +575,22 @@ subroutine vhsec_case1(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, 
 
             ! Process even harmonics with OPTIMIZED LOOPS (only br,bi terms)
             if (mp2 <= ndo2) then
-                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, ve, br, bi, vb, iv, mlat, imid)
+                ! PARALLEL DO PRIVATE(k, np1, i) SHARED(nt, mp2, ndo2, imm1, ve, wo, br, bi, vb, wb, iv, iw, mlat, imid)
                 do k = 1, nt
                     do np1 = mp2, ndo2, 2
                         !DIR$ VECTOR ALWAYS
                         !DIR$ SIMD
                         !DIR$ UNROLL(2)
                         do i = 1, imm1
-                            ! OPTIMIZATION: Only 4 operations instead of 8 (50% reduction)
                             ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) + br(mp1, np1, k) * vb(i, np1, iv)
                             ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + bi(mp1, np1, k) * vb(i, np1, iv)
-                            ! Skip: vo(i, 2*mp1-2, k) -= ci(mp1, np1, k) * wb(i, np1, iw) (ci=0)
-                            ! Skip: vo(i, 2*mp1-1, k) += cr(mp1, np1, k) * wb(i, np1, iw) (cr=0)
-                            ! Note: wo terms with cr,ci are also zero
+                            wo(i, 2*mp1-2, k) = wo(i, 2*mp1-2, k) - bi(mp1, np1, k) * wb(i, np1, iw)
+                            wo(i, 2*mp1-1, k) = wo(i, 2*mp1-1, k) + br(mp1, np1, k) * wb(i, np1, iw)
                         end do
 
-                        ! Handle equator point if needed - BRANCH OPTIMIZED (only br,bi terms)
                         if (mlat /= 0) then
                             ve(imid, 2*mp1-2, k) = ve(imid, 2*mp1-2, k) + br(mp1, np1, k) * vb(imid, np1, iv)
                             ve(imid, 2*mp1-1, k) = ve(imid, 2*mp1-1, k) + bi(mp1, np1, k) * vb(imid, np1, iv)
-                            ! Skip: we terms with cr,ci (they're zero)
                         end if
                     end do
                 end do
