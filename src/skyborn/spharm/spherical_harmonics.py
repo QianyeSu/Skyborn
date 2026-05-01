@@ -969,6 +969,20 @@ class Spharmt:
         operation_name: str,
     ) -> FloatArray:
         """Compute one streamfunction/velocity-potential component safely."""
+        fieldspec = self._getpsichi_spec_component(
+            ugrid, vgrid, ntrunc, component, operation_name
+        )
+        return self.spectogrd(fieldspec)
+
+    def _getpsichi_spec_component(
+        self,
+        ugrid: FloatArray,
+        vgrid: FloatArray,
+        ntrunc: Optional[int],
+        component: str,
+        operation_name: str,
+    ) -> ComplexArray:
+        """Compute one streamfunction/velocity-potential spectrum safely."""
         if ugrid.shape != vgrid.shape:
             raise ValidationError("ugrid and vgrid must have the same shape")
 
@@ -987,7 +1001,52 @@ class Spharmt:
             )
 
         fieldspec = _spherepack.invlap(normalized_spec, self.rsphere)
-        return self.spectogrd(self._restore_spectral_shape(fieldspec, extra_shape))
+        return self._restore_spectral_shape(fieldspec, extra_shape)
+
+    def _getpsi_spec(
+        self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
+    ) -> ComplexArray:
+        """Compute streamfunction spectral coefficients without gridding."""
+        return self._getpsichi_spec_component(
+            ugrid, vgrid, ntrunc, component="psi", operation_name="_getpsi_spec"
+        )
+
+    def _getchi_spec(
+        self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
+    ) -> ComplexArray:
+        """Compute velocity-potential spectral coefficients without gridding."""
+        return self._getpsichi_spec_component(
+            ugrid, vgrid, ntrunc, component="chi", operation_name="_getchi_spec"
+        )
+
+    def _getpsichi_spec(
+        self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
+    ) -> Tuple[ComplexArray, ComplexArray]:
+        """Compute streamfunction and velocity-potential spectra safely."""
+        if ugrid.shape != vgrid.shape:
+            raise ValidationError("ugrid and vgrid must have the same shape")
+
+        _, _, extra_shape = self._validate_grid_data(ugrid, "_getpsichi_spec")
+        ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
+
+        vrtspec, divspec = self.getvrtdivspec(ugrid, vgrid, ntrunc)
+        _, _, normalized_vrt, spec_extra_shape = self._validate_spectral_data(
+            vrtspec, "_getpsichi_spec"
+        )
+        _, _, normalized_div, div_spec_extra_shape = self._validate_spectral_data(
+            divspec, "_getpsichi_spec"
+        )
+        if spec_extra_shape != extra_shape or div_spec_extra_shape != extra_shape:
+            raise ValidationError(
+                "vorticity and divergence spectra have inconsistent dimensions"
+            )
+
+        psispec = _spherepack.invlap(normalized_vrt, self.rsphere)
+        chispec = _spherepack.invlap(normalized_div, self.rsphere)
+        return (
+            self._restore_spectral_shape(psispec, extra_shape),
+            self._restore_spectral_shape(chispec, extra_shape),
+        )
 
     def getpsi(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
