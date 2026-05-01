@@ -237,7 +237,7 @@ class TestSpharmtVectorOperations:
         v = np.zeros((19, 36, 2), dtype=np.float32)
 
         with pytest.raises(ValidationError, match="must have the same shape"):
-            sht._getpsichi_spec(u, v[..., :1])
+            sht.getpsichispec(u, v[..., :1])
 
         nspec = (sht.nlat * (sht.nlat + 1)) // 2
 
@@ -248,7 +248,7 @@ class TestSpharmtVectorOperations:
 
         monkeypatch.setattr(sht, "getvrtdivspec", mismatched_getvrtdivspec)
         with pytest.raises(ValidationError, match="inconsistent dimensions"):
-            sht._getpsichi_spec(u, v)
+            sht.getpsichispec(u, v)
 
 
 class TestSpharmtGradientOperations:
