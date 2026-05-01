@@ -219,11 +219,15 @@ class TestSpharmtVectorOperations:
 
         psi_4d, chi_4d = sht.getpsichi(u_4d, v_4d)
         psi_flat, chi_flat = sht.getpsichi(u_flat, v_flat)
+        psi_only_4d = sht.getpsi(u_4d, v_4d)
+        chi_only_4d = sht.getchi(u_4d, v_4d)
 
         assert psi_4d.shape == u_4d.shape
         assert chi_4d.shape == u_4d.shape
         np.testing.assert_allclose(psi_4d, psi_flat.reshape(u_4d.shape), rtol=0, atol=0)
         np.testing.assert_allclose(chi_4d, chi_flat.reshape(u_4d.shape), rtol=0, atol=0)
+        np.testing.assert_allclose(psi_only_4d, psi_4d, rtol=0, atol=0)
+        np.testing.assert_allclose(chi_only_4d, chi_4d, rtol=0, atol=0)
 
 
 class TestSpharmtGradientOperations:
@@ -1331,6 +1335,11 @@ class TestSpharmtAdditionalCoverage:
         ):
             sht.getpsichi(u, v)
 
+        with pytest.raises(
+            ValidationError, match="ugrid and vgrid must have the same shape"
+        ):
+            sht.getpsi(u, v)
+
         smooth = np.ones((19, 1), dtype=np.float32)
         with pytest.raises(ValidationError, match="smooth must be rank 1"):
             sht.specsmooth(np.zeros((19, 36), dtype=np.float32), smooth)
@@ -1430,6 +1439,33 @@ class TestSpharmtAdditionalCoverage:
             ValidationError, match="spectra have inconsistent dimensions"
         ):
             sht.getpsichi(
+                np.zeros((19, 36), dtype=np.float32),
+                np.zeros((19, 36), dtype=np.float32),
+            )
+
+        monkeypatch.setattr(
+            sht,
+            "_validate_grid_data",
+            lambda data, operation_name: (
+                1,
+                np.zeros((19, 36, 1), dtype=np.float32),
+                (),
+            ),
+        )
+        monkeypatch.setattr(
+            sht,
+            "_validate_spectral_data",
+            lambda data, operation_name: (
+                1,
+                18,
+                np.zeros((190, 1), dtype=np.complex64),
+                (1,),
+            ),
+        )
+        with pytest.raises(
+            ValidationError, match="spectrum has inconsistent dimensions"
+        ):
+            sht.getpsi(
                 np.zeros((19, 36), dtype=np.float32),
                 np.zeros((19, 36), dtype=np.float32),
             )
