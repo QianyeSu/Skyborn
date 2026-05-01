@@ -275,6 +275,8 @@ else:
             'src/onedtotwod.f90',
             'src/onedtotwod_vrtdiv.f90',
             'src/twodtooned.f90',
+            'src/twodtooned_vrt.f90',
+            'src/twodtooned_div.f90',
             'src/twodtooned_vrtdiv.f90',
             'src/multsmoothfact.f90',
             'src/gaqd.f90',
