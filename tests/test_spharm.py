@@ -229,6 +229,27 @@ class TestSpharmtVectorOperations:
         np.testing.assert_allclose(psi_only_4d, psi_4d, rtol=0, atol=0)
         np.testing.assert_allclose(chi_only_4d, chi_4d, rtol=0, atol=0)
 
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_psichi_spec_helpers_validate_shapes(self, monkeypatch):
+        """Private psi/chi spectral helpers should validate inconsistent shapes."""
+        sht = Spharmt(nlon=36, nlat=19)
+        u = np.zeros((19, 36, 2), dtype=np.float32)
+        v = np.zeros((19, 36, 2), dtype=np.float32)
+
+        with pytest.raises(ValidationError, match="must have the same shape"):
+            sht._getpsichi_spec(u, v[..., :1])
+
+        nspec = (sht.nlat * (sht.nlat + 1)) // 2
+
+        def mismatched_getvrtdivspec(*args, **kwargs):
+            vrtspec = np.zeros((nspec, 2), dtype=np.complex64)
+            divspec = np.zeros((nspec, 3), dtype=np.complex64)
+            return vrtspec, divspec
+
+        monkeypatch.setattr(sht, "getvrtdivspec", mismatched_getvrtdivspec)
+        with pytest.raises(ValidationError, match="inconsistent dimensions"):
+            sht._getpsichi_spec(u, v)
+
 
 class TestSpharmtGradientOperations:
     """Test Spharmt gradient operations."""
