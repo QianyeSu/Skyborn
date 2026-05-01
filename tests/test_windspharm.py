@@ -1549,7 +1549,7 @@ class TestWindSpharmTargetedCoverage:
         np.testing.assert_allclose(vw.streamfunction(), psi, rtol=0, atol=0)
         np.testing.assert_allclose(vw.velocitypotential(), chi, rtol=0, atol=0)
 
-        psispec, chispec = vw.s._getpsichi_spec(vw.u, vw.v)
+        psispec, chispec = vw.s.getpsichispec(vw.u, vw.v)
         v_psi, u_psi = vw.s.getgrad(psispec)
         u_chi, v_chi = vw.s.getgrad(chispec)
         expected_nondiv = (
