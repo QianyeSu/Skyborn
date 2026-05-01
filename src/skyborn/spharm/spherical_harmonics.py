@@ -274,11 +274,11 @@ class Spharmt:
         initializer()
 
     def _call_spherepack_safely(
-        self, func: Callable, *args, operation_name: str
+        self, func: Callable, *args, operation_name: str, **kwargs
     ) -> Any:
         """Safely call SPHEREPACK functions with consistent error handling."""
         try:
-            result = func(*args)
+            result = func(*args, **kwargs)
             if isinstance(result, tuple) and len(result) > 1:
                 *data, ierror = result
                 if ierror != 0:
@@ -631,6 +631,7 @@ class Spharmt:
         vgrid: FloatArray,
         ntrunc: Optional[int],
         operation_name: str,
+        ityp: int = 0,
     ) -> Tuple[
         FloatArray,
         FloatArray,
@@ -648,6 +649,10 @@ class Spharmt:
         if extra_shape != v_extra_shape:
             raise ValidationError("ugrid and vgrid must have consistent dimensions")
         ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
+        if ityp not in (0, 1, 2):
+            raise ValidationError(
+                f"{operation_name} invalid ityp {ityp}; expected 0, 1, or 2"
+            )
 
         # Convert from geographical to mathematical coordinates.
         w = normalized_u
@@ -661,6 +666,7 @@ class Spharmt:
                     w,
                     self.wvhaes,
                     (2 * nt + 1) * self.nlat * self.nlon,
+                    ityp=ityp,
                     operation_name="vhaes transform",
                 )
             ),
@@ -671,6 +677,7 @@ class Spharmt:
                     w,
                     self.wvhaec,
                     self.nlat * (2 * nt * self.nlon + max(6 * self._n2, self.nlon)),
+                    ityp=ityp,
                     operation_name="vhaec transform",
                 )
             ),
@@ -681,6 +688,7 @@ class Spharmt:
                     w,
                     self.wvhags,
                     (2 * nt + 1) * self.nlat * self.nlon,
+                    ityp=ityp,
                     operation_name="vhags transform",
                 )
             ),
@@ -691,6 +699,7 @@ class Spharmt:
                     w,
                     self.wvhagc,
                     2 * self.nlat * (2 * self.nlon * nt + 3 * self._n2),
+                    ityp=ityp,
                     operation_name="vhagc transform",
                 )
             ),
@@ -892,7 +901,7 @@ class Spharmt:
     ) -> ComplexArray:
         """Compute only vorticity spectral coefficients from vector wind."""
         br, bi, cr, ci, extra_shape, ntrunc = self._analyze_vector_harmonics(
-            ugrid, vgrid, ntrunc, "getvrtspec"
+            ugrid, vgrid, ntrunc, "getvrtspec", ityp=2
         )
         del br, bi
         vrtspec = _spherepack.twodtooned_vrt(cr, ci, ntrunc, self.rsphere)
@@ -903,7 +912,7 @@ class Spharmt:
     ) -> ComplexArray:
         """Compute only divergence spectral coefficients from vector wind."""
         br, bi, cr, ci, extra_shape, ntrunc = self._analyze_vector_harmonics(
-            ugrid, vgrid, ntrunc, "getdivspec"
+            ugrid, vgrid, ntrunc, "getdivspec", ityp=1
         )
         del cr, ci
         divspec = _spherepack.twodtooned_div(br, bi, ntrunc, self.rsphere)
