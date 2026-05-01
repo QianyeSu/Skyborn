@@ -54,6 +54,24 @@ python module _spherepack ! in
             integer optional,check(shape(a,2)==nt),depend(a) :: nt=shape(a,2)
             integer :: ntrunc
         end subroutine twodtooned
+        subroutine twodtooned_vrt(vrtspec,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned_vrt.f90
+            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
+            real dimension(nlat,nlat,nt) :: cr
+            real dimension(nlat,nlat,nt) :: ci
+            integer optional,check(shape(cr,0)==nlat),depend(cr) :: nlat=shape(cr,0)
+            integer optional,check(shape(cr,2)==nt),depend(cr) :: nt=shape(cr,2)
+            integer :: ntrunc
+            real :: rsphere
+        end subroutine twodtooned_vrt
+        subroutine twodtooned_div(divspec,br,bi,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned_div.f90
+            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
+            real dimension(nlat,nlat,nt) :: br
+            real dimension(nlat,nlat,nt) :: bi
+            integer optional,check(shape(br,0)==nlat),depend(br) :: nlat=shape(br,0)
+            integer optional,check(shape(br,2)==nt),depend(br) :: nt=shape(br,2)
+            integer :: ntrunc
+            real :: rsphere
+        end subroutine twodtooned_div
         subroutine twodtooned_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned_vrtdiv.f90
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
