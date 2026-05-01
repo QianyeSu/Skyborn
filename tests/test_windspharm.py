@@ -1496,7 +1496,7 @@ class TestWindSpharmTargetedCoverage:
             (),
             {
                 "nlat": 4,
-                "getvrtdivspec": lambda self, u, v, ntrunc=None: ("vrtspec", "divspec"),
+                "getvrtspec": lambda self, u, v, ntrunc=None: "vrtspec",
                 "spectogrd": lambda self, spec: (
                     np.ones((4, 8, 2), dtype=np.float64)
                     if spec == "vrtspec"
@@ -1522,6 +1522,32 @@ class TestWindSpharmTargetedCoverage:
 
         with pytest.raises(ValueError, match="invalid value for omega"):
             vw.absolutevorticity(omega="bad")
+
+    def test_single_component_public_methods_use_single_spec_helpers(self, monkeypatch):
+        """vorticity/divergence/absolutevorticity should avoid pair-spectrum calls."""
+        nlat, nlon = 19, 36
+        u = np.random.randn(nlat, nlon).astype(np.float32)
+        v = np.random.randn(nlat, nlon).astype(np.float32)
+        vw = VectorWind(u, v)
+
+        monkeypatch.setattr(
+            vw.s,
+            "getvrtdivspec",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("single-component methods should not call getvrtdivspec")
+            ),
+        )
+
+        vort = vw.vorticity()
+        div = vw.divergence()
+        abs_vort = vw.absolutevorticity()
+
+        assert vort.shape == (nlat, nlon)
+        assert div.shape == (nlat, nlon)
+        assert abs_vort.shape == (nlat, nlon)
+        assert np.all(np.isfinite(vort))
+        assert np.all(np.isfinite(div))
+        assert np.all(np.isfinite(abs_vort))
 
     def test_vrtdiv_raw_batches_scalar_synthesis(self, monkeypatch):
         """_vrtdiv_raw should synthesize vorticity/divergence together once."""
@@ -1555,13 +1581,13 @@ class TestWindSpharmTargetedCoverage:
         vw = VectorWind(u, v)
 
         calls = {"count": 0}
-        original_getvrtdivspec = vw.s.getvrtdivspec
+        original_analyze = vw.s._analyze_vector_harmonics
 
-        def counting_getvrtdivspec(*args, **kwargs):
+        def counting_analyze(*args, **kwargs):
             calls["count"] += 1
-            return original_getvrtdivspec(*args, **kwargs)
+            return original_analyze(*args, **kwargs)
 
-        monkeypatch.setattr(vw.s, "getvrtdivspec", counting_getvrtdivspec)
+        monkeypatch.setattr(vw.s, "_analyze_vector_harmonics", counting_analyze)
 
         rws = vw.rossbywavesource()
 
