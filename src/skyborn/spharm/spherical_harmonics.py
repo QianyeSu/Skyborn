@@ -615,6 +615,90 @@ class Spharmt:
         paired_grids = self.spectogrd(paired_specs)
         return paired_grids[..., 0], paired_grids[..., 1]
 
+    def _invlapspec(
+        self, dataspec: ComplexArray, operation_name: str = "_invlapspec"
+    ) -> ComplexArray:
+        """Apply the inverse Laplacian to a scalar spectrum and preserve shape."""
+        _, _, normalized_spec, extra_shape = self._validate_spectral_data(
+            dataspec, operation_name
+        )
+        invlap_spec = _spherepack.invlap(normalized_spec, self.rsphere)
+        return self._restore_spectral_shape(invlap_spec, extra_shape)
+
+    def _analyze_vector_harmonics(
+        self,
+        ugrid: FloatArray,
+        vgrid: FloatArray,
+        ntrunc: Optional[int],
+        operation_name: str,
+    ) -> Tuple[
+        FloatArray,
+        FloatArray,
+        FloatArray,
+        FloatArray,
+        Tuple[int, ...],
+        int,
+    ]:
+        """Run one vector harmonic analysis and return raw coefficient arrays."""
+        if ugrid.shape != vgrid.shape:
+            raise ValidationError("ugrid and vgrid must have the same shape")
+
+        nt, normalized_u, extra_shape = self._validate_grid_data(ugrid, operation_name)
+        _, normalized_v, v_extra_shape = self._validate_grid_data(vgrid, operation_name)
+        if extra_shape != v_extra_shape:
+            raise ValidationError("ugrid and vgrid must have consistent dimensions")
+        ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
+
+        # Convert from geographical to mathematical coordinates.
+        w = normalized_u
+        v = -normalized_v
+
+        vha_functions = {
+            ("regular", "stored"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhaes,
+                    v,
+                    w,
+                    self.wvhaes,
+                    (2 * nt + 1) * self.nlat * self.nlon,
+                    operation_name="vhaes transform",
+                )
+            ),
+            ("regular", "computed"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhaec,
+                    v,
+                    w,
+                    self.wvhaec,
+                    self.nlat * (2 * nt * self.nlon + max(6 * self._n2, self.nlon)),
+                    operation_name="vhaec transform",
+                )
+            ),
+            ("gaussian", "stored"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhags,
+                    v,
+                    w,
+                    self.wvhags,
+                    (2 * nt + 1) * self.nlat * self.nlon,
+                    operation_name="vhags transform",
+                )
+            ),
+            ("gaussian", "computed"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhagc,
+                    v,
+                    w,
+                    self.wvhagc,
+                    2 * self.nlat * (2 * self.nlon * nt + 3 * self._n2),
+                    operation_name="vhagc transform",
+                )
+            ),
+        }
+
+        br, bi, cr, ci = vha_functions[(self.gridtype, self.legfunc)]()
+        return br, bi, cr, ci, extra_shape, ntrunc
+
     def _validate_ntrunc(self, ntrunc: Optional[int], max_allowed: int) -> int:
         """Validate and return appropriate ntrunc value."""
         if ntrunc is None:
@@ -791,70 +875,9 @@ class Spharmt:
             ValidationError: If input arrays have mismatched shapes or invalid dimensions
             SpheremackError: If SPHEREPACK transform fails
         """
-        # Validate inputs
-        if ugrid.shape != vgrid.shape:
-            raise ValidationError("ugrid and vgrid must have the same shape")
-
-        nt, normalized_u, extra_shape = self._validate_grid_data(ugrid, "getvrtdivspec")
-        _, normalized_v, v_extra_shape = self._validate_grid_data(
-            vgrid, "getvrtdivspec"
+        br, bi, cr, ci, extra_shape, ntrunc = self._analyze_vector_harmonics(
+            ugrid, vgrid, ntrunc, "getvrtdivspec"
         )
-        if extra_shape != v_extra_shape:
-            raise ValidationError("ugrid and vgrid must have consistent dimensions")
-        ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
-
-        # Convert from geographical to mathematical coordinates
-        w = normalized_u
-        v = -normalized_v
-
-        # Select vector harmonic analysis function
-        vha_functions = {
-            ("regular", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhaes,
-                    v,
-                    w,
-                    self.wvhaes,
-                    (2 * nt + 1) * self.nlat * self.nlon,
-                    operation_name="vhaes transform",
-                )
-            ),
-            ("regular", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhaec,
-                    v,
-                    w,
-                    self.wvhaec,
-                    self.nlat * (2 * nt * self.nlon + max(6 * self._n2, self.nlon)),
-                    operation_name="vhaec transform",
-                )
-            ),
-            ("gaussian", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhags,
-                    v,
-                    w,
-                    self.wvhags,
-                    (2 * nt + 1) * self.nlat * self.nlon,
-                    operation_name="vhags transform",
-                )
-            ),
-            ("gaussian", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhagc,
-                    v,
-                    w,
-                    self.wvhagc,
-                    2 * self.nlat * (2 * self.nlon * nt + 3 * self._n2),
-                    operation_name="vhagc transform",
-                )
-            ),
-        }
-
-        vha_func = vha_functions[(self.gridtype, self.legfunc)]
-        br, bi, cr, ci = vha_func()
-
-        # Convert vector harmonic coefficients to vorticity and divergence
         vrtspec, divspec = _spherepack.twodtooned_vrtdiv(
             br, bi, cr, ci, ntrunc, self.rsphere
         )
@@ -863,6 +886,28 @@ class Spharmt:
             self._restore_spectral_shape(vrtspec, extra_shape),
             self._restore_spectral_shape(divspec, extra_shape),
         )
+
+    def getvrtspec(
+        self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
+    ) -> ComplexArray:
+        """Compute only vorticity spectral coefficients from vector wind."""
+        br, bi, cr, ci, extra_shape, ntrunc = self._analyze_vector_harmonics(
+            ugrid, vgrid, ntrunc, "getvrtspec"
+        )
+        del br, bi
+        vrtspec = _spherepack.twodtooned_vrt(cr, ci, ntrunc, self.rsphere)
+        return self._restore_spectral_shape(vrtspec, extra_shape)
+
+    def getdivspec(
+        self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
+    ) -> ComplexArray:
+        """Compute only divergence spectral coefficients from vector wind."""
+        br, bi, cr, ci, extra_shape, ntrunc = self._analyze_vector_harmonics(
+            ugrid, vgrid, ntrunc, "getdivspec"
+        )
+        del cr, ci
+        divspec = _spherepack.twodtooned_div(br, bi, ntrunc, self.rsphere)
+        return self._restore_spectral_shape(divspec, extra_shape)
 
     def getuv(
         self, vrtspec: ComplexArray, divspec: ComplexArray
@@ -994,25 +1039,12 @@ class Spharmt:
         operation_name: str,
     ) -> ComplexArray:
         """Compute one streamfunction/velocity-potential spectrum safely."""
-        if ugrid.shape != vgrid.shape:
-            raise ValidationError("ugrid and vgrid must have the same shape")
-
-        _, _, extra_shape = self._validate_grid_data(ugrid, operation_name)
-        ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
-
-        vrtspec, divspec = self.getvrtdivspec(ugrid, vgrid, ntrunc)
-        source_spec = vrtspec if component == "psi" else divspec
-
-        _, _, normalized_spec, spec_extra_shape = self._validate_spectral_data(
-            source_spec, operation_name
+        source_spec = (
+            self.getvrtspec(ugrid, vgrid, ntrunc)
+            if component == "psi"
+            else self.getdivspec(ugrid, vgrid, ntrunc)
         )
-        if spec_extra_shape != extra_shape:
-            raise ValidationError(
-                "vorticity/divergence spectrum has inconsistent dimensions"
-            )
-
-        fieldspec = _spherepack.invlap(normalized_spec, self.rsphere)
-        return self._restore_spectral_shape(fieldspec, extra_shape)
+        return self._invlapspec(source_spec, operation_name)
 
     def getpsispec(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
