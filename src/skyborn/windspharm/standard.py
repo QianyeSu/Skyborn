@@ -444,18 +444,11 @@ class VectorWind:
         return coriolis
 
     # ------------------------------------------------------------------
-    # Raw numerical helpers. These avoid public dtype restoration between
-    # intermediate steps in chained diagnostics.
+    # Internal numerical helpers. These avoid public dtype restoration
+    # between intermediate steps in chained diagnostics.
     # ------------------------------------------------------------------
 
-    def _vrtdiv_raw(
-        self, truncation: Optional[int] = None
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Return relative vorticity and divergence before public dtype restore."""
-        vrtspec, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
-        return self.s._spectogrd_pair(vrtspec, divspec)
-
-    def _planetaryvorticity_raw(
+    def _planetary_vorticity(
         self,
         omega: Optional[float] = None,
         materialize: bool = True,
@@ -475,14 +468,7 @@ class VectorWind:
             return np.array(broadcast, copy=True)
         return broadcast
 
-    def _irrotationalcomponent_raw(
-        self, truncation: Optional[int] = None
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Return irrotational wind components before public dtype restore."""
-        chispec = self.s.getchispec(self.u, self.v, ntrunc=truncation)
-        return self.s.getgrad(chispec)
-
-    def _gradient_raw(
+    def _gradient_components(
         self, chi: ArrayLike, truncation: Optional[int] = None
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Return vector gradient before public dtype restore."""
@@ -568,7 +554,8 @@ class VectorWind:
         >>> vrt, div = vw.vrtdiv()
         >>> vrt_t13, div_t13 = vw.vrtdiv(truncation=13)
         """
-        vrt, div = self._vrtdiv_raw(truncation=truncation)
+        vrtspec, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
+        vrt, div = self.s._spectogrd_pair(vrtspec, divspec)
         return (
             self._restore_output_dtype(vrt),
             self._restore_output_dtype(div),
@@ -598,8 +585,9 @@ class VectorWind:
         >>> vrt = vw.vorticity()
         >>> vrt_t13 = vw.vorticity(truncation=13)
         """
-        vrtspec, _ = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
-        return self._restore_output_dtype(self.s.spectogrd(vrtspec))
+        return self._restore_output_dtype(
+            self.s.spectogrd(self.s.getvrtspec(self.u, self.v, ntrunc=truncation))
+        )
 
     def divergence(self, truncation: Optional[int] = None) -> np.ndarray:
         """
@@ -624,8 +612,9 @@ class VectorWind:
         >>> div = vw.divergence()
         >>> div_t13 = vw.divergence(truncation=13)
         """
-        _, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
-        return self._restore_output_dtype(self.s.spectogrd(divspec))
+        return self._restore_output_dtype(
+            self.s.spectogrd(self.s.getdivspec(self.u, self.v, ntrunc=truncation))
+        )
 
     def planetaryvorticity(self, omega: Optional[float] = None) -> np.ndarray:
         """
@@ -650,7 +639,7 @@ class VectorWind:
         >>> f = vw.planetaryvorticity()
         >>> f_custom = vw.planetaryvorticity(omega=7.2921150e-5)
         """
-        return self._planetaryvorticity_raw(
+        return self._planetary_vorticity(
             omega=omega, materialize=True, dtype=self._output_dtype
         )
 
@@ -682,10 +671,9 @@ class VectorWind:
         >>> abs_vrt = vw.absolutevorticity()
         >>> abs_vrt_t13 = vw.absolutevorticity(omega=7.2921150e-5, truncation=13)
         """
-        vrtspec, _ = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
-        vrt = self.s.spectogrd(vrtspec)
+        vrt = self.s.spectogrd(self.s.getvrtspec(self.u, self.v, ntrunc=truncation))
         return self._restore_output_dtype(
-            vrt + self._planetaryvorticity_raw(omega=omega, materialize=False)
+            vrt + self._planetary_vorticity(omega=omega, materialize=False)
         )
 
     def sfvp(self, truncation: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
@@ -847,7 +835,9 @@ class VectorWind:
         >>> u_chi, v_chi = vw.irrotationalcomponent()
         >>> u_chi_t13, v_chi_t13 = vw.irrotationalcomponent(truncation=13)
         """
-        u_chi, v_chi = self._irrotationalcomponent_raw(truncation=truncation)
+        u_chi, v_chi = self.s.getgrad(
+            self.s.getchispec(self.u, self.v, ntrunc=truncation)
+        )
         return self._restore_output_dtype(u_chi), self._restore_output_dtype(v_chi)
 
     def nondivergentcomponent(
@@ -915,7 +905,7 @@ class VectorWind:
         >>> avrt_u_t13, avrt_v_t13 = vw.gradient(abs_vrt, truncation=13)
         """
         output_dtype = self._infer_output_dtype(chi)
-        u_chi, v_chi = self._gradient_raw(chi, truncation=truncation)
+        u_chi, v_chi = self._gradient_components(chi, truncation=truncation)
         return (
             self._restore_output_dtype(u_chi, output_dtype),
             self._restore_output_dtype(v_chi, output_dtype),
@@ -1027,15 +1017,17 @@ class VectorWind:
         rotational flow by steady idealized tropical heating. Journal of the
         Atmospheric Sciences, 45(7), 1228-1251.
         """
-        # Compute relative vorticity and divergence in a single vector analysis.
-        vrt, div = self._vrtdiv_raw(truncation=truncation)
-        eta = vrt + self._planetaryvorticity_raw(omega=omega, materialize=False)
+        # Reuse the first vector analysis for both grid-space and spectral terms.
+        vrtspec, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
+        vrt, div = self.s._spectogrd_pair(vrtspec, divspec)
+        eta = vrt + self._planetary_vorticity(omega=omega, materialize=False)
 
-        # Calculate irrotational (divergent) wind components
-        uchi, vchi = self._irrotationalcomponent_raw(truncation=truncation)
+        # Reconstruct the divergent wind from the already-available divergence
+        # spectrum instead of triggering a second vector analysis.
+        uchi, vchi = self.s.getgrad(self.s._invlapspec(divspec, "rossbywavesource"))
 
-        # Calculate gradients of absolute vorticity
-        etax, etay = self._gradient_raw(eta, truncation=truncation)
+        # Preserve the existing absolute-vorticity gradient path exactly.
+        etax, etay = self._gradient_components(eta, truncation=truncation)
 
         # Combine components to form Rossby wave source
         # S = -eta * div - (uchi * etax + vchi * etay)
