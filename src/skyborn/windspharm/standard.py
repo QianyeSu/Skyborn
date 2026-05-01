@@ -479,8 +479,8 @@ class VectorWind:
         self, truncation: Optional[int] = None
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Return irrotational wind components before public dtype restore."""
-        chi = self.s.getchi(self.u, self.v, ntrunc=truncation)
-        return self.s.getgrad(self.s.grdtospec(chi))
+        chispec = self.s._getchi_spec(self.u, self.v, ntrunc=truncation)
+        return self.s.getgrad(chispec)
 
     def _gradient_raw(
         self, chi: ArrayLike, truncation: Optional[int] = None
@@ -803,9 +803,9 @@ class VectorWind:
         >>> u_chi, v_chi, u_psi, v_psi = vw.helmholtz()
         >>> u_chi_t13, v_chi_t13, u_psi_t13, v_psi_t13 = vw.helmholtz(truncation=13)
         """
-        psi, chi = self.s.getpsichi(self.u, self.v, ntrunc=truncation)
-        v_psi, u_psi = self.s.getgrad(self.s.grdtospec(psi))
-        u_chi, v_chi = self.s.getgrad(self.s.grdtospec(chi))
+        psispec, chispec = self.s._getpsichi_spec(self.u, self.v, ntrunc=truncation)
+        v_psi, u_psi = self.s.getgrad(psispec)
+        u_chi, v_chi = self.s.getgrad(chispec)
         return (
             self._restore_output_dtype(u_chi),
             self._restore_output_dtype(v_chi),
@@ -882,8 +882,8 @@ class VectorWind:
         >>> u_psi, v_psi = vw.nondivergentcomponent()
         >>> u_psi_t13, v_psi_t13 = vw.nondivergentcomponent(truncation=13)
         """
-        psi = self.s.getpsi(self.u, self.v, ntrunc=truncation)
-        v_psi, u_psi = self.s.getgrad(self.s.grdtospec(psi))
+        psispec = self.s._getpsi_spec(self.u, self.v, ntrunc=truncation)
+        v_psi, u_psi = self.s.getgrad(psispec)
         return self._restore_output_dtype(-u_psi), self._restore_output_dtype(v_psi)
 
     def gradient(
