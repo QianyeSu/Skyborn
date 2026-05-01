@@ -215,7 +215,7 @@ python module _spherepack ! in
             integer, intent(out) :: ierror
         end subroutine shsgsi
         subroutine vhaes(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaes,lvhaes,work,lwork,ierror) ! in :_spherepack:vhaes.f90
-            integer, intent(hide) :: ityp=0
+            integer optional, intent(in) :: ityp=0
             real dimension(nlat,nlon,nt) :: v
             real dimension(nlat,nlon,nt) :: w
             integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
@@ -247,7 +247,7 @@ python module _spherepack ! in
             integer, intent(out) :: ierror
         end subroutine vhaesi
         subroutine vhags(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhags,lvhags,work,lwork,ierror) ! in :_spherepack:vhags.f
-            integer, intent(hide) :: ityp=0
+            integer optional, intent(in) :: ityp=0
             real dimension(nlat,nlon,nt) :: v
             real dimension(nlat,nlon,nt) :: w
             integer, intent(hide) :: idvw=nlat
@@ -452,7 +452,7 @@ python module _spherepack ! in
             integer, intent(out) :: ierror
         end subroutine shsgci
         subroutine vhaec(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaec,lvhaec,work,lwork,ierror) ! in :_spherepack:vhaec.f90
-            integer, intent(hide) :: ityp=0
+            integer optional, intent(in) :: ityp=0
             real dimension(nlat,nlon,nt) :: v
             real dimension(nlat,nlon,nt) :: w
             integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
@@ -482,7 +482,7 @@ python module _spherepack ! in
             integer, intent(out) :: ierror
         end subroutine vhaeci
         subroutine vhagc(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhagc,lvhagc,work,lwork,ierror) ! in :_spherepack:vhagc.f
-            integer, intent(hide) :: ityp=0
+            integer optional, intent(in) :: ityp=0
             real dimension(nlat,nlon,nt) :: v
             real dimension(nlat,nlon,nt) :: w
             integer, intent(hide) :: idvw=nlat
