@@ -160,6 +160,13 @@ class TestSpharmtGridOperations:
 class TestSpharmtVectorOperations:
     """Test Spharmt vector operations."""
 
+    _VECTOR_BACKEND_CASES = [
+        ("regular", "stored"),
+        ("regular", "computed"),
+        ("gaussian", "stored"),
+        ("gaussian", "computed"),
+    ]
+
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_getuv_basic(self):
         """Test basic getuv functionality."""
@@ -230,9 +237,10 @@ class TestSpharmtVectorOperations:
         np.testing.assert_allclose(chi_only_4d, chi_4d, rtol=0, atol=0)
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
-    def test_single_vrtdiv_spec_helpers_match_pair_output(self):
+    @pytest.mark.parametrize(("gridtype", "legfunc"), _VECTOR_BACKEND_CASES)
+    def test_single_vrtdiv_spec_helpers_match_pair_output(self, gridtype, legfunc):
         """Single-field vorticity/divergence spectra should match pair output exactly."""
-        sht = Spharmt(nlon=36, nlat=19)
+        sht = Spharmt(nlon=36, nlat=19, gridtype=gridtype, legfunc=legfunc)
         rng = np.random.default_rng(20260502)
         u = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
         v = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
@@ -243,6 +251,41 @@ class TestSpharmtVectorOperations:
 
         np.testing.assert_allclose(vrtspec, vrtspec_pair, rtol=0, atol=0)
         np.testing.assert_allclose(divspec, divspec_pair, rtol=0, atol=0)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    @pytest.mark.parametrize(
+        ("gridtype", "legfunc", "expected_operation"),
+        [
+            ("regular", "stored", "vhaes transform"),
+            ("regular", "computed", "vhaec transform"),
+            ("gaussian", "stored", "vhags transform"),
+            ("gaussian", "computed", "vhagc transform"),
+        ],
+    )
+    def test_single_vrtdiv_spec_helpers_select_half_analysis_ityp(
+        self, monkeypatch, gridtype, legfunc, expected_operation
+    ):
+        """Single-field spectral helpers should request the matching half-analysis mode."""
+        sht = Spharmt(nlon=36, nlat=19, gridtype=gridtype, legfunc=legfunc)
+        rng = np.random.default_rng(20260502)
+        u = rng.standard_normal((19, 36)).astype(np.float32)
+        v = rng.standard_normal((19, 36)).astype(np.float32)
+
+        calls = []
+        original_call = sht._call_spherepack_safely
+
+        def recording_call(func, *args, operation_name, **kwargs):
+            if operation_name == expected_operation:
+                calls.append(kwargs.get("ityp", 0))
+            return original_call(func, *args, operation_name=operation_name, **kwargs)
+
+        monkeypatch.setattr(sht, "_call_spherepack_safely", recording_call)
+
+        sht.getvrtspec(u, v)
+        sht.getdivspec(u, v)
+        sht.getvrtdivspec(u, v)
+
+        assert calls == [2, 1, 0]
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_psichi_spec_helpers_validate_shapes(self, monkeypatch):
