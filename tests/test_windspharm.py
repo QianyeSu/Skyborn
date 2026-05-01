@@ -1549,8 +1549,8 @@ class TestWindSpharmTargetedCoverage:
         assert np.all(np.isfinite(div))
         assert np.all(np.isfinite(abs_vort))
 
-    def test_vrtdiv_raw_batches_scalar_synthesis(self, monkeypatch):
-        """_vrtdiv_raw should synthesize vorticity/divergence together once."""
+    def test_vrtdiv_batches_scalar_synthesis(self, monkeypatch):
+        """vrtdiv() should synthesize vorticity/divergence together once."""
         nlat, nlon = 19, 36
         u = np.random.randn(nlat, nlon)
         v = np.random.randn(nlat, nlon)
@@ -1565,7 +1565,7 @@ class TestWindSpharmTargetedCoverage:
 
         monkeypatch.setattr(vw.s, "spectogrd", counting_spectogrd)
 
-        vrt, div = vw._vrtdiv_raw()
+        vrt, div = vw.vrtdiv()
 
         assert vrt.shape == (nlat, nlon)
         assert div.shape == (nlat, nlon)
@@ -1588,12 +1588,19 @@ class TestWindSpharmTargetedCoverage:
             return original_analyze(*args, **kwargs)
 
         monkeypatch.setattr(vw.s, "_analyze_vector_harmonics", counting_analyze)
+        monkeypatch.setattr(
+            vw.s,
+            "getchispec",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("rossbywavesource should reuse the first divspec")
+            ),
+        )
 
         rws = vw.rossbywavesource()
 
         assert rws.shape == (nlat, nlon)
         assert np.all(np.isfinite(rws))
-        assert calls["count"] == 2
+        assert calls["count"] == 1
 
     def test_component_paths_match_direct_spectral_expression(self):
         """Component wind paths should use direct spectral reconstruction."""
@@ -1626,9 +1633,10 @@ class TestWindSpharmTargetedCoverage:
         np.testing.assert_allclose(irrot[0], expected_irrot[0], rtol=0, atol=0)
         np.testing.assert_allclose(irrot[1], expected_irrot[1], rtol=0, atol=0)
 
-        vrt, div = vw._vrtdiv_raw()
-        eta = vrt + vw._planetaryvorticity_raw(materialize=False)
-        etax, etay = vw._gradient_raw(eta)
+        vrtspec, divspec = vw.s.getvrtdivspec(vw.u, vw.v)
+        vrt, div = vw.s._spectogrd_pair(vrtspec, divspec)
+        eta = vrt + vw._planetary_vorticity(materialize=False)
+        etax, etay = vw._gradient_components(eta)
         expected_rws = vw._restore_output_dtype(
             -eta * div - (u_chi * etax + v_chi * etay)
         )
