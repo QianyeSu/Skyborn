@@ -34,8 +34,8 @@ class TestXarrayVectorWindInitialization:
         # Create xarray DataArrays with coordinates
         lat = np.linspace(-90, 90, 19)
         lon = np.linspace(0, 357.5, 36)
-        u_data = np.random.randn(19, 36)
-        v_data = np.random.randn(19, 36)
+        u_data = np.random.randn(19, 36).astype(np.float32)
+        v_data = np.random.randn(19, 36).astype(np.float32)
 
         u = xr.DataArray(
             u_data,
@@ -53,6 +53,14 @@ class TestXarrayVectorWindInitialization:
         vw = VectorWind(u, v)
         assert vw is not None
         assert hasattr(vw, "_api")
+        assert vw._api.u.dtype == u_data.dtype
+        assert vw._api.v.dtype == v_data.dtype
+
+        vorticity = vw.vorticity()
+        assert vorticity.dtype == u_data.dtype
+
+        assert vw.u().dtype == u_data.dtype
+        assert vw.v().dtype == v_data.dtype
 
     def test_xarray_vectorwind_3d(self):
         """Test VectorWind with 3D xarray data."""
@@ -164,6 +172,8 @@ class TestXarrayVectorWindOperations:
 
         assert isinstance(u_out, xr.DataArray)
         assert isinstance(v_out, xr.DataArray)
+        assert u_out.dtype == u.dtype
+        assert v_out.dtype == v.dtype
         assert "standard_name" in u_out.attrs
         assert "standard_name" in v_out.attrs
         assert u_out.attrs["standard_name"] == "eastward_wind"
@@ -857,7 +867,7 @@ class TestXarrayTargetedCoverage:
         vw = VectorWind(u, v)
 
         scalar = xr.DataArray(
-            np.random.randn(19, 36),
+            np.random.randn(19, 36).astype(np.float32),
             dims=["lat", "lon"],
             coords={"lat": lat, "lon": lon},
             name="temperature",
@@ -866,13 +876,57 @@ class TestXarrayTargetedCoverage:
         grad_u, grad_v = vw.gradient(scalar)
         assert isinstance(grad_u, xr.DataArray)
         assert isinstance(grad_v, xr.DataArray)
+        assert grad_u.dtype == scalar.dtype
+        assert grad_v.dtype == scalar.dtype
         assert grad_u.coords["lat"].values[0] > grad_u.coords["lat"].values[-1]
         assert grad_u.name == "zonal_gradient_of_temperature"
         assert grad_v.name == "meridional_gradient_of_temperature"
 
         trunc = vw.truncate(scalar, truncation=10)
         assert isinstance(trunc, xr.DataArray)
+        assert trunc.dtype == scalar.dtype
         assert trunc.coords["lat"].values[0] > trunc.coords["lat"].values[-1]
+
+    def test_gradient_and_truncate_avoid_api_order_copy(self, monkeypatch):
+        """API-ordered scalar fields should be handed to standard API as views."""
+        lat = np.linspace(90.0, -90.0, 19)
+        lon = np.linspace(0.0, 357.5, 36)
+        u = xr.DataArray(
+            np.random.randn(19, 36).astype(np.float32),
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+        )
+        v = xr.DataArray(
+            np.random.randn(19, 36).astype(np.float32),
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+        )
+        scalar_values = np.random.randn(19, 36).astype(np.float32)
+        scalar = xr.DataArray(
+            scalar_values,
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+            name="temperature",
+        )
+        vw = VectorWind(u, v)
+
+        def fake_gradient(values, truncation=None):
+            assert np.shares_memory(values, scalar_values)
+            return np.zeros_like(values), np.ones_like(values)
+
+        def fake_truncate(values, truncation=None):
+            assert np.shares_memory(values, scalar_values)
+            return np.full_like(values, 2.0)
+
+        monkeypatch.setattr(vw._api, "gradient", fake_gradient)
+        monkeypatch.setattr(vw._api, "truncate", fake_truncate)
+
+        grad_u, grad_v = vw.gradient(scalar)
+        trunc = vw.truncate(scalar)
+
+        assert grad_u.dtype == scalar.dtype
+        assert grad_v.dtype == scalar.dtype
+        assert trunc.dtype == scalar.dtype
 
     def test_find_coord_and_dim_error_paths(self):
         """Exercise coordinate lookup failure branches directly."""
