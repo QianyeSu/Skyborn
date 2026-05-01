@@ -453,7 +453,7 @@ class VectorWind:
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Return relative vorticity and divergence before public dtype restore."""
         vrtspec, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
-        return self.s.spectogrd(vrtspec), self.s.spectogrd(divspec)
+        return self.s._spectogrd_pair(vrtspec, divspec)
 
     def _planetaryvorticity_raw(
         self,
@@ -682,7 +682,8 @@ class VectorWind:
         >>> abs_vrt = vw.absolutevorticity()
         >>> abs_vrt_t13 = vw.absolutevorticity(omega=7.2921150e-5, truncation=13)
         """
-        vrt, _ = self._vrtdiv_raw(truncation=truncation)
+        vrtspec, _ = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
+        vrt = self.s.spectogrd(vrtspec)
         return self._restore_output_dtype(
             vrt + self._planetaryvorticity_raw(omega=omega, materialize=False)
         )
