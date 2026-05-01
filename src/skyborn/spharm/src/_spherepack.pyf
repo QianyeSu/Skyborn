@@ -253,6 +253,50 @@ python module _spherepack ! in
             real dimension(lwork),depend(lwork),intent(cache,hide) :: work
             integer, intent(out) :: ierror
         end subroutine vhaes
+        subroutine vhaesdiv(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaes,lvhaes,work,lwork,ierror) ! in :_spherepack:vhaes.f90
+            fortranname vhaes
+            integer, intent(hide) :: ityp=1
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(nlat,nlat,nt),intent(out) :: br
+            real dimension(nlat,nlat,nt),intent(out) :: bi
+            real dimension(1,1,1),intent(cache,hide) :: cr
+            real dimension(1,1,1),intent(cache,hide) :: ci
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(lvhaes) :: wvhaes
+            integer optional,check(shape(wvhaes,0)==lvhaes),depend(wvhaes) :: lvhaes=shape(wvhaes,0)
+            integer, required, intent(in) :: lwork
+            real dimension(lwork),depend(lwork),intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhaesdiv
+        subroutine vhaesvrt(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaes,lvhaes,work,lwork,ierror) ! in :_spherepack:vhaes.f90
+            fortranname vhaes
+            integer, intent(hide) :: ityp=2
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(1,1,1),intent(cache,hide) :: br
+            real dimension(1,1,1),intent(cache,hide) :: bi
+            real dimension(nlat,nlat,nt),intent(out) :: cr
+            real dimension(nlat,nlat,nt),intent(out) :: ci
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(lvhaes) :: wvhaes
+            integer optional,check(shape(wvhaes,0)==lvhaes),depend(wvhaes) :: lvhaes=shape(wvhaes,0)
+            integer, required, intent(in) :: lwork
+            real dimension(lwork),depend(lwork),intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhaesvrt
         subroutine vhaesi(nlat,nlon,wvhaes,lvhaes,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:vhaes.f90
             integer, intent(in) :: nlat
             integer, intent(in) :: nlon
@@ -285,6 +329,50 @@ python module _spherepack ! in
             real dimension(lwork), depend(lwork), intent(cache,hide) :: work
             integer, intent(out) :: ierror
         end subroutine vhags
+        subroutine vhagsdiv(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhags,lvhags,work,lwork,ierror) ! in :_spherepack:vhags.f
+            fortranname vhags
+            integer, intent(hide) :: ityp=1
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(nlat,nlat,nt), intent(out) :: br
+            real dimension(nlat,nlat,nt), intent(out) :: bi
+            real dimension(1,1,1), intent(cache,hide) :: cr
+            real dimension(1,1,1), intent(cache,hide) :: ci
+            real dimension(lvhags) :: wvhags
+            integer optional,check(shape(wvhags,0)==lvhags),depend(wvhags) :: lvhags=shape(wvhags,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhagsdiv
+        subroutine vhagsvrt(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhags,lvhags,work,lwork,ierror) ! in :_spherepack:vhags.f
+            fortranname vhags
+            integer, intent(hide) :: ityp=2
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(1,1,1), intent(cache,hide) :: br
+            real dimension(1,1,1), intent(cache,hide) :: bi
+            real dimension(nlat,nlat,nt), intent(out) :: cr
+            real dimension(nlat,nlat,nt), intent(out) :: ci
+            real dimension(lvhags) :: wvhags
+            integer optional,check(shape(wvhags,0)==lvhags),depend(wvhags) :: lvhags=shape(wvhags,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhagsvrt
         subroutine vhagsi(nlat,nlon,wvhags,lvhags,dwork,ldwork,ierror) ! in :_spherepack:vhags.f
             integer, intent(in) :: nlat
             integer, intent(in) :: nlon
@@ -490,6 +578,50 @@ python module _spherepack ! in
             real dimension(lwork),depend(lwork),intent(cache,hide) :: work
             integer, intent(out) :: ierror
         end subroutine vhaec
+        subroutine vhaecdiv(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaec,lvhaec,work,lwork,ierror) ! in :_spherepack:vhaec.f90
+            fortranname vhaec
+            integer, intent(hide) :: ityp=1
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(nlat,nlat,nt),intent(out) :: br
+            real dimension(nlat,nlat,nt),intent(out) :: bi
+            real dimension(1,1,1),intent(cache,hide) :: cr
+            real dimension(1,1,1),intent(cache,hide) :: ci
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(lvhaec) :: wvhaec
+            integer optional,check(shape(wvhaec,0)==lvhaec),depend(wvhaec) :: lvhaec=shape(wvhaec,0)
+            integer, required, intent(in) :: lwork
+            real dimension(lwork),depend(lwork),intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhaecdiv
+        subroutine vhaecvrt(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaec,lvhaec,work,lwork,ierror) ! in :_spherepack:vhaec.f90
+            fortranname vhaec
+            integer, intent(hide) :: ityp=2
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(1,1,1),intent(cache,hide) :: br
+            real dimension(1,1,1),intent(cache,hide) :: bi
+            real dimension(nlat,nlat,nt),intent(out) :: cr
+            real dimension(nlat,nlat,nt),intent(out) :: ci
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(lvhaec) :: wvhaec
+            integer optional,check(shape(wvhaec,0)==lvhaec),depend(wvhaec) :: lvhaec=shape(wvhaec,0)
+            integer, required, intent(in) :: lwork
+            real dimension(lwork),depend(lwork),intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhaecvrt
         subroutine vhaeci(nlat,nlon,wvhaec,lvhaec,dwork,ldwork,ierror) ! in :_spherepack:vhaec.f90
             integer, intent(in) :: nlat
             integer, intent(in) :: nlon
@@ -520,6 +652,50 @@ python module _spherepack ! in
             real dimension(lwork), depend(lwork), intent(cache,hide) :: work
             integer, intent(out) :: ierror
         end subroutine vhagc
+        subroutine vhagcdiv(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhagc,lvhagc,work,lwork,ierror) ! in :_spherepack:vhagc.f
+            fortranname vhagc
+            integer, intent(hide) :: ityp=1
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(nlat,nlat,nt), intent(out) :: br
+            real dimension(nlat,nlat,nt), intent(out) :: bi
+            real dimension(1,1,1), intent(cache,hide) :: cr
+            real dimension(1,1,1), intent(cache,hide) :: ci
+            real dimension(lvhagc) :: wvhagc
+            integer optional,check(shape(wvhagc,0)==lvhagc),depend(wvhagc) :: lvhagc=shape(wvhagc,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhagcdiv
+        subroutine vhagcvrt(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhagc,lvhagc,work,lwork,ierror) ! in :_spherepack:vhagc.f
+            fortranname vhagc
+            integer, intent(hide) :: ityp=2
+            real dimension(nlat,nlon,nt) :: v
+            real dimension(nlat,nlon,nt) :: w
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
+            integer optional,check(shape(v,1)==nlon),depend(v) :: nlon=shape(v,1)
+            integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
+            real dimension(1,1,1), intent(cache,hide) :: br
+            real dimension(1,1,1), intent(cache,hide) :: bi
+            real dimension(nlat,nlat,nt), intent(out) :: cr
+            real dimension(nlat,nlat,nt), intent(out) :: ci
+            real dimension(lvhagc) :: wvhagc
+            integer optional,check(shape(wvhagc,0)==lvhagc),depend(wvhagc) :: lvhagc=shape(wvhagc,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out) :: ierror
+        end subroutine vhagcvrt
         subroutine vhagci(nlat,nlon,wvhagc,lvhagc,dwork,ldwork,ierror) ! in :_spherepack:vhagc.f
             integer, intent(in) :: nlat
             integer, intent(in) :: nlon
