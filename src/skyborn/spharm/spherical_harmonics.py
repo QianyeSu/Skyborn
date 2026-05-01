@@ -960,6 +960,77 @@ class Spharmt:
             v, extra_shape
         )
 
+    def _getpsichi_component(
+        self,
+        ugrid: FloatArray,
+        vgrid: FloatArray,
+        ntrunc: Optional[int],
+        component: str,
+        operation_name: str,
+    ) -> FloatArray:
+        """Compute one streamfunction/velocity-potential component safely."""
+        if ugrid.shape != vgrid.shape:
+            raise ValidationError("ugrid and vgrid must have the same shape")
+
+        _, _, extra_shape = self._validate_grid_data(ugrid, operation_name)
+        ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
+
+        vrtspec, divspec = self.getvrtdivspec(ugrid, vgrid, ntrunc)
+        source_spec = vrtspec if component == "psi" else divspec
+
+        _, _, normalized_spec, spec_extra_shape = self._validate_spectral_data(
+            source_spec, operation_name
+        )
+        if spec_extra_shape != extra_shape:
+            raise ValidationError(
+                "vorticity/divergence spectrum has inconsistent dimensions"
+            )
+
+        fieldspec = _spherepack.invlap(normalized_spec, self.rsphere)
+        return self.spectogrd(self._restore_spectral_shape(fieldspec, extra_shape))
+
+    def getpsi(
+        self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
+    ) -> FloatArray:
+        """
+        Compute streamfunction from vector wind without materializing chi.
+
+        Args:
+            ugrid: Zonal wind grid data
+            vgrid: Meridional wind grid data
+            ntrunc: Optional spectral truncation limit
+
+        Returns:
+            Streamfunction grid
+
+        Raises:
+            ValidationError: If input arrays have invalid dimensions
+        """
+        return self._getpsichi_component(
+            ugrid, vgrid, ntrunc, component="psi", operation_name="getpsi"
+        )
+
+    def getchi(
+        self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
+    ) -> FloatArray:
+        """
+        Compute velocity potential from vector wind without materializing psi.
+
+        Args:
+            ugrid: Zonal wind grid data
+            vgrid: Meridional wind grid data
+            ntrunc: Optional spectral truncation limit
+
+        Returns:
+            Velocity-potential grid
+
+        Raises:
+            ValidationError: If input arrays have invalid dimensions
+        """
+        return self._getpsichi_component(
+            ugrid, vgrid, ntrunc, component="chi", operation_name="getchi"
+        )
+
     def getpsichi(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
     ) -> Tuple[FloatArray, FloatArray]:
