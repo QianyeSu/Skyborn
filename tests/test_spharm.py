@@ -230,6 +230,21 @@ class TestSpharmtVectorOperations:
         np.testing.assert_allclose(chi_only_4d, chi_4d, rtol=0, atol=0)
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_single_vrtdiv_spec_helpers_match_pair_output(self):
+        """Single-field vorticity/divergence spectra should match pair output exactly."""
+        sht = Spharmt(nlon=36, nlat=19)
+        rng = np.random.default_rng(20260502)
+        u = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
+        v = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
+
+        vrtspec_pair, divspec_pair = sht.getvrtdivspec(u, v)
+        vrtspec = sht.getvrtspec(u, v)
+        divspec = sht.getdivspec(u, v)
+
+        np.testing.assert_allclose(vrtspec, vrtspec_pair, rtol=0, atol=0)
+        np.testing.assert_allclose(divspec, divspec_pair, rtol=0, atol=0)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_psichi_spec_helpers_validate_shapes(self, monkeypatch):
         """Private psi/chi spectral helpers should validate inconsistent shapes."""
         sht = Spharmt(nlon=36, nlat=19)
@@ -1163,6 +1178,31 @@ class TestSpharmtAdditionalCoverage:
         assert calls["count"] == 1
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_getpsi_and_getchi_do_not_depend_on_pair_spectrum_path(self, monkeypatch):
+        """Single scalar potential paths should not call getvrtdivspec anymore."""
+        sht = Spharmt(nlon=36, nlat=19)
+        u = np.random.randn(19, 36) * 0.1
+        v = np.random.randn(19, 36) * 0.1
+
+        monkeypatch.setattr(
+            sht,
+            "getvrtdivspec",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError(
+                    "single-field psi/chi path should not call getvrtdivspec"
+                )
+            ),
+        )
+
+        psi = sht.getpsi(u, v)
+        chi = sht.getchi(u, v)
+
+        assert psi.shape == (19, 36)
+        assert chi.shape == (19, 36)
+        assert np.all(np.isfinite(psi))
+        assert np.all(np.isfinite(chi))
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_regrid_edge_cases(self):
         """Test regrid function with edge cases."""
         # Create different grid types
@@ -1507,13 +1547,20 @@ class TestSpharmtAdditionalCoverage:
                 (1,),
             ),
         )
-        with pytest.raises(
-            ValidationError, match="spectrum has inconsistent dimensions"
-        ):
-            sht.getpsi(
-                np.zeros((19, 36), dtype=np.float32),
-                np.zeros((19, 36), dtype=np.float32),
-            )
+        sht.rsphere = 6.3712e6
+        monkeypatch.setattr(
+            sht,
+            "getvrtspec",
+            lambda ugrid, vgrid, ntrunc=None: np.zeros(190, dtype=np.complex64),
+        )
+        psi_spec = sht.getpsichi_spec_component(
+            np.zeros((19, 36), dtype=np.float32),
+            np.zeros((19, 36), dtype=np.float32),
+            None,
+            component="psi",
+            operation_name="getpsi",
+        )
+        assert psi_spec.shape == (190, 1)
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_helper_backend_error_branches(self, monkeypatch):
