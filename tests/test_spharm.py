@@ -1139,6 +1139,30 @@ class TestSpharmtAdditionalCoverage:
         assert np.all(np.isfinite(grad_y))
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_getpsichi_batches_scalar_synthesis(self, monkeypatch):
+        """getpsichi should synthesize psi/chi together through one call."""
+        sht = Spharmt(nlon=36, nlat=19)
+        u = np.random.randn(19, 36) * 0.1
+        v = np.random.randn(19, 36) * 0.1
+
+        calls = {"count": 0}
+        original_spectogrd = sht.spectogrd
+
+        def counting_spectogrd(*args, **kwargs):
+            calls["count"] += 1
+            return original_spectogrd(*args, **kwargs)
+
+        monkeypatch.setattr(sht, "spectogrd", counting_spectogrd)
+
+        psi, chi = sht.getpsichi(u, v)
+
+        assert psi.shape == (19, 36)
+        assert chi.shape == (19, 36)
+        assert np.all(np.isfinite(psi))
+        assert np.all(np.isfinite(chi))
+        assert calls["count"] == 1
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_regrid_edge_cases(self):
         """Test regrid function with edge cases."""
         # Create different grid types
