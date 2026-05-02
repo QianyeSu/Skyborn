@@ -1604,6 +1604,69 @@ class TestWindSpharmTargetedCoverage:
         assert np.all(np.isfinite(rws))
         assert calls["count"] == 1
 
+    def test_rossbywavesource_caches_planetary_spec_and_avoids_eta_analysis(
+        self, monkeypatch
+    ):
+        """RWS should analyze cached 2D planetary vorticity, not full-field eta."""
+        nlat, nlon = 19, 36
+        rng = np.random.default_rng(20260502)
+        u = rng.standard_normal((nlat, nlon, 2, 3)).astype(np.float32)
+        v = rng.standard_normal((nlat, nlon, 2, 3)).astype(np.float32)
+        vw = VectorWind(u, v)
+
+        calls: list[tuple[int, ...]] = []
+        original_grdtospec = vw.s.grdtospec
+
+        def tracking_grdtospec(datagrid, *args, **kwargs):
+            calls.append(np.shape(datagrid))
+            return original_grdtospec(datagrid, *args, **kwargs)
+
+        monkeypatch.setattr(vw.s, "grdtospec", tracking_grdtospec)
+
+        first = vw.rossbywavesource()
+        second = vw.rossbywavesource()
+
+        assert first.shape == (nlat, nlon, 2, 3)
+        assert second.shape == (nlat, nlon, 2, 3)
+        assert np.all(np.isfinite(first))
+        assert np.all(np.isfinite(second))
+        assert calls == [(nlat, nlon)]
+
+    def test_planetary_vorticity_spec_helper_and_vector_analysis_fallbacks(self):
+        """Cover helper cache initialization and no-fastpath backend fallbacks."""
+        vw = object.__new__(StandardVectorWind)
+        vw.gridtype = "regular"
+        vw._output_dtype = np.dtype(np.float32)
+        vw.u = np.zeros((4, 8), dtype=np.float32)
+        vw.v = np.zeros((4, 8), dtype=np.float32)
+        vw.s = type(
+            "DummySpharm",
+            (),
+            {
+                "nlat": 4,
+                "nlon": 8,
+                "_validate_ntrunc": lambda self, truncation, max_ntrunc: 2,
+                "grdtospec": lambda self, grid, ntrunc=None: np.arange(
+                    6, dtype=np.complex64
+                ),
+                "getvrtdivspec": lambda self, u, v, ntrunc=None: ("vrtdiv", ntrunc),
+                "getvrtspec": lambda self, u, v, ntrunc=None: ("vrt", ntrunc),
+                "getdivspec": lambda self, u, v, ntrunc=None: ("div", ntrunc),
+            },
+        )()
+
+        fspec = vw._planetary_vorticity_spec(spectral_ndim=2)
+        assert fspec.shape == (6, 1, 1)
+        assert hasattr(vw, "_planetary_vorticity_spec_cache")
+        assert len(vw._planetary_vorticity_spec_cache) == 1
+
+        with pytest.raises(ValueError, match="invalid value for omega"):
+            vw._planetary_vorticity_spec(omega="bad")
+
+        assert vw._vector_analysis_spectra(truncation=5) == ("vrtdiv", 5)
+        assert vw._vector_analysis_spectra(truncation=6, component="vrt") == ("vrt", 6)
+        assert vw._vector_analysis_spectra(truncation=7, component="div") == ("div", 7)
+
     def test_vector_analysis_prepared_layout_cache_is_reused(self, monkeypatch):
         """Prepared Fortran-order wind inputs should be built once per instance."""
         nlat, nlon = 19, 36
@@ -1661,11 +1724,42 @@ class TestWindSpharmTargetedCoverage:
         vrtspec, divspec = vw.s.getvrtdivspec(vw.u, vw.v)
         vrt, div = vw.s._spectogrd_pair(vrtspec, divspec)
         eta = vrt + vw._planetary_vorticity(materialize=False)
-        etax, etay = vw._gradient_components(eta)
+        etaspec = vrtspec + vw._planetary_vorticity_spec(
+            spectral_ndim=max(vrtspec.ndim - 1, 0)
+        )
+        etax, etay = vw.s.getgrad(etaspec)
         expected_rws = vw._restore_output_dtype(
             -eta * div - (u_chi * etax + v_chi * etay)
         )
         np.testing.assert_allclose(vw.rossbywavesource(), expected_rws, rtol=0, atol=0)
+
+        fallback_vw = object.__new__(StandardVectorWind)
+        fallback_vw.u = np.zeros((2, 2), dtype=np.float32)
+        fallback_vw.v = np.zeros((2, 2), dtype=np.float32)
+        fallback_vw.s = type(
+            "UnsupportedComponentSpharm",
+            (),
+            {
+                "rsphere": 6.3712e6,
+                "_restore_spectral_shape": lambda self, data, extra_shape: data,
+                "_analyze_vector_harmonic_component_flattened": (
+                    lambda self, layout_u, layout_v, extra_shape, truncation, op_name, component: (
+                        np.zeros((2, 1), dtype=np.float32),
+                        np.zeros((2, 1), dtype=np.float32),
+                        (),
+                        0,
+                    )
+                ),
+            },
+        )()
+        fallback_vw._vector_analysis_layout_cache = (
+            np.zeros((2, 2, 1), dtype=np.float32),
+            np.zeros((2, 2, 1), dtype=np.float32),
+            (),
+        )
+
+        with pytest.raises(ValueError, match="unsupported component"):
+            fallback_vw._vector_analysis_spectra(component="bad")
 
     def test_common_and_tool_validation_branches(self, monkeypatch):
         """Exercise helper validation and recovery branches."""
