@@ -119,7 +119,7 @@ subroutine vhsgs1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     ! Local variables
     integer :: nlp1, mlat, mmax, imm1, ndo1, ndo2, itypp
-    integer :: k, i, j, mp1, np1, m, mb, mp2, mn, mr, mi
+    integer :: k, i, j, mp1, np1, m, mb, mp2, mn
     real :: br_val, bi_val, cr_val, ci_val, vb_val, wb_val
     real :: ve_val, vo_val, we_val, wo_val
 
@@ -190,8 +190,6 @@ subroutine vhsgs1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
             do mp1 = 2, mmax
                 m = mp1 - 1; mp2 = mp1 + 1
                 mb = m * nlat - (m * (m + 1)) / 2
-                mr = 2 * mp1 - 2
-                mi = mr + 1
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
@@ -202,22 +200,22 @@ subroutine vhsgs1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             do i = 1, imm1
                                 vb_val = vb(i, mn)
                                 wb_val = wb(i, mn)
-                                vo(i, mr, k) = vo(i, mr, k) + br_val * vb_val
-                                ve(i, mr, k) = ve(i, mr, k) - ci_val * wb_val
-                                vo(i, mi, k) = vo(i, mi, k) + bi_val * vb_val
-                                ve(i, mi, k) = ve(i, mi, k) + cr_val * wb_val
-                                wo(i, mr, k) = wo(i, mr, k) - cr_val * vb_val
-                                we(i, mr, k) = we(i, mr, k) - bi_val * wb_val
-                                wo(i, mi, k) = wo(i, mi, k) - ci_val * vb_val
-                                we(i, mi, k) = we(i, mi, k) + br_val * wb_val
+                                vo(i, 2*mp1-2, k) = vo(i, 2*mp1-2, k) + br_val * vb_val
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) - ci_val * wb_val
+                                vo(i, 2*mp1-1, k) = vo(i, 2*mp1-1, k) + bi_val * vb_val
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + cr_val * wb_val
+                                wo(i, 2*mp1-2, k) = wo(i, 2*mp1-2, k) - cr_val * vb_val
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - bi_val * wb_val
+                                wo(i, 2*mp1-1, k) = wo(i, 2*mp1-1, k) - ci_val * vb_val
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) + br_val * wb_val
                             end do
                             if (mlat /= 0) then
                                 i = imid
                                 wb_val = wb(i, mn)
-                                ve(i, mr, k) = ve(i, mr, k) - ci_val * wb_val
-                                ve(i, mi, k) = ve(i, mi, k) + cr_val * wb_val
-                                we(i, mr, k) = we(i, mr, k) - bi_val * wb_val
-                                we(i, mi, k) = we(i, mi, k) + br_val * wb_val
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) - ci_val * wb_val
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + cr_val * wb_val
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - bi_val * wb_val
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) + br_val * wb_val
                             end if
                         end do
                     end do
@@ -232,22 +230,22 @@ subroutine vhsgs1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             do i = 1, imm1
                                 vb_val = vb(i, mn)
                                 wb_val = wb(i, mn)
-                                ve(i, mr, k) = ve(i, mr, k) + br_val * vb_val
-                                vo(i, mr, k) = vo(i, mr, k) - ci_val * wb_val
-                                ve(i, mi, k) = ve(i, mi, k) + bi_val * vb_val
-                                vo(i, mi, k) = vo(i, mi, k) + cr_val * wb_val
-                                we(i, mr, k) = we(i, mr, k) - cr_val * vb_val
-                                wo(i, mr, k) = wo(i, mr, k) - bi_val * wb_val
-                                we(i, mi, k) = we(i, mi, k) - ci_val * vb_val
-                                wo(i, mi, k) = wo(i, mi, k) + br_val * wb_val
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) + br_val * vb_val
+                                vo(i, 2*mp1-2, k) = vo(i, 2*mp1-2, k) - ci_val * wb_val
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + bi_val * vb_val
+                                vo(i, 2*mp1-1, k) = vo(i, 2*mp1-1, k) + cr_val * wb_val
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - cr_val * vb_val
+                                wo(i, 2*mp1-2, k) = wo(i, 2*mp1-2, k) - bi_val * wb_val
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) - ci_val * vb_val
+                                wo(i, 2*mp1-1, k) = wo(i, 2*mp1-1, k) + br_val * wb_val
                             end do
                             if (mlat /= 0) then
                                 i = imid
                                 vb_val = vb(i, mn)
-                                ve(i, mr, k) = ve(i, mr, k) + br_val * vb_val
-                                ve(i, mi, k) = ve(i, mi, k) + bi_val * vb_val
-                                we(i, mr, k) = we(i, mr, k) - cr_val * vb_val
-                                we(i, mi, k) = we(i, mi, k) - ci_val * vb_val
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) + br_val * vb_val
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + bi_val * vb_val
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - cr_val * vb_val
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) - ci_val * vb_val
                             end if
                         end do
                     end do
@@ -278,8 +276,6 @@ subroutine vhsgs1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
             do mp1 = 2, mmax
                 m = mp1 - 1; mp2 = mp1 + 1
                 mb = m * nlat - (m * (m + 1)) / 2
-                mr = 2 * mp1 - 2
-                mi = mr + 1
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
@@ -287,15 +283,15 @@ subroutine vhsgs1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             br_val = br(mp1, np1, k); bi_val = bi(mp1, np1, k)
                             !$OMP SIMD
                             do i = 1, imm1
-                                vo(i, mr, k) = vo(i, mr, k) + br_val * vb(i, mn)
-                                vo(i, mi, k) = vo(i, mi, k) + bi_val * vb(i, mn)
-                                we(i, mr, k) = we(i, mr, k) - bi_val * wb(i, mn)
-                                we(i, mi, k) = we(i, mi, k) + br_val * wb(i, mn)
+                                vo(i, 2*mp1-2, k) = vo(i, 2*mp1-2, k) + br_val * vb(i, mn)
+                                vo(i, 2*mp1-1, k) = vo(i, 2*mp1-1, k) + bi_val * vb(i, mn)
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - bi_val * wb(i, mn)
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) + br_val * wb(i, mn)
                             end do
                             if (mlat /= 0) then
                                 i = imid
-                                we(i, mr, k) = we(i, mr, k) - bi_val * wb(i, mn)
-                                we(i, mi, k) = we(i, mi, k) + br_val * wb(i, mn)
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - bi_val * wb(i, mn)
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) + br_val * wb(i, mn)
                             end if
                         end do
                     end do
@@ -307,15 +303,15 @@ subroutine vhsgs1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             br_val = br(mp1, np1, k); bi_val = bi(mp1, np1, k)
                             !$OMP SIMD
                             do i = 1, imm1
-                                ve(i, mr, k) = ve(i, mr, k) + br_val * vb(i, mn)
-                                ve(i, mi, k) = ve(i, mi, k) + bi_val * vb(i, mn)
-                                wo(i, mr, k) = wo(i, mr, k) - bi_val * wb(i, mn)
-                                wo(i, mi, k) = wo(i, mi, k) + br_val * wb(i, mn)
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) + br_val * vb(i, mn)
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + bi_val * vb(i, mn)
+                                wo(i, 2*mp1-2, k) = wo(i, 2*mp1-2, k) - bi_val * wb(i, mn)
+                                wo(i, 2*mp1-1, k) = wo(i, 2*mp1-1, k) + br_val * wb(i, mn)
                             end do
                             if (mlat /= 0) then
                                 i = imid
-                                ve(i, mr, k) = ve(i, mr, k) + br_val * vb(i, mn)
-                                ve(i, mi, k) = ve(i, mi, k) + bi_val * vb(i, mn)
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) + br_val * vb(i, mn)
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + bi_val * vb(i, mn)
                             end if
                         end do
                     end do
@@ -346,8 +342,6 @@ subroutine vhsgs1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
             do mp1 = 2, mmax
                 m = mp1 - 1; mp2 = mp1 + 1
                 mb = m * nlat - (m * (m + 1)) / 2
-                mr = 2 * mp1 - 2
-                mi = mr + 1
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
@@ -355,15 +349,15 @@ subroutine vhsgs1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             cr_val = cr(mp1, np1, k); ci_val = ci(mp1, np1, k)
                             !$OMP SIMD
                             do i = 1, imm1
-                                ve(i, mr, k) = ve(i, mr, k) - ci_val * wb(i, mn)
-                                ve(i, mi, k) = ve(i, mi, k) + cr_val * wb(i, mn)
-                                wo(i, mr, k) = wo(i, mr, k) - cr_val * vb(i, mn)
-                                wo(i, mi, k) = wo(i, mi, k) - ci_val * vb(i, mn)
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) - ci_val * wb(i, mn)
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + cr_val * wb(i, mn)
+                                wo(i, 2*mp1-2, k) = wo(i, 2*mp1-2, k) - cr_val * vb(i, mn)
+                                wo(i, 2*mp1-1, k) = wo(i, 2*mp1-1, k) - ci_val * vb(i, mn)
                             end do
                             if (mlat /= 0) then
                                 i = imid
-                                ve(i, mr, k) = ve(i, mr, k) - ci_val * wb(i, mn)
-                                ve(i, mi, k) = ve(i, mi, k) + cr_val * wb(i, mn)
+                                ve(i, 2*mp1-2, k) = ve(i, 2*mp1-2, k) - ci_val * wb(i, mn)
+                                ve(i, 2*mp1-1, k) = ve(i, 2*mp1-1, k) + cr_val * wb(i, mn)
                             end if
                         end do
                     end do
@@ -375,15 +369,15 @@ subroutine vhsgs1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             cr_val = cr(mp1, np1, k); ci_val = ci(mp1, np1, k)
                             !$OMP SIMD
                             do i = 1, imm1
-                                vo(i, mr, k) = vo(i, mr, k) - ci_val * wb(i, mn)
-                                vo(i, mi, k) = vo(i, mi, k) + cr_val * wb(i, mn)
-                                we(i, mr, k) = we(i, mr, k) - cr_val * vb(i, mn)
-                                we(i, mi, k) = we(i, mi, k) - ci_val * vb(i, mn)
+                                vo(i, 2*mp1-2, k) = vo(i, 2*mp1-2, k) - ci_val * wb(i, mn)
+                                vo(i, 2*mp1-1, k) = vo(i, 2*mp1-1, k) + cr_val * wb(i, mn)
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - cr_val * vb(i, mn)
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) - ci_val * vb(i, mn)
                             end do
                             if (mlat /= 0) then
                                 i = imid
-                                we(i, mr, k) = we(i, mr, k) - cr_val * vb(i, mn)
-                                we(i, mi, k) = we(i, mi, k) - ci_val * vb(i, mn)
+                                we(i, 2*mp1-2, k) = we(i, 2*mp1-2, k) - cr_val * vb(i, mn)
+                                we(i, 2*mp1-1, k) = we(i, 2*mp1-1, k) - ci_val * vb(i, mn)
                             end if
                         end do
                     end do
