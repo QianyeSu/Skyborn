@@ -32,17 +32,10 @@ Notes:
 
 from __future__ import absolute_import
 
-from . import standard, tools
+from . import standard, tools, xarray
 
 # Import main class for easier access
 from .standard import VectorWind
-
-try:
-    from ._version import __version__
-except ImportError:
-    __version__ = "unknown"
-
-from . import xarray
 
 __author__ = "Qianye Su"
 __license__ = "BSD-3-Clause"
