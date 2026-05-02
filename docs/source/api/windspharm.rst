@@ -57,6 +57,25 @@ Use the xarray interface for DataArray inputs:
     v = xr.open_dataarray("v_wind.nc")
     vw = VectorWind(u, v)
 
+Latitude Ordering
+-----------------
+
+The NumPy ``standard.VectorWind`` interface expects latitude to be ordered
+north-to-south. This is not an arbitrary Skyborn preference: it follows the
+underlying SPHEREPACK convention used by ``spharm``, where the first latitude
+row is interpreted as the northernmost point and latitude indices increase
+southward.
+
+If a south-to-north array is passed directly into the standard interface, the
+backend will still interpret the first row as the north side of the grid, which
+leads to incorrect spherical harmonic analysis and large diagnostic errors.
+
+Recommended usage:
+
+* NumPy arrays: reorder first with ``skyborn.windspharm.tools.order_latdim``.
+* xarray / iris interfaces: latitude is reordered automatically before calling
+  the standard backend.
+
 Main Features
 -------------
 
