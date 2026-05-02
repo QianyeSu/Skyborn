@@ -708,6 +708,123 @@ class Spharmt:
         br, bi, cr, ci = vha_functions[(self.gridtype, self.legfunc)]()
         return br, bi, cr, ci, extra_shape, ntrunc
 
+    def _analyze_vector_harmonic_component(
+        self,
+        ugrid: FloatArray,
+        vgrid: FloatArray,
+        ntrunc: Optional[int],
+        operation_name: str,
+        component: str,
+    ) -> Tuple[FloatArray, FloatArray, Tuple[int, ...], int]:
+        """Run one vector harmonic analysis and return only one coefficient family."""
+        if ugrid.shape != vgrid.shape:
+            raise ValidationError("ugrid and vgrid must have the same shape")
+
+        nt, normalized_u, extra_shape = self._validate_grid_data(ugrid, operation_name)
+        _, normalized_v, v_extra_shape = self._validate_grid_data(vgrid, operation_name)
+        if extra_shape != v_extra_shape:
+            raise ValidationError("ugrid and vgrid must have consistent dimensions")
+        ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
+        if component not in {"div", "vrt"}:
+            raise ValidationError(
+                f"{operation_name} invalid component {component!r}; expected 'div' or 'vrt'"
+            )
+
+        # Convert from geographical to mathematical coordinates.
+        w = normalized_u
+        v = -normalized_v
+
+        work_regular = (2 * nt + 1) * self.nlat * self.nlon
+        work_regular_computed = self.nlat * (
+            2 * nt * self.nlon + max(6 * self._n2, self.nlon)
+        )
+        work_gaussian_computed = 2 * self.nlat * (2 * self.nlon * nt + 3 * self._n2)
+
+        vha_functions = {
+            ("regular", "stored", "div"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhaesdiv,
+                    v,
+                    w,
+                    self.wvhaes,
+                    operation_name="vhaes divergence transform",
+                )
+            ),
+            ("regular", "stored", "vrt"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhaesvrt,
+                    v,
+                    w,
+                    self.wvhaes,
+                    work_regular,
+                    operation_name="vhaes vorticity transform",
+                )
+            ),
+            ("regular", "computed", "div"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhaecdiv,
+                    v,
+                    w,
+                    self.wvhaec,
+                    work_regular_computed,
+                    operation_name="vhaec divergence transform",
+                )
+            ),
+            ("regular", "computed", "vrt"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhaecvrt,
+                    v,
+                    w,
+                    self.wvhaec,
+                    work_regular_computed,
+                    operation_name="vhaec vorticity transform",
+                )
+            ),
+            ("gaussian", "stored", "div"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhagsdiv,
+                    v,
+                    w,
+                    self.wvhags,
+                    work_regular,
+                    operation_name="vhags divergence transform",
+                )
+            ),
+            ("gaussian", "stored", "vrt"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhagsvrt,
+                    v,
+                    w,
+                    self.wvhags,
+                    work_regular,
+                    operation_name="vhags vorticity transform",
+                )
+            ),
+            ("gaussian", "computed", "div"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhagcdiv,
+                    v,
+                    w,
+                    self.wvhagc,
+                    work_gaussian_computed,
+                    operation_name="vhagc divergence transform",
+                )
+            ),
+            ("gaussian", "computed", "vrt"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhagcvrt,
+                    v,
+                    w,
+                    self.wvhagc,
+                    work_gaussian_computed,
+                    operation_name="vhagc vorticity transform",
+                )
+            ),
+        }
+
+        coeff_r, coeff_i = vha_functions[(self.gridtype, self.legfunc, component)]()
+        return coeff_r, coeff_i, extra_shape, ntrunc
+
     def _validate_ntrunc(self, ntrunc: Optional[int], max_allowed: int) -> int:
         """Validate and return appropriate ntrunc value."""
         if ntrunc is None:
@@ -900,10 +1017,9 @@ class Spharmt:
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
     ) -> ComplexArray:
         """Compute only vorticity spectral coefficients from vector wind."""
-        br, bi, cr, ci, extra_shape, ntrunc = self._analyze_vector_harmonics(
-            ugrid, vgrid, ntrunc, "getvrtspec", ityp=2
+        cr, ci, extra_shape, ntrunc = self._analyze_vector_harmonic_component(
+            ugrid, vgrid, ntrunc, "getvrtspec", component="vrt"
         )
-        del br, bi
         vrtspec = _spherepack.twodtooned_vrt(cr, ci, ntrunc, self.rsphere)
         return self._restore_spectral_shape(vrtspec, extra_shape)
 
@@ -911,12 +1027,220 @@ class Spharmt:
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
     ) -> ComplexArray:
         """Compute only divergence spectral coefficients from vector wind."""
-        br, bi, cr, ci, extra_shape, ntrunc = self._analyze_vector_harmonics(
-            ugrid, vgrid, ntrunc, "getdivspec", ityp=1
+        br, bi, extra_shape, ntrunc = self._analyze_vector_harmonic_component(
+            ugrid, vgrid, ntrunc, "getdivspec", component="div"
         )
-        del cr, ci
         divspec = _spherepack.twodtooned_div(br, bi, ntrunc, self.rsphere)
         return self._restore_spectral_shape(divspec, extra_shape)
+
+    def _synthesize_vector_harmonics(
+        self,
+        br: FloatArray,
+        bi: FloatArray,
+        cr: FloatArray,
+        ci: FloatArray,
+        nt: int,
+        extra_shape: Tuple[int, ...],
+        operation_name: str,
+        ityp: int = 0,
+    ) -> Tuple[FloatArray, FloatArray]:
+        """Run one vector harmonic synthesis and restore grid dimensions."""
+        if ityp not in (0, 1, 2):
+            raise ValidationError(
+                f"{operation_name} invalid ityp {ityp}; expected 0, 1, or 2"
+            )
+
+        vhs_functions = {
+            ("regular", "stored"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhses,
+                    self.nlon,
+                    br,
+                    bi,
+                    cr,
+                    ci,
+                    self.wvhses,
+                    (2 * nt + 1) * self.nlat * self.nlon,
+                    ityp=ityp,
+                    operation_name="vhses transform",
+                )
+            ),
+            ("regular", "computed"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhsec,
+                    self.nlon,
+                    br,
+                    bi,
+                    cr,
+                    ci,
+                    self.wvhsec,
+                    self.nlat * (2 * nt * self.nlon + max(6 * self._n2, self.nlon)),
+                    ityp=ityp,
+                    operation_name="vhsec transform",
+                )
+            ),
+            ("gaussian", "stored"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhsgs,
+                    self.nlon,
+                    br,
+                    bi,
+                    cr,
+                    ci,
+                    self.wvhsgs,
+                    (2 * nt + 1) * self.nlat * self.nlon,
+                    ityp=ityp,
+                    operation_name="vhsgs transform",
+                )
+            ),
+            ("gaussian", "computed"): (
+                lambda: self._call_spherepack_safely(
+                    _spherepack.vhsgc,
+                    self.nlon,
+                    br,
+                    bi,
+                    cr,
+                    ci,
+                    self.wvhsgc,
+                    self.nlat * (2 * nt * self.nlon + max(6 * self._n2, self.nlon)),
+                    ityp=ityp,
+                    operation_name="vhsgc transform",
+                )
+            ),
+        }
+
+        vhs_func = vhs_functions[(self.gridtype, self.legfunc)]
+        v, w = vhs_func()
+        return self._restore_grid_shape(w, extra_shape), -self._restore_grid_shape(
+            v, extra_shape
+        )
+
+    def _getuv_spec_component(
+        self, dataspec: ComplexArray, component: str, operation_name: str
+    ) -> Tuple[FloatArray, FloatArray]:
+        """Synthesize one vector family from a single spectral field."""
+        nt, _, normalized_spec, extra_shape = self._validate_spectral_data(
+            dataspec, operation_name
+        )
+
+        work_regular = (2 * nt + 1) * self.nlat * self.nlon
+        work_regular_computed = self.nlat * (
+            2 * nt * self.nlon + max(6 * self._n2, self.nlon)
+        )
+
+        if component == "div":
+            br, bi = _spherepack.onedtotwod_div(
+                normalized_spec, self.nlat, self.rsphere
+            )
+            synthesis_functions = {
+                ("regular", "stored"): (
+                    lambda: self._call_spherepack_safely(
+                        _spherepack.vhsesdiv,
+                        self.nlon,
+                        br,
+                        bi,
+                        self.wvhses,
+                        work_regular,
+                        operation_name="vhses divergence transform",
+                    )
+                ),
+                ("regular", "computed"): (
+                    lambda: self._call_spherepack_safely(
+                        _spherepack.vhsecdiv,
+                        self.nlon,
+                        br,
+                        bi,
+                        self.wvhsec,
+                        work_regular_computed,
+                        operation_name="vhsec divergence transform",
+                    )
+                ),
+                ("gaussian", "stored"): (
+                    lambda: self._call_spherepack_safely(
+                        _spherepack.vhsgsdiv,
+                        self.nlon,
+                        br,
+                        bi,
+                        self.wvhsgs,
+                        work_regular,
+                        operation_name="vhsgs divergence transform",
+                    )
+                ),
+                ("gaussian", "computed"): (
+                    lambda: self._call_spherepack_safely(
+                        _spherepack.vhsgcdiv,
+                        self.nlon,
+                        br,
+                        bi,
+                        self.wvhsgc,
+                        work_regular_computed,
+                        operation_name="vhsgc divergence transform",
+                    )
+                ),
+            }
+            v, w = synthesis_functions[(self.gridtype, self.legfunc)]()
+            return self._restore_grid_shape(w, extra_shape), -self._restore_grid_shape(
+                v, extra_shape
+            )
+
+        if component == "vrt":
+            cr, ci = _spherepack.onedtotwod_vrt(
+                normalized_spec, self.nlat, self.rsphere
+            )
+            synthesis_functions = {
+                ("regular", "stored"): (
+                    lambda: self._call_spherepack_safely(
+                        _spherepack.vhsesvrt,
+                        self.nlon,
+                        cr,
+                        ci,
+                        self.wvhses,
+                        work_regular,
+                        operation_name="vhses vorticity transform",
+                    )
+                ),
+                ("regular", "computed"): (
+                    lambda: self._call_spherepack_safely(
+                        _spherepack.vhsecvrt,
+                        self.nlon,
+                        cr,
+                        ci,
+                        self.wvhsec,
+                        work_regular_computed,
+                        operation_name="vhsec vorticity transform",
+                    )
+                ),
+                ("gaussian", "stored"): (
+                    lambda: self._call_spherepack_safely(
+                        _spherepack.vhsgsvrt,
+                        self.nlon,
+                        cr,
+                        ci,
+                        self.wvhsgs,
+                        work_regular,
+                        operation_name="vhsgs vorticity transform",
+                    )
+                ),
+                ("gaussian", "computed"): (
+                    lambda: self._call_spherepack_safely(
+                        _spherepack.vhsgcvrt,
+                        self.nlon,
+                        cr,
+                        ci,
+                        self.wvhsgc,
+                        work_regular_computed,
+                        operation_name="vhsgc vorticity transform",
+                    )
+                ),
+            }
+            v, w = synthesis_functions[(self.gridtype, self.legfunc)]()
+            return self._restore_grid_shape(w, extra_shape), -self._restore_grid_shape(
+                v, extra_shape
+            )
+
+        raise ValidationError(
+            f'{operation_name} invalid component "{component}"; expected "div" or "vrt"'
+        )
 
     def getuv(
         self, vrtspec: ComplexArray, divspec: ComplexArray
@@ -960,69 +1284,8 @@ class Spharmt:
         br, bi, cr, ci = _spherepack.onedtotwod_vrtdiv(
             normalized_vrt, normalized_div, self.nlat, self.rsphere
         )
-
-        # Select vector harmonic synthesis function
-        vhs_functions = {
-            ("regular", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhses,
-                    self.nlon,
-                    br,
-                    bi,
-                    cr,
-                    ci,
-                    self.wvhses,
-                    (2 * nt_vrt + 1) * self.nlat * self.nlon,
-                    operation_name="vhses transform",
-                )
-            ),
-            ("regular", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhsec,
-                    self.nlon,
-                    br,
-                    bi,
-                    cr,
-                    ci,
-                    self.wvhsec,
-                    self.nlat * (2 * nt_vrt * self.nlon + max(6 * self._n2, self.nlon)),
-                    operation_name="vhsec transform",
-                )
-            ),
-            ("gaussian", "stored"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhsgs,
-                    self.nlon,
-                    br,
-                    bi,
-                    cr,
-                    ci,
-                    self.wvhsgs,
-                    (2 * nt_vrt + 1) * self.nlat * self.nlon,
-                    operation_name="vhsgs transform",
-                )
-            ),
-            ("gaussian", "computed"): (
-                lambda: self._call_spherepack_safely(
-                    _spherepack.vhsgc,
-                    self.nlon,
-                    br,
-                    bi,
-                    cr,
-                    ci,
-                    self.wvhsgc,
-                    self.nlat * (2 * nt_vrt * self.nlon + max(6 * self._n2, self.nlon)),
-                    operation_name="vhsgc transform",
-                )
-            ),
-        }
-
-        vhs_func = vhs_functions[(self.gridtype, self.legfunc)]
-        v, w = vhs_func()
-
-        # Convert to geographical coordinates and restore flattened dimensions.
-        return self._restore_grid_shape(w, extra_shape), -self._restore_grid_shape(
-            v, extra_shape
+        return self._synthesize_vector_harmonics(
+            br, bi, cr, ci, nt_vrt, extra_shape, "getuv", ityp=0
         )
 
     def getpsichi_component(
@@ -1209,17 +1472,11 @@ class Spharmt:
 
         # Convert chispec to divergence spec using Laplacian
         divspec = _spherepack.lap(normalized_spec, self.rsphere)
-
-        # Create zero vorticity spec with same shape
-        vrtspec = np.zeros(normalized_spec.shape, normalized_spec.dtype)
-
-        # Get gradient components using getuv
-        uchi, vchi = self.getuv(
-            self._restore_spectral_shape(vrtspec, extra_shape),
+        return self._getuv_spec_component(
             self._restore_spectral_shape(divspec, extra_shape),
+            component="div",
+            operation_name="getgrad",
         )
-
-        return uchi, vchi
 
     def specsmooth(self, datagrid: FloatArray, smooth: FloatArray) -> FloatArray:
         """
