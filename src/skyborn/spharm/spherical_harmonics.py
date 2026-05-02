@@ -648,6 +648,44 @@ class Spharmt:
         _, normalized_v, v_extra_shape = self._validate_grid_data(vgrid, operation_name)
         if extra_shape != v_extra_shape:
             raise ValidationError("ugrid and vgrid must have consistent dimensions")
+        return self._analyze_vector_harmonics_flattened(
+            normalized_u,
+            normalized_v,
+            extra_shape,
+            ntrunc,
+            operation_name,
+            ityp=ityp,
+        )
+
+    def _analyze_vector_harmonics_flattened(
+        self,
+        normalized_u: FloatArray,
+        normalized_v: FloatArray,
+        extra_shape: Tuple[int, ...],
+        ntrunc: Optional[int],
+        operation_name: str,
+        ityp: int = 0,
+    ) -> Tuple[
+        FloatArray,
+        FloatArray,
+        FloatArray,
+        FloatArray,
+        Tuple[int, ...],
+        int,
+    ]:
+        """Run one vector harmonic analysis from wrapper-owned flattened 3D arrays."""
+        if normalized_u.shape != normalized_v.shape:
+            raise ValidationError("ugrid and vgrid must have consistent dimensions")
+        if normalized_u.ndim != 3:
+            raise ValidationError(
+                f"{operation_name} flattened inputs must be rank 3, got rank {normalized_u.ndim}"
+            )
+        if normalized_u.shape[:2] != (self.nlat, self.nlon):
+            raise ValidationError(
+                f"{operation_name} flattened inputs must have shape ({self.nlat}, {self.nlon}, nt)"
+            )
+
+        nt = normalized_u.shape[2]
         ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
         if ityp not in (0, 1, 2):
             raise ValidationError(
@@ -724,6 +762,37 @@ class Spharmt:
         _, normalized_v, v_extra_shape = self._validate_grid_data(vgrid, operation_name)
         if extra_shape != v_extra_shape:
             raise ValidationError("ugrid and vgrid must have consistent dimensions")
+        return self._analyze_vector_harmonic_component_flattened(
+            normalized_u,
+            normalized_v,
+            extra_shape,
+            ntrunc,
+            operation_name,
+            component,
+        )
+
+    def _analyze_vector_harmonic_component_flattened(
+        self,
+        normalized_u: FloatArray,
+        normalized_v: FloatArray,
+        extra_shape: Tuple[int, ...],
+        ntrunc: Optional[int],
+        operation_name: str,
+        component: str,
+    ) -> Tuple[FloatArray, FloatArray, Tuple[int, ...], int]:
+        """Run one single-family vector harmonic analysis from flattened 3D arrays."""
+        if normalized_u.shape != normalized_v.shape:
+            raise ValidationError("ugrid and vgrid must have consistent dimensions")
+        if normalized_u.ndim != 3:
+            raise ValidationError(
+                f"{operation_name} flattened inputs must be rank 3, got rank {normalized_u.ndim}"
+            )
+        if normalized_u.shape[:2] != (self.nlat, self.nlon):
+            raise ValidationError(
+                f"{operation_name} flattened inputs must have shape ({self.nlat}, {self.nlon}, nt)"
+            )
+
+        nt = normalized_u.shape[2]
         ntrunc = self._validate_ntrunc(ntrunc, self.nlat - 1)
         if component not in {"div", "vrt"}:
             raise ValidationError(
