@@ -1581,13 +1581,15 @@ class TestWindSpharmTargetedCoverage:
         vw = VectorWind(u, v)
 
         calls = {"count": 0}
-        original_analyze = vw.s._analyze_vector_harmonics
+        original_analyze = vw.s._analyze_vector_harmonics_flattened
 
         def counting_analyze(*args, **kwargs):
             calls["count"] += 1
             return original_analyze(*args, **kwargs)
 
-        monkeypatch.setattr(vw.s, "_analyze_vector_harmonics", counting_analyze)
+        monkeypatch.setattr(
+            vw.s, "_analyze_vector_harmonics_flattened", counting_analyze
+        )
         monkeypatch.setattr(
             vw.s,
             "getchispec",
@@ -1601,6 +1603,29 @@ class TestWindSpharmTargetedCoverage:
         assert rws.shape == (nlat, nlon)
         assert np.all(np.isfinite(rws))
         assert calls["count"] == 1
+
+    def test_vector_analysis_prepared_layout_cache_is_reused(self, monkeypatch):
+        """Prepared Fortran-order wind inputs should be built once per instance."""
+        nlat, nlon = 19, 36
+        rng = np.random.default_rng(20260502)
+        u = rng.standard_normal((nlat, nlon, 2, 3)).astype(np.float32)
+        v = rng.standard_normal((nlat, nlon, 2, 3)).astype(np.float32)
+        vw = VectorWind(u, v)
+
+        calls = {"count": 0}
+        original_asfortranarray = standard.np.asfortranarray
+
+        def counting_asfortranarray(*args, **kwargs):
+            calls["count"] += 1
+            return original_asfortranarray(*args, **kwargs)
+
+        monkeypatch.setattr(standard.np, "asfortranarray", counting_asfortranarray)
+
+        vw.vorticity()
+        vw.divergence()
+        vw.sfvp()
+
+        assert calls["count"] == 2
 
     def test_component_paths_match_direct_spectral_expression(self):
         """Component wind paths should use direct spectral reconstruction."""
