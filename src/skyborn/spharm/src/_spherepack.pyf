@@ -253,9 +253,7 @@ python module _spherepack ! in
             real dimension(lwork),depend(lwork),intent(cache,hide) :: work
             integer, intent(out) :: ierror
         end subroutine vhaes
-        subroutine vhaesdiv(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhaes,lvhaes,work,lwork,ierror) ! in :_spherepack:vhaes.f90
-            fortranname vhaes
-            integer, intent(hide) :: ityp=1
+        subroutine vhaesdiv(nlat,nlon,nt,v,w,idvw,jdvw,br,bi,mdab,ndab,wvhaes,lvhaes,nbatch,work,lwork,ierror) ! in :_spherepack:vhaesdiv.f90
             real dimension(nlat,nlon,nt) :: v
             real dimension(nlat,nlon,nt) :: w
             integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
@@ -263,15 +261,14 @@ python module _spherepack ! in
             integer optional,check(shape(v,2)==nt),depend(v) :: nt=shape(v,2)
             real dimension(nlat,nlat,nt),intent(out) :: br
             real dimension(nlat,nlat,nt),intent(out) :: bi
-            real dimension(1,1,1),intent(cache,hide) :: cr
-            real dimension(1,1,1),intent(cache,hide) :: ci
             integer, intent(hide) :: idvw=nlat
             integer, intent(hide) :: mdab=nlat
             integer, intent(hide) :: ndab=nlat
             integer, intent(hide) :: jdvw=nlon
             real dimension(lvhaes) :: wvhaes
             integer optional,check(shape(wvhaes,0)==lvhaes),depend(wvhaes) :: lvhaes=shape(wvhaes,0)
-            integer, required, intent(in) :: lwork
+            integer, intent(hide) :: nbatch=24
+            integer, intent(hide), depend(nbatch,nlat,nlon) :: lwork=(2*nbatch+1)*nlat*nlon
             real dimension(lwork),depend(lwork),intent(cache,hide) :: work
             integer, intent(out) :: ierror
         end subroutine vhaesdiv
@@ -405,6 +402,50 @@ python module _spherepack ! in
             real dimension(lwork), depend(lwork), intent(cache,hide) :: work
             integer, intent(out):: ierror
         end subroutine vhses
+        subroutine vhsesdiv(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhses,lvhses,work,lwork,ierror) ! in :_spherepack:vhses.f
+            fortranname vhses
+            integer, intent(hide) :: ityp=1
+            integer, required, intent(in) :: nlon
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(nlat,nlat,nt) :: br
+            real dimension(nlat,nlat,nt) :: bi
+            real dimension(1,1,1), intent(cache,hide) :: cr
+            real dimension(1,1,1), intent(cache,hide) :: ci
+            integer optional,check(shape(br,0)==nlat),depend(br) :: nlat=shape(br,0)
+            integer optional,check(shape(br,2)==nt),depend(br) :: nt=shape(br,2)
+            real dimension(lvhses) :: wvhses
+            integer optional,check(shape(wvhses,0)==lvhses),depend(wvhses) :: lvhses=shape(wvhses,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out):: ierror
+        end subroutine vhsesdiv
+        subroutine vhsesvrt(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhses,lvhses,work,lwork,ierror) ! in :_spherepack:vhses.f
+            fortranname vhses
+            integer, intent(hide) :: ityp=2
+            integer, required, intent(in) :: nlon
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(1,1,1), intent(cache,hide) :: br
+            real dimension(1,1,1), intent(cache,hide) :: bi
+            real dimension(nlat,nlat,nt) :: cr
+            real dimension(nlat,nlat,nt) :: ci
+            integer optional,check(shape(cr,0)==nlat),depend(cr) :: nlat=shape(cr,0)
+            integer optional,check(shape(cr,2)==nt),depend(cr) :: nt=shape(cr,2)
+            real dimension(lvhses) :: wvhses
+            integer optional,check(shape(wvhses,0)==lvhses),depend(wvhses) :: lvhses=shape(wvhses,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out):: ierror
+        end subroutine vhsesvrt
         subroutine vhsesi(nlat,nlon,wvhses,lvhses,work,lwork,dwork,ldwork,ierror) ! in :_spherepack:vhses.f
             integer :: nlat
             integer :: nlon
@@ -437,6 +478,50 @@ python module _spherepack ! in
             integer, required :: lwork
             integer, intent(out) :: ierror
         end subroutine vhsgs
+        subroutine vhsgsdiv(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgs,lvhsgs,work,lwork,ierror) ! in :_spherepack:vhsgs.f
+            fortranname vhsgs
+            integer, intent(hide) :: ityp=1
+            integer, required, intent(in) :: nlon
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            integer, intent(hide) :: idvw = nlat
+            integer, intent(hide) :: mdab = nlat
+            integer, intent(hide) :: ndab = nlat
+            integer, intent(hide) :: jdvw = nlon
+            real dimension(nlat,nlat,nt) :: br
+            real dimension(nlat,nlat,nt) :: bi
+            real dimension(1,1,1), intent(cache,hide) :: cr
+            real dimension(1,1,1), intent(cache,hide) :: ci
+            integer optional,check(shape(br,0)==nlat),depend(br) :: nlat=shape(br,0)
+            integer optional,check(shape(br,2)==nt),depend(br) :: nt=shape(br,2)
+            real dimension(lvhsgs) :: wvhsgs
+            integer optional,check(shape(wvhsgs,0)==lvhsgs),depend(wvhsgs) :: lvhsgs=shape(wvhsgs,0)
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, required :: lwork
+            integer, intent(out) :: ierror
+        end subroutine vhsgsdiv
+        subroutine vhsgsvrt(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgs,lvhsgs,work,lwork,ierror) ! in :_spherepack:vhsgs.f
+            fortranname vhsgs
+            integer, intent(hide) :: ityp=2
+            integer, required, intent(in) :: nlon
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            integer, intent(hide) :: idvw = nlat
+            integer, intent(hide) :: mdab = nlat
+            integer, intent(hide) :: ndab = nlat
+            integer, intent(hide) :: jdvw = nlon
+            real dimension(1,1,1), intent(cache,hide) :: br
+            real dimension(1,1,1), intent(cache,hide) :: bi
+            real dimension(nlat,nlat,nt) :: cr
+            real dimension(nlat,nlat,nt) :: ci
+            integer optional,check(shape(cr,0)==nlat),depend(cr) :: nlat=shape(cr,0)
+            integer optional,check(shape(cr,2)==nt),depend(cr) :: nt=shape(cr,2)
+            real dimension(lvhsgs) :: wvhsgs
+            integer optional,check(shape(wvhsgs,0)==lvhsgs),depend(wvhsgs) :: lvhsgs=shape(wvhsgs,0)
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, required :: lwork
+            integer, intent(out) :: ierror
+        end subroutine vhsgsvrt
         subroutine vhsgsi(nlat,nlon,wvhsgs,lvhsgs,dwork,ldwork,ierror) ! in :_spherepack:vhsgs.f
             integer :: nlat
             integer :: nlon
@@ -726,6 +811,50 @@ python module _spherepack ! in
             real dimension(lwork), depend(lwork), intent(cache,hide) :: work
             integer, intent(out):: ierror
         end subroutine vhsec
+        subroutine vhsecdiv(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsec,lvhsec,work,lwork,ierror) ! in :_spherepack:vhsec.f90
+            fortranname vhsec
+            integer, intent(hide) :: ityp=1
+            integer, required, intent(in) :: nlon
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(nlat,nlat,nt) :: br
+            real dimension(nlat,nlat,nt) :: bi
+            real dimension(1,1,1), intent(cache,hide) :: cr
+            real dimension(1,1,1), intent(cache,hide) :: ci
+            integer optional,check(shape(br,0)==nlat),depend(br) :: nlat=shape(br,0)
+            integer optional,check(shape(br,2)==nt),depend(br) :: nt=shape(br,2)
+            real dimension(lvhsec) :: wvhsec
+            integer optional,check(shape(wvhsec,0)==lvhsec),depend(wvhsec) :: lvhsec=shape(wvhsec,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out):: ierror
+        end subroutine vhsecdiv
+        subroutine vhsecvrt(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsec,lvhsec,work,lwork,ierror) ! in :_spherepack:vhsec.f90
+            fortranname vhsec
+            integer, intent(hide) :: ityp=2
+            integer, required, intent(in) :: nlon
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            integer, intent(hide) :: idvw=nlat
+            integer, intent(hide) :: mdab=nlat
+            integer, intent(hide) :: ndab=nlat
+            integer, intent(hide) :: jdvw=nlon
+            real dimension(1,1,1), intent(cache,hide) :: br
+            real dimension(1,1,1), intent(cache,hide) :: bi
+            real dimension(nlat,nlat,nt) :: cr
+            real dimension(nlat,nlat,nt) :: ci
+            integer optional,check(shape(cr,0)==nlat),depend(cr) :: nlat=shape(cr,0)
+            integer optional,check(shape(cr,2)==nt),depend(cr) :: nt=shape(cr,2)
+            real dimension(lvhsec) :: wvhsec
+            integer optional,check(shape(wvhsec,0)==lvhsec),depend(wvhsec) :: lvhsec=shape(wvhsec,0)
+            integer, required :: lwork
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, intent(out):: ierror
+        end subroutine vhsecvrt
         subroutine vhseci(nlat,nlon,wvhsec,lvhsec,dwork,ldwork,ierror) ! in :_spherepack:vhsec.f90
             integer :: nlat
             integer :: nlon
@@ -756,6 +885,50 @@ python module _spherepack ! in
             integer, required :: lwork
             integer, intent(out) :: ierror
         end subroutine vhsgc
+        subroutine vhsgcdiv(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgc,lvhsgc,work,lwork,ierror) ! in :_spherepack:vhsgc.f90
+            fortranname vhsgc
+            integer, intent(hide) :: ityp=1
+            integer, required, intent(in) :: nlon
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            integer, intent(hide) :: idvw = nlat
+            integer, intent(hide) :: mdab = nlat
+            integer, intent(hide) :: ndab = nlat
+            integer, intent(hide) :: jdvw = nlon
+            real dimension(nlat,nlat,nt) :: br
+            real dimension(nlat,nlat,nt) :: bi
+            real dimension(1,1,1), intent(cache,hide) :: cr
+            real dimension(1,1,1), intent(cache,hide) :: ci
+            integer optional,check(shape(br,0)==nlat),depend(br) :: nlat=shape(br,0)
+            integer optional,check(shape(br,2)==nt),depend(br) :: nt=shape(br,2)
+            real dimension(lvhsgc) :: wvhsgc
+            integer optional,check(shape(wvhsgc,0)==lvhsgc),depend(wvhsgc) :: lvhsgc=shape(wvhsgc,0)
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, required :: lwork
+            integer, intent(out) :: ierror
+        end subroutine vhsgcdiv
+        subroutine vhsgcvrt(nlat,nlon,ityp,nt,v,w,idvw,jdvw,br,bi,cr,ci,mdab,ndab,wvhsgc,lvhsgc,work,lwork,ierror) ! in :_spherepack:vhsgc.f90
+            fortranname vhsgc
+            integer, intent(hide) :: ityp=2
+            integer, required, intent(in) :: nlon
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: v
+            real dimension(nlat,nlon,nt), depend(nlat,nlon,nt), intent(out) :: w
+            integer, intent(hide) :: idvw = nlat
+            integer, intent(hide) :: mdab = nlat
+            integer, intent(hide) :: ndab = nlat
+            integer, intent(hide) :: jdvw = nlon
+            real dimension(1,1,1), intent(cache,hide) :: br
+            real dimension(1,1,1), intent(cache,hide) :: bi
+            real dimension(nlat,nlat,nt) :: cr
+            real dimension(nlat,nlat,nt) :: ci
+            integer optional,check(shape(cr,0)==nlat),depend(cr) :: nlat=shape(cr,0)
+            integer optional,check(shape(cr,2)==nt),depend(cr) :: nt=shape(cr,2)
+            real dimension(lvhsgc) :: wvhsgc
+            integer optional,check(shape(wvhsgc,0)==lvhsgc),depend(wvhsgc) :: lvhsgc=shape(wvhsgc,0)
+            real dimension(lwork), depend(lwork), intent(cache,hide) :: work
+            integer, required :: lwork
+            integer, intent(out) :: ierror
+        end subroutine vhsgcvrt
         subroutine vhsgci(nlat,nlon,wvhsgc,lvhsgc,dwork,ldwork,ierror) ! in :_spherepack:vhsgc.f90
             integer :: nlat
             integer :: nlon
