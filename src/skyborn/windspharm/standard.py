@@ -391,6 +391,9 @@ class VectorWind:
         """Initialize small per-instance caches for repeated wrapper work."""
         self._latitude_cache: dict[tuple[str, int], np.ndarray] = {}
         self._coriolis_cache: dict[tuple[str, int, float, str], np.ndarray] = {}
+        self._planetary_vorticity_spec_cache: dict[
+            tuple[str, int, int, float, int], np.ndarray
+        ] = {}
         self._vector_analysis_layout_cache: Optional[
             Tuple[np.ndarray, np.ndarray, Tuple[int, ...]]
         ] = None
@@ -471,6 +474,36 @@ class VectorWind:
         if materialize:
             return np.array(broadcast, copy=True)
         return broadcast
+
+    def _planetary_vorticity_spec(
+        self,
+        truncation: Optional[int] = None,
+        omega: Optional[float] = None,
+        spectral_ndim: int = 0,
+    ) -> np.ndarray:
+        """Return cached planetary-vorticity spectrum, broadcast for reuse."""
+        try:
+            omega_value = 7.292e-05 if omega is None else float(omega)
+        except (TypeError, ValueError):
+            raise ValueError(f"invalid value for omega: {omega!r}")
+        ntrunc = self.s._validate_ntrunc(truncation, self.s.nlat - 1)
+        key = (self.gridtype, self.s.nlat, self.s.nlon, omega_value, ntrunc)
+        cache = getattr(self, "_planetary_vorticity_spec_cache", None)
+        if cache is None:
+            cache = {}
+            self._planetary_vorticity_spec_cache = cache
+
+        fspec = cache.get(key)
+        if fspec is None:
+            coriolis = self._coriolis_values(omega_value, dtype=self._output_dtype)
+            grid = np.broadcast_to(coriolis[:, np.newaxis], (self.s.nlat, self.s.nlon))
+            fspec = self.s.grdtospec(grid, ntrunc=ntrunc)
+            cache[key] = fspec
+
+        if spectral_ndim <= 0:
+            return fspec
+
+        return fspec[(slice(None),) + (np.newaxis,) * spectral_ndim]
 
     def _gradient_components(
         self, chi: ArrayLike, truncation: Optional[int] = None
@@ -1144,8 +1177,15 @@ class VectorWind:
         # spectrum instead of triggering a second vector analysis.
         uchi, vchi = self.s.getgrad(self.s._invlapspec(divspec, "rossbywavesource"))
 
-        # Preserve the existing absolute-vorticity gradient path exactly.
-        etax, etay = self._gradient_components(eta, truncation=truncation)
+        # Reuse relative-vorticity spectra plus a cached planetary-vorticity
+        # spectrum so absolute-vorticity gradients do not trigger a full-field
+        # scalar analysis of eta on every call.
+        etaspec = vrtspec + self._planetary_vorticity_spec(
+            truncation=truncation,
+            omega=omega,
+            spectral_ndim=max(vrtspec.ndim - 1, 0),
+        )
+        etax, etay = self.s.getgrad(etaspec)
 
         # Combine components to form Rossby wave source
         # S = -eta * div - (uchi * etax + vchi * etay)
