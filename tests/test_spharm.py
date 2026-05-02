@@ -295,10 +295,10 @@ class TestSpharmtVectorOperations:
         sht.getvrtdivspec(u, v)
 
         assert calls == [
-            getattr(_spherepack, expected_vrt_wrapper),
-            getattr(_spherepack, expected_div_wrapper),
+            getattr(spharm_mod._spherepack, expected_vrt_wrapper),
+            getattr(spharm_mod._spherepack, expected_div_wrapper),
             getattr(
-                _spherepack,
+                spharm_mod._spherepack,
                 {
                     ("regular", "stored"): "vhaes",
                     ("regular", "computed"): "vhaec",
