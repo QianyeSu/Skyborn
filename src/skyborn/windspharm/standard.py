@@ -37,6 +37,9 @@ class VectorWind:
         Zonal wind component. Shape should be (nlat, nlon) or
         (nlat, nlon, *extra_dims), where nlat is latitude points and nlon is
         longitude points. Latitude dimension should be north-to-south.
+        This follows the underlying SPHEREPACK convention that the first
+        latitude row is the northernmost point and latitude indices increase
+        southward.
     v : array_like
         Meridional wind component. Must have same shape as u.
     gridtype : {'regular', 'gaussian'}, default 'regular'
@@ -79,6 +82,13 @@ class VectorWind:
     >>> divergence = vw.divergence()
     >>> streamfunction = vw.streamfunction()
     >>> velocity_potential = vw.velocitypotential()
+
+    Notes
+    -----
+    The NumPy ``standard.VectorWind`` interface does not automatically reorder
+    latitude. If your data is south-to-north, reverse it first or use
+    :func:`skyborn.windspharm.tools.order_latdim`. The xarray and iris
+    interfaces handle this reordering automatically.
     """
 
     def __init__(
