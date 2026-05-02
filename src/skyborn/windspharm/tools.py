@@ -385,6 +385,11 @@ def order_latdim(
     If necessary, reverses the latitude coordinates and the corresponding dimension
     in the wind components. Always returns copies of the input arrays.
 
+    This helper is mainly for the NumPy ``standard.VectorWind`` interface, whose
+    underlying spherical harmonic backend follows the SPHEREPACK convention that
+    the first latitude row is the northernmost point and latitude indices
+    increase southward.
+
     Parameters
     ----------
     lat_coords : array_like
