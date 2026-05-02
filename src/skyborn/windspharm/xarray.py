@@ -157,7 +157,7 @@ class VectorWind:
         self._u_component_dtype = standard.VectorWind._infer_output_dtype(u_data)
         self._v_component_dtype = standard.VectorWind._infer_output_dtype(v_data)
 
-        self._api = standard.VectorWind._from_prepared(
+        self._api = standard.VectorWind._from_owned_input(
             u_data,
             v_data,
             gridtype=gridtype,
