@@ -22,6 +22,12 @@ Example:
     >>> vorticity = vw.vorticity()
     >>> divergence = vw.divergence()
     >>> psi, chi = vw.sfvp()
+
+Notes:
+    The NumPy-facing ``VectorWind`` interface expects latitude to run
+    north-to-south. If your array is south-to-north, reorder it first with
+    ``skyborn.windspharm.tools.order_latdim`` or use the xarray interface,
+    which handles latitude reordering automatically.
 """
 
 from __future__ import absolute_import
