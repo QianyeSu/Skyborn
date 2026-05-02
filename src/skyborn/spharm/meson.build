@@ -285,6 +285,7 @@ else:
             'src/shses.f90',
             'src/shaes.f90',
             'src/vhaes.f90',
+            'src/vhaesdiv.f90',
             'src/vhses.f90',
             'src/shsgs.f90',
             'src/shags.f90',
