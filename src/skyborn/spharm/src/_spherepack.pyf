@@ -34,7 +34,7 @@ python module _spherepack ! in
             integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
             integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
         end subroutine onedtotwod
-        subroutine onedtotwod_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,nmdim,nt,rsphere) ! in :_spherepack:onedtotwod_vrtdiv.f90
+        subroutine onedtotwod_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,nmdim,nt,rsphere) ! in :_spherepack:onedtotwod.f90
             complex dimension(nmdim,nt) :: vrtspec
             complex dimension(nmdim,nt) :: divspec
             integer, required, intent(in) :: nlat
@@ -46,7 +46,7 @@ python module _spherepack ! in
             integer optional,check(shape(vrtspec,1)==nt),depend(vrtspec) :: nt=shape(vrtspec,1)
             real :: rsphere
         end subroutine onedtotwod_vrtdiv
-        subroutine onedtotwod_vrt(vrtspec,cr,ci,nlat,nmdim,nt,rsphere) ! in :_spherepack:onedtotwod_vrt.f90
+        subroutine onedtotwod_vrt(vrtspec,cr,ci,nlat,nmdim,nt,rsphere) ! in :_spherepack:onedtotwod.f90
             complex dimension(nmdim,nt) :: vrtspec
             integer, required, intent(in) :: nlat
             real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: cr
@@ -55,7 +55,7 @@ python module _spherepack ! in
             integer optional,check(shape(vrtspec,1)==nt),depend(vrtspec) :: nt=shape(vrtspec,1)
             real :: rsphere
         end subroutine onedtotwod_vrt
-        subroutine onedtotwod_div(divspec,br,bi,nlat,nmdim,nt,rsphere) ! in :_spherepack:onedtotwod_div.f90
+        subroutine onedtotwod_div(divspec,br,bi,nlat,nmdim,nt,rsphere) ! in :_spherepack:onedtotwod.f90
             complex dimension(nmdim,nt) :: divspec
             integer, required, intent(in) :: nlat
             real dimension(nlat,nlat,nt), depend(nlat,nt), intent(out) :: br
@@ -72,7 +72,7 @@ python module _spherepack ! in
             integer optional,check(shape(a,2)==nt),depend(a) :: nt=shape(a,2)
             integer :: ntrunc
         end subroutine twodtooned
-        subroutine twodtooned_vrt(vrtspec,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned_vrt.f90
+        subroutine twodtooned_vrt(vrtspec,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned.f90
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
             real dimension(nlat,nlat,nt) :: cr
             real dimension(nlat,nlat,nt) :: ci
@@ -81,7 +81,7 @@ python module _spherepack ! in
             integer :: ntrunc
             real :: rsphere
         end subroutine twodtooned_vrt
-        subroutine twodtooned_div(divspec,br,bi,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned_div.f90
+        subroutine twodtooned_div(divspec,br,bi,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned.f90
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
             real dimension(nlat,nlat,nt) :: br
             real dimension(nlat,nlat,nt) :: bi
@@ -90,7 +90,7 @@ python module _spherepack ! in
             integer :: ntrunc
             real :: rsphere
         end subroutine twodtooned_div
-        subroutine twodtooned_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned_vrtdiv.f90
+        subroutine twodtooned_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned.f90
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
             real dimension(nlat,nlat,nt) :: br
@@ -253,7 +253,7 @@ python module _spherepack ! in
             real dimension(lwork),depend(lwork),intent(cache,hide) :: work
             integer, intent(out) :: ierror
         end subroutine vhaes
-        subroutine vhaesdiv(nlat,nlon,nt,v,w,idvw,jdvw,br,bi,mdab,ndab,wvhaes,lvhaes,nbatch,work,lwork,ierror) ! in :_spherepack:vhaesdiv.f90
+        subroutine vhaesdiv(nlat,nlon,nt,v,w,idvw,jdvw,br,bi,mdab,ndab,wvhaes,lvhaes,nbatch,work,lwork,ierror) ! in :_spherepack:vhaes.f90
             real dimension(nlat,nlon,nt) :: v
             real dimension(nlat,nlon,nt) :: w
             integer optional,check(shape(v,0)==nlat),depend(v) :: nlat=shape(v,0)
