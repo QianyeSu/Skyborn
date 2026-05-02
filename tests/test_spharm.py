@@ -53,10 +53,10 @@ VECTOR_BACKEND_CASES = [
 ]
 
 VECTOR_SYNTHESIS_BACKEND_CASES = [
-    ("regular", "stored", "vhses transform", [1, 0]),
-    ("regular", "computed", "vhsec transform", [1, 0]),
-    ("gaussian", "stored", "vhsgs transform", [1, 0]),
-    ("gaussian", "computed", "vhsgc transform", [1, 0]),
+    ("regular", "stored", "vhsesdiv", "vhses"),
+    ("regular", "computed", "vhsecdiv", "vhsec"),
+    ("gaussian", "stored", "vhsgsdiv", "vhsgs"),
+    ("gaussian", "computed", "vhsgcdiv", "vhsgc"),
 ]
 
 
@@ -373,13 +373,51 @@ class TestSpharmtGradientOperations:
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     @pytest.mark.parametrize(
-        ("gridtype", "legfunc", "expected_operation", "expected_calls"),
+        ("gridtype", "legfunc", "component"),
+        [
+            (gridtype, legfunc, component)
+            for gridtype, legfunc in VECTOR_BACKEND_CASES
+            for component in ("div", "vrt")
+        ],
+    )
+    def test_getuv_spec_component_single_family_matches_pair_output(
+        self, gridtype, legfunc, component
+    ):
+        """Single-family synthesis wrappers should match the legacy paired getuv path."""
+        sht = Spharmt(nlon=36, nlat=19, gridtype=gridtype, legfunc=legfunc)
+        rng = np.random.default_rng(20260503)
+        scalar = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
+        spec = sht.grdtospec(scalar)
+
+        component_u, component_v = sht._getuv_spec_component(
+            spec,
+            component=component,
+            operation_name="test_getuv_spec_component_single_family_matches_pair_output",
+        )
+
+        zeros = np.zeros_like(spec)
+        if component == "div":
+            legacy_u, legacy_v = sht.getuv(zeros, spec)
+        else:
+            legacy_u, legacy_v = sht.getuv(spec, zeros)
+
+        np.testing.assert_allclose(component_u, legacy_u, rtol=0, atol=0)
+        np.testing.assert_allclose(component_v, legacy_v, rtol=0, atol=0)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    @pytest.mark.parametrize(
+        ("gridtype", "legfunc", "expected_half_wrapper", "expected_full_wrapper"),
         VECTOR_SYNTHESIS_BACKEND_CASES,
     )
-    def test_getgrad_selects_divergence_only_half_synthesis_ityp(
-        self, monkeypatch, gridtype, legfunc, expected_operation, expected_calls
+    def test_getgrad_selects_divergence_only_half_synthesis_wrapper(
+        self,
+        monkeypatch,
+        gridtype,
+        legfunc,
+        expected_half_wrapper,
+        expected_full_wrapper,
     ):
-        """getgrad() should request ityp=1 while public getuv() stays on ityp=0."""
+        """getgrad() should use the dedicated half-synthesis wrapper, not full getuv."""
         sht = Spharmt(nlon=36, nlat=19, gridtype=gridtype, legfunc=legfunc)
         rng = np.random.default_rng(20260503)
         chi = rng.standard_normal((19, 36)).astype(np.float32)
@@ -390,10 +428,12 @@ class TestSpharmtGradientOperations:
 
         calls = []
         original_call = sht._call_spherepack_safely
+        expected_half = getattr(spharm_mod._spherepack, expected_half_wrapper)
+        expected_full = getattr(spharm_mod._spherepack, expected_full_wrapper)
 
         def recording_call(func, *args, operation_name, **kwargs):
-            if operation_name == expected_operation:
-                calls.append(kwargs.get("ityp", 0))
+            if func in (expected_half, expected_full):
+                calls.append(func)
             return original_call(func, *args, operation_name=operation_name, **kwargs)
 
         monkeypatch.setattr(sht, "_call_spherepack_safely", recording_call)
@@ -401,7 +441,7 @@ class TestSpharmtGradientOperations:
         sht.getgrad(chispec)
         sht.getuv(vrtspec, divspec)
 
-        assert calls == expected_calls
+        assert calls == [expected_half, expected_full]
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_getpsichi_basic(self):
