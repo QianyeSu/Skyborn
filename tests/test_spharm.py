@@ -1722,6 +1722,171 @@ class TestSpharmtAdditionalCoverage:
         assert psi_spec.shape == (190, 1)
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_internal_helper_validation_and_wrapper_branches(self, monkeypatch):
+        """Cover remaining helper validation branches without changing runtime logic."""
+        sht = object.__new__(Spharmt)
+        sht.nlat = 19
+        sht.nlon = 36
+        sht.gridtype = "regular"
+        sht.legfunc = "stored"
+        sht.rsphere = 6.3712e6
+        sht._n2 = 10
+
+        with pytest.raises(
+            ValidationError, match="paired spectra must have the same shape"
+        ):
+            sht._spectogrd_pair(
+                np.zeros(6, dtype=np.complex64),
+                np.zeros((6, 2), dtype=np.complex64),
+            )
+
+        monkeypatch.setattr(sht, "_validate_ntrunc", lambda ntrunc, max_ntrunc: 18)
+        with pytest.raises(ValidationError, match="consistent dimensions"):
+            sht._analyze_vector_harmonics_flattened(
+                np.zeros((19, 36, 1), dtype=np.float32),
+                np.zeros((19, 36, 2), dtype=np.float32),
+                (),
+                None,
+                "flattened",
+            )
+        with pytest.raises(ValidationError, match="must be rank 3"):
+            sht._analyze_vector_harmonics_flattened(
+                np.zeros((19, 36), dtype=np.float32),
+                np.zeros((19, 36), dtype=np.float32),
+                (),
+                None,
+                "flattened",
+            )
+        with pytest.raises(ValidationError, match=r"must have shape \(19, 36, nt\)"):
+            sht._analyze_vector_harmonics_flattened(
+                np.zeros((18, 36, 1), dtype=np.float32),
+                np.zeros((18, 36, 1), dtype=np.float32),
+                (),
+                None,
+                "flattened",
+            )
+        with pytest.raises(ValidationError, match="invalid ityp 9"):
+            sht._analyze_vector_harmonics_flattened(
+                np.zeros((19, 36, 1), dtype=np.float32),
+                np.zeros((19, 36, 1), dtype=np.float32),
+                (),
+                None,
+                "flattened",
+                ityp=9,
+            )
+
+        grid_calls = iter(
+            [
+                (1, np.zeros((19, 36, 1), dtype=np.float32), ()),
+                (1, np.zeros((19, 36, 1), dtype=np.float32), (1,)),
+            ]
+        )
+        monkeypatch.setattr(
+            sht,
+            "_validate_grid_data",
+            lambda data, operation_name: next(grid_calls),
+        )
+        with pytest.raises(ValidationError, match="consistent dimensions"):
+            sht._analyze_vector_harmonic_component(
+                np.zeros((19, 36), dtype=np.float32),
+                np.zeros((19, 36), dtype=np.float32),
+                None,
+                "component",
+                "div",
+            )
+
+        with pytest.raises(ValidationError, match="consistent dimensions"):
+            sht._analyze_vector_harmonic_component_flattened(
+                np.zeros((19, 36, 1), dtype=np.float32),
+                np.zeros((19, 36, 2), dtype=np.float32),
+                (),
+                None,
+                "component",
+                "div",
+            )
+        with pytest.raises(ValidationError, match="must be rank 3"):
+            sht._analyze_vector_harmonic_component_flattened(
+                np.zeros((19, 36), dtype=np.float32),
+                np.zeros((19, 36), dtype=np.float32),
+                (),
+                None,
+                "component",
+                "div",
+            )
+        with pytest.raises(ValidationError, match=r"must have shape \(19, 36, nt\)"):
+            sht._analyze_vector_harmonic_component_flattened(
+                np.zeros((18, 36, 1), dtype=np.float32),
+                np.zeros((18, 36, 1), dtype=np.float32),
+                (),
+                None,
+                "component",
+                "div",
+            )
+        with pytest.raises(ValidationError, match="expected 'div' or 'vrt'"):
+            sht._analyze_vector_harmonic_component_flattened(
+                np.zeros((19, 36, 1), dtype=np.float32),
+                np.zeros((19, 36, 1), dtype=np.float32),
+                (),
+                None,
+                "component",
+                "bad",
+            )
+
+        with pytest.raises(ValidationError, match="invalid ityp 9"):
+            sht._synthesize_vector_harmonics(
+                np.zeros((10, 1), dtype=np.float32),
+                np.zeros((10, 1), dtype=np.float32),
+                np.zeros((10, 1), dtype=np.float32),
+                np.zeros((10, 1), dtype=np.float32),
+                1,
+                (),
+                "synthesis",
+                ityp=9,
+            )
+
+        monkeypatch.setattr(
+            sht,
+            "_validate_spectral_data",
+            lambda data, operation_name: (
+                1,
+                18,
+                np.zeros((190, 1), dtype=np.complex64),
+                (),
+            ),
+        )
+        with pytest.raises(ValidationError, match='expected "div" or "vrt"'):
+            sht._getuv_spec_component(
+                np.zeros(190, dtype=np.complex64),
+                component="bad",
+                operation_name="getuv_component",
+            )
+
+        calls = []
+
+        def fake_getpsichi_spec_component(
+            ugrid, vgrid, ntrunc, component, operation_name
+        ):
+            calls.append((component, operation_name))
+            return np.zeros(190, dtype=np.complex64)
+
+        monkeypatch.setattr(
+            sht,
+            "getpsichi_spec_component",
+            fake_getpsichi_spec_component,
+        )
+        psi = sht.getpsispec(
+            np.zeros((19, 36), dtype=np.float32),
+            np.zeros((19, 36), dtype=np.float32),
+        )
+        chi = sht.getchispec(
+            np.zeros((19, 36), dtype=np.float32),
+            np.zeros((19, 36), dtype=np.float32),
+        )
+        assert psi.shape == (190,)
+        assert chi.shape == (190,)
+        assert calls == [("psi", "getpsispec"), ("chi", "getchispec")]
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_helper_backend_error_branches(self, monkeypatch):
         """Exercise helper backend failures and validation branches."""
         with pytest.raises(ValidationError, match="ntrunc must be non-negative"):
