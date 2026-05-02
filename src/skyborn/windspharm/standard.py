@@ -13,6 +13,7 @@ from typing import Literal, Optional, Tuple, Union
 import numpy as np
 
 from skyborn.spharm import Spharmt, gaussian_lats_wts
+from skyborn.spharm import spherical_harmonics as spharm_mod
 
 __all__ = ["VectorWind"]
 
@@ -115,7 +116,7 @@ class VectorWind:
         self._setup_method_aliases()
 
     @classmethod
-    def _from_prepared(
+    def _from_owned_input(
         cls,
         u: ArrayLike,
         v: ArrayLike,
@@ -390,6 +391,9 @@ class VectorWind:
         """Initialize small per-instance caches for repeated wrapper work."""
         self._latitude_cache: dict[tuple[str, int], np.ndarray] = {}
         self._coriolis_cache: dict[tuple[str, int, float, str], np.ndarray] = {}
+        self._vector_analysis_layout_cache: Optional[
+            Tuple[np.ndarray, np.ndarray, Tuple[int, ...]]
+        ] = None
 
     def _latitude_values(self) -> np.ndarray:
         """Return latitude coordinates for this wind grid."""
@@ -487,6 +491,92 @@ class VectorWind:
 
         return self.s.getgrad(chi_spec)
 
+    def _vector_analysis_layout_inputs(
+        self,
+    ) -> Tuple[np.ndarray, np.ndarray, Tuple[int, ...]]:
+        """Return one cached Fortran-ready flattened wind-field pair."""
+        cache = getattr(self, "_vector_analysis_layout_cache", None)
+        if cache is not None:
+            return cache
+
+        if self.u.ndim == 2:
+            extra_shape: Tuple[int, ...] = ()
+            layout_u = np.asfortranarray(np.expand_dims(self.u, 2))
+            layout_v = np.asfortranarray(np.expand_dims(self.v, 2))
+        else:
+            extra_shape = tuple(self.u.shape[2:])
+            nt = int(np.prod(extra_shape, dtype=int))
+            # Preserve the existing C-order flatten semantics, then convert once
+            # to a Fortran-contiguous 3D layout for repeated vector analysis.
+            layout_u = np.asfortranarray(
+                self.u.reshape(self.u.shape[0], self.u.shape[1], nt)
+            )
+            layout_v = np.asfortranarray(
+                self.v.reshape(self.v.shape[0], self.v.shape[1], nt)
+            )
+
+        cache = (layout_u, layout_v, extra_shape)
+        self._vector_analysis_layout_cache = cache
+        return cache
+
+    def _vector_analysis_spectra(
+        self, truncation: Optional[int] = None, component: Optional[str] = None
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """Return cached-layout vector-analysis spectra for wind-derived diagnostics."""
+        if component is None and not hasattr(
+            self.s, "_analyze_vector_harmonics_flattened"
+        ):
+            return self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
+        if component == "vrt" and not hasattr(
+            self.s, "_analyze_vector_harmonic_component_flattened"
+        ):
+            return self.s.getvrtspec(self.u, self.v, ntrunc=truncation)
+        if component == "div" and not hasattr(
+            self.s, "_analyze_vector_harmonic_component_flattened"
+        ):
+            return self.s.getdivspec(self.u, self.v, ntrunc=truncation)
+
+        layout_u, layout_v, extra_shape = self._vector_analysis_layout_inputs()
+
+        if component is None:
+            br, bi, cr, ci, _, ntrunc = self.s._analyze_vector_harmonics_flattened(
+                layout_u,
+                layout_v,
+                extra_shape,
+                truncation,
+                "vector wind analysis",
+            )
+            vrtspec, divspec = spharm_mod._spherepack.twodtooned_vrtdiv(
+                br, bi, cr, ci, ntrunc, self.s.rsphere
+            )
+            return (
+                self.s._restore_spectral_shape(vrtspec, extra_shape),
+                self.s._restore_spectral_shape(divspec, extra_shape),
+            )
+
+        coeff_r, coeff_i, _, ntrunc = (
+            self.s._analyze_vector_harmonic_component_flattened(
+                layout_u,
+                layout_v,
+                extra_shape,
+                truncation,
+                "vector wind analysis",
+                component,
+            )
+        )
+        if component == "vrt":
+            dataspec = spharm_mod._spherepack.twodtooned_vrt(
+                coeff_r, coeff_i, ntrunc, self.s.rsphere
+            )
+        elif component == "div":
+            dataspec = spharm_mod._spherepack.twodtooned_div(
+                coeff_r, coeff_i, ntrunc, self.s.rsphere
+            )
+        else:
+            raise ValueError(f"unsupported component: {component!r}")
+
+        return self.s._restore_spectral_shape(dataspec, extra_shape)
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -554,7 +644,7 @@ class VectorWind:
         >>> vrt, div = vw.vrtdiv()
         >>> vrt_t13, div_t13 = vw.vrtdiv(truncation=13)
         """
-        vrtspec, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
+        vrtspec, divspec = self._vector_analysis_spectra(truncation=truncation)
         vrt, div = self.s._spectogrd_pair(vrtspec, divspec)
         return (
             self._restore_output_dtype(vrt),
@@ -586,7 +676,9 @@ class VectorWind:
         >>> vrt_t13 = vw.vorticity(truncation=13)
         """
         return self._restore_output_dtype(
-            self.s.spectogrd(self.s.getvrtspec(self.u, self.v, ntrunc=truncation))
+            self.s.spectogrd(
+                self._vector_analysis_spectra(truncation=truncation, component="vrt")
+            )
         )
 
     def divergence(self, truncation: Optional[int] = None) -> np.ndarray:
@@ -613,7 +705,9 @@ class VectorWind:
         >>> div_t13 = vw.divergence(truncation=13)
         """
         return self._restore_output_dtype(
-            self.s.spectogrd(self.s.getdivspec(self.u, self.v, ntrunc=truncation))
+            self.s.spectogrd(
+                self._vector_analysis_spectra(truncation=truncation, component="div")
+            )
         )
 
     def planetaryvorticity(self, omega: Optional[float] = None) -> np.ndarray:
@@ -671,7 +765,9 @@ class VectorWind:
         >>> abs_vrt = vw.absolutevorticity()
         >>> abs_vrt_t13 = vw.absolutevorticity(omega=7.2921150e-5, truncation=13)
         """
-        vrt = self.s.spectogrd(self.s.getvrtspec(self.u, self.v, ntrunc=truncation))
+        vrt = self.s.spectogrd(
+            self._vector_analysis_spectra(truncation=truncation, component="vrt")
+        )
         return self._restore_output_dtype(
             vrt + self._planetary_vorticity(omega=omega, materialize=False)
         )
@@ -702,7 +798,11 @@ class VectorWind:
         >>> psi, chi = vw.sfvp()
         >>> psi_t13, chi_t13 = vw.sfvp(truncation=13)
         """
-        psi, chi = self.s.getpsichi(self.u, self.v, ntrunc=truncation)
+        vrtspec, divspec = self._vector_analysis_spectra(truncation=truncation)
+        psi, chi = self.s._spectogrd_pair(
+            self.s._invlapspec(vrtspec, "sfvp"),
+            self.s._invlapspec(divspec, "sfvp"),
+        )
         return self._restore_output_dtype(psi), self._restore_output_dtype(chi)
 
     def streamfunction(self, truncation: Optional[int] = None) -> np.ndarray:
@@ -728,7 +828,12 @@ class VectorWind:
         >>> psi = vw.streamfunction()
         >>> psi_t13 = vw.streamfunction(truncation=13)
         """
-        psi = self.s.getpsi(self.u, self.v, ntrunc=truncation)
+        psi = self.s.spectogrd(
+            self.s._invlapspec(
+                self._vector_analysis_spectra(truncation=truncation, component="vrt"),
+                "streamfunction",
+            )
+        )
         return self._restore_output_dtype(psi)
 
     def velocitypotential(self, truncation: Optional[int] = None) -> np.ndarray:
@@ -754,7 +859,12 @@ class VectorWind:
         >>> chi = vw.velocitypotential()
         >>> chi_t13 = vw.velocitypotential(truncation=13)
         """
-        chi = self.s.getchi(self.u, self.v, ntrunc=truncation)
+        chi = self.s.spectogrd(
+            self.s._invlapspec(
+                self._vector_analysis_spectra(truncation=truncation, component="div"),
+                "velocitypotential",
+            )
+        )
         return self._restore_output_dtype(chi)
 
     def helmholtz(
@@ -792,7 +902,9 @@ class VectorWind:
         >>> u_chi, v_chi, u_psi, v_psi = vw.helmholtz()
         >>> u_chi_t13, v_chi_t13, u_psi_t13, v_psi_t13 = vw.helmholtz(truncation=13)
         """
-        psispec, chispec = self.s.getpsichispec(self.u, self.v, ntrunc=truncation)
+        vrtspec, divspec = self._vector_analysis_spectra(truncation=truncation)
+        psispec = self.s._invlapspec(vrtspec, "helmholtz")
+        chispec = self.s._invlapspec(divspec, "helmholtz")
         v_psi, u_psi = self.s.getgrad(psispec)
         u_chi, v_chi = self.s.getgrad(chispec)
         return (
@@ -836,7 +948,10 @@ class VectorWind:
         >>> u_chi_t13, v_chi_t13 = vw.irrotationalcomponent(truncation=13)
         """
         u_chi, v_chi = self.s.getgrad(
-            self.s.getchispec(self.u, self.v, ntrunc=truncation)
+            self.s._invlapspec(
+                self._vector_analysis_spectra(truncation=truncation, component="div"),
+                "irrotationalcomponent",
+            )
         )
         return self._restore_output_dtype(u_chi), self._restore_output_dtype(v_chi)
 
@@ -873,7 +988,10 @@ class VectorWind:
         >>> u_psi, v_psi = vw.nondivergentcomponent()
         >>> u_psi_t13, v_psi_t13 = vw.nondivergentcomponent(truncation=13)
         """
-        psispec = self.s.getpsispec(self.u, self.v, ntrunc=truncation)
+        psispec = self.s._invlapspec(
+            self._vector_analysis_spectra(truncation=truncation, component="vrt"),
+            "nondivergentcomponent",
+        )
         v_psi, u_psi = self.s.getgrad(psispec)
         return self._restore_output_dtype(-u_psi), self._restore_output_dtype(v_psi)
 
@@ -1018,7 +1136,7 @@ class VectorWind:
         Atmospheric Sciences, 45(7), 1228-1251.
         """
         # Reuse the first vector analysis for both grid-space and spectral terms.
-        vrtspec, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=truncation)
+        vrtspec, divspec = self._vector_analysis_spectra(truncation=truncation)
         vrt, div = self.s._spectogrd_pair(vrtspec, divspec)
         eta = vrt + self._planetary_vorticity(omega=omega, materialize=False)
 
