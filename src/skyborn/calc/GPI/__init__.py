@@ -1,16 +1,18 @@
-"""
-Skyborn Tropical Cyclone Potential Intensity Module
+"""Skyborn Tropical Cyclone Potential Intensity Module.
 
 This module provides optimized Fortran implementations for calculating
 tropical cyclone potential intensity (PI), with high-level Python
 interfaces for multi-dimensional meteorological data handling.
 
-Features:
-- High-performance Fortran implementation with OpenMP support
-- Support for 1D profiles, 3D gridded, and 4D time series data
+Features
+--------
+- High-performance Fortran implementation
+- Support for 1D profiles, 3D gridded fields, and 4D time series data
 - Automatic dimension detection and unit conversion
-- Direct processing of atmospheric profile data
-- XArray integration with metadata preservation
+- Optional profile diagnostics through ``potential_intensity(..., return_diagnostics=True)``
+- Xarray integration with metadata preservation
+
+For successful solves, ``error_flag == 1``.
 
 Physical Basis:
 The potential intensity calculation is based on Emanuel's thermodynamic theory:
@@ -56,15 +58,9 @@ cyclone potential intensity 1. Interannual to interdecadal variability.
 Journal of Geophysical Research, 107(D24), 4801.
 """
 
-# Import xarray submodule for user access
 from . import xarray
-
-# Import high-level Python interface (user-facing API)
 from .interface import potential_intensity
 
 __version__ = "1.0.0"
 
-# Define public API - only high-level numpy interface
-__all__ = [
-    "potential_intensity",
-]
+__all__ = ["potential_intensity"]
