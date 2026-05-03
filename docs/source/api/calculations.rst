@@ -46,9 +46,10 @@ Growth-rate Diagnostics
    atmospheric column, the compiled solver still sweeps many zonal
    wavenumbers and solves a generalized eigenvalue problem for each one, so
    the dominant cost is the repeated linear-algebra solve rather than
-   tropopause diagnosis or pressure interpolation. When ``smooth_window`` is
-   greater than 1, the centered running mean is applied inside the Fortran
-   backend before the final Chemke-style maximum-growth diagnostic is taken.
+   tropopause diagnosis or pressure interpolation. The public default is
+   ``smooth_window=1``; values greater than 1 apply the centered running mean
+   inside the Fortran backend before the final Chemke-style maximum-growth
+   diagnostic is taken.
 
 .. rubric:: References
 
