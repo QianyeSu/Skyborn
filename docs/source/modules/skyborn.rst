@@ -22,7 +22,9 @@ Module Overview
 ---------------
 
 **calc**
-   Statistical calculations and emergent constraint methods for climate data analysis
+   Statistical calculations and emergent constraint methods for climate data
+   analysis, including WMO tropopause diagnostics, geostrophic wind tools, and
+   Chemke-style baroclinic/barotropic growth-rate diagnostics
 
 **gridfill** *(New in v0.3.10)*
    Advanced data interpolation using Poisson equation solvers for filling missing values in gridded data.
@@ -68,6 +70,12 @@ To use any module, import Skyborn and access the module:
 
    # Use calculation functions
    pdf = skb.calc.gaussian_pdf(mu=0, sigma=1, x=x_values)
+
+   # Growth-rate diagnostics
+   sigma_baroc = skb.calc.baroc_growth_rate(
+       u_profile, temperature_profile, pressure_profile, lat=45.0
+   )
+   sigma_barot = skb.calc.barot_growth_rate(u_barotropic_profile, latitudes)
 
    # Fill missing data with GridFill
    from skyborn.gridfill.xarray import fill
