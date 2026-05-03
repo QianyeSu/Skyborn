@@ -18,6 +18,7 @@ import warnings
 import numpy as np
 import xarray as xr
 
+from .fortran.int2p_kernels import dinterp_pressure_1d as _dinterp_pressure_1d
 from .fortran.vinth2p_kernels import (
     ddelta_pressure_hybrid_pa as _ddelta_pressure_hybrid_pa,
 )
@@ -51,6 +52,7 @@ from .fortran.vinth2p_kernels import dvinth2p_nodes_pa as _dvinth2p_nodes_pa
 from .fortran.vinth2p_kernels import dvinth2p_nodes_pa_into as _dvinth2p_nodes_pa_into
 
 __all__ = [
+    "interp_pressure_1d",
     "pressure_at_hybrid_levels",
     "delta_pressure_hybrid",
     "interp_hybrid_to_pressure",
@@ -59,6 +61,7 @@ __all__ = [
 ]
 
 supported_types = typing.Union[xr.DataArray, np.ndarray]
+_PRESSURE_INTERP_SPVL = np.float64(np.finfo(np.float64).max)
 _VINTH2P_SPVL = np.float64(-9.96921e36)
 
 __pres_lev_mandatory__ = np.array(
@@ -191,6 +194,185 @@ def _finalize_hybrid_level_output(
         result = result.transpose(*output_dims)
 
     return result
+
+
+def interp_pressure_1d(
+    x,
+    p_in,
+    p_out,
+    *,
+    method: str = "log",
+    extrapolate: bool = False,
+    missing_value=np.nan,
+):
+    """Interpolate a one-dimensional profile between pressure coordinates.
+
+    Parameters
+    ----------
+    x : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        One-dimensional field values defined on ``p_in``.
+
+    p_in : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        One-dimensional source pressure levels. Values must be strictly
+        monotonic after missing levels are removed.
+
+    p_out : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        One-dimensional target pressure levels. Values may be increasing or
+        decreasing.
+
+    method : {"linear", "log"}, optional
+        Interpolate linearly in pressure or in log-pressure. Defaults to
+        ``"log"``.
+
+    extrapolate : bool, optional
+        If True, use the end slopes to extrapolate outside the valid source
+        pressure range. Defaults to False.
+
+    missing_value : scalar, optional
+        Public missing-value marker. Defaults to ``np.nan``.
+
+    Returns
+    -------
+    :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        Interpolated values on ``p_out``. Xarray inputs return a one-dimensional
+        DataArray with the target pressure coordinate.
+    """
+
+    _require_compiled_interp("interp_pressure_1d", _dinterp_pressure_1d)
+    _reject_lazy_or_unit_backed_inputs("interp_pressure_1d", x, p_in, p_out)
+
+    def is_nan_missing_value(value) -> bool:
+        if value is None:
+            return True
+
+        try:
+            return bool(np.isnan(value))
+        except TypeError:
+            return False
+
+    def pressure_interp_missing_mask(values: np.ndarray) -> np.ndarray:
+        mask = ~np.isfinite(values)
+        if missing_value is not None and not is_nan_missing_value(missing_value):
+            mask |= values == float(missing_value)
+        return mask
+
+    def require_strict_monotonic_pressure(name: str, values: np.ndarray) -> None:
+        if values.size < 2:
+            return
+
+        diffs = np.diff(values)
+        if not (np.all(diffs > 0.0) or np.all(diffs < 0.0)):
+            raise ValueError(
+                f"{name} must be strictly monotonic after missing values are removed"
+            )
+
+    def wrap_pressure_interp_output(values):
+        if not isinstance(x, xr.DataArray):
+            return values
+
+        if isinstance(p_out, xr.DataArray):
+            output_dim = p_out.dims[0]
+            output_coord = xr.DataArray(
+                np.asarray(p_out.data),
+                dims=(output_dim,),
+                attrs=p_out.attrs.copy(),
+            )
+        else:
+            output_dim = x.dims[0]
+            output_coord = xr.DataArray(np.asarray(p_out), dims=(output_dim,))
+
+        return xr.DataArray(
+            np.asarray(values),
+            dims=(output_dim,),
+            coords={output_dim: output_coord},
+            name=x.name,
+            attrs=x.attrs.copy(),
+        )
+
+    normalized_method = method.lower()
+    if normalized_method == "linear":
+        linlog = -1 if extrapolate else 1
+    elif normalized_method == "log":
+        linlog = -2 if extrapolate else 2
+    else:
+        raise ValueError("`method` must be either 'linear' or 'log'")
+
+    x_values = np.asarray(
+        x.data if isinstance(x, xr.DataArray) else x, dtype=np.float64
+    )
+    p_in_values = np.asarray(
+        p_in.data if isinstance(p_in, xr.DataArray) else p_in,
+        dtype=np.float64,
+    )
+    p_out_values = np.asarray(
+        p_out.data if isinstance(p_out, xr.DataArray) else p_out,
+        dtype=np.float64,
+    )
+
+    if x_values.ndim != 1 or p_in_values.ndim != 1 or p_out_values.ndim != 1:
+        raise ValueError("`x`, `p_in`, and `p_out` must each be one-dimensional")
+
+    if x_values.shape != p_in_values.shape:
+        raise ValueError(
+            "`x` and `p_in` must have the same length for pressure interpolation"
+        )
+
+    output_missing = (
+        np.nan if is_nan_missing_value(missing_value) else float(missing_value)
+    )
+    result = np.full(p_out_values.shape, output_missing, dtype=np.float64)
+    if p_out_values.size == 0:
+        return wrap_pressure_interp_output(result)
+
+    input_missing_mask = pressure_interp_missing_mask(
+        x_values
+    ) | pressure_interp_missing_mask(p_in_values)
+    valid_p_in = p_in_values[~input_missing_mask]
+    if valid_p_in.size < 2:
+        raise ValueError(
+            "interp_pressure_1d requires at least two valid input levels after "
+            "missing values are removed"
+        )
+
+    require_strict_monotonic_pressure("`p_in`", valid_p_in)
+
+    output_missing_mask = pressure_interp_missing_mask(p_out_values)
+    valid_p_out = p_out_values[~output_missing_mask]
+    require_strict_monotonic_pressure("`p_out`", valid_p_out)
+
+    if abs(linlog) != 1:
+        if np.any(valid_p_in <= 0.0) or np.any(valid_p_out <= 0.0):
+            raise ValueError(
+                "log-pressure interpolation requires strictly positive pressures"
+            )
+
+    if valid_p_out.size == 0:
+        return wrap_pressure_interp_output(result)
+
+    p_in_work = np.array(p_in_values, dtype=np.float64, copy=True)
+    x_work = np.array(x_values, dtype=np.float64, copy=True)
+    p_out_work = np.array(valid_p_out, dtype=np.float64, copy=True)
+    p_in_work[pressure_interp_missing_mask(p_in_work)] = _PRESSURE_INTERP_SPVL
+    x_work[pressure_interp_missing_mask(x_work)] = _PRESSURE_INTERP_SPVL
+
+    output_valid, ier = _dinterp_pressure_1d(
+        p_in_work,
+        x_work,
+        p_out_work,
+        linlog,
+        _PRESSURE_INTERP_SPVL,
+    )
+    output_valid = np.asarray(output_valid, dtype=np.float64)
+    output_valid[output_valid == _PRESSURE_INTERP_SPVL] = output_missing
+
+    if ier != 0:
+        raise RuntimeError(
+            f"interp_pressure_1d Fortran backend returned ier={ier} for the "
+            "requested pressure interpolation"
+        )
+
+    result[~output_missing_mask] = output_valid
+    return wrap_pressure_interp_output(result)
 
 
 def pressure_at_hybrid_levels(
