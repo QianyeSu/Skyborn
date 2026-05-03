@@ -44,6 +44,7 @@ HEAT_CAPACITY = 1004.7
 KAPPA = GAS_CONSTANT_DRY / HEAT_CAPACITY
 REFERENCE_PRESSURE_PA = 100000.0
 DEFAULT_SOLVER_LEVELS = 45
+DEFAULT_SMOOTH_WINDOW = 1
 
 ProfileInput = xr.DataArray | np.ndarray
 MissingValue = float | int | np.floating | np.integer | None
@@ -254,6 +255,25 @@ def _normalize_solver_levels(solver_levels: int) -> int:
     return normalized
 
 
+def _normalize_smooth_window(smooth_window: int | None) -> int:
+    """Validate the zonal-wavenumber smoothing window for growth spectra."""
+
+    if smooth_window is None:
+        return DEFAULT_SMOOTH_WINDOW
+
+    if isinstance(smooth_window, bool) or not isinstance(
+        smooth_window, (int, np.integer)
+    ):
+        raise TypeError("`smooth_window` must be a positive odd integer or None")
+
+    normalized = int(smooth_window)
+    if normalized < 1:
+        raise ValueError("`smooth_window` must be at least 1")
+    if normalized % 2 == 0:
+        raise ValueError("`smooth_window` must be an odd integer")
+    return normalized
+
+
 def barot_growth_rate(
     u_barotropic: ProfileInput,
     lat: ProfileInput,
@@ -369,6 +389,7 @@ def baroc_growth_rate(
     vertical_interp: str = "log",
     target_pressure: ProfileInput | None = None,
     solver_levels: int = DEFAULT_SOLVER_LEVELS,
+    smooth_window: int | None = None,
     missing_value: MissingValue = np.nan,
 ) -> float:
     r"""Compute the maximum baroclinic normal-mode growth rate.
@@ -411,6 +432,12 @@ def baroc_growth_rate(
         the solver grid is built automatically. Defaults to
         ``DEFAULT_SOLVER_LEVELS``. Ignored when ``target_pressure`` is given
         explicitly.
+
+    smooth_window : int, optional
+        Optional centered running-mean window applied to the growth-rate
+        spectrum over zonal wavenumber inside the compiled Fortran backend
+        before the final maximum-growth diagnostic is taken. ``None`` or ``1``
+        disables smoothing. If given, this must be a positive odd integer.
 
     missing_value : scalar, optional
         Public missing-value marker. If any input value is missing, the
@@ -460,6 +487,10 @@ def baroc_growth_rate(
        B(k) \sim f^2 \partial_p \left(N_z^{-1}\partial_p\right) - k^2,
 
     and the returned value is :math:`\max_k \operatorname{Im}(\lambda_k)`.
+    If ``smooth_window`` is greater than 1, the compiled backend first applies
+    a centered running mean along the discrete zonal-wavenumber spectrum and
+    then evaluates the final Chemke-style turning-point maximum on that
+    smoothed spectrum.
 
     The default ``DEFAULT_SOLVER_LEVELS = 45`` is a practical resolution
     choice, not a formal optimum. Increasing ``solver_levels`` can improve
@@ -518,6 +549,7 @@ def baroc_growth_rate(
 
     _require_monotonic(pressure_pa, "pressure")
     solver_levels = _normalize_solver_levels(solver_levels)
+    smooth_window = _normalize_smooth_window(smooth_window)
 
     target_pressure_pa = _build_solver_pressure_grid_pa(
         pressure_pa,
@@ -566,6 +598,7 @@ def baroc_growth_rate(
         target_pressure_pa,
         temperature_solver,
         float(lat),
+        smooth_window,
     )
     if ier != 0:
         raise RuntimeError(
