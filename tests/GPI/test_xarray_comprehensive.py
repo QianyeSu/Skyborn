@@ -670,10 +670,13 @@ class Test4DCalculations:
             attrs={"units": "K"},
         )
 
-        # This should raise an error because dimension mismatch
-        with pytest.raises(ValueError, match="Unsupported number of dimensions"):
-            # Using potential_intensity which routes to the appropriate function
-            potential_intensity(sst[0], psl[0], levels, temp_3d, mixr[0])
+        # A 3D temperature field is a valid 3D calculation target, so the public
+        # dispatcher should route this case through the 3D backend successfully.
+        result_3d = potential_intensity(sst[0], psl[0], levels, temp_3d, mixr[0])
+        assert isinstance(result_3d, xr.Dataset)
+        assert result_3d.error_flag.values == 1
+        assert result_3d.min_pressure.ndim == 2
+        assert result_3d.pi.ndim == 2
 
         # Test with wrong SST dimensions (2D when expecting 3D for 4D data)
         sst_2d = xr.DataArray(
