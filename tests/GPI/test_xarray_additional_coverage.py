@@ -17,6 +17,37 @@ except ImportError:
 
 
 @pytest.mark.skipif(not _has_xarray, reason="xarray not available")
+class TestCompiledBoundaryHelpers:
+    """Test explicit array materialization helpers used before compiled calls."""
+
+    def test_compiled_float32_array_layout_branches(self):
+        """xarray helper should cover 1D-F, explicit C, and fallback branches."""
+        from skyborn.calc.GPI.xarray import _compiled_float32_array
+
+        arr_f_1d = _compiled_float32_array(np.array([1.0, 2.0, 3.0]), order="F")
+        assert arr_f_1d.dtype == np.float32
+        assert arr_f_1d.flags.c_contiguous
+
+        base = np.arange(12, dtype=np.float64).reshape(3, 4).T
+        arr_c = _compiled_float32_array(base, order="C")
+        assert arr_c.dtype == np.float32
+        assert arr_c.flags.c_contiguous
+
+        arr_default = _compiled_float32_array(
+            np.asfortranarray(np.arange(12).reshape(3, 4))
+        )
+        assert arr_default.dtype == np.float32
+        assert arr_default.flags.f_contiguous or arr_default.flags.c_contiguous
+
+        non_contiguous = np.arange(24, dtype=np.float32).reshape(4, 6)[:, ::2]
+        assert not non_contiguous.flags.c_contiguous
+        assert not non_contiguous.flags.f_contiguous
+        arr_fallback = _compiled_float32_array(non_contiguous)
+        assert arr_fallback.dtype == np.float32
+        assert arr_fallback.flags.c_contiguous
+
+
+@pytest.mark.skipif(not _has_xarray, reason="xarray not available")
 class TestAdditionalUnitConversions:
     """Test additional unit conversion scenarios for complete coverage."""
 
@@ -150,6 +181,31 @@ class TestProfileValidationEdgeCases:
                 mixing_ratio=mixr,
             )
 
+    def test_profile_diagnostics_1d_validation_fails(self):
+        """Diagnostic profile helper should reject non-1D thermodynamic inputs."""
+        from skyborn.calc.GPI.xarray import _potential_intensity_profile_diagnostics
+
+        levels = xr.DataArray(
+            [[1000, 850], [1000, 850]], dims=["x", "level"], attrs={"units": "mb"}
+        )
+        temp = xr.DataArray(
+            [[300, 290], [301, 291]], dims=["x", "level"], attrs={"units": "K"}
+        )
+        mixr = xr.DataArray(
+            [[0.015, 0.010], [0.016, 0.011]],
+            dims=["x", "level"],
+            attrs={"units": "kg/kg"},
+        )
+
+        with pytest.raises(ValueError, match="Only 1D profiles are supported"):
+            _potential_intensity_profile_diagnostics(
+                sst=302.0,
+                psl=101325.0,
+                pressure_levels=levels,
+                temperature=temp,
+                mixing_ratio=mixr,
+            )
+
 
 @pytest.mark.skipif(not _has_xarray, reason="xarray not available")
 class Test3DValidationEdgeCases:
@@ -174,8 +230,8 @@ class Test3DValidationEdgeCases:
         sst = xr.DataArray(np.random.rand(10), dims=["x"], attrs={"units": "K"})
         psl = xr.DataArray(np.random.rand(10), dims=["x"], attrs={"units": "Pa"})
 
-        # This should fail because not enough spatial dimensions (line 791)
-        with pytest.raises(ValueError, match="Expected exactly 2 spatial dimensions"):
+        # The helper rejects non-3D thermodynamic fields before spatial-dim checks.
+        with pytest.raises(ValueError, match="must be 3D arrays"):
             _potential_intensity_3d(sst, psl, levels, temp, mixr)
 
 
@@ -263,8 +319,8 @@ class TestMainInterfaceEdgeCases:
             np.random.rand(10, 12), dims=["lat", "lon"], attrs={"units": "Pa"}
         )
 
-        # Should fail because 2D is not supported (line 967)
-        with pytest.raises(ValueError, match="Could not auto-detect level dimension"):
+        # The public dispatcher rejects unsupported dimensionality directly.
+        with pytest.raises(ValueError, match="Unsupported number of dimensions"):
             potential_intensity(sst, psl, levels, temp_2d, mixr_2d)
 
     def test_unsupported_5d_dimensions(self):
