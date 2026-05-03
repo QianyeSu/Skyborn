@@ -47,6 +47,27 @@ Growth-rate Diagnostics
    repeated linear-algebra solve rather than tropopause diagnosis or pressure
    interpolation.
 
+.. rubric:: References
+
+The current growth-rate implementation is documented against the following
+Chemke publications that are directly related to baroclinic wave growth and
+storm-track changes:
+
+* Chemke, R., and Ming, Y. (2020): *Large Atmospheric Waves Will Get
+  Stronger, While Small Waves Will Get Weaker by the End of the 21st
+  Century*. Geophysical Research Letters, 47, ``e2020GL090441``.
+  https://doi.org/10.1029/2020GL090441
+* Chemke, R., Zanna, L., Orbe, C., Sentman, L. T., and Polvani, L. M.
+  (2022): *The Future Intensification of the North Atlantic Winter Storm
+  Track: The Key Role of Dynamic Ocean Coupling*. Journal of Climate,
+  35(8), 2407-2421. https://doi.org/10.1175/JCLI-D-21-0407.1
+* Chemke, R. (2022): *The future poleward shift of Southern Hemisphere
+  summer mid-latitude storm tracks stems from ocean coupling*. Nature
+  Communications, 13, 2531. https://doi.org/10.1038/s41467-022-29392-4
+* Chemke, R., Ming, Y., and Yuval, J. (2022): *The intensification of
+  winter mid-latitude storm tracks in the Southern Hemisphere*. Nature
+  Climate Change, 12, 553-557. https://doi.org/10.1038/s41558-022-01368-8
+
 Geostrophic Wind Calculations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
