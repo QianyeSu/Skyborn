@@ -25,7 +25,9 @@ Version 0.3.22 (Planned)
   control the automatic pressure-grid resolution without editing module
   constants, and now exposes ``smooth_window`` to apply Chemke-style
   centered running-mean smoothing over zonal wavenumber directly inside the
-  Fortran backend before the final maximum-growth diagnostic is taken
+  Fortran backend before the final maximum-growth diagnostic is taken; the
+  public default is ``smooth_window=1`` to disable smoothing unless the caller
+  explicitly requests an odd window greater than 1
 
 **Bug Fixes**
 
