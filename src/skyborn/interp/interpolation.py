@@ -197,26 +197,27 @@ def _finalize_hybrid_level_output(
 
 
 def interp_pressure_1d(
-    x,
-    p_in,
-    p_out,
+    values=None,
+    source_pressure=None,
+    target_pressure=None,
     *,
     method: str = "log",
     extrapolate: bool = False,
     missing_value=np.nan,
+    **legacy_kwargs,
 ):
     """Interpolate a one-dimensional profile between pressure coordinates.
 
     Parameters
     ----------
-    x : :class:`xarray.DataArray`, :class:`numpy.ndarray`
-        One-dimensional field values defined on ``p_in``.
+    values : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        One-dimensional field values defined on ``source_pressure``.
 
-    p_in : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+    source_pressure : :class:`xarray.DataArray`, :class:`numpy.ndarray`
         One-dimensional source pressure levels. Values must be strictly
         monotonic after missing levels are removed.
 
-    p_out : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+    target_pressure : :class:`xarray.DataArray`, :class:`numpy.ndarray`
         One-dimensional target pressure levels. Values may be increasing or
         decreasing.
 
@@ -234,12 +235,74 @@ def interp_pressure_1d(
     Returns
     -------
     :class:`xarray.DataArray`, :class:`numpy.ndarray`
-        Interpolated values on ``p_out``. Xarray inputs return a one-dimensional
-        DataArray with the target pressure coordinate.
+        Interpolated values on ``target_pressure``. Xarray inputs return a
+        one-dimensional DataArray with the target pressure coordinate.
+
+    Notes
+    -----
+    The legacy keyword aliases ``x``, ``p_in``, and ``p_out`` are still
+    accepted for backward compatibility, but the preferred public parameter
+    names are now ``values``, ``source_pressure``, and ``target_pressure``.
     """
 
+    legacy_name_map = {
+        "x": "values",
+        "p_in": "source_pressure",
+        "p_out": "target_pressure",
+    }
+    for legacy_name, canonical_name in legacy_name_map.items():
+        if legacy_name not in legacy_kwargs:
+            continue
+
+        legacy_value = legacy_kwargs.pop(legacy_name)
+        if canonical_name == "values":
+            if values is not None:
+                raise TypeError(
+                    "interp_pressure_1d() received both `values` and legacy "
+                    f"`{legacy_name}`"
+                )
+            values = legacy_value
+        elif canonical_name == "source_pressure":
+            if source_pressure is not None:
+                raise TypeError(
+                    "interp_pressure_1d() received both `source_pressure` and "
+                    f"legacy `{legacy_name}`"
+                )
+            source_pressure = legacy_value
+        else:
+            if target_pressure is not None:
+                raise TypeError(
+                    "interp_pressure_1d() received both `target_pressure` and "
+                    f"legacy `{legacy_name}`"
+                )
+            target_pressure = legacy_value
+
+    if legacy_kwargs:
+        unexpected = ", ".join(f"`{name}`" for name in sorted(legacy_kwargs))
+        raise TypeError(
+            "interp_pressure_1d() got unexpected keyword argument(s): " f"{unexpected}"
+        )
+
+    missing_arguments = []
+    if values is None:
+        missing_arguments.append("values")
+    if source_pressure is None:
+        missing_arguments.append("source_pressure")
+    if target_pressure is None:
+        missing_arguments.append("target_pressure")
+    if missing_arguments:
+        missing_text = ", ".join(f"`{name}`" for name in missing_arguments)
+        raise TypeError(
+            "interp_pressure_1d() missing required argument(s): " f"{missing_text}"
+        )
+
     _require_compiled_interp("interp_pressure_1d", _dinterp_pressure_1d)
-    _reject_lazy_or_unit_backed_inputs("interp_pressure_1d", x, p_in, p_out)
+    _reject_lazy_or_unit_backed_inputs(
+        "interp_pressure_1d",
+        values,
+        source_pressure,
+        target_pressure,
+    )
 
     def is_nan_missing_value(value) -> bool:
         if value is None:
@@ -266,27 +329,27 @@ def interp_pressure_1d(
                 f"{name} must be strictly monotonic after missing values are removed"
             )
 
-    def wrap_pressure_interp_output(values):
-        if not isinstance(x, xr.DataArray):
-            return values
+    def wrap_pressure_interp_output(output_values):
+        if not isinstance(values, xr.DataArray):
+            return output_values
 
-        if isinstance(p_out, xr.DataArray):
-            output_dim = p_out.dims[0]
+        if isinstance(target_pressure, xr.DataArray):
+            output_dim = target_pressure.dims[0]
             output_coord = xr.DataArray(
-                np.asarray(p_out.data),
+                np.asarray(target_pressure.data),
                 dims=(output_dim,),
-                attrs=p_out.attrs.copy(),
+                attrs=target_pressure.attrs.copy(),
             )
         else:
-            output_dim = x.dims[0]
-            output_coord = xr.DataArray(np.asarray(p_out), dims=(output_dim,))
+            output_dim = values.dims[0]
+            output_coord = xr.DataArray(np.asarray(target_pressure), dims=(output_dim,))
 
         return xr.DataArray(
-            np.asarray(values),
+            np.asarray(output_values),
             dims=(output_dim,),
             coords={output_dim: output_coord},
-            name=x.name,
-            attrs=x.attrs.copy(),
+            name=values.name,
+            attrs=values.attrs.copy(),
         )
 
     normalized_method = method.lower()
@@ -297,68 +360,87 @@ def interp_pressure_1d(
     else:
         raise ValueError("`method` must be either 'linear' or 'log'")
 
-    x_values = np.asarray(
-        x.data if isinstance(x, xr.DataArray) else x, dtype=np.float64
-    )
-    p_in_values = np.asarray(
-        p_in.data if isinstance(p_in, xr.DataArray) else p_in,
+    values_array = np.asarray(
+        values.data if isinstance(values, xr.DataArray) else values,
         dtype=np.float64,
     )
-    p_out_values = np.asarray(
-        p_out.data if isinstance(p_out, xr.DataArray) else p_out,
+    source_pressure_array = np.asarray(
+        (
+            source_pressure.data
+            if isinstance(source_pressure, xr.DataArray)
+            else source_pressure
+        ),
+        dtype=np.float64,
+    )
+    target_pressure_array = np.asarray(
+        (
+            target_pressure.data
+            if isinstance(target_pressure, xr.DataArray)
+            else target_pressure
+        ),
         dtype=np.float64,
     )
 
-    if x_values.ndim != 1 or p_in_values.ndim != 1 or p_out_values.ndim != 1:
-        raise ValueError("`x`, `p_in`, and `p_out` must each be one-dimensional")
-
-    if x_values.shape != p_in_values.shape:
+    if (
+        values_array.ndim != 1
+        or source_pressure_array.ndim != 1
+        or target_pressure_array.ndim != 1
+    ):
         raise ValueError(
-            "`x` and `p_in` must have the same length for pressure interpolation"
+            "`values`, `source_pressure`, and `target_pressure` must each be "
+            "one-dimensional"
+        )
+
+    if values_array.shape != source_pressure_array.shape:
+        raise ValueError(
+            "`values` and `source_pressure` must have the same length for "
+            "pressure interpolation"
         )
 
     output_missing = (
         np.nan if is_nan_missing_value(missing_value) else float(missing_value)
     )
-    result = np.full(p_out_values.shape, output_missing, dtype=np.float64)
-    if p_out_values.size == 0:
+    result = np.full(target_pressure_array.shape, output_missing, dtype=np.float64)
+    if target_pressure_array.size == 0:
         return wrap_pressure_interp_output(result)
 
     input_missing_mask = pressure_interp_missing_mask(
-        x_values
-    ) | pressure_interp_missing_mask(p_in_values)
-    valid_p_in = p_in_values[~input_missing_mask]
-    if valid_p_in.size < 2:
+        values_array
+    ) | pressure_interp_missing_mask(source_pressure_array)
+    valid_source_pressure = source_pressure_array[~input_missing_mask]
+    if valid_source_pressure.size < 2:
         raise ValueError(
             "interp_pressure_1d requires at least two valid input levels after "
             "missing values are removed"
         )
 
-    require_strict_monotonic_pressure("`p_in`", valid_p_in)
+    require_strict_monotonic_pressure("`source_pressure`", valid_source_pressure)
 
-    output_missing_mask = pressure_interp_missing_mask(p_out_values)
-    valid_p_out = p_out_values[~output_missing_mask]
-    require_strict_monotonic_pressure("`p_out`", valid_p_out)
+    output_missing_mask = pressure_interp_missing_mask(target_pressure_array)
+    valid_target_pressure = target_pressure_array[~output_missing_mask]
+    require_strict_monotonic_pressure("`target_pressure`", valid_target_pressure)
 
     if abs(linlog) != 1:
-        if np.any(valid_p_in <= 0.0) or np.any(valid_p_out <= 0.0):
+        if np.any(valid_source_pressure <= 0.0) or np.any(valid_target_pressure <= 0.0):
             raise ValueError(
                 "log-pressure interpolation requires strictly positive pressures"
             )
 
-    if valid_p_out.size == 0:
+    if valid_target_pressure.size == 0:
         return wrap_pressure_interp_output(result)
 
-    p_in_work = np.array(p_in_values, dtype=np.float64, copy=True)
-    x_work = np.array(x_values, dtype=np.float64, copy=True)
-    p_out_work = np.array(valid_p_out, dtype=np.float64, copy=True)
-    p_in_work[pressure_interp_missing_mask(p_in_work)] = _PRESSURE_INTERP_SPVL
-    x_work[pressure_interp_missing_mask(x_work)] = _PRESSURE_INTERP_SPVL
+    source_pressure_work = np.array(source_pressure_array, dtype=np.float64, copy=True)
+    values_work = np.array(values_array, dtype=np.float64, copy=True)
+    target_pressure_work = np.array(valid_target_pressure, dtype=np.float64, copy=True)
+    source_pressure_work[pressure_interp_missing_mask(source_pressure_work)] = (
+        _PRESSURE_INTERP_SPVL
+    )
+    values_work[pressure_interp_missing_mask(values_work)] = _PRESSURE_INTERP_SPVL
 
     output_valid, ier = _dinterp_pressure_1d(
-        p_in_work,
-        x_work,
-        p_out_work,
+        source_pressure_work,
+        values_work,
+        target_pressure_work,
         linlog,
         _PRESSURE_INTERP_SPVL,
     )
