@@ -30,12 +30,13 @@ Growth-rate Diagnostics
 
    When ``target_pressure`` is omitted, the function diagnoses the WMO
    tropopause pressure and builds a fixed solver grid with
-   ``DEFAULT_SOLVER_LEVELS = 45`` between that tropopause and the lower
+   ``solver_levels=45`` by default between that tropopause and the lower
    troposphere. This is a practical resolution choice for the compiled
-   eigenvalue problem, not a universal optimum: increasing the level count can
-   improve vertical-grid convergence up to a point, but it also raises the
-   per-profile cost and is not automatically better once the solution is
-   converged.
+   eigenvalue problem, not a universal optimum: increasing ``solver_levels``
+   can improve vertical-grid convergence up to a point, but it also raises
+   the per-profile cost and is not automatically better once the solution is
+   converged. If you want full control over the vertical solver grid, pass
+   ``target_pressure`` explicitly instead.
 
 Geostrophic Wind Calculations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
