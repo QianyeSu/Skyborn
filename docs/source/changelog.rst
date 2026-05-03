@@ -23,7 +23,9 @@ Version 0.3.22 (Planned)
   preserving the older ``values`` keyword and the other legacy aliases;
   ``baroc_growth_rate`` now also exposes ``solver_levels`` so callers can
   control the automatic pressure-grid resolution without editing module
-  constants
+  constants, and now exposes ``smooth_window`` to apply Chemke-style
+  centered running-mean smoothing over zonal wavenumber directly inside the
+  Fortran backend before the final maximum-growth diagnostic is taken
 
 **Bug Fixes**
 
