@@ -20,7 +20,10 @@ Version 0.3.22 (Planned)
   alias, and renamed the public ``interp_pressure_1d`` parameter names
   from ``x`` / ``p_in`` / ``p_out`` to the clearer
   ``data`` / ``source_pressure`` / ``target_pressure`` while
-  preserving the older ``values`` keyword and the other legacy aliases
+  preserving the older ``values`` keyword and the other legacy aliases;
+  ``baroc_growth_rate`` now also exposes ``solver_levels`` so callers can
+  control the automatic pressure-grid resolution without editing module
+  constants
 
 **Bug Fixes**
 
