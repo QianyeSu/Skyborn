@@ -25,7 +25,6 @@ from skyborn.calc.GPI.interface import (
     calculate_potential_intensity_3d,
     calculate_potential_intensity_4d,
     calculate_potential_intensity_profile,
-    calculate_potential_intensity_profile_complete,
     log_decompose_pi,
     pi_log_decomposition,
     potential_intensity,
@@ -84,7 +83,7 @@ class TestHelperUtilities:
             _normalize_outflow_source("bad_mode")
 
     def test_maybe_scalar(self):
-        """0D arrays should collapse to Python scalars while arrays stay arrays."""
+        """0D arrays should collapse while regular arrays stay arrays."""
         assert _maybe_scalar(np.asarray(3.5)) == 3.5
         arr = np.array([1.0, 2.0])
         result = _maybe_scalar(arr)
@@ -129,7 +128,7 @@ class TestHelperUtilities:
             log_decompose_pi(10.0, 300.0, 200.0, sst_units="degF")
 
     def test_log_decompose_pi_celsius_scalar(self):
-        """Celsius SST inputs should be converted to Kelvin internally."""
+        """Celsius SST inputs should be converted internally."""
         lnpi, lneff, lndiseq, lnckcd = log_decompose_pi(
             20.0, 27.0, 200.0, CKCD=0.9, sst_units="C"
         )
@@ -617,36 +616,28 @@ class TestCalculatePotentialIntensityProfile:
         assert isinstance(max_w, (float, np.floating))
         assert err == 1
 
-    def test_profile_return_diagnostics_and_log_decomposition(self):
-        """Profile diagnostics should be exposed from the main profile API."""
+    def test_profile_log_decomposition(self):
+        """Profile diagnostics should be exposed from the explicit decomposition API."""
         sst = 300.0
         psl = 101325.0
         pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
         temp = np.array([300.0, 285.0, 270.0, 250.0])
         mixr = np.array([0.012, 0.008, 0.005, 0.003])
 
-        complete = calculate_potential_intensity_profile(
+        complete = pi_log_decomposition(
             sst,
             psl,
             pressure_levels,
             temp,
             mixr,
-            return_diagnostics=True,
             outflow_source="cape_env",
         )
         assert complete["error_flag"] == 1
         assert np.isfinite(complete["max_wind"])
         assert np.isfinite(complete["min_pressure"])
-        assert np.isfinite(complete["outflow_temp"])
-        assert np.isfinite(complete["outflow_level"])
+        assert np.isfinite(complete["t0"])
+        assert np.isfinite(complete["otl"])
         assert np.isfinite(complete["lnCKCD"])
-
-        decomposed = pi_log_decomposition(
-            sst, psl, pressure_levels, temp, mixr, outflow_source="cape_star"
-        )
-        for key in ["lnpi", "lneff", "lndiseq", "lnCKCD"]:
-            assert key in decomposed
-        assert np.isfinite(decomposed["lnCKCD"])
 
     def test_profile_undef_result(self):
         """Test profile calculation with extreme values that might return UNDEF."""
@@ -679,13 +670,12 @@ class TestCalculatePotentialIntensityProfile:
         mixr = np.array([0.012, 0.008, 0.005])
 
         with pytest.raises(ValueError, match="Profile lengths mismatch"):
-            calculate_potential_intensity_profile(
+            pi_log_decomposition(
                 sst,
                 psl,
                 pressure_levels,
                 temp,
                 mixr,
-                return_diagnostics=True,
             )
 
         with pytest.raises(ValueError, match="Invalid outflow_source"):
@@ -756,6 +746,27 @@ class TestPotentialIntensityCalculator:
         assert max_w.shape == (ntimes, nlat, nlon)
         assert err == 1
 
+    def test_4d_data_diagnostics(self):
+        """Calculator diagnostics should expose 4D decomposition fields."""
+        ntimes, nlat, nlon = 2, 4, 5
+        num_levels = 4
+        sst = np.random.rand(ntimes, nlat, nlon) * 5.0 + 298.0
+        psl = np.random.rand(ntimes, nlat, nlon) * 1500.0 + 100000.0
+        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
+        temp = np.empty((ntimes, num_levels, nlat, nlon), dtype=float)
+        mixr = np.empty_like(temp)
+        base_temp = np.array([300.0, 288.0, 275.0, 255.0])
+        base_mixr = np.array([0.016, 0.010, 0.006, 0.0025])
+        for i in range(num_levels):
+            temp[:, i] = base_temp[i] + np.random.rand(ntimes, nlat, nlon) * 2.0
+            mixr[:, i] = base_mixr[i] + np.random.rand(ntimes, nlat, nlon) * 0.001
+
+        calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
+        result = calc.diagnostics()
+        assert result["max_wind"].shape == (ntimes, nlat, nlon)
+        assert result["lndiseq"].shape == (ntimes, nlat, nlon)
+        assert np.isfinite(result["lnCKCD"])
+
     def test_profile_data_detection(self):
         """Test automatic detection of profile data."""
         sst = 300.0
@@ -775,11 +786,13 @@ class TestPotentialIntensityCalculator:
         assert err == 1
 
     def test_diagnostics_require_profile_input(self):
-        """Class helper should reject non-profile inputs."""
+        """Class helper should support gridded diagnostics."""
         sst, psl, pressure_levels, temp, mixr = self._realistic_3d_inputs()
         calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
-        with pytest.raises(ValueError, match="only available for profile data"):
-            calc.calculate(return_diagnostics=True)
+        result = calc.diagnostics()
+        assert result["max_wind"].shape == sst.shape
+        assert result["t0"].shape == sst.shape
+        assert np.isfinite(result["lnCKCD"])
 
     def test_diagnostics_results_cache(self):
         """Class helper should cache full profile diagnostics."""
@@ -790,15 +803,15 @@ class TestPotentialIntensityCalculator:
             np.array([300.0, 285.0, 270.0, 250.0]),
             np.array([0.012, 0.008, 0.005, 0.003]),
         )
-        result = calc.calculate(return_diagnostics=True, outflow_source="cape_env")
+        result = calc.diagnostics(outflow_source="cape_env")
         assert result["error_flag"] == 1
         assert calc.results is not None
         assert calc.results["data_type"] == "profile"
-        assert "outflow_temp" in calc.results
+        assert "t0" in calc.results
         assert "lnpi" in calc.results
 
-    def test_diagnostics_method_and_compat_alias(self):
-        """Class diagnostics helpers should remain available for compatibility."""
+    def test_diagnostics_method(self):
+        """Class diagnostics helper should delegate to the main entry point."""
         calc = PotentialIntensityCalculator(
             300.0,
             101325.0,
@@ -807,10 +820,33 @@ class TestPotentialIntensityCalculator:
             np.array([0.012, 0.008, 0.005, 0.003]),
         )
         direct = calc.diagnostics(outflow_source="cape_star")
-        compat = calc.calculate_complete_profile(outflow_source="cape_star")
         assert direct["error_flag"] == 1
-        assert compat["error_flag"] == 1
-        assert direct["lnCKCD"] == compat["lnCKCD"]
+        assert np.isfinite(direct["lnCKCD"])
+
+    def test_gridded_diagnostics_helpers(self):
+        """Explicit decomposition helper should return full 3D/4D fields."""
+        sst3, psl3, levels3, temp3, mixr3 = self._realistic_3d_inputs()
+        diag3 = pi_log_decomposition(sst3, psl3, levels3, temp3, mixr3)
+        assert diag3["max_wind"].shape == sst3.shape
+        assert diag3["lnpi"].shape == sst3.shape
+        assert np.isfinite(diag3["lnCKCD"])
+
+        ntimes, nlat, nlon = 2, 4, 5
+        levels4 = np.array([1000.0, 850.0, 700.0, 500.0])
+        sst4 = np.random.rand(ntimes, nlat, nlon) * 5.0 + 298.0
+        psl4 = np.random.rand(ntimes, nlat, nlon) * 1500.0 + 100000.0
+        temp4 = np.empty((ntimes, len(levels4), nlat, nlon), dtype=float)
+        mixr4 = np.empty_like(temp4)
+        base_temp = np.array([300.0, 288.0, 275.0, 255.0])
+        base_mixr = np.array([0.016, 0.010, 0.006, 0.0025])
+        for i in range(len(levels4)):
+            temp4[:, i] = base_temp[i] + np.random.rand(ntimes, nlat, nlon) * 2.0
+            mixr4[:, i] = base_mixr[i] + np.random.rand(ntimes, nlat, nlon) * 0.001
+
+        diag4 = pi_log_decomposition(sst4, psl4, levels4, temp4, mixr4)
+        assert diag4["max_wind"].shape == sst4.shape
+        assert diag4["otl"].shape == sst4.shape
+        assert np.isfinite(diag4["lnCKCD"])
 
     def test_unsupported_dimensions(self):
         """Test error on unsupported dimensions."""
@@ -907,22 +943,21 @@ class TestPotentialIntensityConvenienceFunction:
         assert isinstance(max_w, (float, np.floating))
         assert err == 1
 
-    def test_profile_data_return_diagnostics(self):
-        """Convenience function should expose diagnostics for profile input."""
-        result = potential_intensity(
+    def test_profile_data_log_decomposition(self):
+        """Explicit decomposition helper should expose profile diagnostics."""
+        result = pi_log_decomposition(
             300.0,
             101325.0,
             np.array([1000.0, 850.0, 700.0, 500.0]),
             np.array([300.0, 285.0, 270.0, 250.0]),
             np.array([0.012, 0.008, 0.005, 0.003]),
-            return_diagnostics=True,
             outflow_source="cape_env",
         )
 
         assert result["error_flag"] == 1
         for key in [
-            "outflow_temp",
-            "outflow_level",
+            "t0",
+            "otl",
             "lnpi",
             "lneff",
             "lndiseq",
@@ -930,35 +965,61 @@ class TestPotentialIntensityConvenienceFunction:
         ]:
             assert key in result
 
-    def test_profile_complete_function_compatibility_wrapper(self):
-        """Legacy complete-profile wrapper should mirror the main diagnostics API."""
-        direct = potential_intensity(
-            300.0,
-            101325.0,
-            np.array([1000.0, 850.0, 700.0, 500.0]),
-            np.array([300.0, 285.0, 270.0, 250.0]),
-            np.array([0.012, 0.008, 0.005, 0.003]),
-            return_diagnostics=True,
-            outflow_source="cape_env",
-        )
-        compat = calculate_potential_intensity_profile_complete(
-            300.0,
-            101325.0,
-            np.array([1000.0, 850.0, 700.0, 500.0]),
-            np.array([300.0, 285.0, 270.0, 250.0]),
-            np.array([0.012, 0.008, 0.005, 0.003]),
-            outflow_source="cape_env",
-        )
+    def test_3d_data_log_decomposition(self):
+        """Explicit decomposition helper should expose diagnostics for 3D input."""
+        nlat, nlon = 6, 7
+        (
+            sst,
+            psl,
+            pressure_levels,
+            temp,
+            mixr,
+        ) = TestPotentialIntensityCalculator._realistic_3d_inputs(nlat, nlon)
+        result = pi_log_decomposition(sst, psl, pressure_levels, temp, mixr)
+        assert result["max_wind"].shape == (nlat, nlon)
+        assert result["lnpi"].shape == (nlat, nlon)
+        assert np.isfinite(result["lnCKCD"])
 
-        assert compat["error_flag"] == 1
-        for key in [
-            "min_pressure",
-            "max_wind",
-            "error_flag",
-            "outflow_temp",
-            "outflow_level",
-        ]:
-            assert np.isclose(compat[key], direct[key], equal_nan=True)
+    def test_4d_data_log_decomposition(self):
+        """Explicit decomposition helper should expose diagnostics for 4D input."""
+        ntimes, nlat, nlon = 2, 4, 5
+        num_levels = 4
+        sst = np.random.rand(ntimes, nlat, nlon) * 5.0 + 298.0
+        psl = np.random.rand(ntimes, nlat, nlon) * 1500.0 + 100000.0
+        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
+        temp = np.empty((ntimes, num_levels, nlat, nlon), dtype=float)
+        mixr = np.empty_like(temp)
+        base_temp = np.array([300.0, 288.0, 275.0, 255.0])
+        base_mixr = np.array([0.016, 0.010, 0.006, 0.0025])
+        for i in range(num_levels):
+            temp[:, i] = base_temp[i] + np.random.rand(ntimes, nlat, nlon) * 2.0
+            mixr[:, i] = base_mixr[i] + np.random.rand(ntimes, nlat, nlon) * 0.001
+        result = pi_log_decomposition(sst, psl, pressure_levels, temp, mixr)
+        assert result["max_wind"].shape == (ntimes, nlat, nlon)
+        assert result["t0"].shape == (ntimes, nlat, nlon)
+        assert np.isfinite(result["lnCKCD"])
+
+    def test_unsupported_dimensions_raise_from_convenience_function(self):
+        """Convenience function should reject unsupported dimensionality."""
+        with pytest.raises(ValueError, match="Unsupported temperature dimensions"):
+            potential_intensity(
+                np.random.rand(3, 4),
+                np.random.rand(3, 4),
+                np.array([1000.0, 850.0]),
+                np.random.rand(3, 4),
+                np.random.rand(3, 4),
+            )
+
+    def test_pi_log_decomposition_rejects_unsupported_dimensions(self):
+        """Explicit decomposition helper should reject 2D thermodynamic input."""
+        with pytest.raises(ValueError, match="Unsupported temperature dimensions"):
+            pi_log_decomposition(
+                np.random.rand(3, 4),
+                np.random.rand(3, 4),
+                np.array([1000.0, 850.0]),
+                np.random.rand(3, 4),
+                np.random.rand(3, 4),
+            )
 
 
 # Integration tests
