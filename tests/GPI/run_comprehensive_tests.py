@@ -424,11 +424,11 @@ def calculate_coverage():
                 f"\nOverall GPI module coverage: {overall_coverage:.1f}% ({executed_lines}/{total_lines} lines)"
             )
 
-            if overall_coverage >= 96:
-                print("PASS: Coverage goal of 96% achieved!")
+            if overall_coverage >= 100:
+                print("PASS: Coverage goal of 100% achieved!")
             else:
-                needed = int(0.96 * total_lines) - executed_lines
-                print(f"FAIL: Need to cover {needed} more lines to reach 96% coverage")
+                needed = total_lines - executed_lines
+                print(f"FAIL: Need to cover {needed} more lines to reach 100% coverage")
 
     except ImportError:
         print("! coverage package not available")
