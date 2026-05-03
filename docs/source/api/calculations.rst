@@ -40,12 +40,15 @@ Growth-rate Diagnostics
 
    In the original Chemke-style analysis scripts, a parameter named
    ``window_size`` is often used for a centered running mean applied to the
-   growth-rate spectrum over zonal wavenumber. That smoothing width is not the
-   same thing as ``solver_levels``. Even for a single atmospheric column, the
-   compiled solver still sweeps many zonal wavenumbers and solves a
-   generalized eigenvalue problem for each one, so the dominant cost is the
-   repeated linear-algebra solve rather than tropopause diagnosis or pressure
-   interpolation.
+   growth-rate spectrum over zonal wavenumber. In Skyborn this role is
+   represented by ``smooth_window`` in ``baroc_growth_rate``. That smoothing
+   width is not the same thing as ``solver_levels``. Even for a single
+   atmospheric column, the compiled solver still sweeps many zonal
+   wavenumbers and solves a generalized eigenvalue problem for each one, so
+   the dominant cost is the repeated linear-algebra solve rather than
+   tropopause diagnosis or pressure interpolation. When ``smooth_window`` is
+   greater than 1, the centered running mean is applied inside the Fortran
+   backend before the final Chemke-style maximum-growth diagnostic is taken.
 
 .. rubric:: References
 
