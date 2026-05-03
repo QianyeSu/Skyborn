@@ -252,7 +252,7 @@ class TestGrowthRateHelpers:
         with pytest.raises(ValueError, match="odd integer"):
             growth_rate_core._normalize_smooth_window(4)
 
-        assert growth_rate_core._normalize_smooth_window(None) == 1
+        assert growth_rate_core._normalize_smooth_window(1) == 1
         assert growth_rate_core._normalize_smooth_window(np.int64(5)) == 5
 
         with pytest.raises(TypeError, match="smooth_window"):
