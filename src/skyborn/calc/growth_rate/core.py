@@ -1,22 +1,32 @@
-"""Chemke-style baroclinic and barotropic growth-rate diagnostics."""
+"""Chemke-style baroclinic and barotropic growth-rate diagnostics.
+
+This module prepares one-dimensional atmospheric profiles in Python and
+dispatches the expensive normal-mode solves to the compiled Fortran kernels in
+``skyborn.calc.growth_rate.growth_rate_kernels``.
+
+References
+----------
+Chemke, R., and Polvani, L. M. (2020):
+    Exploiting the Abrupt 4 x CO2 Scenario to Elucidate Tropical Expansion
+    Mechanisms. Journal of Climate, 32(3), 859-875.
+    https://doi.org/10.1175/JCLI-D-18-0330.1
+
+Chemke, R., Ming, Y., and Yuval, J. (2022):
+    The intensification of winter mid-latitude storm tracks in the Southern
+    Hemisphere. Nature Climate Change, 12, 553-557.
+    https://doi.org/10.1038/s41558-022-01368-8
+"""
 
 from __future__ import annotations
 
 import numpy as np
+import xarray as xr
 
 from skyborn.interp.interpolation import interp_pressure_1d
 
-try:
-    from ..troposphere import trop_wmo_profile as _trop_wmo_profile
-except ImportError:
-    _trop_wmo_profile = None
-
-try:
-    from .growth_rate_kernels import dbaroc_growth_rate_1d as _dbaroc_growth_rate_1d
-    from .growth_rate_kernels import dbarot_growth_rate_1d as _dbarot_growth_rate_1d
-except ImportError:
-    _dbaroc_growth_rate_1d = None
-    _dbarot_growth_rate_1d = None
+from ..troposphere import trop_wmo_profile as _trop_wmo_profile
+from .growth_rate_kernels import dbaroc_growth_rate_1d as _dbaroc_growth_rate_1d
+from .growth_rate_kernels import dbarot_growth_rate_1d as _dbarot_growth_rate_1d
 
 GAS_CONSTANT_DRY = 287.04
 HEAT_CAPACITY = 1004.7
@@ -24,24 +34,17 @@ KAPPA = GAS_CONSTANT_DRY / HEAT_CAPACITY
 REFERENCE_PRESSURE_PA = 100000.0
 DEFAULT_SOLVER_LEVELS = 45
 
+ProfileInput = xr.DataArray | np.ndarray
+MissingValue = float | int | np.floating | np.integer | None
+
 __all__ = [
     "baroc_growth_rate",
     "barot_growth_rate",
 ]
 
 
-def _require_growth_rate_backend(function_name: str, handle) -> None:
-    """Raise a clear error when the compiled growth-rate backend is unavailable."""
-
-    if handle is None:
-        raise RuntimeError(
-            f"{function_name} requires the compiled Fortran backend in "
-            "`skyborn.calc.growth_rate.growth_rate_kernels`."
-        )
-
-
-def _as_1d_float64(values, name: str) -> np.ndarray:
-    """Convert one-dimensional inputs to eager float64 NumPy arrays."""
+def _as_1d_float64(values: ProfileInput, name: str) -> np.ndarray:
+    """Convert one-dimensional eager inputs to ``float64`` NumPy arrays."""
 
     array = np.asarray(getattr(values, "data", values), dtype=np.float64)
     if array.ndim != 1:
@@ -49,8 +52,8 @@ def _as_1d_float64(values, name: str) -> np.ndarray:
     return np.array(array, dtype=np.float64, copy=True)
 
 
-def _same_shape_or_raise(*named_arrays) -> None:
-    """Validate that all named 1D arrays have identical shapes."""
+def _same_shape_or_raise(*named_arrays: tuple[str, np.ndarray]) -> None:
+    """Validate that all named one-dimensional arrays have identical shapes."""
 
     names = [name for name, _ in named_arrays]
     arrays = [array for _, array in named_arrays]
@@ -66,27 +69,27 @@ def _same_shape_or_raise(*named_arrays) -> None:
             )
 
 
-def _is_nan_missing_value(value) -> bool:
+def _is_nan_missing_value(value: MissingValue) -> bool:
     """Return True when ``value`` behaves like a NaN missing sentinel."""
 
     if value is None:
         return True
 
-    try:
+    if isinstance(value, (float, int, np.floating, np.integer)):
         return bool(np.isnan(value))
-    except TypeError:
-        return False
+
+    return False
 
 
-def _return_missing_value(missing_value):
-    """Return a normalized scalar missing value for public APIs."""
+def _return_missing_value(missing_value: MissingValue) -> float:
+    """Return a normalized scalar missing value for the public APIs."""
 
     if _is_nan_missing_value(missing_value):
         return float("nan")
     return float(missing_value)
 
 
-def _contains_missing(values: np.ndarray, missing_value) -> bool:
+def _contains_missing(values: np.ndarray, missing_value: MissingValue) -> bool:
     """Return True when an input profile contains missing values."""
 
     if np.any(~np.isfinite(values)):
@@ -104,7 +107,7 @@ def _require_monotonic(values: np.ndarray, name: str) -> None:
         raise ValueError(f"`{name}` must be strictly monotonic")
 
 
-def _pressure_to_pa(pressure) -> np.ndarray:
+def _pressure_to_pa(pressure: ProfileInput) -> np.ndarray:
     """Convert a pressure axis from Pa-or-hPa input to Pascals."""
 
     pressure_values = _as_1d_float64(pressure, "pressure")
@@ -116,8 +119,8 @@ def _pressure_to_pa(pressure) -> np.ndarray:
     return pressure_values
 
 
-def _target_pressure_to_pa(target_pressure) -> np.ndarray:
-    """Convert explicit target pressure levels to Pascals."""
+def _target_pressure_to_pa(target_pressure: ProfileInput) -> np.ndarray:
+    """Convert explicit target pressure levels from Pa-or-hPa to Pascals."""
 
     target_values = _as_1d_float64(target_pressure, "target_pressure")
     if np.any(target_values <= 0.0):
@@ -129,7 +132,7 @@ def _target_pressure_to_pa(target_pressure) -> np.ndarray:
 
 
 def _normalize_output_units(output_units: str) -> str:
-    """Normalize public output-unit labels."""
+    """Normalize public output-unit aliases to one canonical label."""
 
     normalized = output_units.strip().lower()
     if normalized in {"s^-1", "s-1", "1/s"}:
@@ -149,7 +152,7 @@ def _convert_output_units(value: float, output_units: str) -> float:
 
 
 def _normalize_vertical_interp(method: str) -> str:
-    """Map public vertical interpolation aliases to interp_pressure_1d modes."""
+    """Map public vertical interpolation aliases to ``interp_pressure_1d`` modes."""
 
     normalized = method.strip().lower().replace("_", "")
     if normalized in {"logp", "log"}:
@@ -164,13 +167,6 @@ def _infer_tropopause_pressure_pa(
     pressure_pa: np.ndarray,
 ) -> float:
     """Diagnose tropopause pressure from the input sounding via WMO criteria."""
-
-    if _trop_wmo_profile is None:
-        raise RuntimeError(
-            "Automatic tropopause detection requires the compiled "
-            "`skyborn.calc.troposphere` backend. Provide "
-            "`tropopause_pressure` explicitly if that backend is unavailable."
-        )
 
     pressure_for_tropopause = np.array(pressure_pa, dtype=np.float64, copy=True)
     temperature_for_tropopause = np.array(temperature, dtype=np.float64, copy=True)
@@ -192,36 +188,121 @@ def _infer_tropopause_pressure_pa(
     ):
         raise RuntimeError(
             "Automatic WMO tropopause detection did not return a usable "
-            "tropopause pressure for this profile; provide "
-            "`tropopause_pressure` explicitly."
+            "tropopause pressure for this profile."
         )
 
     return tropopause_pressure_hpa * 100.0
 
 
+def _build_solver_pressure_grid_pa(
+    pressure_pa: np.ndarray,
+    temperature: np.ndarray,
+    target_pressure: ProfileInput | None,
+) -> np.ndarray:
+    """Build the solver pressure grid in Pascals."""
+
+    if target_pressure is not None:
+        target_pressure_pa = _target_pressure_to_pa(target_pressure)
+        _require_monotonic(target_pressure_pa, "target_pressure")
+        return target_pressure_pa
+
+    tropopause_pressure_pa = _infer_tropopause_pressure_pa(
+        temperature,
+        pressure_pa,
+    )
+    bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
+    if tropopause_pressure_pa >= bottom_pressure_pa:
+        raise ValueError(
+            "The diagnosed tropopause pressure must be lower than the lower-"
+            "tropospheric pressure bound used by the solver grid."
+        )
+
+    return np.linspace(
+        tropopause_pressure_pa,
+        bottom_pressure_pa,
+        DEFAULT_SOLVER_LEVELS,
+        dtype=np.float64,
+    )
+
+
 def barot_growth_rate(
-    u_barotropic,
-    lat,
+    u_barotropic: ProfileInput,
+    lat: ProfileInput,
     *,
     output_units: str = "s-1",
     radius: float = 6_371_000.0,
     omega: float = 7.292e-5,
-    missing_value=np.nan,
-):
-    """Compute maximum barotropic growth rate from ``U(lat)``.
+    missing_value: MissingValue = np.nan,
+) -> float:
+    r"""Compute the maximum barotropic normal-mode growth rate from ``U(lat)``.
+
+    Parameters
+    ----------
+    u_barotropic : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        One-dimensional vertically averaged zonal-wind profile in ``m s^-1``.
+
+    lat : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        One-dimensional latitude coordinate in degrees north. Values must be
+        strictly monotonic.
+
+    output_units : {"s^-1", "day^-1"}, optional
+        Output units for the returned maximum growth rate. Defaults to
+        ``"s-1"``.
+
+    radius : float, optional
+        Earth radius in meters. Only the default value is currently supported
+        by the compiled kernel.
+
+    omega : float, optional
+        Planetary rotation rate in ``s^-1``. Only the default value is
+        currently supported by the compiled kernel.
+
+    missing_value : scalar, optional
+        Public missing-value marker. If any input value is missing, the
+        function returns this marker normalized to ``float``. Defaults to
+        ``np.nan``.
+
+    Returns
+    -------
+    float
+        Maximum barotropic growth rate in the requested units.
 
     Notes
     -----
-    This first implementation follows the Chemke-style one-dimensional
-    normal-mode problem directly. It expects a single latitude profile and does
-    not yet provide xarray batch dispatch.
+    This diagnostic solves the finite-difference generalized eigenproblem
+
+    .. math::
+
+       A(k)\psi = \lambda B(k)\psi
+
+    for each zonal wavenumber :math:`k`, where the continuous barotropic
+    operator is
+
+    .. math::
+
+       \left[k\beta - k^3 U + kU\partial_{yy} - kU_{yy}\right]\psi
+       = \lambda \left(\partial_{yy} - k^2\right)\psi,
+
+    with
+
+    .. math::
+
+       \beta = \frac{2\Omega\cos(\phi)}{a}.
+
+    The returned value is :math:`\max_k \operatorname{Im}(\lambda_k)`.
+
+    References
+    ----------
+    Chemke, R., Ming, Y., and Yuval, J. (2022):
+        The intensification of winter mid-latitude storm tracks in the
+        Southern Hemisphere. Nature Climate Change, 12, 553-557.
+        https://doi.org/10.1038/s41558-022-01368-8
     """
 
-    _require_growth_rate_backend("barot_growth_rate", _dbarot_growth_rate_1d)
     if radius != 6_371_000.0 or omega != 7.292e-5:
         raise NotImplementedError(
-            "custom `radius` and `omega` values are not implemented yet for "
-            "the compiled barotropic growth-rate kernel"
+            "Custom `radius` and `omega` values are not implemented yet for "
+            "the compiled barotropic growth-rate kernel."
         )
 
     u_values = _as_1d_float64(u_barotropic, "u_barotropic")
@@ -243,44 +324,120 @@ def barot_growth_rate(
     if ier != 0:
         raise RuntimeError(
             f"barot_growth_rate Fortran backend returned ier={ier} for the "
-            "requested latitude profile"
+            "requested latitude profile."
         )
 
     return _convert_output_units(max_growth, output_units)
 
 
 def baroc_growth_rate(
-    u,
-    temperature,
-    pressure,
+    u: ProfileInput,
+    temperature: ProfileInput,
+    pressure: ProfileInput,
     *,
-    lat=None,
-    tropopause_pressure=None,
-    tropopause_height=None,
+    lat: float | int | np.floating | np.integer | None = None,
     output_units: str = "s-1",
     vertical_interp: str = "logp",
-    target_pressure=None,
-    missing_value=np.nan,
-):
-    """Compute maximum baroclinic normal-mode growth rate.
+    target_pressure: ProfileInput | None = None,
+    missing_value: MissingValue = np.nan,
+) -> float:
+    r"""Compute the maximum baroclinic normal-mode growth rate.
+
+    Parameters
+    ----------
+    u : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        One-dimensional zonal-wind profile in ``m s^-1``.
+
+    temperature : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        One-dimensional temperature profile in Kelvin.
+
+    pressure : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+        One-dimensional pressure coordinate in Pa or hPa. Values must be
+        strictly monotonic and strictly positive.
+
+    lat : scalar
+        Latitude in degrees north. Required because the compiled solver uses
+        the local Coriolis parameter and meridional gradient of planetary
+        vorticity.
+
+    output_units : {"s^-1", "day^-1"}, optional
+        Output units for the returned maximum growth rate. Defaults to
+        ``"s-1"``.
+
+    vertical_interp : {"logp", "linear"}, optional
+        Vertical interpolation method used to remap the input profiles onto the
+        solver pressure grid. Defaults to ``"logp"``.
+
+    target_pressure : :class:`xarray.DataArray`, :class:`numpy.ndarray`, optional
+        Optional explicit solver pressure grid in Pa or hPa. If omitted, the
+        function diagnoses the WMO tropopause pressure from the input
+        ``temperature`` and builds a fixed ``DEFAULT_SOLVER_LEVELS`` grid from
+        that tropopause to the lower-tropospheric bound.
+
+    missing_value : scalar, optional
+        Public missing-value marker. If any input value is missing, the
+        function returns this marker normalized to ``float``. Defaults to
+        ``np.nan``.
+
+    Returns
+    -------
+    float
+        Maximum baroclinic growth rate in the requested units.
 
     Notes
     -----
-    This first implementation expects one atmospheric column. The expensive
-    normal-mode solve runs only through the compiled Fortran backend; the Python
-    wrapper handles unit normalization and pressure-grid preparation.
-    """
+    When ``target_pressure`` is omitted, this function first diagnoses the
+    WMO tropopause pressure and then interpolates ``u`` and ``temperature`` to
+    a fixed pressure grid between that tropopause and the lower troposphere.
+    The thermodynamic profiles passed to the compiled kernel are
 
-    _require_growth_rate_backend("baroc_growth_rate", _dbaroc_growth_rate_1d)
+    .. math::
+
+       \theta = T\left(\frac{p_0}{p}\right)^{\kappa},
+       \qquad
+       \rho = \frac{p}{R_d T},
+       \qquad
+       N_z = -\frac{1}{\rho\theta}\frac{\partial \theta}{\partial p}.
+
+    The compiled solver then forms the finite-difference generalized
+    eigenproblem
+
+    .. math::
+
+       A(k)\psi = \lambda B(k)\psi,
+
+    where the vertical quasi-geostrophic operator is represented in pressure
+    coordinates by
+
+    .. math::
+
+       A(k) \sim k\beta - k^3 U
+       + kUf^2 \partial_p \left(N_z^{-1}\partial_p\right)
+       - kf^2 \left(\partial_p U\right) N_z^{-1}\partial_p,
+
+    and
+
+    .. math::
+
+       B(k) \sim f^2 \partial_p \left(N_z^{-1}\partial_p\right) - k^2,
+
+    and the returned value is :math:`\max_k \operatorname{Im}(\lambda_k)`.
+
+    References
+    ----------
+    Chemke, R., and Polvani, L. M. (2020):
+        Exploiting the Abrupt 4 x CO2 Scenario to Elucidate Tropical
+        Expansion Mechanisms. Journal of Climate, 32(3), 859-875.
+        https://doi.org/10.1175/JCLI-D-18-0330.1
+
+    Chemke, R., Ming, Y., and Yuval, J. (2022):
+        The intensification of winter mid-latitude storm tracks in the
+        Southern Hemisphere. Nature Climate Change, 12, 553-557.
+        https://doi.org/10.1038/s41558-022-01368-8
+    """
 
     if lat is None:
         raise ValueError("`lat` is required for baroc_growth_rate")
-    if tropopause_height is not None and tropopause_pressure is None:
-        raise NotImplementedError(
-            "`tropopause_height` cannot yet be converted directly into the "
-            "solver pressure bound. Omit it to use automatic WMO tropopause "
-            "detection, or provide `tropopause_pressure` explicitly."
-        )
 
     u_values = _as_1d_float64(u, "u")
     temperature_values = _as_1d_float64(temperature, "temperature")
@@ -304,34 +461,11 @@ def baroc_growth_rate(
 
     _require_monotonic(pressure_pa, "pressure")
 
-    if target_pressure is None:
-        if tropopause_pressure is None:
-            tropopause_pressure_pa = _infer_tropopause_pressure_pa(
-                temperature_values,
-                pressure_pa,
-            )
-        else:
-            tropopause_pressure_pa = float(
-                _target_pressure_to_pa([tropopause_pressure])[0]
-            )
-
-        top_pressure = tropopause_pressure_pa
-        bottom_pressure = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
-        if top_pressure >= bottom_pressure:
-            raise ValueError(
-                "tropopause pressure must be lower than the lower-tropospheric "
-                "pressure bound used by the solver grid"
-            )
-        target_pressure_pa = np.linspace(
-            top_pressure,
-            bottom_pressure,
-            DEFAULT_SOLVER_LEVELS,
-            dtype=np.float64,
-        )
-    else:
-        target_pressure_pa = _target_pressure_to_pa(target_pressure)
-
-    _require_monotonic(target_pressure_pa, "target_pressure")
+    target_pressure_pa = _build_solver_pressure_grid_pa(
+        pressure_pa,
+        temperature_values,
+        target_pressure,
+    )
     interp_method = _normalize_vertical_interp(vertical_interp)
     u_solver = np.asarray(
         interp_pressure_1d(
@@ -377,7 +511,7 @@ def baroc_growth_rate(
     if ier != 0:
         raise RuntimeError(
             f"baroc_growth_rate Fortran backend returned ier={ier} for the "
-            "requested atmospheric column"
+            "requested atmospheric column."
         )
 
     return _convert_output_units(max_growth, output_units)
