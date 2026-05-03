@@ -1,0 +1,21 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module int2p_kernels ! in
+    interface ! in :int2p_kernels
+        ! signature : xxout,ier = dinterp_pressure_1d(ppin,xxin,ppout,linlog,xmsg)
+        subroutine dinterp_pressure_1d(ppin,xxin,ppout,xxout,linlog,xmsg,ier,npin,npout) ! in :int2p_kernels:int2p_kernels.f90
+            integer, optional, check(len(ppin)>=npin), depend(ppin) :: npin=len(ppin)
+            integer, optional, check(len(ppout)>=npout), depend(ppout) :: npout=len(ppout)
+            double precision dimension(npin), intent(in) :: ppin
+            double precision dimension(npin), depend(npin), intent(in) :: xxin
+            double precision dimension(npout), intent(in) :: ppout
+            double precision dimension(npout), depend(npout), intent(out) :: xxout
+            integer intent(in) :: linlog
+            double precision intent(in) :: xmsg
+            integer intent(out) :: ier
+        end subroutine dinterp_pressure_1d
+    end interface
+end python module int2p_kernels
+
+! This file was written manually for f2py compatibility.
