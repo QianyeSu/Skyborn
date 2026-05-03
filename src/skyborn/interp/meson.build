@@ -312,6 +312,22 @@ else:
     )
     vinth2p_kernels_sources += vinth2p_kernels_source
 
+    # Build INT2P kernels extension
+    int2p_kernels_sources = []
+    int2p_kernels_source = custom_target(
+        'int2p_kernelsmodule.c',
+        input: ['fortran/int2p_kernels.pyf'],
+        output: ['int2p_kernelsmodule.c', 'int2p_kernels-f2pywrappers.f'],
+        command: [
+            f2py_inline_cmd,
+            '--lower', '@INPUT@',
+            '--build-dir', '@OUTDIR@',
+        ],
+        build_by_default: true,
+        install: false,
+    )
+    int2p_kernels_sources += int2p_kernels_source
+
     # Add fortranobject.c if found
     if fortranobject_c != ''
         message('Found fortranobject.c: ' + fortranobject_c)
@@ -328,6 +344,7 @@ else:
             triple2grid_sources += files(fortranobject_c)
             grid2triple_sources += files(fortranobject_c)
             vinth2p_kernels_sources += files(fortranobject_c)
+            int2p_kernels_sources += files(fortranobject_c)
             message('Added fortranobject.c to build')
         else
             warning(
@@ -477,10 +494,26 @@ else:
         build_by_default: true,
     )
 
+    # Build the int2p kernels extension module
+    int2p_kernels_ext = py.extension_module(
+        'int2p_kernels',
+        [
+            'fortran/int2p_kernels.f90',
+            int2p_kernels_sources,
+        ],
+        include_directories: inc_np,
+        dependencies: [py_dep],
+        fortran_args: fortran_args,
+        c_args: c_args,
+        install: true,
+        install_dir: get_option('python.purelibdir') / 'skyborn' / 'interp' / 'fortran',
+        build_by_default: true,
+    )
+
     # Copy to source directory for inplace builds
     custom_target(
         'copy_interp_to_source',
-        input: [rcm2points_ext, rcm2rgrid_ext, triple2grid_ext, grid2triple_ext, vinth2p_kernels_ext],
+        input: [rcm2points_ext, rcm2rgrid_ext, triple2grid_ext, grid2triple_ext, vinth2p_kernels_ext, int2p_kernels_ext],
         output: 'interp_copy_marker.txt',
         command: [
             py,
@@ -528,9 +561,10 @@ with open(sys.argv[1], 'w') as f:
     f.write('from .rcm2rgrid import drcm2rgrid, drgrid2rcm' + chr(10))
     f.write('from .triple2grid import triple2grid1' + chr(10))
     f.write('from .grid2triple import grid2triple' + chr(10))
+    f.write('from .int2p_kernels import dinterp_pressure_1d' + chr(10))
     f.write('from .vinth2p_kernels import dvinth2p_nodes_pa, dvinth2p_nodes_pa_into, dsigma2hybrid_nodes, dsigma2hybrid_nodes_into, dsigma2hybrid_nodes_corder_into, dvinth2p_nodes_corder_pa_into, dvinth2p_ecmwf_nodes_pa, dvinth2p_ecmwf_nodes_pa_into, dvinth2p_ecmwf_nodes_corder_pa_into' + chr(10))
     f.write(chr(10))
-    f.write('__all__ = [' + chr(39) + 'drcm2points' + chr(39) + ', ' + chr(39) + 'drcm2rgrid' + chr(39) + ', ' + chr(39) + 'drgrid2rcm' + chr(39) + ', ' + chr(39) + 'triple2grid1' + chr(39) + ', ' + chr(39) + 'grid2triple' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_pa' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_pa_into' + chr(39) + ', ' + chr(39) + 'dsigma2hybrid_nodes' + chr(39) + ', ' + chr(39) + 'dsigma2hybrid_nodes_into' + chr(39) + ', ' + chr(39) + 'dsigma2hybrid_nodes_corder_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_corder_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_pa' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_corder_pa_into' + chr(39) + ']' + chr(10))
+    f.write('__all__ = [' + chr(39) + 'drcm2points' + chr(39) + ', ' + chr(39) + 'drcm2rgrid' + chr(39) + ', ' + chr(39) + 'drgrid2rcm' + chr(39) + ', ' + chr(39) + 'triple2grid1' + chr(39) + ', ' + chr(39) + 'grid2triple' + chr(39) + ', ' + chr(39) + 'dinterp_pressure_1d' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_pa' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_pa_into' + chr(39) + ', ' + chr(39) + 'dsigma2hybrid_nodes' + chr(39) + ', ' + chr(39) + 'dsigma2hybrid_nodes_into' + chr(39) + ', ' + chr(39) + 'dsigma2hybrid_nodes_corder_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_nodes_corder_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_pa' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_pa_into' + chr(39) + ', ' + chr(39) + 'dvinth2p_ecmwf_nodes_corder_pa_into' + chr(39) + ']' + chr(10))
 ''',
             '@OUTPUT@',
         ],
