@@ -165,20 +165,19 @@ class TestGPIXarray:
         assert isinstance(result, xr.Dataset)
         assert result.error_flag.values == 1  # 1 = success
 
-    def test_profile_return_diagnostics_xarray_interface(self, xarray_profile_data):
-        """Main xarray helper should expose diagnostics for profile input."""
+    def test_profile_log_decomposition_xarray_interface(self, xarray_profile_data):
+        """Explicit xarray decomposition helper should expose profile diagnostics."""
         from skyborn.calc.GPI.xarray import (
-            potential_intensity as potential_intensity_xr,
+            pi_log_decomposition as pi_log_decomposition_xr,
         )
 
         data = xarray_profile_data
-        result = potential_intensity_xr(
+        result = pi_log_decomposition_xr(
             sst=xr.DataArray(data["sst"], attrs={"units": "K"}),
             psl=xr.DataArray(data["psl"], attrs={"units": "Pa"}),
             pressure_levels=data["levels"],
             temperature=data["temperature"],
             mixing_ratio=data["mixing_ratio"],
-            return_diagnostics=True,
             outflow_source="cape_env",
         )
 
@@ -189,52 +188,48 @@ class TestGPIXarray:
         assert np.isfinite(float(result.t0.values))
         assert np.isfinite(float(result.otl.values))
 
-    def test_profile_return_diagnostics_xarray_validation(self, xarray_profile_data):
-        """Profile diagnostics should reject non-1D and non-scalar inputs."""
+    def test_profile_log_decomposition_xarray_validation(self, xarray_profile_data):
+        """Profile decomposition should reject non-1D and non-scalar inputs."""
         from skyborn.calc.GPI.xarray import (
-            potential_intensity as potential_intensity_xr,
+            pi_log_decomposition as pi_log_decomposition_xr,
         )
 
         data = xarray_profile_data
 
-        with pytest.raises(ValueError, match="Only 1D profiles are supported"):
-            potential_intensity_xr(
+        with pytest.raises(ValueError, match="Unsupported number of dimensions"):
+            pi_log_decomposition_xr(
                 sst=data["sst"],
                 psl=data["psl"],
                 pressure_levels=data["levels"].expand_dims("x"),
                 temperature=data["temperature"].expand_dims("x"),
                 mixing_ratio=data["mixing_ratio"].expand_dims("x"),
-                return_diagnostics=True,
             )
 
         with pytest.raises(ValueError, match="SST DataArray must be 0-dimensional"):
-            potential_intensity_xr(
+            pi_log_decomposition_xr(
                 sst=xr.DataArray([data["sst"], data["sst"]], dims=["x"]),
                 psl=xr.DataArray(data["psl"], attrs={"units": "Pa"}),
                 pressure_levels=data["levels"],
                 temperature=data["temperature"],
                 mixing_ratio=data["mixing_ratio"],
-                return_diagnostics=True,
             )
 
-    def test_profile_return_diagnostics_compat_alias(self, xarray_profile_data):
-        """Compatibility profile helper should still mirror the main diagnostics path."""
+    def test_profile_log_decomposition_repeatability(self, xarray_profile_data):
+        """Profile diagnostics should be stable across repeated decomposition calls."""
         from skyborn.calc.GPI.xarray import (
-            potential_intensity as potential_intensity_xr,
+            pi_log_decomposition as pi_log_decomposition_xr,
         )
-        from skyborn.calc.GPI.xarray import potential_intensity_profile_complete
 
         data = xarray_profile_data
-        main = potential_intensity_xr(
+        main = pi_log_decomposition_xr(
             sst=xr.DataArray(data["sst"], attrs={"units": "K"}),
             psl=xr.DataArray(data["psl"], attrs={"units": "Pa"}),
             pressure_levels=data["levels"],
             temperature=data["temperature"],
             mixing_ratio=data["mixing_ratio"],
-            return_diagnostics=True,
             outflow_source="cape_env",
         )
-        compat = potential_intensity_profile_complete(
+        repeat = pi_log_decomposition_xr(
             sst=xr.DataArray(data["sst"], attrs={"units": "K"}),
             psl=xr.DataArray(data["psl"], attrs={"units": "Pa"}),
             pressure_levels=data["levels"],
@@ -253,17 +248,78 @@ class TestGPIXarray:
             "lndiseq",
             "lnCKCD",
         ]:
-            np.testing.assert_allclose(main[name].values, compat[name].values)
+            np.testing.assert_allclose(main[name].values, repeat[name].values)
 
         with pytest.raises(ValueError, match="PSL DataArray must be 0-dimensional"):
-            potential_intensity_xr(
+            pi_log_decomposition_xr(
                 sst=float(data["sst"]),
                 psl=xr.DataArray([data["psl"], data["psl"]], dims=["x"]),
                 pressure_levels=data["levels"],
                 temperature=data["temperature"],
                 mixing_ratio=data["mixing_ratio"],
-                return_diagnostics=True,
             )
+
+    def test_3d_log_decomposition_xarray_interface(self):
+        """3D xarray diagnostics should come back as gridded fields."""
+        from skyborn.calc.GPI.xarray import (
+            pi_log_decomposition as pi_log_decomposition_xr,
+        )
+
+        lat = xr.DataArray(np.linspace(-10, 10, 4), dims=["lat"])
+        lon = xr.DataArray(np.linspace(100, 110, 5), dims=["lon"])
+        level = xr.DataArray(
+            [1000, 850, 700, 500], dims=["level"], attrs={"units": "mb"}
+        )
+        sst = xr.DataArray(
+            298.0 + np.random.rand(4, 5) * 4.0,
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+            attrs={"units": "K"},
+        )
+        psl = xr.DataArray(
+            100000.0 + np.random.rand(4, 5) * 1200.0,
+            dims=["lat", "lon"],
+            coords={"lat": lat, "lon": lon},
+            attrs={"units": "Pa"},
+        )
+        temp = xr.DataArray(
+            np.stack(
+                [
+                    300 + np.random.rand(4, 5),
+                    288 + np.random.rand(4, 5),
+                    275 + np.random.rand(4, 5),
+                    255 + np.random.rand(4, 5),
+                ]
+            ),
+            dims=["level", "lat", "lon"],
+            coords={"level": level, "lat": lat, "lon": lon},
+            attrs={"units": "K"},
+        )
+        mixr = xr.DataArray(
+            np.stack(
+                [
+                    0.016 + np.random.rand(4, 5) * 1e-3,
+                    0.010 + np.random.rand(4, 5) * 1e-3,
+                    0.006 + np.random.rand(4, 5) * 1e-3,
+                    0.0025 + np.random.rand(4, 5) * 1e-3,
+                ]
+            ),
+            dims=["level", "lat", "lon"],
+            coords={"level": level, "lat": lat, "lon": lon},
+            attrs={"units": "kg/kg"},
+        )
+
+        result = pi_log_decomposition_xr(
+            sst=sst,
+            psl=psl,
+            pressure_levels=level,
+            temperature=temp,
+            mixing_ratio=mixr,
+        )
+        for name in ["t0", "otl", "lnpi", "lneff", "lndiseq", "lnCKCD"]:
+            assert name in result.data_vars
+        assert result.pi.shape == sst.shape
+        assert np.isfinite(float(result.lnCKCD.values))
 
     def test_metadata_preservation(self, xarray_profile_data):
         """Test that metadata is properly added to results."""
