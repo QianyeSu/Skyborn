@@ -12,14 +12,15 @@ python module growth_rate_kernels ! in
             integer intent(out) :: ier
         end subroutine dbarot_growth_rate_1d
 
-        ! signature : max_growth,ier = dbaroc_growth_rate_1d(u,theta,pressure,temperature,lat)
-        subroutine dbaroc_growth_rate_1d(u,theta,pressure,temperature,lat,max_growth,ier,nlev) ! in :growth_rate_kernels:growth_rate_kernels.f90
+        ! signature : max_growth,ier = dbaroc_growth_rate_1d(u,theta,pressure,temperature,lat,smooth_window)
+        subroutine dbaroc_growth_rate_1d(u,theta,pressure,temperature,lat,smooth_window,max_growth,ier,nlev) ! in :growth_rate_kernels:growth_rate_kernels.f90
             integer, optional, check(len(u)>=nlev), depend(u) :: nlev=len(u)
             double precision dimension(nlev), intent(in) :: u
             double precision dimension(nlev), depend(nlev), intent(in) :: theta
             double precision dimension(nlev), depend(nlev), intent(in) :: pressure
             double precision dimension(nlev), depend(nlev), intent(in) :: temperature
             double precision intent(in) :: lat
+            integer intent(in) :: smooth_window
             double precision intent(out) :: max_growth
             integer intent(out) :: ier
         end subroutine dbaroc_growth_rate_1d
