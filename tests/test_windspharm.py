@@ -1663,9 +1663,9 @@ class TestWindSpharmTargetedCoverage:
         with pytest.raises(ValueError, match="invalid value for omega"):
             vw._planetary_vorticity_spec(omega="bad")
 
-        assert vw._vector_analysis_spectra(truncation=5) == ("vrtdiv", 5)
-        assert vw._vector_analysis_spectra(truncation=6, component="vrt") == ("vrt", 6)
-        assert vw._vector_analysis_spectra(truncation=7, component="div") == ("div", 7)
+        assert vw._vector_analysis_spectral(truncation=5) == ("vrtdiv", 5)
+        assert vw._vector_analysis_spectral(truncation=6, component="vrt") == ("vrt", 6)
+        assert vw._vector_analysis_spectral(truncation=7, component="div") == ("div", 7)
 
     def test_vector_analysis_prepared_layout_cache_is_reused(self, monkeypatch):
         """Prepared Fortran-order wind inputs should be built once per instance."""
@@ -1759,7 +1759,7 @@ class TestWindSpharmTargetedCoverage:
         )
 
         with pytest.raises(ValueError, match="unsupported component"):
-            fallback_vw._vector_analysis_spectra(component="bad")
+            fallback_vw._vector_analysis_spectral(component="bad")
 
     def test_common_and_tool_validation_branches(self, monkeypatch):
         """Exercise helper validation and recovery branches."""
