@@ -353,3 +353,59 @@ class TestMainInterfaceEdgeCases:
         # Should fail because 5D is not supported (line 967-969)
         with pytest.raises(ValueError, match="Unsupported number of dimensions"):
             potential_intensity(sst, psl, levels, temp_5d, mixr_5d)
+
+    def test_4d_log_decomposition_dispatch(self):
+        """4D decomposition should dispatch to the xarray diagnostics path."""
+        from skyborn.calc.GPI.xarray import pi_log_decomposition
+
+        level = xr.DataArray(
+            [1000, 850, 700, 500], dims=["level"], attrs={"units": "mb"}
+        )
+        time = xr.DataArray([0, 1], dims=["time"])
+        lat = xr.DataArray(np.linspace(-10, 10, 3), dims=["lat"])
+        lon = xr.DataArray(np.linspace(100, 106, 4), dims=["lon"])
+        sst = xr.DataArray(
+            298.0 + np.random.rand(2, 3, 4) * 4.0,
+            dims=["time", "lat", "lon"],
+            coords={"time": time, "lat": lat, "lon": lon},
+            attrs={"units": "K"},
+        )
+        psl = xr.DataArray(
+            100000.0 + np.random.rand(2, 3, 4) * 1200.0,
+            dims=["time", "lat", "lon"],
+            coords={"time": time, "lat": lat, "lon": lon},
+            attrs={"units": "Pa"},
+        )
+        temp = xr.DataArray(
+            np.stack(
+                [
+                    300 + np.random.rand(2, 3, 4),
+                    288 + np.random.rand(2, 3, 4),
+                    275 + np.random.rand(2, 3, 4),
+                    255 + np.random.rand(2, 3, 4),
+                ],
+                axis=1,
+            ),
+            dims=["time", "level", "lat", "lon"],
+            coords={"time": time, "level": level, "lat": lat, "lon": lon},
+            attrs={"units": "K"},
+        )
+        mixr = xr.DataArray(
+            np.stack(
+                [
+                    0.016 + np.random.rand(2, 3, 4) * 1e-3,
+                    0.010 + np.random.rand(2, 3, 4) * 1e-3,
+                    0.006 + np.random.rand(2, 3, 4) * 1e-3,
+                    0.0025 + np.random.rand(2, 3, 4) * 1e-3,
+                ],
+                axis=1,
+            ),
+            dims=["time", "level", "lat", "lon"],
+            coords={"time": time, "level": level, "lat": lat, "lon": lon},
+            attrs={"units": "kg/kg"},
+        )
+
+        result = pi_log_decomposition(sst, psl, level, temp, mixr)
+        assert result.pi.shape == sst.shape
+        assert "lnCKCD" in result
+        assert np.isfinite(float(result.lnCKCD.values))
