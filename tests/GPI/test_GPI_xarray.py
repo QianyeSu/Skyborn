@@ -165,6 +165,30 @@ class TestGPIXarray:
         assert isinstance(result, xr.Dataset)
         assert result.error_flag.values == 1  # 1 = success
 
+    def test_complete_profile_xarray_interface(self, xarray_profile_data):
+        """Extended xarray profile helper should expose outflow and log terms."""
+        try:
+            from skyborn.calc.GPI.xarray import potential_intensity_profile_complete
+        except ImportError:
+            pytest.skip("GPI module not available")
+
+        data = xarray_profile_data
+        result = potential_intensity_profile_complete(
+            sst=xr.DataArray(data["sst"], attrs={"units": "K"}),
+            psl=xr.DataArray(data["psl"], attrs={"units": "Pa"}),
+            pressure_levels=data["levels"],
+            temperature=data["temperature"],
+            mixing_ratio=data["mixing_ratio"],
+            outflow_source="cape_env",
+        )
+
+        assert isinstance(result, xr.Dataset)
+        for name in ["t0", "otl", "lnpi", "lneff", "lndiseq", "lnCKCD"]:
+            assert name in result.data_vars
+        assert int(result.error_flag.values) == 1
+        assert np.isfinite(float(result.t0.values))
+        assert np.isfinite(float(result.otl.values))
+
     def test_metadata_preservation(self, xarray_profile_data):
         """Test that metadata is properly added to results."""
         try:
