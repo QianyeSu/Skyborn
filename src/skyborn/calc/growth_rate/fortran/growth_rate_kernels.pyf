@@ -24,6 +24,7 @@ python module growth_rate_kernels ! in
             double precision intent(out) :: max_growth
             integer intent(out) :: ier
         end subroutine dbaroc_growth_rate_1d
+
     end interface
 end python module growth_rate_kernels
 
