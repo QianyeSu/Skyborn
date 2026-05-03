@@ -6,19 +6,15 @@ dispatches the expensive normal-mode solves to the compiled Fortran kernels in
 
 References
 ----------
-Chemke, R., and Polvani, L. M. (2019):
-    Exploiting the Abrupt 4 x CO2 Scenario to Elucidate Tropical Expansion
-    Mechanisms. Journal of Climate, 32(3), 859-875.
-    https://doi.org/10.1175/JCLI-D-18-0330.1
+Chemke, R., and Ming, Y. (2020):
+    Large Atmospheric Waves Will Get Stronger, While Small Waves Will Get
+    Weaker by the End of the 21st Century. Geophysical Research Letters, 47,
+    e2020GL090441.
+    https://doi.org/10.1029/2020GL090441
 
-Chemke, R. (2021):
-    Future Changes in the Hadley Circulation: The Role of Ocean Heat
-    Transport. Geophysical Research Letters, 48, e2020GL091372.
-    https://doi.org/10.1029/2020GL091372
-
-Chemke, R., Zanna, L., Polvani, L. M., Orbe, C., and Sentman, L. T. (2022):
-    Ocean-Coupled Contributions to the Recent Poleward Expansion of the
-    Southern Hemisphere Hadley Cell. Journal of Climate, 35(19), 6131-6144.
+Chemke, R., Zanna, L., Orbe, C., Sentman, L. T., and Polvani, L. M. (2022):
+    The Future Intensification of the North Atlantic Winter Storm Track: The
+    Key Role of Dynamic Ocean Coupling. Journal of Climate, 35(8), 2407-2421.
     https://doi.org/10.1175/JCLI-D-21-0407.1
 
 Chemke, R. (2022):
@@ -473,20 +469,16 @@ def baroc_growth_rate(
 
     References
     ----------
-    Chemke, R., and Polvani, L. M. (2019):
-        Exploiting the Abrupt 4 x CO2 Scenario to Elucidate Tropical
-        Expansion Mechanisms. Journal of Climate, 32(3), 859-875.
-        https://doi.org/10.1175/JCLI-D-18-0330.1
+    Chemke, R., and Ming, Y. (2020):
+        Large Atmospheric Waves Will Get Stronger, While Small Waves Will Get
+        Weaker by the End of the 21st Century. Geophysical Research Letters,
+        47, e2020GL090441.
+        https://doi.org/10.1029/2020GL090441
 
-    Chemke, R. (2021):
-        Future Changes in the Hadley Circulation: The Role of Ocean Heat
-        Transport. Geophysical Research Letters, 48, e2020GL091372.
-        https://doi.org/10.1029/2020GL091372
-
-    Chemke, R., Zanna, L., Polvani, L. M., Orbe, C., and Sentman, L. T. (2022):
-        Ocean-Coupled Contributions to the Recent Poleward Expansion of the
-        Southern Hemisphere Hadley Cell. Journal of Climate, 35(19),
-        6131-6144.
+    Chemke, R., Zanna, L., Orbe, C., Sentman, L. T., and Polvani, L. M. (2022):
+        The Future Intensification of the North Atlantic Winter Storm Track:
+        The Key Role of Dynamic Ocean Coupling. Journal of Climate, 35(8),
+        2407-2421.
         https://doi.org/10.1175/JCLI-D-21-0407.1
 
     Chemke, R. (2022):
