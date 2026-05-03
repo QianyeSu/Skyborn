@@ -60,7 +60,8 @@ __all__ = [
     "interp_multidim",
 ]
 
-supported_types = typing.Union[xr.DataArray, np.ndarray]
+supported_types = xr.DataArray | np.ndarray
+coordinate_types = xr.DataArray | np.ndarray | typing.Sequence[float]
 _PRESSURE_INTERP_SPVL = np.float64(np.finfo(np.float64).max)
 _VINTH2P_SPVL = np.float64(-9.96921e36)
 
@@ -197,20 +198,20 @@ def _finalize_hybrid_level_output(
 
 
 def interp_pressure_1d(
-    values=None,
-    source_pressure=None,
-    target_pressure=None,
+    data: supported_types | None = None,
+    source_pressure: supported_types | None = None,
+    target_pressure: supported_types | None = None,
     *,
     method: str = "log",
     extrapolate: bool = False,
-    missing_value=np.nan,
-    **legacy_kwargs,
-):
+    missing_value: object = np.nan,
+    **legacy_kwargs: supported_types,
+) -> supported_types:
     """Interpolate a one-dimensional profile between pressure coordinates.
 
     Parameters
     ----------
-    values : :class:`xarray.DataArray`, :class:`numpy.ndarray`
+    data : :class:`xarray.DataArray`, :class:`numpy.ndarray`
         One-dimensional field values defined on ``source_pressure``.
 
     source_pressure : :class:`xarray.DataArray`, :class:`numpy.ndarray`
@@ -240,13 +241,15 @@ def interp_pressure_1d(
 
     Notes
     -----
-    The legacy keyword aliases ``x``, ``p_in``, and ``p_out`` are still
-    accepted for backward compatibility, but the preferred public parameter
-    names are now ``values``, ``source_pressure``, and ``target_pressure``.
+    The legacy keyword aliases ``values``, ``x``, ``p_in``, and ``p_out`` are
+    still accepted for backward compatibility, but the preferred public
+    parameter names are now ``data``, ``source_pressure``, and
+    ``target_pressure``.
     """
 
     legacy_name_map = {
-        "x": "values",
+        "values": "data",
+        "x": "data",
         "p_in": "source_pressure",
         "p_out": "target_pressure",
     }
@@ -255,13 +258,13 @@ def interp_pressure_1d(
             continue
 
         legacy_value = legacy_kwargs.pop(legacy_name)
-        if canonical_name == "values":
-            if values is not None:
+        if canonical_name == "data":
+            if data is not None:
                 raise TypeError(
-                    "interp_pressure_1d() received both `values` and legacy "
+                    "interp_pressure_1d() received both `data` and legacy "
                     f"`{legacy_name}`"
                 )
-            values = legacy_value
+            data = legacy_value
         elif canonical_name == "source_pressure":
             if source_pressure is not None:
                 raise TypeError(
@@ -284,8 +287,8 @@ def interp_pressure_1d(
         )
 
     missing_arguments = []
-    if values is None:
-        missing_arguments.append("values")
+    if data is None:
+        missing_arguments.append("data")
     if source_pressure is None:
         missing_arguments.append("source_pressure")
     if target_pressure is None:
@@ -299,7 +302,7 @@ def interp_pressure_1d(
     _require_compiled_interp("interp_pressure_1d", _dinterp_pressure_1d)
     _reject_lazy_or_unit_backed_inputs(
         "interp_pressure_1d",
-        values,
+        data,
         source_pressure,
         target_pressure,
     )
@@ -330,7 +333,7 @@ def interp_pressure_1d(
             )
 
     def wrap_pressure_interp_output(output_values):
-        if not isinstance(values, xr.DataArray):
+        if not isinstance(data, xr.DataArray):
             return output_values
 
         if isinstance(target_pressure, xr.DataArray):
@@ -341,15 +344,15 @@ def interp_pressure_1d(
                 attrs=target_pressure.attrs.copy(),
             )
         else:
-            output_dim = values.dims[0]
+            output_dim = data.dims[0]
             output_coord = xr.DataArray(np.asarray(target_pressure), dims=(output_dim,))
 
         return xr.DataArray(
             np.asarray(output_values),
             dims=(output_dim,),
             coords={output_dim: output_coord},
-            name=values.name,
-            attrs=values.attrs.copy(),
+            name=data.name,
+            attrs=data.attrs.copy(),
         )
 
     normalized_method = method.lower()
@@ -360,8 +363,8 @@ def interp_pressure_1d(
     else:
         raise ValueError("`method` must be either 'linear' or 'log'")
 
-    values_array = np.asarray(
-        values.data if isinstance(values, xr.DataArray) else values,
+    data_array = np.asarray(
+        data.data if isinstance(data, xr.DataArray) else data,
         dtype=np.float64,
     )
     source_pressure_array = np.asarray(
@@ -382,18 +385,18 @@ def interp_pressure_1d(
     )
 
     if (
-        values_array.ndim != 1
+        data_array.ndim != 1
         or source_pressure_array.ndim != 1
         or target_pressure_array.ndim != 1
     ):
         raise ValueError(
-            "`values`, `source_pressure`, and `target_pressure` must each be "
+            "`data`, `source_pressure`, and `target_pressure` must each be "
             "one-dimensional"
         )
 
-    if values_array.shape != source_pressure_array.shape:
+    if data_array.shape != source_pressure_array.shape:
         raise ValueError(
-            "`values` and `source_pressure` must have the same length for "
+            "`data` and `source_pressure` must have the same length for "
             "pressure interpolation"
         )
 
@@ -405,7 +408,7 @@ def interp_pressure_1d(
         return wrap_pressure_interp_output(result)
 
     input_missing_mask = pressure_interp_missing_mask(
-        values_array
+        data_array
     ) | pressure_interp_missing_mask(source_pressure_array)
     valid_source_pressure = source_pressure_array[~input_missing_mask]
     if valid_source_pressure.size < 2:
@@ -430,16 +433,16 @@ def interp_pressure_1d(
         return wrap_pressure_interp_output(result)
 
     source_pressure_work = np.array(source_pressure_array, dtype=np.float64, copy=True)
-    values_work = np.array(values_array, dtype=np.float64, copy=True)
+    data_work = np.array(data_array, dtype=np.float64, copy=True)
     target_pressure_work = np.array(valid_target_pressure, dtype=np.float64, copy=True)
     source_pressure_work[pressure_interp_missing_mask(source_pressure_work)] = (
         _PRESSURE_INTERP_SPVL
     )
-    values_work[pressure_interp_missing_mask(values_work)] = _PRESSURE_INTERP_SPVL
+    data_work[pressure_interp_missing_mask(data_work)] = _PRESSURE_INTERP_SPVL
 
     output_valid, ier = _dinterp_pressure_1d(
         source_pressure_work,
-        values_work,
+        data_work,
         target_pressure_work,
         linlog,
         _PRESSURE_INTERP_SPVL,
@@ -458,13 +461,13 @@ def interp_pressure_1d(
 
 
 def pressure_at_hybrid_levels(
-    psfc,
-    hya,
-    hyb,
-    p0=100000.0,
+    psfc: supported_types,
+    hya: supported_types,
+    hyb: supported_types,
+    p0: float = 100000.0,
     lev_dim: str = "lev",
-    output_dims=("time", "lev", "lat", "lon"),
-):
+    output_dims: tuple[str, ...] = ("time", "lev", "lat", "lon"),
+) -> supported_types:
     """Calculate pressure at hybrid levels.
 
     Parameters
@@ -558,13 +561,13 @@ def pressure_at_hybrid_levels(
 
 
 def delta_pressure_hybrid(
-    ps,
-    hya,
-    hyb,
-    p0=100000.0,
+    ps: supported_types,
+    hya: supported_types,
+    hyb: supported_types,
+    p0: float = 100000.0,
     lev_dim: str = "lev",
-    output_dims=("time", "lev", "lat", "lon"),
-):
+    output_dims: tuple[str, ...] = ("time", "lev", "lat", "lon"),
+) -> supported_types:
     """Calculate pressure layer thickness for hybrid coordinates.
 
     Parameters
@@ -1578,13 +1581,13 @@ def interp_hybrid_to_pressure(
     hyam: xr.DataArray,
     hybm: xr.DataArray,
     p0: float = 100000.0,
-    new_levels: np.ndarray = __pres_lev_mandatory__,
-    lev_dim: str = None,
+    new_levels: coordinate_types = __pres_lev_mandatory__,
+    lev_dim: str | None = None,
     method: str = "linear",
     extrapolate: bool = False,
-    variable: str = None,
-    t_bot: xr.DataArray = None,
-    phi_sfc: xr.DataArray = None,
+    variable: str | None = None,
+    t_bot: xr.DataArray | None = None,
+    phi_sfc: xr.DataArray | None = None,
 ) -> xr.DataArray:
     """Interpolate and extrapolate data from hybrid-sigma levels to isobaric levels.
 
@@ -1756,7 +1759,7 @@ def interp_sigma_to_hybrid(
     hyam: xr.DataArray,
     hybm: xr.DataArray,
     p0: float = 100000.0,
-    lev_dim: str = None,
+    lev_dim: str | None = None,
     method: str = "linear",
 ) -> xr.DataArray:
     """Interpolate data from sigma to hybrid coordinates.
@@ -1856,14 +1859,14 @@ def interp_sigma_to_hybrid(
 
 def interp_multidim(
     data_in: supported_types,
-    lat_out: np.ndarray,
-    lon_out: np.ndarray,
-    lat_in: np.ndarray = None,
-    lon_in: np.ndarray = None,
+    lat_out: coordinate_types,
+    lon_out: coordinate_types,
+    lat_in: coordinate_types | None = None,
+    lon_in: coordinate_types | None = None,
     cyclic: bool = False,
-    missing_val: np.number = None,
+    missing_val: np.number | None = None,
     method: str = "linear",
-    fill_value: typing.Union[str, np.number] = np.nan,
+    fill_value: str | np.number = np.nan,
 ) -> supported_types:
     """Multidimensional interpolation of variables. Uses ``xarray.interp`` to
     perform interpolation. Will not perform extrapolation by default, returns
