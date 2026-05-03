@@ -30,6 +30,10 @@ Atmospheric Physics Functions
      - WMO tropopause calculation for single atmospheric profiles
    * - :func:`skyborn.calc.troposphere.xarray.trop_wmo`
      - Xarray interface for tropopause calculation with automatic pressure generation
+   * - :func:`skyborn.calc.baroc_growth_rate`
+     - Chemke-style baroclinic normal-mode growth-rate diagnostic with automatic WMO tropopause gridding
+   * - :func:`skyborn.calc.barot_growth_rate`
+     - Chemke-style barotropic normal-mode growth-rate diagnostic from a horizontal zonal-wind profile
    * - :func:`skyborn.calc.geostrophic.interface.geostrophic_wind`
      - Geostrophic wind calculation from geopotential height (NumPy interface)
    * - :class:`skyborn.calc.geostrophic.interface.GeostrophicWind`
