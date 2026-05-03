@@ -38,6 +38,15 @@ Growth-rate Diagnostics
    converged. If you want full control over the vertical solver grid, pass
    ``target_pressure`` explicitly instead.
 
+   In the original Chemke-style analysis scripts, a parameter named
+   ``window_size`` is often used for a centered running mean applied to the
+   growth-rate spectrum over zonal wavenumber. That smoothing width is not the
+   same thing as ``solver_levels``. Even for a single atmospheric column, the
+   compiled solver still sweeps many zonal wavenumbers and solves a
+   generalized eigenvalue problem for each one, so the dominant cost is the
+   repeated linear-algebra solve rather than tropopause diagnosis or pressure
+   interpolation.
+
 Geostrophic Wind Calculations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
