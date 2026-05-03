@@ -14,6 +14,7 @@ from .interpolation import (
     delta_pressure_hybrid,
     interp_hybrid_to_pressure,
     interp_multidim,
+    interp_pressure_1d,
     interp_sigma_to_hybrid,
     pressure_at_hybrid_levels,
 )
@@ -35,6 +36,7 @@ from .triple_to_grid import grid_to_triple, triple_to_grid
 __all__ = [
     "delta_pressure_hybrid",
     "interp_hybrid_to_pressure",
+    "interp_pressure_1d",
     "interp_multidim",
     "interp_sigma_to_hybrid",
     "pressure_at_hybrid_levels",
