@@ -165,20 +165,20 @@ class TestGPIXarray:
         assert isinstance(result, xr.Dataset)
         assert result.error_flag.values == 1  # 1 = success
 
-    def test_complete_profile_xarray_interface(self, xarray_profile_data):
-        """Extended xarray profile helper should expose outflow and log terms."""
-        try:
-            from skyborn.calc.GPI.xarray import potential_intensity_profile_complete
-        except ImportError:
-            pytest.skip("GPI module not available")
+    def test_profile_return_diagnostics_xarray_interface(self, xarray_profile_data):
+        """Main xarray helper should expose diagnostics for profile input."""
+        from skyborn.calc.GPI.xarray import (
+            potential_intensity as potential_intensity_xr,
+        )
 
         data = xarray_profile_data
-        result = potential_intensity_profile_complete(
+        result = potential_intensity_xr(
             sst=xr.DataArray(data["sst"], attrs={"units": "K"}),
             psl=xr.DataArray(data["psl"], attrs={"units": "Pa"}),
             pressure_levels=data["levels"],
             temperature=data["temperature"],
             mixing_ratio=data["mixing_ratio"],
+            return_diagnostics=True,
             outflow_source="cape_env",
         )
 
@@ -188,6 +188,82 @@ class TestGPIXarray:
         assert int(result.error_flag.values) == 1
         assert np.isfinite(float(result.t0.values))
         assert np.isfinite(float(result.otl.values))
+
+    def test_profile_return_diagnostics_xarray_validation(self, xarray_profile_data):
+        """Profile diagnostics should reject non-1D and non-scalar inputs."""
+        from skyborn.calc.GPI.xarray import (
+            potential_intensity as potential_intensity_xr,
+        )
+
+        data = xarray_profile_data
+
+        with pytest.raises(ValueError, match="Only 1D profiles are supported"):
+            potential_intensity_xr(
+                sst=data["sst"],
+                psl=data["psl"],
+                pressure_levels=data["levels"].expand_dims("x"),
+                temperature=data["temperature"].expand_dims("x"),
+                mixing_ratio=data["mixing_ratio"].expand_dims("x"),
+                return_diagnostics=True,
+            )
+
+        with pytest.raises(ValueError, match="SST DataArray must be 0-dimensional"):
+            potential_intensity_xr(
+                sst=xr.DataArray([data["sst"], data["sst"]], dims=["x"]),
+                psl=xr.DataArray(data["psl"], attrs={"units": "Pa"}),
+                pressure_levels=data["levels"],
+                temperature=data["temperature"],
+                mixing_ratio=data["mixing_ratio"],
+                return_diagnostics=True,
+            )
+
+    def test_profile_return_diagnostics_compat_alias(self, xarray_profile_data):
+        """Compatibility profile helper should still mirror the main diagnostics path."""
+        from skyborn.calc.GPI.xarray import (
+            potential_intensity as potential_intensity_xr,
+        )
+        from skyborn.calc.GPI.xarray import potential_intensity_profile_complete
+
+        data = xarray_profile_data
+        main = potential_intensity_xr(
+            sst=xr.DataArray(data["sst"], attrs={"units": "K"}),
+            psl=xr.DataArray(data["psl"], attrs={"units": "Pa"}),
+            pressure_levels=data["levels"],
+            temperature=data["temperature"],
+            mixing_ratio=data["mixing_ratio"],
+            return_diagnostics=True,
+            outflow_source="cape_env",
+        )
+        compat = potential_intensity_profile_complete(
+            sst=xr.DataArray(data["sst"], attrs={"units": "K"}),
+            psl=xr.DataArray(data["psl"], attrs={"units": "Pa"}),
+            pressure_levels=data["levels"],
+            temperature=data["temperature"],
+            mixing_ratio=data["mixing_ratio"],
+            outflow_source="cape_env",
+        )
+
+        for name in [
+            "pi",
+            "min_pressure",
+            "t0",
+            "otl",
+            "lnpi",
+            "lneff",
+            "lndiseq",
+            "lnCKCD",
+        ]:
+            np.testing.assert_allclose(main[name].values, compat[name].values)
+
+        with pytest.raises(ValueError, match="PSL DataArray must be 0-dimensional"):
+            potential_intensity_xr(
+                sst=float(data["sst"]),
+                psl=xr.DataArray([data["psl"], data["psl"]], dims=["x"]),
+                pressure_levels=data["levels"],
+                temperature=data["temperature"],
+                mixing_ratio=data["mixing_ratio"],
+                return_diagnostics=True,
+            )
 
     def test_metadata_preservation(self, xarray_profile_data):
         """Test that metadata is properly added to results."""
