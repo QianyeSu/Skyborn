@@ -159,7 +159,10 @@ def _normalize_vertical_interp(method: str) -> str:
         return "log"
     if normalized in {"linear", "pressure"}:
         return "linear"
-    raise ValueError("`vertical_interp` must be 'logp' or 'linear'")
+    raise ValueError(
+        "`vertical_interp` must be 'log' or 'linear' "
+        "(the alias 'logp' is also accepted)"
+    )
 
 
 def _infer_tropopause_pressure_pa(
@@ -337,7 +340,7 @@ def baroc_growth_rate(
     *,
     lat: float | int | np.floating | np.integer | None = None,
     output_units: str = "s-1",
-    vertical_interp: str = "logp",
+    vertical_interp: str = "log",
     target_pressure: ProfileInput | None = None,
     missing_value: MissingValue = np.nan,
 ) -> float:
@@ -364,9 +367,11 @@ def baroc_growth_rate(
         Output units for the returned maximum growth rate. Defaults to
         ``"s-1"``.
 
-    vertical_interp : {"logp", "linear"}, optional
+    vertical_interp : {"log", "linear"}, optional
         Vertical interpolation method used to remap the input profiles onto the
-        solver pressure grid. Defaults to ``"logp"``.
+        solver pressure grid. ``"log"`` means linear interpolation in
+        log-pressure, not logarithmic interpolation of the field itself.
+        Defaults to ``"log"``. The legacy alias ``"logp"`` is still accepted.
 
     target_pressure : :class:`xarray.DataArray`, :class:`numpy.ndarray`, optional
         Optional explicit solver pressure grid in Pa or hPa. If omitted, the
@@ -422,6 +427,12 @@ def baroc_growth_rate(
        B(k) \sim f^2 \partial_p \left(N_z^{-1}\partial_p\right) - k^2,
 
     and the returned value is :math:`\max_k \operatorname{Im}(\lambda_k)`.
+
+    The default ``DEFAULT_SOLVER_LEVELS = 45`` is a practical resolution
+    choice, not a formal optimum. Increasing the number of solver levels can
+    improve vertical-grid convergence up to a point, but it also increases the
+    per-profile eigenvalue cost and does not guarantee a better diagnostic once
+    the solution is already converged on the chosen pressure interval.
 
     References
     ----------
