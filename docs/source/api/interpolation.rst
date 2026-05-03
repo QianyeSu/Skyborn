@@ -53,6 +53,18 @@ execution path for ``interp_hybrid_to_pressure``:
 * Dask ``map_blocks`` fallback for chunked inputs that still need the older
   workaround path
 
+Pressure-Coordinate Profiles
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: skyborn.interp.interp_pressure_1d
+
+.. note::
+
+   The public ``interp_pressure_1d`` signature now uses the descriptive
+   parameter names ``values``, ``source_pressure``, and ``target_pressure``.
+   The historical aliases ``x``, ``p_in``, and ``p_out`` are still accepted
+   for backward compatibility.
+
 Hybrid-Level Diagnostics
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
