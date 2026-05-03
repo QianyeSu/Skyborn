@@ -41,6 +41,7 @@ from .geostrophic import (
 
 # Import tropical cyclone potential intensity calculation
 from .GPI import potential_intensity
+from .growth_rate_core.core import baroc_growth_rate, barot_growth_rate
 from .mann_kendall import mk_multidim  # alias
 from .mann_kendall import mk_test  # alias
 from .mann_kendall import (
