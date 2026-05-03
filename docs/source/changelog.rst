@@ -19,8 +19,8 @@ Version 0.3.22 (Planned)
   ``"logp"`` to ``"log"`` while keeping ``"logp"`` as a compatibility
   alias, and renamed the public ``interp_pressure_1d`` parameter names
   from ``x`` / ``p_in`` / ``p_out`` to the clearer
-  ``values`` / ``source_pressure`` / ``target_pressure`` while
-  preserving the legacy keyword aliases
+  ``data`` / ``source_pressure`` / ``target_pressure`` while
+  preserving the older ``values`` keyword and the other legacy aliases
 
 **Bug Fixes**
 
