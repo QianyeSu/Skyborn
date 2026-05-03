@@ -25,19 +25,18 @@ module growth_rate_kernels_core
     public :: omega
     public :: radius
     public :: dgeev_lwork
-    public :: solve_linear_system_eig_max_imag
+    public :: solve_tridiagonal_system_eig_max_imag
     public :: wavenumber_step
     public :: finalize_baroc_growth
     public :: finalize_barot_growth
 
     interface
-        subroutine dgesv(n, nrhs, a, lda, ipiv, b, ldb, info)
+        subroutine dgtsv(n, nrhs, dl, d, du, b, ldb, info)
             import :: real64
-            integer, intent(in) :: n, nrhs, lda, ldb
-            integer, intent(out) :: ipiv(*)
-            real(real64), intent(inout) :: a(lda, *), b(ldb, *)
+            integer, intent(in) :: n, nrhs, ldb
+            real(real64), intent(inout) :: dl(*), d(*), du(*), b(ldb, *)
             integer, intent(out) :: info
-        end subroutine dgesv
+        end subroutine dgtsv
 
         subroutine dgeev(jobvl, jobvr, n, a, lda, wr, wi, vl, ldvl, vr, ldvr, &
                          work, lwork, info)
@@ -77,12 +76,10 @@ contains
     end function dgeev_lwork
 
 
-    subroutine solve_linear_system_eig_max_imag( &
-        a_in, b_in, eig_matrix, b_work, ipiv, wr, wi, work, lwork, max_imag, info &
+    subroutine solve_tridiagonal_system_eig_max_imag( &
+        eig_matrix, dl, d, du, wr, wi, work, lwork, max_imag, info &
     )
-        real(real64), intent(in) :: a_in(:, :), b_in(:, :)
-        real(real64), intent(inout) :: eig_matrix(:, :), b_work(:, :), wr(:), wi(:), work(:)
-        integer, intent(inout) :: ipiv(:)
+        real(real64), intent(inout) :: eig_matrix(:, :), dl(:), d(:), du(:), wr(:), wi(:), work(:)
         integer, intent(in) :: lwork
         real(real64), intent(out) :: max_imag
         integer, intent(out) :: info
@@ -91,11 +88,8 @@ contains
         integer :: i, n
         logical :: has_valid
 
-        n = size(a_in, 1)
-        eig_matrix = a_in
-        b_work = b_in
-
-        call dgesv(n, n, b_work, n, ipiv, eig_matrix, n, info)
+        n = size(eig_matrix, 1)
+        call dgtsv(n, n, dl, d, du, eig_matrix, n, info)
         if (info /= 0) then
             max_imag = nan_value()
             return
@@ -122,7 +116,7 @@ contains
             info = 1
             max_imag = nan_value()
         end if
-    end subroutine solve_linear_system_eig_max_imag
+    end subroutine solve_tridiagonal_system_eig_max_imag
 
 
     subroutine finalize_barot_growth(growth, max_growth, ier)
@@ -200,7 +194,7 @@ end module growth_rate_kernels_core
 subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
     use growth_rate_kernels_core, only : &
         dgeev_lwork, real64, nan_value, nwavenumbers, omega, radius, &
-        solve_linear_system_eig_max_imag, wavenumber_step, finalize_barot_growth
+        solve_tridiagonal_system_eig_max_imag, wavenumber_step, finalize_barot_growth
     implicit none
 
     integer, intent(in) :: nlat
@@ -208,11 +202,11 @@ subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
     real(real64), intent(out) :: max_growth
     integer, intent(out) :: ier
 
-    real(real64) :: a(nlat, nlat), b(nlat, nlat), beta_arr(nlat)
+    real(real64) :: a_diag_linear(nlat), a_lower_coeff(nlat - 1), a_upper_coeff(nlat - 1)
+    real(real64) :: b_diag_base(nlat), b_lower_coeff(nlat - 1), b_upper_coeff(nlat - 1), beta_arr(nlat)
     real(real64) :: dy(nlat - 1), dy1(nlat - 1), dy2(nlat - 2), growth(nwavenumbers)
-    real(real64) :: kval, y(nlat), y1, y2, growth_k
-    real(real64), allocatable :: eig_matrix(:, :), b_work(:, :), wr(:), wi(:), eig_work(:)
-    integer, allocatable :: ipiv(:)
+    real(real64) :: kval, kval2, kval3, y(nlat), y1, y2, growth_k
+    real(real64), allocatable :: eig_matrix(:, :), b_diag(:), b_lower(:), b_upper(:), wr(:), wi(:), eig_work(:)
     integer :: info, k, lwork, n
 
     if (nlat < 3) then
@@ -229,49 +223,57 @@ subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
     y2 = (y(nlat) - y(nlat - 1)) * cos((acos(-1.0_real64) / 180.0_real64) * ((lat(nlat) + lat(nlat - 1)) / 2.0_real64))
     beta_arr = 2.0_real64 * omega * cos((acos(-1.0_real64) / 180.0_real64) * lat) / radius
 
+    a_diag_linear(1) = beta_arr(1) + u(1) / y1 * (-1.0_real64 / y1 - 1.0_real64 / dy(1)) - &
+        (1.0_real64 / y1) * (((-u(1)) / y1) - ((u(1) - u(2)) / dy(1)))
+    b_diag_base(1) = (1.0_real64 / y1) * (-1.0_real64 / y1 - 1.0_real64 / dy(1))
+    a_upper_coeff(1) = u(1) / (y1 * dy(1))
+    b_upper_coeff(1) = 1.0_real64 / (y1 * dy(1))
+
+    do n = 2, nlat - 1
+        a_lower_coeff(n - 1) = u(n) / (dy2(n - 1) * dy(n - 1))
+        a_upper_coeff(n) = u(n) / (dy2(n - 1) * dy(n))
+        a_diag_linear(n) = beta_arr(n) + &
+            u(n) / dy2(n - 1) * (-1.0_real64 / dy(n - 1) - 1.0_real64 / dy(n)) - &
+            (1.0_real64 / dy2(n - 1)) * (((u(n - 1) - u(n)) / dy(n - 1)) - ((u(n) - u(n + 1)) / dy(n)))
+        b_lower_coeff(n - 1) = 1.0_real64 / (dy2(n - 1) * dy(n - 1))
+        b_upper_coeff(n) = 1.0_real64 / (dy2(n - 1) * dy(n))
+        b_diag_base(n) = (1.0_real64 / dy2(n - 1)) * (-1.0_real64 / dy(n - 1) - 1.0_real64 / dy(n))
+    end do
+
+    a_lower_coeff(nlat - 1) = u(nlat) / (y2 * dy(nlat - 1))
+    b_lower_coeff(nlat - 1) = 1.0_real64 / (y2 * dy(nlat - 1))
+    a_diag_linear(nlat) = beta_arr(nlat) + u(nlat) / y2 * (-1.0_real64 / dy(nlat - 1) - 1.0_real64 / y2) - &
+        (1.0_real64 / y2) * (((u(nlat - 1) - u(nlat)) / dy(nlat - 1)) - u(nlat) / y2)
+    b_diag_base(nlat) = (1.0_real64 / y2) * (-1.0_real64 / dy(nlat - 1) - 1.0_real64 / y2)
+
     lwork = dgeev_lwork(nlat)
-    allocate(eig_matrix(nlat, nlat), b_work(nlat, nlat), wr(nlat), wi(nlat), eig_work(lwork), ipiv(nlat))
+    allocate(eig_matrix(nlat, nlat), b_diag(nlat), b_lower(nlat - 1), b_upper(nlat - 1), wr(nlat), wi(nlat), eig_work(lwork))
 
     growth = nan_value()
     do k = 1, nwavenumbers
         kval = real(k - 1, real64) * wavenumber_step
-        a = 0.0_real64
-        b = 0.0_real64
+        kval2 = kval * kval
+        kval3 = kval2 * kval
+        eig_matrix = 0.0_real64
+        b_lower = b_lower_coeff
+        b_diag = b_diag_base - kval2
+        b_upper = b_upper_coeff
 
         do n = 1, nlat
-            if (n == nlat) then
-                a(n, n) = kval * beta_arr(n) - (kval**2) * (kval * u(n)) + &
-                    (kval * u(n)) / y2 * (-1.0_real64 / dy(n - 1) - 1.0_real64 / y2) - &
-                    kval / y2 * (((u(n - 1) - u(n)) / dy(n - 1)) - u(n) / y2)
-                a(n, n - 1) = (kval * u(n)) / (y2 * dy(n - 1))
-                b(n, n) = -(kval**2) + (1.0_real64 / y2) * (-1.0_real64 / dy(n - 1) - 1.0_real64 / y2)
-                b(n, n - 1) = 1.0_real64 / (y2 * dy(n - 1))
-            else if (n == 1) then
-                a(n, n) = kval * beta_arr(n) - (kval**2) * (kval * u(n)) + &
-                    (kval * u(n)) / y1 * (-1.0_real64 / y1 - 1.0_real64 / dy(n)) - &
-                    kval / y1 * (((-u(n)) / y1) - ((u(n) - u(n + 1)) / dy(n)))
-                a(n, n + 1) = (kval * u(n)) / (y1 * dy(n))
-                b(n, n) = -(kval**2) + (1.0_real64 / y1) * (-1.0_real64 / y1 - 1.0_real64 / dy(n))
-                b(n, n + 1) = 1.0_real64 / (y1 * dy(n))
-            else
-                a(n, n - 1) = (kval * u(n)) / (dy2(n - 1) * dy(n - 1))
-                a(n, n + 1) = (kval * u(n)) / (dy2(n - 1) * dy(n))
-                a(n, n) = kval * beta_arr(n) - (kval**2) * (kval * u(n)) + &
-                    (kval * u(n)) / dy2(n - 1) * (-1.0_real64 / dy(n - 1) - 1.0_real64 / dy(n)) - &
-                    kval / dy2(n - 1) * (((u(n - 1) - u(n)) / dy(n - 1)) - ((u(n) - u(n + 1)) / dy(n)))
-                b(n, n - 1) = 1.0_real64 / (dy2(n - 1) * dy(n - 1))
-                b(n, n + 1) = 1.0_real64 / (dy2(n - 1) * dy(n))
-                b(n, n) = -(kval**2) + (1.0_real64 / dy2(n - 1)) * (-1.0_real64 / dy(n - 1) - 1.0_real64 / dy(n))
-            end if
+            eig_matrix(n, n) = kval * a_diag_linear(n) - kval3 * u(n)
+        end do
+        do n = 1, nlat - 1
+            eig_matrix(n + 1, n) = kval * a_lower_coeff(n)
+            eig_matrix(n, n + 1) = kval * a_upper_coeff(n)
         end do
 
-        call solve_linear_system_eig_max_imag( &
-            a, b, eig_matrix, b_work, ipiv, wr, wi, eig_work, lwork, growth_k, info &
+        call solve_tridiagonal_system_eig_max_imag( &
+            eig_matrix, b_lower, b_diag, b_upper, wr, wi, eig_work, lwork, growth_k, info &
         )
         if (info == 0) growth(k) = growth_k
     end do
 
-    deallocate(eig_matrix, b_work, wr, wi, eig_work, ipiv)
+    deallocate(eig_matrix, b_diag, b_lower, b_upper, wr, wi, eig_work)
     call finalize_barot_growth(growth, max_growth, ier)
 end subroutine dbarot_growth_rate_1d
 
@@ -279,7 +281,7 @@ end subroutine dbarot_growth_rate_1d
 subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, max_growth, ier, nlev)
     use growth_rate_kernels_core, only : &
         dgeev_lwork, real64, gas_constant_dry, nan_value, nwavenumbers, omega, &
-        radius, solve_linear_system_eig_max_imag, wavenumber_step, finalize_baroc_growth
+        radius, solve_tridiagonal_system_eig_max_imag, wavenumber_step, finalize_baroc_growth
     implicit none
 
     integer, intent(in) :: nlev
@@ -287,11 +289,11 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, max_growt
     real(real64), intent(out) :: max_growth
     integer, intent(out) :: ier
 
-    real(real64) :: a(nlev, nlev), b(nlev, nlev), dz1(nlev - 1), dz2(nlev)
+    real(real64) :: a_diag_linear(nlev), a_lower_coeff(nlev - 1), a_upper_coeff(nlev - 1)
+    real(real64) :: b_diag_base(nlev), b_lower_coeff(nlev - 1), b_upper_coeff(nlev - 1), dz1(nlev - 1), dz2(nlev)
     real(real64) :: growth(nwavenumbers), growth_k, kval
-    real(real64) :: f, beta, nz(nlev - 1), rho(nlev)
-    real(real64), allocatable :: eig_matrix(:, :), b_work(:, :), wr(:), wi(:), eig_work(:)
-    integer, allocatable :: ipiv(:)
+    real(real64) :: f, f2, beta, kval2, kval3, nz(nlev - 1), rho(nlev)
+    real(real64), allocatable :: eig_matrix(:, :), b_diag(:), b_lower(:), b_upper(:), wr(:), wi(:), eig_work(:)
     integer :: info, k, lwork, n
 
     if (nlev < 3) then
@@ -305,52 +307,60 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, max_growt
     dz2(2:nlev - 1) = dz1(2:) - dz1(:nlev - 2)
     dz2(nlev) = pressure(nlev) - pressure(nlev - 1)
     f = 2.0_real64 * omega * sin((acos(-1.0_real64) / 180.0_real64) * lat)
+    f2 = f * f
     beta = 2.0_real64 * omega * cos((acos(-1.0_real64) / 180.0_real64) * lat) / radius
     rho = pressure / (gas_constant_dry * temperature)
     nz = -((theta(2:) - theta(:nlev - 1)) * (1.0_real64 / (rho(:nlev - 1) * theta(:nlev - 1))))
 
+    a_diag_linear(1) = beta + u(1) * f2 / dz2(1) * (-1.0_real64 / nz(1)) - &
+        f2 / dz2(1) * ((u(2) - u(1)) / nz(1))
+    b_diag_base(1) = f2 / dz2(1) * (-1.0_real64 / nz(1))
+    a_upper_coeff(1) = u(1) * f2 / (dz2(1) * nz(1))
+    b_upper_coeff(1) = f2 / (dz2(1) * nz(1))
+
+    do n = 2, nlev - 1
+        a_lower_coeff(n - 1) = u(n) * f2 / (dz2(n) * nz(n - 1))
+        a_upper_coeff(n) = u(n) * f2 / (dz2(n) * nz(n))
+        a_diag_linear(n) = beta + u(n) * f2 / dz2(n) * (-1.0_real64 / nz(n - 1) - 1.0_real64 / nz(n)) - &
+            f2 / dz2(n) * (((u(n - 1) - u(n)) / nz(n - 1)) - ((u(n) - u(n + 1)) / nz(n)))
+        b_lower_coeff(n - 1) = f2 / (dz2(n) * nz(n - 1))
+        b_upper_coeff(n) = f2 / (dz2(n) * nz(n))
+        b_diag_base(n) = f2 / dz2(n) * (-1.0_real64 / nz(n - 1) - 1.0_real64 / nz(n))
+    end do
+
+    a_lower_coeff(nlev - 1) = u(nlev) * f2 / (dz2(nlev) * nz(nlev - 1))
+    b_lower_coeff(nlev - 1) = f2 / (dz2(nlev) * nz(nlev - 1))
+    a_diag_linear(nlev) = beta + u(nlev) * f2 / dz2(nlev) * (-1.0_real64 / nz(nlev - 1)) - &
+        f2 / dz2(nlev) * ((u(nlev - 1) - u(nlev)) / nz(nlev - 1))
+    b_diag_base(nlev) = f2 / dz2(nlev) * (-1.0_real64 / nz(nlev - 1))
+
     lwork = dgeev_lwork(nlev)
-    allocate(eig_matrix(nlev, nlev), b_work(nlev, nlev), wr(nlev), wi(nlev), eig_work(lwork), ipiv(nlev))
+    allocate(eig_matrix(nlev, nlev), b_diag(nlev), b_lower(nlev - 1), b_upper(nlev - 1), wr(nlev), wi(nlev), eig_work(lwork))
 
     growth = nan_value()
     do k = 1, nwavenumbers
         kval = real(k - 1, real64) * wavenumber_step
-        a = 0.0_real64
-        b = 0.0_real64
+        kval2 = kval * kval
+        kval3 = kval2 * kval
+        eig_matrix = 0.0_real64
+        b_lower = b_lower_coeff
+        b_diag = b_diag_base - kval2
+        b_upper = b_upper_coeff
 
         do n = 1, nlev
-            if (n == nlev) then
-                a(n, n) = kval * beta - (kval**2) * (kval * u(n)) + &
-                    (kval * u(n)) * (f**2) / dz2(n) * (-1.0_real64 / nz(n - 1)) - &
-                    kval * (f**2) / dz2(n) * ((u(n - 1) - u(n)) / nz(n - 1))
-                a(n, n - 1) = (kval * u(n)) * (f**2) / (dz2(n) * nz(n - 1))
-                b(n, n) = -(kval**2) + (f**2) / dz2(n) * (-1.0_real64 / nz(n - 1))
-                b(n, n - 1) = (f**2) / (dz2(n) * nz(n - 1))
-            else if (n == 1) then
-                a(n, n) = kval * beta - (kval**2) * (kval * u(n)) + &
-                    (kval * u(n)) * (f**2) / dz2(n) * (-1.0_real64 / nz(n)) - &
-                    kval * (f**2) / dz2(n) * ((u(n + 1) - u(n)) / nz(n))
-                a(n, n + 1) = (kval * u(n)) * (f**2) / (dz2(n) * nz(n))
-                b(n, n) = -(kval**2) + (f**2) / dz2(n) * (-1.0_real64 / nz(n))
-                b(n, n + 1) = (f**2) / (dz2(n) * nz(n))
-            else
-                a(n, n - 1) = (kval * u(n)) * (f**2) / (dz2(n) * nz(n - 1))
-                a(n, n + 1) = (kval * u(n)) * (f**2) / (dz2(n) * nz(n))
-                a(n, n) = kval * beta - (kval**2) * (kval * u(n)) + &
-                    (kval * u(n)) * (f**2) / dz2(n) * (-1.0_real64 / nz(n - 1) - 1.0_real64 / nz(n)) - &
-                    kval * (f**2) / dz2(n) * (((u(n - 1) - u(n)) / nz(n - 1)) - ((u(n) - u(n + 1)) / nz(n)))
-                b(n, n - 1) = (f**2) / (dz2(n) * nz(n - 1))
-                b(n, n + 1) = (f**2) / (dz2(n) * nz(n))
-                b(n, n) = -(kval**2) + (f**2) / dz2(n) * (-1.0_real64 / nz(n - 1) - 1.0_real64 / nz(n))
-            end if
+            eig_matrix(n, n) = kval * a_diag_linear(n) - kval3 * u(n)
+        end do
+        do n = 1, nlev - 1
+            eig_matrix(n + 1, n) = kval * a_lower_coeff(n)
+            eig_matrix(n, n + 1) = kval * a_upper_coeff(n)
         end do
 
-        call solve_linear_system_eig_max_imag( &
-            a, b, eig_matrix, b_work, ipiv, wr, wi, eig_work, lwork, growth_k, info &
+        call solve_tridiagonal_system_eig_max_imag( &
+            eig_matrix, b_lower, b_diag, b_upper, wr, wi, eig_work, lwork, growth_k, info &
         )
         if (info == 0) growth(k) = growth_k
     end do
 
-    deallocate(eig_matrix, b_work, wr, wi, eig_work, ipiv)
+    deallocate(eig_matrix, b_diag, b_lower, b_upper, wr, wi, eig_work)
     call finalize_baroc_growth(growth, max_growth, ier)
 end subroutine dbaroc_growth_rate_1d
