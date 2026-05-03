@@ -13,12 +13,24 @@ Version 0.3.22 (Planned)
 * **windspharm Performance Improvements**: Reduced the Python-side
   overhead in the tested wind-decomposition workflow family while
   keeping the established public numerical conventions unchanged
+* **Growth-rate and Pressure-Interpolation API Cleanup**: Clarified the
+  new compiled growth-rate documentation, changed the public
+  ``baroc_growth_rate`` default vertical interpolation spelling from
+  ``"logp"`` to ``"log"`` while keeping ``"logp"`` as a compatibility
+  alias, and renamed the public ``interp_pressure_1d`` parameter names
+  from ``x`` / ``p_in`` / ``p_out`` to the clearer
+  ``values`` / ``source_pressure`` / ``target_pressure`` while
+  preserving the legacy keyword aliases
 
 **Bug Fixes**
 
 * **spharm and windspharm Regression Coverage**: Added focused tests for
   the updated internal spectral-helper and wind-analysis paths,
   including shape-validation coverage for the new optimized flow
+* **Growth-rate and Interpolation Regression Coverage**: Extended
+  focused wrapper tests so the current ``skyborn.calc.growth_rate`` and
+  updated ``interp_pressure_1d`` Python dispatch paths keep their new
+  public naming and validation branches covered
 
 Version 0.3.21 (Current)
 ------------------------
