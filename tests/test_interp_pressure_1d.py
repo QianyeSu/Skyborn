@@ -34,6 +34,18 @@ class TestInterpPressure1D:
         """The public API should accept descriptive pressure-interpolation keywords."""
 
         result = interp_pressure_1d(
+            data=np.array([10.0, 20.0, 40.0]),
+            source_pressure=np.array([1000.0, 850.0, 700.0]),
+            target_pressure=np.array([925.0, 775.0]),
+            method="linear",
+        )
+
+        assert_allclose(result, np.array([15.0, 30.0]), rtol=0.0, atol=1e-12)
+
+    def test_values_keyword_alias_remains_supported(self):
+        """The older ``values=`` keyword should remain valid for compatibility."""
+
+        result = interp_pressure_1d(
             values=np.array([10.0, 20.0, 40.0]),
             source_pressure=np.array([1000.0, 850.0, 700.0]),
             target_pressure=np.array([925.0, 775.0]),
@@ -43,7 +55,7 @@ class TestInterpPressure1D:
         assert_allclose(result, np.array([15.0, 30.0]), rtol=0.0, atol=1e-12)
 
     def test_legacy_keyword_aliases_remain_supported(self):
-        """The legacy keyword aliases should remain valid for compatibility."""
+        """The oldest keyword aliases should remain valid for compatibility."""
 
         result = interp_pressure_1d(
             x=np.array([10.0, 20.0, 40.0]),
