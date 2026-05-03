@@ -30,6 +30,30 @@ def _compat_low_end_log_extrap(
 class TestInterpPressure1D:
     """Behavior checks for `interp_pressure_1d`."""
 
+    def test_descriptive_keyword_names_are_supported(self):
+        """The public API should accept descriptive pressure-interpolation keywords."""
+
+        result = interp_pressure_1d(
+            values=np.array([10.0, 20.0, 40.0]),
+            source_pressure=np.array([1000.0, 850.0, 700.0]),
+            target_pressure=np.array([925.0, 775.0]),
+            method="linear",
+        )
+
+        assert_allclose(result, np.array([15.0, 30.0]), rtol=0.0, atol=1e-12)
+
+    def test_legacy_keyword_aliases_remain_supported(self):
+        """The legacy keyword aliases should remain valid for compatibility."""
+
+        result = interp_pressure_1d(
+            x=np.array([10.0, 20.0, 40.0]),
+            p_in=np.array([1000.0, 850.0, 700.0]),
+            p_out=np.array([925.0, 775.0]),
+            method="linear",
+        )
+
+        assert_allclose(result, np.array([15.0, 30.0]), rtol=0.0, atol=1e-12)
+
     def test_linear_interpolation_matches_hand_calculation(self):
         """Linear-in-pressure mode should match a small hand-computed example."""
 
