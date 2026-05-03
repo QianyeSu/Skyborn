@@ -73,7 +73,7 @@ To use any module, import Skyborn and access the module:
 
    # Growth-rate diagnostics
    sigma_baroc = skb.calc.baroc_growth_rate(
-       u_profile, temperature_profile, pressure_profile, lat=45.0
+       u_profile, temperature_profile, pressure_profile, lat=45.0, solver_levels=45
    )
    sigma_barot = skb.calc.barot_growth_rate(u_barotropic_profile, latitudes)
 
