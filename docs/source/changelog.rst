@@ -28,6 +28,11 @@ Version 0.3.22 (Planned)
   Fortran backend before the final maximum-growth diagnostic is taken; the
   public default is ``smooth_window=1`` to disable smoothing unless the caller
   explicitly requests an odd window greater than 1
+* **Growth-rate Adaptive Spectrum Solver**: Added an experimental
+  ``spectral_solver="adaptive"`` option for
+  ``baroc_growth_rate`` that keeps the current Fortran matrix discretization
+  but can stop the wavenumber sweep early on well separated growth spectra;
+  ``spectral_solver="full"`` remains the default reference path
 
 **Bug Fixes**
 
