@@ -562,7 +562,7 @@ class VectorWind:
         self._vector_analysis_layout_cache = cache
         return cache
 
-    def _vector_analysis_spectra(
+    def _vector_analysis_spectral(
         self, truncation: Optional[int] = None, component: Optional[str] = None
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """Return cached-layout vector-analysis spectra for wind-derived diagnostics."""
@@ -687,7 +687,7 @@ class VectorWind:
         >>> vrt, div = vw.vrtdiv()
         >>> vrt_t13, div_t13 = vw.vrtdiv(truncation=13)
         """
-        vrtspec, divspec = self._vector_analysis_spectra(truncation=truncation)
+        vrtspec, divspec = self._vector_analysis_spectral(truncation=truncation)
         vrt, div = self.s._spectogrd_pair(vrtspec, divspec)
         return (
             self._restore_output_dtype(vrt),
@@ -720,7 +720,7 @@ class VectorWind:
         """
         return self._restore_output_dtype(
             self.s.spectogrd(
-                self._vector_analysis_spectra(truncation=truncation, component="vrt")
+                self._vector_analysis_spectral(truncation=truncation, component="vrt")
             )
         )
 
@@ -749,7 +749,7 @@ class VectorWind:
         """
         return self._restore_output_dtype(
             self.s.spectogrd(
-                self._vector_analysis_spectra(truncation=truncation, component="div")
+                self._vector_analysis_spectral(truncation=truncation, component="div")
             )
         )
 
@@ -809,7 +809,7 @@ class VectorWind:
         >>> abs_vrt_t13 = vw.absolutevorticity(omega=7.2921150e-5, truncation=13)
         """
         vrt = self.s.spectogrd(
-            self._vector_analysis_spectra(truncation=truncation, component="vrt")
+            self._vector_analysis_spectral(truncation=truncation, component="vrt")
         )
         return self._restore_output_dtype(
             vrt + self._planetary_vorticity(omega=omega, materialize=False)
@@ -841,7 +841,7 @@ class VectorWind:
         >>> psi, chi = vw.sfvp()
         >>> psi_t13, chi_t13 = vw.sfvp(truncation=13)
         """
-        vrtspec, divspec = self._vector_analysis_spectra(truncation=truncation)
+        vrtspec, divspec = self._vector_analysis_spectral(truncation=truncation)
         psi, chi = self.s._spectogrd_pair(
             self.s._invlapspec(vrtspec, "sfvp"),
             self.s._invlapspec(divspec, "sfvp"),
@@ -873,7 +873,7 @@ class VectorWind:
         """
         psi = self.s.spectogrd(
             self.s._invlapspec(
-                self._vector_analysis_spectra(truncation=truncation, component="vrt"),
+                self._vector_analysis_spectral(truncation=truncation, component="vrt"),
                 "streamfunction",
             )
         )
@@ -904,7 +904,7 @@ class VectorWind:
         """
         chi = self.s.spectogrd(
             self.s._invlapspec(
-                self._vector_analysis_spectra(truncation=truncation, component="div"),
+                self._vector_analysis_spectral(truncation=truncation, component="div"),
                 "velocitypotential",
             )
         )
@@ -945,7 +945,7 @@ class VectorWind:
         >>> u_chi, v_chi, u_psi, v_psi = vw.helmholtz()
         >>> u_chi_t13, v_chi_t13, u_psi_t13, v_psi_t13 = vw.helmholtz(truncation=13)
         """
-        vrtspec, divspec = self._vector_analysis_spectra(truncation=truncation)
+        vrtspec, divspec = self._vector_analysis_spectral(truncation=truncation)
         psispec = self.s._invlapspec(vrtspec, "helmholtz")
         chispec = self.s._invlapspec(divspec, "helmholtz")
         v_psi, u_psi = self.s.getgrad(psispec)
@@ -992,7 +992,7 @@ class VectorWind:
         """
         u_chi, v_chi = self.s.getgrad(
             self.s._invlapspec(
-                self._vector_analysis_spectra(truncation=truncation, component="div"),
+                self._vector_analysis_spectral(truncation=truncation, component="div"),
                 "irrotationalcomponent",
             )
         )
@@ -1032,7 +1032,7 @@ class VectorWind:
         >>> u_psi_t13, v_psi_t13 = vw.nondivergentcomponent(truncation=13)
         """
         psispec = self.s._invlapspec(
-            self._vector_analysis_spectra(truncation=truncation, component="vrt"),
+            self._vector_analysis_spectral(truncation=truncation, component="vrt"),
             "nondivergentcomponent",
         )
         v_psi, u_psi = self.s.getgrad(psispec)
@@ -1179,7 +1179,7 @@ class VectorWind:
         Atmospheric Sciences, 45(7), 1228-1251.
         """
         # Reuse the first vector analysis for both grid-space and spectral terms.
-        vrtspec, divspec = self._vector_analysis_spectra(truncation=truncation)
+        vrtspec, divspec = self._vector_analysis_spectral(truncation=truncation)
         vrt, div = self.s._spectogrd_pair(vrtspec, divspec)
         eta = vrt + self._planetary_vorticity(omega=omega, materialize=False)
 
