@@ -6,10 +6,25 @@ dispatches the expensive normal-mode solves to the compiled Fortran kernels in
 
 References
 ----------
-Chemke, R., and Polvani, L. M. (2020):
+Chemke, R., and Polvani, L. M. (2019):
     Exploiting the Abrupt 4 x CO2 Scenario to Elucidate Tropical Expansion
     Mechanisms. Journal of Climate, 32(3), 859-875.
     https://doi.org/10.1175/JCLI-D-18-0330.1
+
+Chemke, R. (2021):
+    Future Changes in the Hadley Circulation: The Role of Ocean Heat
+    Transport. Geophysical Research Letters, 48, e2020GL091372.
+    https://doi.org/10.1029/2020GL091372
+
+Chemke, R., Zanna, L., Polvani, L. M., Orbe, C., and Sentman, L. T. (2022):
+    Ocean-Coupled Contributions to the Recent Poleward Expansion of the
+    Southern Hemisphere Hadley Cell. Journal of Climate, 35(19), 6131-6144.
+    https://doi.org/10.1175/JCLI-D-21-0407.1
+
+Chemke, R. (2022):
+    The future poleward shift of Southern Hemisphere summer mid-latitude
+    storm tracks stems from ocean coupling. Nature Communications, 13, 2531.
+    https://doi.org/10.1038/s41467-022-29392-4
 
 Chemke, R., Ming, Y., and Yuval, J. (2022):
     The intensification of winter mid-latitude storm tracks in the Southern
@@ -201,6 +216,7 @@ def _build_solver_pressure_grid_pa(
     pressure_pa: np.ndarray,
     temperature: np.ndarray,
     target_pressure: ProfileInput | None,
+    solver_levels: int,
 ) -> np.ndarray:
     """Build the solver pressure grid in Pascals."""
 
@@ -223,9 +239,23 @@ def _build_solver_pressure_grid_pa(
     return np.linspace(
         tropopause_pressure_pa,
         bottom_pressure_pa,
-        DEFAULT_SOLVER_LEVELS,
+        solver_levels,
         dtype=np.float64,
     )
+
+
+def _normalize_solver_levels(solver_levels: int) -> int:
+    """Validate the requested automatic solver-grid level count."""
+
+    if isinstance(solver_levels, bool) or not isinstance(
+        solver_levels, (int, np.integer)
+    ):
+        raise TypeError("`solver_levels` must be an integer >= 2")
+
+    normalized = int(solver_levels)
+    if normalized < 2:
+        raise ValueError("`solver_levels` must be at least 2")
+    return normalized
 
 
 def barot_growth_rate(
@@ -342,6 +372,7 @@ def baroc_growth_rate(
     output_units: str = "s-1",
     vertical_interp: str = "log",
     target_pressure: ProfileInput | None = None,
+    solver_levels: int = DEFAULT_SOLVER_LEVELS,
     missing_value: MissingValue = np.nan,
 ) -> float:
     r"""Compute the maximum baroclinic normal-mode growth rate.
@@ -376,8 +407,14 @@ def baroc_growth_rate(
     target_pressure : :class:`xarray.DataArray`, :class:`numpy.ndarray`, optional
         Optional explicit solver pressure grid in Pa or hPa. If omitted, the
         function diagnoses the WMO tropopause pressure from the input
-        ``temperature`` and builds a fixed ``DEFAULT_SOLVER_LEVELS`` grid from
-        that tropopause to the lower-tropospheric bound.
+        ``temperature`` and builds a fixed-pressure solver grid from that
+        tropopause to the lower-tropospheric bound.
+
+    solver_levels : int, optional
+        Number of pressure levels used when ``target_pressure`` is omitted and
+        the solver grid is built automatically. Defaults to
+        ``DEFAULT_SOLVER_LEVELS``. Ignored when ``target_pressure`` is given
+        explicitly.
 
     missing_value : scalar, optional
         Public missing-value marker. If any input value is missing, the
@@ -429,17 +466,34 @@ def baroc_growth_rate(
     and the returned value is :math:`\max_k \operatorname{Im}(\lambda_k)`.
 
     The default ``DEFAULT_SOLVER_LEVELS = 45`` is a practical resolution
-    choice, not a formal optimum. Increasing the number of solver levels can
-    improve vertical-grid convergence up to a point, but it also increases the
+    choice, not a formal optimum. Increasing ``solver_levels`` can improve
+    vertical-grid convergence up to a point, but it also increases the
     per-profile eigenvalue cost and does not guarantee a better diagnostic once
     the solution is already converged on the chosen pressure interval.
 
     References
     ----------
-    Chemke, R., and Polvani, L. M. (2020):
+    Chemke, R., and Polvani, L. M. (2019):
         Exploiting the Abrupt 4 x CO2 Scenario to Elucidate Tropical
         Expansion Mechanisms. Journal of Climate, 32(3), 859-875.
         https://doi.org/10.1175/JCLI-D-18-0330.1
+
+    Chemke, R. (2021):
+        Future Changes in the Hadley Circulation: The Role of Ocean Heat
+        Transport. Geophysical Research Letters, 48, e2020GL091372.
+        https://doi.org/10.1029/2020GL091372
+
+    Chemke, R., Zanna, L., Polvani, L. M., Orbe, C., and Sentman, L. T. (2022):
+        Ocean-Coupled Contributions to the Recent Poleward Expansion of the
+        Southern Hemisphere Hadley Cell. Journal of Climate, 35(19),
+        6131-6144.
+        https://doi.org/10.1175/JCLI-D-21-0407.1
+
+    Chemke, R. (2022):
+        The future poleward shift of Southern Hemisphere summer mid-latitude
+        storm tracks stems from ocean coupling. Nature Communications, 13,
+        2531.
+        https://doi.org/10.1038/s41467-022-29392-4
 
     Chemke, R., Ming, Y., and Yuval, J. (2022):
         The intensification of winter mid-latitude storm tracks in the
@@ -471,11 +525,13 @@ def baroc_growth_rate(
         raise ValueError("temperature values must be strictly positive")
 
     _require_monotonic(pressure_pa, "pressure")
+    solver_levels = _normalize_solver_levels(solver_levels)
 
     target_pressure_pa = _build_solver_pressure_grid_pa(
         pressure_pa,
         temperature_values,
         target_pressure,
+        solver_levels,
     )
     interp_method = _normalize_vertical_interp(vertical_interp)
     u_solver = np.asarray(
