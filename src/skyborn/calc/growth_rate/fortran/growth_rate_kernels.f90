@@ -12,6 +12,8 @@ module growth_rate_kernels_core
     implicit none
     private
 
+    ! shared physical constants and numerical controls for the growth-rate
+    ! kernels so the barotropic and baroclinic paths use the same sampling.
     real(real64), parameter :: omega = 7.292e-5_real64
     real(real64), parameter :: radius = 6.371e6_real64
     real(real64), parameter :: gas_constant_dry = 287.04_real64
@@ -29,7 +31,10 @@ module growth_rate_kernels_core
     public :: wavenumber_step
     public :: finalize_baroc_growth
     public :: finalize_barot_growth
+    public :: apply_centered_running_mean
 
+    ! lapack interfaces used by the dense eigenvalue and tridiagonal solve
+    ! helpers below.
     interface
         subroutine dgtsv(n, nrhs, dl, d, du, b, ldb, info)
             import :: real64
@@ -51,11 +56,25 @@ module growth_rate_kernels_core
 
 contains
 
+    ! quick reference
+    ! purpose
+    !    return a quiet nan sentinel for failed growth-rate calculations.
+    ! expected input shapes
+    !    none.
+    ! output
+    !    value - quiet nan sentinel.
     pure real(real64) function nan_value() result(value)
         value = ieee_value(0.0_real64, ieee_quiet_nan)
     end function nan_value
 
 
+    ! quick reference
+    ! purpose
+    !    query lapack dgeev for a safe workspace size for an n x n matrix.
+    ! expected input shapes
+    !    n - matrix order used to size the temporary query arrays.
+    ! output
+    !    lwork - recommended workspace length for dgeev.
     integer function dgeev_lwork(n) result(lwork)
         integer, intent(in) :: n
 
@@ -76,6 +95,21 @@ contains
     end function dgeev_lwork
 
 
+    ! quick reference
+    ! purpose
+    !    solve the tridiagonal system, convert it to a dense eigenproblem,
+    !    and return the largest imaginary eigenvalue component.
+    ! expected input shapes
+    !    eig_matrix(n,n) - dense matrix overwritten by dgtsv and passed to dgeev.
+    !    dl(n-1)         - lower diagonal band of the tridiagonal matrix.
+    !    d(n)            - main diagonal band of the tridiagonal matrix.
+    !    du(n-1)         - upper diagonal band of the tridiagonal matrix.
+    !    wr(n)           - real parts of the lapack eigenvalues.
+    !    wi(n)           - imaginary parts of the lapack eigenvalues.
+    !    work(lwork)     - lapack workspace for dgeev.
+    ! output
+    !    max_imag - largest imaginary eigenvalue component.
+    !    info      - lapack status flag from dgtsv/dgeev.
     subroutine solve_tridiagonal_system_eig_max_imag( &
         eig_matrix, dl, d, du, wr, wi, work, lwork, max_imag, info &
     )
@@ -119,6 +153,15 @@ contains
     end subroutine solve_tridiagonal_system_eig_max_imag
 
 
+    ! quick reference
+    ! purpose
+    !    collapse the barotropic growth-rate spectrum to its maximum finite
+    !    value.
+    ! expected input shapes
+    !    growth(nwavenumbers) - sampled growth-rate spectrum across wavenumbers.
+    ! output
+    !    max_growth - maximum finite growth-rate sample.
+    !    ier - status flag: 0 on success, 200 when no finite sample exists.
     subroutine finalize_barot_growth(growth, max_growth, ier)
         real(real64), intent(in) :: growth(:)
         real(real64), intent(out) :: max_growth
@@ -148,18 +191,76 @@ contains
     end subroutine finalize_barot_growth
 
 
-    subroutine finalize_baroc_growth(growth, max_growth, ier)
+    ! quick reference
+    ! purpose
+    !    smooth a one-dimensional profile with a centered running mean that
+    !    ignores nan samples.
+    ! expected input shapes
+    !    values(n) - raw growth-rate or diagnostic samples.
+    !    window - centered window width; values <= 1 leave the series unchanged.
+    ! output
+    !    smoothed(n) - averaged profile.
+    subroutine apply_centered_running_mean(values, window, smoothed)
+        real(real64), intent(in) :: values(:)
+        integer, intent(in) :: window
+        real(real64), intent(out) :: smoothed(size(values))
+
+        integer :: count_valid, half_window, i, j, j_end, j_start
+        real(real64) :: value_sum
+
+        if (window <= 1) then
+            smoothed = values
+            return
+        end if
+
+        half_window = window / 2
+        do i = 1, size(values)
+            j_start = max(1, i - half_window)
+            j_end = min(size(values), i + half_window)
+            value_sum = 0.0_real64
+            count_valid = 0
+            do j = j_start, j_end
+                if (ieee_is_nan(values(j))) cycle
+                value_sum = value_sum + values(j)
+                count_valid = count_valid + 1
+            end do
+
+            if (count_valid > 0) then
+                smoothed(i) = value_sum / real(count_valid, real64)
+            else
+                smoothed(i) = nan_value()
+            end if
+        end do
+    end subroutine apply_centered_running_mean
+
+
+    ! quick reference
+    ! purpose
+    !    smooth the baroclinic growth-rate spectrum, find the last turning
+    !    point, and return the peak value up to that point.
+    ! expected input shapes
+    !    growth(nwavenumbers) - sampled growth-rate spectrum across wavenumbers.
+    !    smooth_window - centered smoothing width applied before peak detection.
+    ! output
+    !    max_growth - maximum growth up to the last turning point.
+    !    ier - status flag: 0 on success, 300 when no turning point is found,
+    !         301 when no valid sample remains after smoothing.
+    subroutine finalize_baroc_growth(growth, smooth_window, max_growth, ier)
         real(real64), intent(in) :: growth(:)
+        integer, intent(in) :: smooth_window
         real(real64), intent(out) :: max_growth
         integer, intent(out) :: ier
 
         integer :: i, last_turn
         logical :: has_valid
+        real(real64) :: growth_used(size(growth))
+
+        call apply_centered_running_mean(growth, smooth_window, growth_used)
 
         last_turn = 0
-        do i = 1, size(growth) - 1
-            if (ieee_is_nan(growth(i)) .or. ieee_is_nan(growth(i + 1))) cycle
-            if (growth(i) - growth(i + 1) > 0.0_real64) last_turn = i
+        do i = 1, size(growth_used) - 1
+            if (ieee_is_nan(growth_used(i)) .or. ieee_is_nan(growth_used(i + 1))) cycle
+            if (growth_used(i) - growth_used(i + 1) > 0.0_real64) last_turn = i
         end do
 
         if (last_turn == 0) then
@@ -171,12 +272,12 @@ contains
         has_valid = .false.
         max_growth = nan_value()
         do i = 1, last_turn + 1
-            if (ieee_is_nan(growth(i))) cycle
+            if (ieee_is_nan(growth_used(i))) cycle
             if (.not. has_valid) then
-                max_growth = growth(i)
+                max_growth = growth_used(i)
                 has_valid = .true.
             else
-                max_growth = max(max_growth, growth(i))
+                max_growth = max(max_growth, growth_used(i))
             end if
         end do
 
@@ -191,6 +292,21 @@ contains
 end module growth_rate_kernels_core
 
 
+! quick reference
+! purpose
+!    compute the chemke-style barotropic growth-rate spectrum for a latitude
+!    profile and return the maximum growth.
+! expected input shapes
+!    lat(nlat) - latitude coordinates in degrees for the zonal-mean profile.
+!    u(nlat) - zonal wind profile on the same latitude grid.
+! units
+!    lat - degrees
+!    u - m s-1
+! output
+!    max_growth - maximum finite barotropic growth rate over the sampled
+!                 wavenumbers.
+!    ier - status flag: 0 on success, 1 when nlat < 3, 200 when no finite
+!          sample exists.
 subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
     use growth_rate_kernels_core, only : &
         dgeev_lwork, real64, nan_value, nwavenumbers, omega, radius, &
@@ -278,13 +394,36 @@ subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
 end subroutine dbarot_growth_rate_1d
 
 
-subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, max_growth, ier, nlev)
+! quick reference
+! purpose
+!    compute the chemke-style baroclinic growth-rate spectrum for one vertical
+!    profile and return the smoothed peak growth.
+! expected input shapes
+!    u(nlev) - zonal wind profile with height.
+!    theta(nlev) - potential temperature profile on the same vertical grid.
+!    pressure(nlev) - pressure profile used to build the vertical spacing.
+!    temperature(nlev) - temperature profile used to compute density.
+!    lat - latitude in degrees for the coriolis terms.
+!    smooth_window - centered smoothing width applied before peak detection.
+! units
+!    lat - degrees
+!    pressure - pa
+!    temperature - k
+!    u - m s-1
+!    theta - k
+! output
+!    max_growth - maximum baroclinic growth rate up to the last turning point.
+!    ier - status flag: 0 on success, 1 when nlev < 3, 2 when smooth_window < 1,
+!          300 when no turning point is found, 301 when no valid sample remains
+!          after smoothing.
+subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, smooth_window, max_growth, ier, nlev)
     use growth_rate_kernels_core, only : &
         dgeev_lwork, real64, gas_constant_dry, nan_value, nwavenumbers, omega, &
         radius, solve_tridiagonal_system_eig_max_imag, wavenumber_step, finalize_baroc_growth
     implicit none
 
     integer, intent(in) :: nlev
+    integer, intent(in) :: smooth_window
     real(real64), intent(in) :: u(nlev), theta(nlev), pressure(nlev), temperature(nlev), lat
     real(real64), intent(out) :: max_growth
     integer, intent(out) :: ier
@@ -298,6 +437,12 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, max_growt
 
     if (nlev < 3) then
         ier = 1
+        max_growth = nan_value()
+        return
+    end if
+
+    if (smooth_window < 1) then
+        ier = 2
         max_growth = nan_value()
         return
     end if
@@ -362,5 +507,5 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, max_growt
     end do
 
     deallocate(eig_matrix, b_diag, b_lower, b_upper, wr, wi, eig_work)
-    call finalize_baroc_growth(growth, max_growth, ier)
+    call finalize_baroc_growth(growth, smooth_window, max_growth, ier)
 end subroutine dbaroc_growth_rate_1d
