@@ -191,6 +191,8 @@ Interpolation Functions
 
    * - Function
      - Description
+   * - :func:`skyborn.interp.interp_pressure_1d`
+     - One-dimensional pressure-coordinate interpolation with linear and log-pressure modes
    * - :func:`skyborn.interp.interp_hybrid_to_pressure`
      - Hybrid to pressure interpolation
    * - :func:`skyborn.interp.pressure_at_hybrid_levels`
