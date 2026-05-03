@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Check actual coverage of GPI module by importing and using all functions.
+Check actual coverage of the GPI module by importing and using all functions.
 """
 
 import os
@@ -14,11 +14,9 @@ def main():
 
     print("Testing GPI module coverage...")
 
-    # Test interface module
     import numpy as np
 
     from skyborn.calc.GPI.interface import (
-        UNDEF,
         PotentialIntensityCalculator,
         _ensure_pressure_ordering,
         _postprocess_results,
@@ -27,7 +25,6 @@ def main():
         potential_intensity,
     )
 
-    # Exercise functions
     arr = np.array([1, 2, 3])
     _postprocess_results(arr, arr)
     _validate_input_arrays(arr)
@@ -37,7 +34,6 @@ def main():
     mixr = np.array([0.012, 0.008, 0.005])
     _ensure_pressure_ordering(pressure, temp, mixr)
 
-    # Test xarray module
     try:
         import xarray as xr
 
@@ -48,7 +44,6 @@ def main():
             potential_intensity,
         )
 
-        # Create test data
         da = xr.DataArray(25.0, attrs={"units": "K"})
         _check_units(da, "temperature", "K")
 
@@ -61,7 +56,6 @@ def main():
     except ImportError:
         print("XArray not available")
 
-    # Calculate coverage
     import coverage
 
     cov = coverage.Coverage()
@@ -89,13 +83,13 @@ def main():
             f"\nOverall GPI coverage: {overall:.1f}% ({covered_statements}/{total_statements} lines)"
         )
 
-        if overall >= 96:
-            print("✓ Coverage goal of 96% achieved!")
+        if overall >= 100:
+            print("PASS: Coverage goal of 100% achieved!")
             return 0
-        else:
-            needed = int(0.96 * total_statements) - covered_statements
-            print(f"Need {needed} more lines for 96% coverage")
-            return 1
+
+        needed = total_statements - covered_statements
+        print(f"Need {needed} more lines for 100% coverage")
+        return 1
 
     return 0
 
