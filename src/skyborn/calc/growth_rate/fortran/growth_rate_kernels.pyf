@@ -1,0 +1,29 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module growth_rate_kernels ! in
+    interface ! in :growth_rate_kernels
+        ! signature : max_growth,ier = dbarot_growth_rate_1d(lat,u)
+        subroutine dbarot_growth_rate_1d(lat,u,max_growth,ier,nlat) ! in :growth_rate_kernels:growth_rate_kernels.f90
+            integer, optional, check(len(lat)>=nlat), depend(lat) :: nlat=len(lat)
+            double precision dimension(nlat), intent(in) :: lat
+            double precision dimension(nlat), depend(nlat), intent(in) :: u
+            double precision intent(out) :: max_growth
+            integer intent(out) :: ier
+        end subroutine dbarot_growth_rate_1d
+
+        ! signature : max_growth,ier = dbaroc_growth_rate_1d(u,theta,pressure,temperature,lat)
+        subroutine dbaroc_growth_rate_1d(u,theta,pressure,temperature,lat,max_growth,ier,nlev) ! in :growth_rate_kernels:growth_rate_kernels.f90
+            integer, optional, check(len(u)>=nlev), depend(u) :: nlev=len(u)
+            double precision dimension(nlev), intent(in) :: u
+            double precision dimension(nlev), depend(nlev), intent(in) :: theta
+            double precision dimension(nlev), depend(nlev), intent(in) :: pressure
+            double precision dimension(nlev), depend(nlev), intent(in) :: temperature
+            double precision intent(in) :: lat
+            double precision intent(out) :: max_growth
+            integer intent(out) :: ier
+        end subroutine dbaroc_growth_rate_1d
+    end interface
+end python module growth_rate_kernels
+
+! This file was written manually for f2py compatibility.
