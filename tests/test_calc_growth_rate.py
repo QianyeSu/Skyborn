@@ -224,6 +224,12 @@ class TestGrowthRateHelpers:
         with pytest.raises(ValueError, match="vertical_interp"):
             growth_rate_core._normalize_vertical_interp("cubic")
 
+        with pytest.raises(TypeError, match="solver_levels"):
+            growth_rate_core._normalize_solver_levels(3.5)
+
+        with pytest.raises(ValueError, match="at least 2"):
+            growth_rate_core._normalize_solver_levels(1)
+
     def test_infer_tropopause_reorders_descending_pressure_for_wmo_solver(
         self, monkeypatch
     ):
@@ -271,6 +277,7 @@ class TestGrowthRateHelpers:
                 np.array([30000.0, 70000.0, 100000.0]),
                 np.array([230.0, 260.0, 285.0]),
                 target_pressure=None,
+                solver_levels=45,
             )
 
 
@@ -450,6 +457,72 @@ class TestGrowthRate:
         assert_allclose(captured["pressure_solver"][0], 23000.0, rtol=0.0, atol=1e-12)
         assert_allclose(captured["pressure_solver"][-1], 100000.0, rtol=0.0, atol=1e-12)
         assert captured["temperature_solver"].shape == captured["pressure_solver"].shape
+
+    def test_baroc_growth_rate_exposes_solver_levels_for_auto_grid(self, monkeypatch):
+        """The public API should let callers control the automatic solver-grid size."""
+
+        captured = {}
+
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_infer_tropopause_pressure_pa",
+            lambda temperature, pressure_pa: 25000.0,
+        )
+
+        def fake_backend(
+            u_solver, theta_solver, pressure_solver, temperature_solver, lat
+        ):
+            captured["pressure_solver"] = np.array(
+                pressure_solver, dtype=np.float64, copy=True
+            )
+            return 1.0e-6, 0
+
+        monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
+
+        result = baroc_growth_rate(
+            np.array([8.0, 14.0, 24.0, 32.0, 38.0]),
+            np.array([220.0, 235.0, 255.0, 272.0, 288.0]),
+            np.array([20000.0, 40000.0, 60000.0, 80000.0, 100000.0]),
+            lat=45.0,
+            solver_levels=11,
+        )
+
+        assert_allclose(result, 1.0e-6, rtol=0.0, atol=0.0)
+        assert captured["pressure_solver"].shape == (11,)
+        assert_allclose(captured["pressure_solver"][0], 25000.0, atol=1e-12)
+        assert_allclose(captured["pressure_solver"][-1], 100000.0, atol=1e-12)
+
+    def test_baroc_growth_rate_ignores_solver_levels_when_target_grid_is_explicit(
+        self, monkeypatch
+    ):
+        """Explicit target_pressure should override the automatic solver-level setting."""
+
+        captured = {}
+
+        def fake_backend(
+            u_solver, theta_solver, pressure_solver, temperature_solver, lat
+        ):
+            captured["pressure_solver"] = np.array(
+                pressure_solver, dtype=np.float64, copy=True
+            )
+            return 1.0e-6, 0
+
+        monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
+
+        result = baroc_growth_rate(
+            np.array([8.0, 14.0, 24.0]),
+            np.array([220.0, 235.0, 255.0]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat=45.0,
+            target_pressure=np.array([30000.0, 55000.0, 80000.0, 100000.0]),
+            solver_levels=99,
+        )
+
+        assert_allclose(result, 1.0e-6, rtol=0.0, atol=0.0)
+        assert_allclose(
+            captured["pressure_solver"],
+            np.array([30000.0, 55000.0, 80000.0, 100000.0]),
+        )
 
     def test_baroc_growth_rate_defaults_to_log_pressure_interpolation(
         self, monkeypatch
