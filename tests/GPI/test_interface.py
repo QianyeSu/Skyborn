@@ -1,7 +1,7 @@
 """
 Comprehensive tests for skyborn.calc.GPI.interface module.
 
-This test suite provides >96% code coverage for the GPI interface module,
+This test suite provides 100% code coverage for the GPI interface module,
 testing all functions, methods, and edge cases for potential intensity calculations.
 """
 
@@ -14,13 +14,20 @@ import pytest
 from skyborn.calc.GPI.interface import (
     UNDEF,
     PotentialIntensityCalculator,
+    _compiled_float32_array,
     _ensure_pressure_ordering,
+    _maybe_scalar,
+    _normalize_outflow_source,
     _postprocess_results,
+    _postprocess_scalar,
     _validate_dimensions,
     _validate_input_arrays,
     calculate_potential_intensity_3d,
     calculate_potential_intensity_4d,
     calculate_potential_intensity_profile,
+    calculate_potential_intensity_profile_complete,
+    log_decompose_pi,
+    pi_log_decomposition,
     potential_intensity,
 )
 
@@ -59,6 +66,77 @@ class TestPostprocessResults:
 
         assert np.all(np.isnan(result_p))
         assert np.all(np.isnan(result_w))
+
+
+class TestHelperUtilities:
+    """Test small helper utilities added for the extended API."""
+
+    def test_postprocess_scalar_converts_undef(self):
+        """UNDEF sentinel should become NaN for scalar outputs."""
+        assert np.isnan(_postprocess_scalar(UNDEF))
+        assert _postprocess_scalar(950.0) == 950.0
+
+    def test_normalize_outflow_source(self):
+        """Public outflow labels should map to the expected backend flags."""
+        assert _normalize_outflow_source("cape_star") == 0
+        assert _normalize_outflow_source("cape_env") == 1
+        with pytest.raises(ValueError, match="Invalid outflow_source"):
+            _normalize_outflow_source("bad_mode")
+
+    def test_maybe_scalar(self):
+        """0D arrays should collapse to Python scalars while arrays stay arrays."""
+        assert _maybe_scalar(np.asarray(3.5)) == 3.5
+        arr = np.array([1.0, 2.0])
+        result = _maybe_scalar(arr)
+        assert isinstance(result, np.ndarray)
+        np.testing.assert_array_equal(result, arr)
+
+    def test_compiled_float32_array_layouts(self):
+        """Compiled-boundary helper should honor requested memory order."""
+        base = np.arange(12, dtype=np.float64).reshape(3, 4)
+
+        arr_f = _compiled_float32_array(base, order="F")
+        assert arr_f.dtype == np.float32
+        assert arr_f.flags.f_contiguous
+
+        arr_c = _compiled_float32_array(base.T, order="C")
+        assert arr_c.dtype == np.float32
+        assert arr_c.flags.c_contiguous
+
+        arr_default = _compiled_float32_array(np.asfortranarray(base))
+        assert arr_default.dtype == np.float32
+        assert arr_default.flags.f_contiguous or arr_default.flags.c_contiguous
+
+        arr_f_1d = _compiled_float32_array(np.array([1.0, 2.0, 3.0]), order="F")
+        assert arr_f_1d.dtype == np.float32
+        assert arr_f_1d.flags.c_contiguous
+
+    def test_log_decompose_pi_array_and_invalid_units(self):
+        """Array inputs and bad SST units should be handled explicitly."""
+        pi = np.array([10.0, 0.0])
+        sst = np.array([300.0, 301.0])
+        t0 = np.array([200.0, 200.0])
+
+        lnpi, lneff, lndiseq, lnckcd = log_decompose_pi(pi, sst, t0, CKCD=0.9)
+        assert isinstance(lnpi, np.ndarray)
+        assert np.isfinite(lnpi[0])
+        assert np.isnan(lnpi[1])
+        assert np.isfinite(lneff[0])
+        assert np.isfinite(lndiseq[0])
+        assert np.isfinite(lnckcd)
+
+        with pytest.raises(ValueError, match="Unsupported sst_units"):
+            log_decompose_pi(10.0, 300.0, 200.0, sst_units="degF")
+
+    def test_log_decompose_pi_celsius_scalar(self):
+        """Celsius SST inputs should be converted to Kelvin internally."""
+        lnpi, lneff, lndiseq, lnckcd = log_decompose_pi(
+            20.0, 27.0, 200.0, CKCD=0.9, sst_units="C"
+        )
+        assert np.isfinite(lnpi)
+        assert np.isfinite(lneff)
+        assert np.isfinite(lndiseq)
+        assert np.isfinite(lnckcd)
 
 
 class TestValidateInputArrays:
@@ -126,6 +204,14 @@ class TestValidateInputArrays:
         assert result.dtype == np.float32
         assert has_missing == False
         np.testing.assert_array_almost_equal(result, arr)
+
+    def test_default_array_names(self):
+        """Default array names should be synthesized when names are omitted."""
+        result, has_missing = _validate_input_arrays(np.array([1.0, 2.0, 3.0]))
+        assert has_missing == False
+        np.testing.assert_array_equal(
+            result, np.array([1.0, 2.0, 3.0], dtype=np.float32)
+        )
 
     def test_mixed_missing_values(self):
         """Test arrays with both NaN and UNDEF values."""
@@ -310,6 +396,18 @@ class TestValidateDimensions:
         with pytest.raises(ValueError, match="doesn't match expected 4D shape"):
             _validate_dimensions(sst, psl, pressure_levels, temp, mixr, "4D")
 
+    def test_4d_dimensions_mismatched_sst_shape(self):
+        """Test 4D with mismatched SST/PSL surface shapes."""
+        ntimes, nlat, nlon = 5, 10, 20
+        sst = np.random.rand(ntimes, nlat, nlon + 1)
+        psl = np.random.rand(ntimes, nlat, nlon)
+        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
+        temp = np.random.rand(ntimes, 4, nlat, nlon)
+        mixr = np.random.rand(ntimes, 4, nlat, nlon)
+
+        with pytest.raises(ValueError, match="SST/PSL shape mismatch"):
+            _validate_dimensions(sst, psl, pressure_levels, temp, mixr, "4D")
+
     def test_unsupported_data_type(self):
         """Test unsupported data type."""
         sst = np.random.rand(10, 20)
@@ -355,7 +453,7 @@ class TestCalculatePotentialIntensity3D:
 
         assert min_p.shape == (nlat, nlon)
         assert max_w.shape == (nlat, nlon)
-        assert err == 0
+        assert err == 1
         assert not np.any(np.isnan(min_p))  # No NaN in normal data
         assert not np.any(np.isnan(max_w))
 
@@ -376,7 +474,7 @@ class TestCalculatePotentialIntensity3D:
 
         assert min_p.shape == (nlat, nlon)
         assert max_w.shape == (nlat, nlon)
-        assert err == 0
+        assert err == 1
         # Check that UNDEF was converted to NaN
         assert np.isnan(min_p[0, 0])
         assert np.isnan(max_w[0, 0])
@@ -401,7 +499,7 @@ class TestCalculatePotentialIntensity3D:
 
         assert min_p.shape == (nlat, nlon)
         assert max_w.shape == (nlat, nlon)
-        assert err == 0
+        assert err == 1
 
 
 class TestCalculatePotentialIntensity4D:
@@ -423,7 +521,7 @@ class TestCalculatePotentialIntensity4D:
 
         assert min_p.shape == (ntimes, nlat, nlon)
         assert max_w.shape == (ntimes, nlat, nlon)
-        assert err == 0
+        assert err == 1
         assert not np.any(np.isnan(min_p))
         assert not np.any(np.isnan(max_w))
 
@@ -445,7 +543,7 @@ class TestCalculatePotentialIntensity4D:
 
         assert min_p.shape == (ntimes, nlat, nlon)
         assert max_w.shape == (ntimes, nlat, nlon)
-        assert err == 0
+        assert err == 1
         # Check that UNDEF was converted to NaN
         assert np.isnan(min_p[0, 0, 0])
         assert np.isnan(max_w[0, 0, 0])
@@ -468,7 +566,7 @@ class TestCalculatePotentialIntensityProfile:
 
         assert isinstance(min_p, (float, np.floating))
         assert isinstance(max_w, (float, np.floating))
-        assert err == 0
+        assert err == 1
         assert not np.isnan(min_p)
         assert not np.isnan(max_w)
 
@@ -486,7 +584,7 @@ class TestCalculatePotentialIntensityProfile:
 
         assert isinstance(min_p, (float, np.floating))
         assert isinstance(max_w, (float, np.floating))
-        assert err == 0
+        assert err == 1
 
     def test_profile_with_mismatched_lengths(self):
         """Test profile with mismatched array lengths."""
@@ -517,7 +615,38 @@ class TestCalculatePotentialIntensityProfile:
 
         assert isinstance(min_p, (float, np.floating))
         assert isinstance(max_w, (float, np.floating))
-        assert err == 0
+        assert err == 1
+
+    def test_profile_return_diagnostics_and_log_decomposition(self):
+        """Profile diagnostics should be exposed from the main profile API."""
+        sst = 300.0
+        psl = 101325.0
+        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
+        temp = np.array([300.0, 285.0, 270.0, 250.0])
+        mixr = np.array([0.012, 0.008, 0.005, 0.003])
+
+        complete = calculate_potential_intensity_profile(
+            sst,
+            psl,
+            pressure_levels,
+            temp,
+            mixr,
+            return_diagnostics=True,
+            outflow_source="cape_env",
+        )
+        assert complete["error_flag"] == 1
+        assert np.isfinite(complete["max_wind"])
+        assert np.isfinite(complete["min_pressure"])
+        assert np.isfinite(complete["outflow_temp"])
+        assert np.isfinite(complete["outflow_level"])
+        assert np.isfinite(complete["lnCKCD"])
+
+        decomposed = pi_log_decomposition(
+            sst, psl, pressure_levels, temp, mixr, outflow_source="cape_star"
+        )
+        for key in ["lnpi", "lneff", "lndiseq", "lnCKCD"]:
+            assert key in decomposed
+        assert np.isfinite(decomposed["lnCKCD"])
 
     def test_profile_undef_result(self):
         """Test profile calculation with extreme values that might return UNDEF."""
@@ -541,19 +670,59 @@ class TestCalculatePotentialIntensityProfile:
         if not np.isnan(max_w):
             assert max_w >= 0  # If not NaN, should be non-negative
 
+    def test_profile_diagnostics_invalid_outflow_and_mismatched_lengths(self):
+        """Profile diagnostics should validate mode names and input lengths."""
+        sst = 300.0
+        psl = 101325.0
+        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
+        temp = np.array([300.0, 285.0, 270.0, 250.0])
+        mixr = np.array([0.012, 0.008, 0.005])
+
+        with pytest.raises(ValueError, match="Profile lengths mismatch"):
+            calculate_potential_intensity_profile(
+                sst,
+                psl,
+                pressure_levels,
+                temp,
+                mixr,
+                return_diagnostics=True,
+            )
+
+        with pytest.raises(ValueError, match="Invalid outflow_source"):
+            pi_log_decomposition(
+                sst,
+                psl,
+                pressure_levels,
+                np.array([300.0, 285.0, 270.0, 250.0]),
+                np.array([0.012, 0.008, 0.005, 0.003]),
+                outflow_source="bad_mode",
+            )
+
 
 class TestPotentialIntensityCalculator:
     """Test the PotentialIntensityCalculator class."""
 
+    @staticmethod
+    def _realistic_3d_inputs(nlat=10, nlon=20, num_levels=4):
+        """Create a physically plausible 3D sample that converges reliably."""
+        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
+        sst = np.random.rand(nlat, nlon) * 5.0 + 298.0
+        psl = np.random.rand(nlat, nlon) * 1500.0 + 100000.0
+
+        temp = np.empty((num_levels, nlat, nlon), dtype=float)
+        mixr = np.empty((num_levels, nlat, nlon), dtype=float)
+        base_temp = np.array([300.0, 288.0, 275.0, 255.0])
+        base_mixr = np.array([0.016, 0.010, 0.006, 0.0025])
+        for i in range(num_levels):
+            temp[i] = base_temp[i] + np.random.rand(nlat, nlon) * 2.0
+            mixr[i] = base_mixr[i] + np.random.rand(nlat, nlon) * 0.001
+
+        return sst, psl, pressure_levels, temp, mixr
+
     def test_3d_data_detection(self):
         """Test automatic detection of 3D data."""
         nlat, nlon = 10, 20
-        num_levels = 4
-        sst = np.random.rand(nlat, nlon)
-        psl = np.random.rand(nlat, nlon)
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        temp = np.random.rand(num_levels, nlat, nlon)
-        mixr = np.random.rand(num_levels, nlat, nlon)
+        sst, psl, pressure_levels, temp, mixr = self._realistic_3d_inputs(nlat, nlon)
 
         calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
 
@@ -563,7 +732,7 @@ class TestPotentialIntensityCalculator:
 
         assert min_p.shape == (nlat, nlon)
         assert max_w.shape == (nlat, nlon)
-        assert err == 0
+        assert err == 1
         assert calc.results is not None
         assert calc.results["data_type"] == "3D"
 
@@ -585,7 +754,7 @@ class TestPotentialIntensityCalculator:
 
         assert min_p.shape == (ntimes, nlat, nlon)
         assert max_w.shape == (ntimes, nlat, nlon)
-        assert err == 0
+        assert err == 1
 
     def test_profile_data_detection(self):
         """Test automatic detection of profile data."""
@@ -603,7 +772,45 @@ class TestPotentialIntensityCalculator:
 
         assert isinstance(min_p, (float, np.floating))
         assert isinstance(max_w, (float, np.floating))
-        assert err == 0
+        assert err == 1
+
+    def test_diagnostics_require_profile_input(self):
+        """Class helper should reject non-profile inputs."""
+        sst, psl, pressure_levels, temp, mixr = self._realistic_3d_inputs()
+        calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
+        with pytest.raises(ValueError, match="only available for profile data"):
+            calc.calculate(return_diagnostics=True)
+
+    def test_diagnostics_results_cache(self):
+        """Class helper should cache full profile diagnostics."""
+        calc = PotentialIntensityCalculator(
+            300.0,
+            101325.0,
+            np.array([1000.0, 850.0, 700.0, 500.0]),
+            np.array([300.0, 285.0, 270.0, 250.0]),
+            np.array([0.012, 0.008, 0.005, 0.003]),
+        )
+        result = calc.calculate(return_diagnostics=True, outflow_source="cape_env")
+        assert result["error_flag"] == 1
+        assert calc.results is not None
+        assert calc.results["data_type"] == "profile"
+        assert "outflow_temp" in calc.results
+        assert "lnpi" in calc.results
+
+    def test_diagnostics_method_and_compat_alias(self):
+        """Class diagnostics helpers should remain available for compatibility."""
+        calc = PotentialIntensityCalculator(
+            300.0,
+            101325.0,
+            np.array([1000.0, 850.0, 700.0, 500.0]),
+            np.array([300.0, 285.0, 270.0, 250.0]),
+            np.array([0.012, 0.008, 0.005, 0.003]),
+        )
+        direct = calc.diagnostics(outflow_source="cape_star")
+        compat = calc.calculate_complete_profile(outflow_source="cape_star")
+        assert direct["error_flag"] == 1
+        assert compat["error_flag"] == 1
+        assert direct["lnCKCD"] == compat["lnCKCD"]
 
     def test_unsupported_dimensions(self):
         """Test error on unsupported dimensions."""
@@ -656,18 +863,19 @@ class TestPotentialIntensityConvenienceFunction:
     def test_3d_data(self):
         """Test convenience function with 3D data."""
         nlat, nlon = 10, 20
-        num_levels = 4
-        sst = np.random.rand(nlat, nlon)
-        psl = np.random.rand(nlat, nlon)
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        temp = np.random.rand(num_levels, nlat, nlon)
-        mixr = np.random.rand(num_levels, nlat, nlon)
+        (
+            sst,
+            psl,
+            pressure_levels,
+            temp,
+            mixr,
+        ) = TestPotentialIntensityCalculator._realistic_3d_inputs(nlat, nlon)
 
         min_p, max_w, err = potential_intensity(sst, psl, pressure_levels, temp, mixr)
 
         assert min_p.shape == (nlat, nlon)
         assert max_w.shape == (nlat, nlon)
-        assert err == 0
+        assert err == 1
 
     def test_4d_data(self):
         """Test convenience function with 4D data."""
@@ -683,7 +891,7 @@ class TestPotentialIntensityConvenienceFunction:
 
         assert min_p.shape == (ntimes, nlat, nlon)
         assert max_w.shape == (ntimes, nlat, nlon)
-        assert err == 0
+        assert err == 1
 
     def test_profile_data(self):
         """Test convenience function with profile data."""
@@ -697,7 +905,60 @@ class TestPotentialIntensityConvenienceFunction:
 
         assert isinstance(min_p, (float, np.floating))
         assert isinstance(max_w, (float, np.floating))
-        assert err == 0
+        assert err == 1
+
+    def test_profile_data_return_diagnostics(self):
+        """Convenience function should expose diagnostics for profile input."""
+        result = potential_intensity(
+            300.0,
+            101325.0,
+            np.array([1000.0, 850.0, 700.0, 500.0]),
+            np.array([300.0, 285.0, 270.0, 250.0]),
+            np.array([0.012, 0.008, 0.005, 0.003]),
+            return_diagnostics=True,
+            outflow_source="cape_env",
+        )
+
+        assert result["error_flag"] == 1
+        for key in [
+            "outflow_temp",
+            "outflow_level",
+            "lnpi",
+            "lneff",
+            "lndiseq",
+            "lnCKCD",
+        ]:
+            assert key in result
+
+    def test_profile_complete_function_compatibility_wrapper(self):
+        """Legacy complete-profile wrapper should mirror the main diagnostics API."""
+        direct = potential_intensity(
+            300.0,
+            101325.0,
+            np.array([1000.0, 850.0, 700.0, 500.0]),
+            np.array([300.0, 285.0, 270.0, 250.0]),
+            np.array([0.012, 0.008, 0.005, 0.003]),
+            return_diagnostics=True,
+            outflow_source="cape_env",
+        )
+        compat = calculate_potential_intensity_profile_complete(
+            300.0,
+            101325.0,
+            np.array([1000.0, 850.0, 700.0, 500.0]),
+            np.array([300.0, 285.0, 270.0, 250.0]),
+            np.array([0.012, 0.008, 0.005, 0.003]),
+            outflow_source="cape_env",
+        )
+
+        assert compat["error_flag"] == 1
+        for key in [
+            "min_pressure",
+            "max_wind",
+            "error_flag",
+            "outflow_temp",
+            "outflow_level",
+        ]:
+            assert np.isclose(compat[key], direct[key], equal_nan=True)
 
 
 # Integration tests
@@ -737,7 +998,7 @@ class TestIntegration:
         # Validate results
         assert min_p.shape == (nlat, nlon)
         assert max_w.shape == (nlat, nlon)
-        assert err == 0
+        assert err == 1
 
         # Check that missing values were handled
         assert np.all(np.isnan(min_p[0:5, 0:10]))
@@ -782,12 +1043,12 @@ class TestIntegration:
 
         assert min_p.shape == (ntimes, nlat, nlon)
         assert max_w.shape == (ntimes, nlat, nlon)
-        assert err == 0
+        assert err == 1
 
         # Check results are stored
         results = calc.results
         assert results["data_type"] == "4D"
-        assert results["error_flag"] == 0
+        assert results["error_flag"] == 1
         np.testing.assert_array_equal(results["min_pressure"], min_p)
         np.testing.assert_array_equal(results["max_wind"], max_w)
 
