@@ -94,6 +94,7 @@ def _baroc_growth_reference(
     temperature: np.ndarray,
     pressure_pa: np.ndarray,
     lat: float,
+    smooth_window: int = 1,
 ) -> float:
     """Pure NumPy port of the Chemke baroclinic reference algorithm."""
 
@@ -159,6 +160,18 @@ def _baroc_growth_reference(
 
         eigvals = np.linalg.eigvals(np.linalg.solve(b, a))
         growth[k] = np.max(np.imag(eigvals))
+
+    if smooth_window > 1:
+        half_window = smooth_window // 2
+        growth_smoothed = np.full_like(growth, np.nan)
+        for i in range(growth.size):
+            start = max(0, i - half_window)
+            stop = min(growth.size, i + half_window + 1)
+            window_values = growth[start:stop]
+            finite_mask = np.isfinite(window_values)
+            if np.any(finite_mask):
+                growth_smoothed[i] = np.mean(window_values[finite_mask])
+        growth = growth_smoothed
 
     turning_points = np.where(growth[:-1] - growth[1:] > 0.0)[0]
     if turning_points.size == 0:
@@ -229,6 +242,21 @@ class TestGrowthRateHelpers:
 
         with pytest.raises(ValueError, match="at least 2"):
             growth_rate_core._normalize_solver_levels(1)
+
+        with pytest.raises(TypeError, match="smooth_window"):
+            growth_rate_core._normalize_smooth_window(2.5)
+
+        with pytest.raises(ValueError, match="at least 1"):
+            growth_rate_core._normalize_smooth_window(0)
+
+        with pytest.raises(ValueError, match="odd integer"):
+            growth_rate_core._normalize_smooth_window(4)
+
+        assert growth_rate_core._normalize_smooth_window(None) == 1
+        assert growth_rate_core._normalize_smooth_window(np.int64(5)) == 5
+
+        with pytest.raises(TypeError, match="smooth_window"):
+            growth_rate_core._normalize_smooth_window(True)
 
     def test_infer_tropopause_reorders_descending_pressure_for_wmo_solver(
         self, monkeypatch
@@ -433,7 +461,12 @@ class TestGrowthRate:
         )
 
         def fake_baroc_backend(
-            u_solver, theta_solver, pressure_solver, temperature_solver, lat
+            u_solver,
+            theta_solver,
+            pressure_solver,
+            temperature_solver,
+            lat,
+            smooth_window,
         ):
             captured["pressure_solver"] = np.array(
                 pressure_solver, dtype=np.float64, copy=True
@@ -442,6 +475,7 @@ class TestGrowthRate:
                 temperature_solver, dtype=np.float64, copy=True
             )
             captured["lat"] = float(lat)
+            captured["smooth_window"] = int(smooth_window)
             return 1.25e-6, 0
 
         monkeypatch.setattr(
@@ -454,6 +488,7 @@ class TestGrowthRate:
 
         assert_allclose(result, 1.25e-6, rtol=0.0, atol=0.0)
         assert captured["lat"] == 45.0
+        assert captured["smooth_window"] == 1
         assert_allclose(captured["pressure_solver"][0], 23000.0, rtol=0.0, atol=1e-12)
         assert_allclose(captured["pressure_solver"][-1], 100000.0, rtol=0.0, atol=1e-12)
         assert captured["temperature_solver"].shape == captured["pressure_solver"].shape
@@ -470,11 +505,17 @@ class TestGrowthRate:
         )
 
         def fake_backend(
-            u_solver, theta_solver, pressure_solver, temperature_solver, lat
+            u_solver,
+            theta_solver,
+            pressure_solver,
+            temperature_solver,
+            lat,
+            smooth_window,
         ):
             captured["pressure_solver"] = np.array(
                 pressure_solver, dtype=np.float64, copy=True
             )
+            captured["smooth_window"] = int(smooth_window)
             return 1.0e-6, 0
 
         monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
@@ -489,6 +530,7 @@ class TestGrowthRate:
 
         assert_allclose(result, 1.0e-6, rtol=0.0, atol=0.0)
         assert captured["pressure_solver"].shape == (11,)
+        assert captured["smooth_window"] == 1
         assert_allclose(captured["pressure_solver"][0], 25000.0, atol=1e-12)
         assert_allclose(captured["pressure_solver"][-1], 100000.0, atol=1e-12)
 
@@ -500,11 +542,17 @@ class TestGrowthRate:
         captured = {}
 
         def fake_backend(
-            u_solver, theta_solver, pressure_solver, temperature_solver, lat
+            u_solver,
+            theta_solver,
+            pressure_solver,
+            temperature_solver,
+            lat,
+            smooth_window,
         ):
             captured["pressure_solver"] = np.array(
                 pressure_solver, dtype=np.float64, copy=True
             )
+            captured["smooth_window"] = int(smooth_window)
             return 1.0e-6, 0
 
         monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
@@ -519,10 +567,70 @@ class TestGrowthRate:
         )
 
         assert_allclose(result, 1.0e-6, rtol=0.0, atol=0.0)
+        assert captured["smooth_window"] == 1
         assert_allclose(
             captured["pressure_solver"],
             np.array([30000.0, 55000.0, 80000.0, 100000.0]),
         )
+
+    def test_baroc_growth_rate_passes_smooth_window_to_fortran_backend(
+        self, monkeypatch
+    ):
+        """The public API should forward smooth_window to the compiled backend."""
+
+        captured = {}
+
+        def fake_backend(
+            u_solver,
+            theta_solver,
+            pressure_solver,
+            temperature_solver,
+            lat,
+            smooth_window,
+        ):
+            captured["smooth_window"] = int(smooth_window)
+            return 1.0e-6, 0
+
+        monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
+
+        result = baroc_growth_rate(
+            np.array([8.0, 14.0, 24.0]),
+            np.array([220.0, 235.0, 255.0]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat=45.0,
+            target_pressure=np.array([30000.0, 60000.0, 100000.0]),
+            smooth_window=5,
+        )
+
+        assert_allclose(result, 1.0e-6, rtol=0.0, atol=0.0)
+        assert captured["smooth_window"] == 5
+
+    def test_baroc_growth_rate_matches_reference_with_spectrum_smoothing(self):
+        """Compiled spectrum smoothing should match the NumPy reference path."""
+
+        pressure = np.array([20000.0, 40000.0, 60000.0, 80000.0, 100000.0])
+        temperature = np.array([220.0, 235.0, 255.0, 272.0, 288.0])
+        u = np.array([8.0, 14.0, 24.0, 32.0, 38.0])
+        lat = 45.0
+
+        expected = _baroc_growth_reference(
+            u,
+            temperature,
+            pressure,
+            lat,
+            smooth_window=5,
+        )
+        result = baroc_growth_rate(
+            u,
+            temperature,
+            pressure,
+            lat=lat,
+            target_pressure=pressure,
+            smooth_window=5,
+            output_units="s^-1",
+        )
+
+        assert_allclose(result, expected, rtol=1e-8, atol=1e-11)
 
     def test_baroc_growth_rate_defaults_to_log_pressure_interpolation(
         self, monkeypatch
@@ -545,7 +653,7 @@ class TestGrowthRate:
         monkeypatch.setattr(
             growth_rate_core,
             "_dbaroc_growth_rate_1d",
-            lambda u_solver, theta_solver, pressure_solver, temperature_solver, lat: (
+            lambda u_solver, theta_solver, pressure_solver, temperature_solver, lat, smooth_window: (
                 1.0e-6,
                 0,
             ),
@@ -575,7 +683,7 @@ class TestGrowthRate:
         monkeypatch.setattr(
             growth_rate_core,
             "_dbaroc_growth_rate_1d",
-            lambda u_solver, theta_solver, pressure_solver, temperature_solver, lat: (
+            lambda u_solver, theta_solver, pressure_solver, temperature_solver, lat, smooth_window: (
                 1.0e-6,
                 0,
             ),
@@ -680,7 +788,12 @@ class TestGrowthRate:
             return np.array([201.0, 202.0, 203.0])
 
         def fake_backend(
-            u_solver, theta_solver, pressure_solver, temperature_solver, lat
+            u_solver,
+            theta_solver,
+            pressure_solver,
+            temperature_solver,
+            lat,
+            smooth_window,
         ):
             captured["u_solver"] = np.array(u_solver, dtype=np.float64, copy=True)
             captured["pressure_solver"] = np.array(
@@ -689,6 +802,7 @@ class TestGrowthRate:
             captured["temperature_solver"] = np.array(
                 temperature_solver, dtype=np.float64, copy=True
             )
+            captured["smooth_window"] = int(smooth_window)
             return 2.0e-6, 0
 
         monkeypatch.setattr(growth_rate_core, "interp_pressure_1d", fake_interp)
@@ -706,6 +820,7 @@ class TestGrowthRate:
         assert_allclose(
             captured["pressure_solver"], np.array([30000.0, 60000.0, 100000.0])
         )
+        assert captured["smooth_window"] == 1
         assert_allclose(captured["u_solver"], np.array([103.0, 102.0, 101.0]))
         assert_allclose(captured["temperature_solver"], np.array([203.0, 202.0, 201.0]))
 
@@ -715,7 +830,7 @@ class TestGrowthRate:
         monkeypatch.setattr(
             growth_rate_core,
             "_dbaroc_growth_rate_1d",
-            lambda u_solver, theta_solver, pressure_solver, temperature_solver, lat: (
+            lambda u_solver, theta_solver, pressure_solver, temperature_solver, lat, smooth_window: (
                 0.0,
                 19,
             ),
@@ -728,4 +843,17 @@ class TestGrowthRate:
                 np.array([30000.0, 60000.0, 100000.0]),
                 lat=45.0,
                 target_pressure=np.array([30000.0, 60000.0, 100000.0]),
+            )
+
+    def test_baroc_growth_rate_rejects_even_smooth_window(self):
+        """Centered spectrum smoothing should require an odd window length."""
+
+        with pytest.raises(ValueError, match="odd integer"):
+            baroc_growth_rate(
+                np.array([8.0, 14.0, 24.0]),
+                np.array([220.0, 235.0, 255.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat=45.0,
+                target_pressure=np.array([30000.0, 60000.0, 100000.0]),
+                smooth_window=4,
             )
