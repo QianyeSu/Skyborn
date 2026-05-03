@@ -15,6 +15,28 @@ Tropopause Calculations
 
 .. autofunction:: skyborn.calc.troposphere.xarray.trop_wmo
 
+Growth-rate Diagnostics
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: skyborn.calc.baroc_growth_rate
+
+.. autofunction:: skyborn.calc.barot_growth_rate
+
+.. note::
+
+   ``skyborn.calc.baroc_growth_rate`` uses ``vertical_interp="log"`` by
+   default. Here ``"log"`` means interpolation that is linear in
+   log-pressure, not a logarithmic transform of the field values.
+
+   When ``target_pressure`` is omitted, the function diagnoses the WMO
+   tropopause pressure and builds a fixed solver grid with
+   ``DEFAULT_SOLVER_LEVELS = 45`` between that tropopause and the lower
+   troposphere. This is a practical resolution choice for the compiled
+   eigenvalue problem, not a universal optimum: increasing the level count can
+   improve vertical-grid convergence up to a point, but it also raises the
+   per-profile cost and is not automatically better once the solution is
+   converged.
+
 Geostrophic Wind Calculations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
