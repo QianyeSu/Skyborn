@@ -255,16 +255,13 @@ def _normalize_solver_levels(solver_levels: int) -> int:
     return normalized
 
 
-def _normalize_smooth_window(smooth_window: int | None) -> int:
+def _normalize_smooth_window(smooth_window: int) -> int:
     """Validate the zonal-wavenumber smoothing window for growth spectra."""
-
-    if smooth_window is None:
-        return DEFAULT_SMOOTH_WINDOW
 
     if isinstance(smooth_window, bool) or not isinstance(
         smooth_window, (int, np.integer)
     ):
-        raise TypeError("`smooth_window` must be a positive odd integer or None")
+        raise TypeError("`smooth_window` must be a positive odd integer")
 
     normalized = int(smooth_window)
     if normalized < 1:
@@ -389,7 +386,7 @@ def baroc_growth_rate(
     vertical_interp: str = "log",
     target_pressure: ProfileInput | None = None,
     solver_levels: int = DEFAULT_SOLVER_LEVELS,
-    smooth_window: int | None = None,
+    smooth_window: int = DEFAULT_SMOOTH_WINDOW,
     missing_value: MissingValue = np.nan,
 ) -> float:
     r"""Compute the maximum baroclinic normal-mode growth rate.
@@ -436,8 +433,8 @@ def baroc_growth_rate(
     smooth_window : int, optional
         Optional centered running-mean window applied to the growth-rate
         spectrum over zonal wavenumber inside the compiled Fortran backend
-        before the final maximum-growth diagnostic is taken. ``None`` or ``1``
-        disables smoothing. If given, this must be a positive odd integer.
+        before the final maximum-growth diagnostic is taken. ``1`` disables
+        smoothing. If given, this must be a positive odd integer.
 
     missing_value : scalar, optional
         Public missing-value marker. If any input value is missing, the
