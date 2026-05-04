@@ -62,6 +62,8 @@ exclude = [
     "*.tests.*",
     "*.examples",
     "*.examples.*",
+    "*.build*",
+    "*.build*.*",
     "*.build",
     "*.build.*",
 ]
