@@ -206,13 +206,31 @@ class TestGrowthRateHelpers:
             growth_rate_core._as_profile_vector(np.array([300.0]), "lat", 2),
             np.array([300.0, 300.0]),
         )
-        assert growth_rate_core._normalize_vertical_interp("pressure") == "linear"
-        assert growth_rate_core._normalize_vertical_interp("logp") == "log"
+        assert growth_rate_core._normalize_method("pressure") == "linear"
+        assert growth_rate_core._normalize_method("logp") == "log"
         converted = growth_rate_core._convert_output_units(
             np.array([1.0e-6, 2.0e-6]),
             "day^-1",
         )
         assert_allclose(converted, np.array([0.0864, 0.1728]))
+        replaced = growth_rate_core._replace_missing_with_nan(
+            np.array([1.0, -999.0, np.inf], dtype=np.float64),
+            -999.0,
+        )
+        assert np.isnan(replaced[1])
+        assert np.isnan(replaced[2])
+        weighted = growth_rate_core._nan_weighted_mean_last_axis(
+            np.array(
+                [
+                    [1.0, np.nan, 5.0],
+                    [np.nan, np.nan, np.nan],
+                ],
+                dtype=np.float64,
+            ),
+            np.array([1.0, 2.0, 3.0], dtype=np.float64),
+        )
+        assert_allclose(weighted[0], 4.0, rtol=0.0, atol=1e-15)
+        assert np.isnan(weighted[1])
         matrix = growth_rate_core._coerce_profile_matrix(
             np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
             "values",
@@ -252,8 +270,8 @@ class TestGrowthRateHelpers:
         with pytest.raises(ValueError, match="output_units"):
             growth_rate_core._normalize_output_units("month^-1")
 
-        with pytest.raises(ValueError, match="vertical_interp"):
-            growth_rate_core._normalize_vertical_interp("cubic")
+        with pytest.raises(ValueError, match="method"):
+            growth_rate_core._normalize_method("cubic")
 
         with pytest.raises(TypeError, match="solver_levels"):
             growth_rate_core._normalize_solver_levels(3.5)
@@ -325,6 +343,16 @@ class TestGrowthRateHelpers:
             growth_rate_core._as_profile_vector(np.array([45.0]), "lat", 3),
             np.array([45.0, 45.0, 45.0]),
         )
+
+    def test_latitude_band_helper_matches_chemke_reference_formula(self):
+        """Latitude-band helper should reproduce the Chemke sin/cos averages."""
+
+        f_cor, beta = growth_rate_core._f_beta_from_lat_bounds((30.0, 60.0))
+        sin_avg = (np.sin(np.deg2rad(30.0)) + np.sin(np.deg2rad(60.0))) / 2.0
+        cos_avg = (np.cos(np.deg2rad(30.0)) + np.cos(np.deg2rad(60.0))) / 2.0
+
+        assert_allclose(f_cor, 2.0 * OMEGA * sin_avg, rtol=0.0, atol=1e-15)
+        assert_allclose(beta, 2.0 * OMEGA * cos_avg / RADIUS, rtol=0.0, atol=1e-21)
 
     def test_infer_tropopause_reorders_descending_pressure_for_wmo_solver(
         self, monkeypatch
@@ -398,6 +426,657 @@ class TestGrowthRateHelpers:
                 tropopause_pressure=300.0,
             )
 
+    def test_baroc_growth_rate_xarray_latitude_band_reduces_lat_axis(self, monkeypatch):
+        """Latitude-band xarray input should be cosine-weighted over the lat axis."""
+
+        captured = {}
+
+        def fake_backend(
+            u_input,
+            temperature_input,
+            source_pressure,
+            target_pressure,
+            f_cor,
+            beta,
+            interp_kind,
+            smooth_window,
+            missing_value,
+        ):
+            captured["u_input"] = np.array(u_input, dtype=np.float64, copy=True)
+            captured["temperature_input"] = np.array(
+                temperature_input, dtype=np.float64, copy=True
+            )
+            captured["source_pressure"] = np.array(
+                source_pressure, dtype=np.float64, copy=True
+            )
+            captured["f_cor"] = np.array(f_cor, dtype=np.float64, copy=True)
+            captured["beta"] = np.array(beta, dtype=np.float64, copy=True)
+            return np.array([1.0e-6, 2.0e-6]), np.array([0, 0], dtype=np.int32)
+
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_dbaroc_growth_rate_profiles",
+            fake_backend,
+        )
+
+        lat_coord = np.array([20.0, 40.0, 60.0, 80.0], dtype=np.float64)
+        u = xr.DataArray(
+            np.array(
+                [
+                    [[1.0, 3.0, 5.0, 7.0], [2.0, 4.0, 6.0, 8.0], [3.0, 5.0, 7.0, 9.0]],
+                    [[2.0, 4.0, 6.0, 8.0], [3.0, 5.0, 7.0, 9.0], [4.0, 6.0, 8.0, 10.0]],
+                ],
+                dtype=np.float64,
+            ),
+            dims=("time", "level", "lat"),
+            coords={
+                "time": [2000, 2001],
+                "level": [300.0, 600.0, 1000.0],
+                "lat": lat_coord,
+            },
+        )
+        temperature = xr.DataArray(
+            np.array(
+                [
+                    [
+                        [220.0, 222.0, 224.0, 226.0],
+                        [230.0, 232.0, 234.0, 236.0],
+                        [240.0, 242.0, 244.0, 246.0],
+                    ],
+                    [
+                        [221.0, 223.0, 225.0, 227.0],
+                        [231.0, 233.0, 235.0, 237.0],
+                        [241.0, 243.0, 245.0, 247.0],
+                    ],
+                ],
+                dtype=np.float64,
+            ),
+            dims=("time", "level", "lat"),
+            coords=u.coords,
+        )
+
+        result = baroc_growth_rate(
+            u,
+            temperature,
+            u["level"],
+            lat_bounds=(30.0, 60.0),
+            tropopause_pressure=300.0,
+            solver_levels=4,
+        )
+
+        selected_lat = xr.DataArray(
+            lat_coord[1:3], dims=("lat",), coords={"lat": lat_coord[1:3]}
+        )
+        weights = xr.DataArray(
+            np.cos(np.deg2rad(selected_lat.values)),
+            dims=("lat",),
+            coords={"lat": selected_lat.values},
+        )
+        expected_u = u.sel(lat=slice(30.0, 60.0)).weighted(weights).mean("lat")
+        expected_temperature = (
+            temperature.sel(lat=slice(30.0, 60.0)).weighted(weights).mean("lat")
+        )
+        sin_avg = (np.sin(np.deg2rad(30.0)) + np.sin(np.deg2rad(60.0))) / 2.0
+        cos_avg = (np.cos(np.deg2rad(30.0)) + np.cos(np.deg2rad(60.0))) / 2.0
+
+        assert isinstance(result, xr.DataArray)
+        assert result.dims == ("time",)
+        assert_allclose(result.values, np.array([1.0e-6, 2.0e-6]))
+        assert_allclose(captured["u_input"], expected_u.values.T)
+        assert_allclose(captured["temperature_input"], expected_temperature.values.T)
+        assert_allclose(
+            captured["source_pressure"],
+            np.array([30000.0, 60000.0, 100000.0]),
+        )
+        assert_allclose(captured["f_cor"], np.full(2, 2.0 * OMEGA * sin_avg))
+        assert_allclose(captured["beta"], np.full(2, 2.0 * OMEGA * cos_avg / RADIUS))
+
+    def test_baroc_growth_rate_xarray_latitude_band_skips_inputs_without_lat_axis(
+        self, monkeypatch
+    ):
+        """Latitude-band reduction should leave already-collapsed xarray inputs untouched."""
+
+        captured = {}
+
+        def fake_backend(
+            u_input,
+            temperature_input,
+            source_pressure,
+            target_pressure,
+            f_cor,
+            beta,
+            interp_kind,
+            smooth_window,
+            missing_value,
+        ):
+            captured["u_input"] = np.array(u_input, dtype=np.float64, copy=True)
+            captured["temperature_input"] = np.array(
+                temperature_input, dtype=np.float64, copy=True
+            )
+            return np.array([1.0e-6, 2.0e-6]), np.array([0, 0], dtype=np.int32)
+
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_dbaroc_growth_rate_profiles",
+            fake_backend,
+        )
+
+        u = xr.DataArray(
+            np.array(
+                [[3.0, 4.0, 5.0], [4.0, 5.0, 6.0]],
+                dtype=np.float64,
+            ),
+            dims=("time", "level"),
+            coords={"time": [2000, 2001], "level": [300.0, 600.0, 1000.0]},
+        )
+        temperature = xr.DataArray(
+            np.array(
+                [
+                    [
+                        [220.0, 222.0, 224.0, 226.0],
+                        [230.0, 232.0, 234.0, 236.0],
+                        [240.0, 242.0, 244.0, 246.0],
+                    ],
+                    [
+                        [221.0, 223.0, 225.0, 227.0],
+                        [231.0, 233.0, 235.0, 237.0],
+                        [241.0, 243.0, 245.0, 247.0],
+                    ],
+                ],
+                dtype=np.float64,
+            ),
+            dims=("time", "level", "lat"),
+            coords={
+                "time": [2000, 2001],
+                "level": [300.0, 600.0, 1000.0],
+                "lat": [20.0, 40.0, 60.0, 80.0],
+            },
+        )
+
+        result = baroc_growth_rate(
+            u,
+            temperature,
+            u["level"],
+            lat_bounds=(30.0, 60.0),
+            tropopause_pressure=300.0,
+            solver_levels=4,
+        )
+
+        weights = xr.DataArray(
+            np.cos(np.deg2rad(np.array([40.0, 60.0], dtype=np.float64))),
+            dims=("lat",),
+            coords={"lat": [40.0, 60.0]},
+        )
+        expected_temperature = (
+            temperature.sel(lat=slice(30.0, 60.0)).weighted(weights).mean("lat")
+        )
+
+        assert_allclose(result.values, np.array([1.0e-6, 2.0e-6]))
+        assert_allclose(captured["u_input"], u.values.T)
+        assert_allclose(captured["temperature_input"], expected_temperature.values.T)
+
+    def test_baroc_growth_rate_numpy_latitude_band_reduces_lat_axis(self, monkeypatch):
+        """NumPy latitude-band input should use the explicit latitude coordinate."""
+
+        captured = {}
+
+        def fake_backend(
+            u_input,
+            temperature_input,
+            source_pressure,
+            target_pressure,
+            f_cor,
+            beta,
+            interp_kind,
+            smooth_window,
+            missing_value,
+        ):
+            captured["u_input"] = np.array(u_input, dtype=np.float64, copy=True)
+            captured["temperature_input"] = np.array(
+                temperature_input, dtype=np.float64, copy=True
+            )
+            captured["f_cor"] = np.array(f_cor, dtype=np.float64, copy=True)
+            captured["beta"] = np.array(beta, dtype=np.float64, copy=True)
+            return np.array([1.0e-6, 2.0e-6]), np.array([0, 0], dtype=np.int32)
+
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_dbaroc_growth_rate_profiles",
+            fake_backend,
+        )
+
+        lat_coord = np.array([20.0, 40.0, 60.0, 80.0], dtype=np.float64)
+        u = np.array(
+            [
+                [[1.0, 3.0, 5.0, 7.0], [2.0, 4.0, 6.0, 8.0], [3.0, 5.0, 7.0, 9.0]],
+                [[2.0, 4.0, 6.0, 8.0], [3.0, 5.0, 7.0, 9.0], [4.0, 6.0, 8.0, 10.0]],
+            ],
+            dtype=np.float64,
+        )
+        temperature = np.array(
+            [
+                [
+                    [220.0, 222.0, 224.0, 226.0],
+                    [230.0, 232.0, 234.0, 236.0],
+                    [240.0, 242.0, 244.0, 246.0],
+                ],
+                [
+                    [221.0, 223.0, 225.0, 227.0],
+                    [231.0, 233.0, 235.0, 237.0],
+                    [241.0, 243.0, 245.0, 247.0],
+                ],
+            ],
+            dtype=np.float64,
+        )
+
+        result = baroc_growth_rate(
+            u,
+            temperature,
+            np.array([300.0, 600.0, 1000.0], dtype=np.float64),
+            lat=lat_coord,
+            lat_bounds=(30.0, 60.0),
+            tropopause_pressure=300.0,
+            solver_levels=4,
+        )
+
+        weights = np.cos(np.deg2rad(lat_coord[1:3]))
+        expected_u = np.average(u[:, :, 1:3], axis=2, weights=weights)
+        expected_temperature = np.average(
+            temperature[:, :, 1:3], axis=2, weights=weights
+        )
+        sin_avg = (np.sin(np.deg2rad(30.0)) + np.sin(np.deg2rad(60.0))) / 2.0
+        cos_avg = (np.cos(np.deg2rad(30.0)) + np.cos(np.deg2rad(60.0))) / 2.0
+
+        assert_allclose(result, np.array([1.0e-6, 2.0e-6]))
+        assert_allclose(captured["u_input"], expected_u.T)
+        assert_allclose(captured["temperature_input"], expected_temperature.T)
+        assert_allclose(captured["f_cor"], np.full(2, 2.0 * OMEGA * sin_avg))
+        assert_allclose(captured["beta"], np.full(2, 2.0 * OMEGA * cos_avg / RADIUS))
+
+    def test_baroc_growth_rate_numpy_latitude_band_requires_lat_coordinate(self):
+        """Three-dimensional NumPy latitude-band input needs an explicit latitude coordinate."""
+
+        with pytest.raises(ValueError, match="require `lat`"):
+            baroc_growth_rate(
+                np.ones((2, 3, 4), dtype=np.float64),
+                np.full((2, 3, 4), 240.0, dtype=np.float64),
+                np.array([300.0, 600.0, 1000.0], dtype=np.float64),
+                lat_bounds=(30.0, 60.0),
+                tropopause_pressure=300.0,
+                solver_levels=4,
+            )
+
+    def test_baroc_growth_rate_xarray_latitude_band_rejects_multiple_lat_dims(self):
+        """Latitude-band xarray input must not expose two latitude dimensions."""
+
+        with pytest.raises(ValueError, match="at most one latitude dimension"):
+            baroc_growth_rate(
+                xr.DataArray(
+                    np.ones((1, 3, 2, 2), dtype=np.float64),
+                    dims=("time", "level", "lat", "latitude"),
+                    coords={
+                        "time": [0],
+                        "level": [300.0, 600.0, 1000.0],
+                        "lat": [30.0, 60.0],
+                        "latitude": [30.0, 60.0],
+                    },
+                ),
+                xr.DataArray(
+                    np.ones((1, 3, 2, 2), dtype=np.float64) * 240.0,
+                    dims=("time", "level", "lat", "latitude"),
+                    coords={
+                        "time": [0],
+                        "level": [300.0, 600.0, 1000.0],
+                        "lat": [30.0, 60.0],
+                        "latitude": [30.0, 60.0],
+                    },
+                ),
+                xr.DataArray([300.0, 600.0, 1000.0], dims=("level",)),
+                lat_bounds=(30.0, 60.0),
+                tropopause_pressure=300.0,
+            )
+
+    def test_baroc_growth_rate_xarray_latitude_band_requires_shared_lat_dim(self):
+        """Latitude-band xarray inputs should agree on the latitude-dimension name."""
+
+        with pytest.raises(ValueError, match="share the same latitude dimension"):
+            baroc_growth_rate(
+                xr.DataArray(
+                    np.ones((1, 3, 2), dtype=np.float64),
+                    dims=("time", "level", "lat"),
+                    coords={
+                        "time": [0],
+                        "level": [300.0, 600.0, 1000.0],
+                        "lat": [30.0, 60.0],
+                    },
+                ),
+                xr.DataArray(
+                    np.ones((1, 3, 2), dtype=np.float64) * 240.0,
+                    dims=("time", "level", "latitude"),
+                    coords={
+                        "time": [0],
+                        "level": [300.0, 600.0, 1000.0],
+                        "latitude": [30.0, 60.0],
+                    },
+                ),
+                xr.DataArray([300.0, 600.0, 1000.0], dims=("level",)),
+                lat_bounds=(30.0, 60.0),
+                tropopause_pressure=300.0,
+            )
+
+    def test_baroc_growth_rate_xarray_latitude_band_uses_embedded_coordinate(self):
+        """Latitude-band xarray input should reject an extra public ``lat`` argument."""
+
+        with pytest.raises(
+            ValueError, match="latitude coordinate is taken from the DataArray"
+        ):
+            baroc_growth_rate(
+                xr.DataArray(
+                    np.ones((1, 3, 2), dtype=np.float64),
+                    dims=("time", "level", "lat"),
+                    coords={
+                        "time": [0],
+                        "level": [300.0, 600.0, 1000.0],
+                        "lat": [30.0, 60.0],
+                    },
+                ),
+                xr.DataArray(
+                    np.ones((1, 3, 2), dtype=np.float64) * 240.0,
+                    dims=("time", "level", "lat"),
+                    coords={
+                        "time": [0],
+                        "level": [300.0, 600.0, 1000.0],
+                        "lat": [30.0, 60.0],
+                    },
+                ),
+                xr.DataArray([300.0, 600.0, 1000.0], dims=("level",)),
+                lat=45.0,
+                lat_bounds=(30.0, 60.0),
+                tropopause_pressure=300.0,
+            )
+
+    def test_baroc_growth_rate_xarray_latitude_band_ignores_exact_missing_markers(
+        self, monkeypatch
+    ):
+        """Latitude-band xarray reduction should treat the public missing marker as invalid."""
+
+        captured = {}
+
+        def fake_backend(
+            u_input,
+            temperature_input,
+            source_pressure,
+            target_pressure,
+            f_cor,
+            beta,
+            interp_kind,
+            smooth_window,
+            missing_value,
+        ):
+            captured["u_input"] = np.array(u_input, dtype=np.float64, copy=True)
+            captured["temperature_input"] = np.array(
+                temperature_input, dtype=np.float64, copy=True
+            )
+            return np.array([1.0e-6, 2.0e-6]), np.array([0, 0], dtype=np.int32)
+
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_dbaroc_growth_rate_profiles",
+            fake_backend,
+        )
+
+        coords = {
+            "time": [2000, 2001],
+            "level": [300.0, 600.0, 1000.0],
+            "lat": [20.0, 40.0, 60.0, 80.0],
+        }
+        u = xr.DataArray(
+            np.array(
+                [
+                    [
+                        [1.0, -999.0, 5.0, 7.0],
+                        [2.0, -999.0, 6.0, 8.0],
+                        [3.0, -999.0, 7.0, 9.0],
+                    ],
+                    [
+                        [2.0, 4.0, -999.0, 8.0],
+                        [3.0, 5.0, -999.0, 9.0],
+                        [4.0, 6.0, -999.0, 10.0],
+                    ],
+                ],
+                dtype=np.float64,
+            ),
+            dims=("time", "level", "lat"),
+            coords=coords,
+        )
+        temperature = xr.DataArray(
+            np.array(
+                [
+                    [
+                        [220.0, -999.0, 224.0, 226.0],
+                        [230.0, -999.0, 234.0, 236.0],
+                        [240.0, -999.0, 244.0, 246.0],
+                    ],
+                    [
+                        [221.0, 223.0, -999.0, 227.0],
+                        [231.0, 233.0, -999.0, 237.0],
+                        [241.0, 243.0, -999.0, 247.0],
+                    ],
+                ],
+                dtype=np.float64,
+            ),
+            dims=("time", "level", "lat"),
+            coords=coords,
+        )
+
+        result = baroc_growth_rate(
+            u,
+            temperature,
+            u["level"],
+            lat_bounds=(30.0, 60.0),
+            tropopause_pressure=300.0,
+            solver_levels=4,
+            missing_value=-999.0,
+        )
+
+        assert_allclose(result.values, np.array([1.0e-6, 2.0e-6]))
+        assert_allclose(
+            captured["u_input"],
+            np.array([[5.0, 4.0], [6.0, 5.0], [7.0, 6.0]], dtype=np.float64),
+        )
+        assert_allclose(
+            captured["temperature_input"],
+            np.array(
+                [[224.0, 223.0], [234.0, 233.0], [244.0, 243.0]], dtype=np.float64
+            ),
+        )
+
+    def test_baroc_growth_rate_xarray_latitude_band_requires_selected_points(self):
+        """Latitude-band xarray input should fail when the requested band is empty."""
+
+        with pytest.raises(ValueError, match="does not select any latitude points"):
+            baroc_growth_rate(
+                xr.DataArray(
+                    np.ones((1, 3, 2), dtype=np.float64),
+                    dims=("time", "level", "lat"),
+                    coords={
+                        "time": [0],
+                        "level": [300.0, 600.0, 1000.0],
+                        "lat": [10.0, 20.0],
+                    },
+                ),
+                xr.DataArray(
+                    np.ones((1, 3, 2), dtype=np.float64) * 240.0,
+                    dims=("time", "level", "lat"),
+                    coords={
+                        "time": [0],
+                        "level": [300.0, 600.0, 1000.0],
+                        "lat": [10.0, 20.0],
+                    },
+                ),
+                xr.DataArray([300.0, 600.0, 1000.0], dims=("level",)),
+                lat_bounds=(30.0, 60.0),
+                tropopause_pressure=300.0,
+            )
+
+    def test_baroc_growth_rate_numpy_latitude_band_requires_one_dimensional_lat(self):
+        """NumPy latitude-band input should reject multi-dimensional latitude coordinates."""
+
+        with pytest.raises(ValueError, match="must be one-dimensional"):
+            baroc_growth_rate(
+                np.ones((2, 3, 4), dtype=np.float64),
+                np.full((2, 3, 4), 240.0, dtype=np.float64),
+                np.array([300.0, 600.0, 1000.0], dtype=np.float64),
+                lat=np.ones((2, 2), dtype=np.float64),
+                lat_bounds=(30.0, 60.0),
+                tropopause_pressure=300.0,
+                solver_levels=4,
+            )
+
+    def test_baroc_growth_rate_numpy_latitude_band_requires_selected_points(self):
+        """NumPy latitude-band input should fail when the requested band is empty."""
+
+        with pytest.raises(ValueError, match="does not select any latitude points"):
+            baroc_growth_rate(
+                np.ones((2, 3, 4), dtype=np.float64),
+                np.full((2, 3, 4), 240.0, dtype=np.float64),
+                np.array([300.0, 600.0, 1000.0], dtype=np.float64),
+                lat=np.array([70.0, 75.0, 80.0, 85.0], dtype=np.float64),
+                lat_bounds=(30.0, 60.0),
+                tropopause_pressure=300.0,
+                solver_levels=4,
+            )
+
+    def test_baroc_growth_rate_numpy_latitude_band_rejects_invalid_array_rank(self):
+        """NumPy latitude-band reduction only supports 2D or 3D raw arrays."""
+
+        with pytest.raises(ValueError, match="two- or three-dimensional"):
+            baroc_growth_rate(
+                np.ones((2, 3, 4, 1), dtype=np.float64),
+                np.full((2, 3, 4, 1), 240.0, dtype=np.float64),
+                np.array([300.0, 600.0, 1000.0], dtype=np.float64),
+                lat=np.array([20.0, 40.0, 60.0, 80.0], dtype=np.float64),
+                lat_bounds=(30.0, 60.0),
+                tropopause_pressure=300.0,
+                solver_levels=4,
+            )
+
+    def test_baroc_growth_rate_numpy_latitude_band_requires_one_pressure_axis(self):
+        """NumPy latitude-band input should preserve the single-pressure-axis rule."""
+
+        with pytest.raises(
+            ValueError, match="exactly one axis matching the pressure coordinate"
+        ):
+            baroc_growth_rate(
+                np.ones((2, 2, 4), dtype=np.float64),
+                np.full((2, 2, 4), 240.0, dtype=np.float64),
+                np.array([300.0, 600.0, 1000.0], dtype=np.float64),
+                lat=np.array([20.0, 40.0, 60.0, 80.0], dtype=np.float64),
+                lat_bounds=(30.0, 60.0),
+                tropopause_pressure=300.0,
+                solver_levels=4,
+            )
+
+    def test_baroc_growth_rate_numpy_latitude_band_requires_one_latitude_axis(self):
+        """NumPy latitude-band input should identify one explicit latitude axis."""
+
+        with pytest.raises(
+            ValueError, match="exactly one latitude axis matching `lat`"
+        ):
+            baroc_growth_rate(
+                np.ones((2, 3, 5), dtype=np.float64),
+                np.full((2, 3, 5), 240.0, dtype=np.float64),
+                np.array([300.0, 600.0, 1000.0], dtype=np.float64),
+                lat=np.array([20.0, 40.0, 60.0, 80.0], dtype=np.float64),
+                lat_bounds=(30.0, 60.0),
+                tropopause_pressure=300.0,
+                solver_levels=4,
+            )
+
+    def test_baroc_growth_rate_numpy_latitude_band_ignores_exact_missing_markers(
+        self, monkeypatch
+    ):
+        """NumPy latitude-band reduction should treat the public missing marker as invalid."""
+
+        captured = {}
+
+        def fake_backend(
+            u_input,
+            temperature_input,
+            source_pressure,
+            target_pressure,
+            f_cor,
+            beta,
+            interp_kind,
+            smooth_window,
+            missing_value,
+        ):
+            captured["u_input"] = np.array(u_input, dtype=np.float64, copy=True)
+            captured["temperature_input"] = np.array(
+                temperature_input, dtype=np.float64, copy=True
+            )
+            return np.array([1.0e-6, 2.0e-6]), np.array([0, 0], dtype=np.int32)
+
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_dbaroc_growth_rate_profiles",
+            fake_backend,
+        )
+
+        u = np.array(
+            [
+                [
+                    [1.0, -999.0, 5.0, 7.0],
+                    [2.0, -999.0, 6.0, 8.0],
+                    [3.0, -999.0, 7.0, 9.0],
+                ],
+                [
+                    [2.0, 4.0, -999.0, 8.0],
+                    [3.0, 5.0, -999.0, 9.0],
+                    [4.0, 6.0, -999.0, 10.0],
+                ],
+            ],
+            dtype=np.float64,
+        )
+        temperature = np.array(
+            [
+                [
+                    [220.0, -999.0, 224.0, 226.0],
+                    [230.0, -999.0, 234.0, 236.0],
+                    [240.0, -999.0, 244.0, 246.0],
+                ],
+                [
+                    [221.0, 223.0, -999.0, 227.0],
+                    [231.0, 233.0, -999.0, 237.0],
+                    [241.0, 243.0, -999.0, 247.0],
+                ],
+            ],
+            dtype=np.float64,
+        )
+
+        result = baroc_growth_rate(
+            u,
+            temperature,
+            np.array([300.0, 600.0, 1000.0], dtype=np.float64),
+            lat=np.array([20.0, 40.0, 60.0, 80.0], dtype=np.float64),
+            lat_bounds=(30.0, 60.0),
+            tropopause_pressure=300.0,
+            solver_levels=4,
+            missing_value=-999.0,
+        )
+
+        assert_allclose(result, np.array([1.0e-6, 2.0e-6]))
+        assert_allclose(
+            captured["u_input"],
+            np.array([[5.0, 4.0], [6.0, 5.0], [7.0, 6.0]], dtype=np.float64),
+        )
+        assert_allclose(
+            captured["temperature_input"],
+            np.array(
+                [[224.0, 223.0], [234.0, 233.0], [244.0, 243.0]], dtype=np.float64
+            ),
+        )
+
 
 class TestGrowthRate:
     """Regression checks for the first-stage growth-rate API."""
@@ -424,6 +1103,16 @@ class TestGrowthRate:
         assert np.isfinite(result)
         assert abs(result) < 1e-10
 
+    def test_barot_growth_rate_rejects_custom_planetary_constants(self):
+        """The compiled barotropic kernel should reject unsupported radius/omega values."""
+
+        with pytest.raises(NotImplementedError, match="not implemented yet"):
+            barot_growth_rate(
+                np.array([10.0, 20.0, 15.0], dtype=np.float64),
+                np.array([30.0, 45.0, 60.0], dtype=np.float64),
+                radius=7_000_000.0,
+            )
+
     def test_baroc_growth_rate_matches_reference_on_solver_grid_from_tropopause(self):
         """Compiled baroclinic growth should match the Chemke-style NumPy port."""
 
@@ -448,11 +1137,34 @@ class TestGrowthRate:
     def test_baroc_growth_rate_requires_latitude(self):
         """Latitude is required for the Coriolis-dependent baroclinic solver."""
 
-        with pytest.raises(ValueError, match="`lat` is required"):
+        with pytest.raises(ValueError, match="`lat` or `lat_bounds` is required"):
             baroc_growth_rate(
                 np.array([10.0, 20.0, 30.0]),
                 np.array([240.0, 260.0, 280.0]),
                 np.array([30000.0, 60000.0, 100000.0]),
+            )
+
+    def test_baroc_growth_rate_rejects_conflicting_latitude_inputs(self):
+        """Single-latitude and latitude-band controls cannot be mixed."""
+
+        with pytest.raises(ValueError, match="cannot be provided together"):
+            baroc_growth_rate(
+                np.array([10.0, 20.0, 30.0]),
+                np.array([240.0, 260.0, 280.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat=45.0,
+                lat_bounds=(30.0, 60.0),
+            )
+
+    def test_baroc_growth_rate_rejects_malformed_latitude_band(self):
+        """Latitude-band control must contain exactly two endpoints."""
+
+        with pytest.raises(ValueError, match="exactly two latitude values"):
+            baroc_growth_rate(
+                np.array([10.0, 20.0, 30.0]),
+                np.array([240.0, 260.0, 280.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat_bounds=(30.0,),
             )
 
     def test_output_units_conversion_to_day_inverse(self):
@@ -556,7 +1268,8 @@ class TestGrowthRate:
             theta_solver,
             pressure_solver,
             temperature_solver,
-            lat,
+            f_cor,
+            beta,
             smooth_window,
         ):
             captured["pressure_solver"] = np.array(
@@ -565,7 +1278,8 @@ class TestGrowthRate:
             captured["temperature_solver"] = np.array(
                 temperature_solver, dtype=np.float64, copy=True
             )
-            captured["lat"] = float(lat)
+            captured["f_cor"] = float(f_cor)
+            captured["beta"] = float(beta)
             captured["smooth_window"] = int(smooth_window)
             return 1.25e-6, 0
 
@@ -578,7 +1292,11 @@ class TestGrowthRate:
         result = baroc_growth_rate(u, temperature, pressure, lat=45.0)
 
         assert_allclose(result, 1.25e-6, rtol=0.0, atol=0.0)
-        assert captured["lat"] == 45.0
+        assert_allclose(captured["f_cor"], 2.0 * OMEGA * np.sin(np.deg2rad(45.0)))
+        assert_allclose(
+            captured["beta"],
+            2.0 * OMEGA * np.cos(np.deg2rad(45.0)) / RADIUS,
+        )
         assert captured["smooth_window"] == 1
         assert_allclose(captured["pressure_solver"][0], 23000.0, rtol=0.0, atol=1e-12)
         assert_allclose(captured["pressure_solver"][-1], 100000.0, rtol=0.0, atol=1e-12)
@@ -600,7 +1318,8 @@ class TestGrowthRate:
             theta_solver,
             pressure_solver,
             temperature_solver,
-            lat,
+            f_cor,
+            beta,
             smooth_window,
         ):
             captured["pressure_solver"] = np.array(
@@ -640,7 +1359,8 @@ class TestGrowthRate:
             theta_solver,
             pressure_solver,
             temperature_solver,
-            lat,
+            f_cor,
+            beta,
             smooth_window,
         ):
             captured["pressure_solver"] = np.array(
@@ -678,7 +1398,8 @@ class TestGrowthRate:
             theta_solver,
             pressure_solver,
             temperature_solver,
-            lat,
+            f_cor,
+            beta,
             smooth_window,
         ):
             captured["smooth_window"] = int(smooth_window)
@@ -727,6 +1448,47 @@ class TestGrowthRate:
 
         assert_allclose(result, expected, rtol=1e-8, atol=1e-11)
 
+    def test_baroc_growth_rate_uses_chemke_latitude_band_dynamics(self, monkeypatch):
+        """Latitude-band calls should forward Chemke-style band-mean ``f`` and ``beta``."""
+
+        captured = {}
+
+        def fake_backend(
+            u_solver,
+            theta_solver,
+            pressure_solver,
+            temperature_solver,
+            f_cor,
+            beta,
+            smooth_window,
+        ):
+            captured["f_cor"] = float(f_cor)
+            captured["beta"] = float(beta)
+            return 1.0e-6, 0
+
+        monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
+
+        result = baroc_growth_rate(
+            np.array([8.0, 14.0, 24.0]),
+            np.array([220.0, 235.0, 255.0]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat_bounds=(30.0, 60.0),
+            tropopause_pressure=300.0,
+            solver_levels=3,
+        )
+
+        sin_avg = (np.sin(np.deg2rad(30.0)) + np.sin(np.deg2rad(60.0))) / 2.0
+        cos_avg = (np.cos(np.deg2rad(30.0)) + np.cos(np.deg2rad(60.0))) / 2.0
+
+        assert_allclose(result, 1.0e-6, rtol=0.0, atol=0.0)
+        assert_allclose(captured["f_cor"], 2.0 * OMEGA * sin_avg, rtol=0.0, atol=1e-15)
+        assert_allclose(
+            captured["beta"],
+            2.0 * OMEGA * cos_avg / RADIUS,
+            rtol=0.0,
+            atol=1e-21,
+        )
+
     def test_baroc_growth_rate_defaults_to_log_pressure_interpolation(
         self, monkeypatch
     ):
@@ -748,7 +1510,7 @@ class TestGrowthRate:
         monkeypatch.setattr(
             growth_rate_core,
             "_dbaroc_growth_rate_1d",
-            lambda u_solver, theta_solver, pressure_solver, temperature_solver, lat, smooth_window: (
+            lambda u_solver, theta_solver, pressure_solver, temperature_solver, f_cor, beta, smooth_window: (
                 1.0e-6,
                 0,
             ),
@@ -779,7 +1541,7 @@ class TestGrowthRate:
         monkeypatch.setattr(
             growth_rate_core,
             "_dbaroc_growth_rate_1d",
-            lambda u_solver, theta_solver, pressure_solver, temperature_solver, lat, smooth_window: (
+            lambda u_solver, theta_solver, pressure_solver, temperature_solver, f_cor, beta, smooth_window: (
                 1.0e-6,
                 0,
             ),
@@ -792,7 +1554,7 @@ class TestGrowthRate:
             lat=45.0,
             tropopause_pressure=300.0,
             solver_levels=3,
-            vertical_interp="logp",
+            method="logp",
         )
 
         assert methods == ["log", "log"]
@@ -880,7 +1642,7 @@ class TestGrowthRate:
         monkeypatch.setattr(
             growth_rate_core,
             "_dbaroc_growth_rate_1d",
-            lambda u_solver, theta_solver, pressure_solver, temperature_solver, lat, smooth_window: (
+            lambda u_solver, theta_solver, pressure_solver, temperature_solver, f_cor, beta, smooth_window: (
                 0.0,
                 19,
             ),
@@ -944,7 +1706,8 @@ class TestGrowthRate:
             temperature_input,
             source_pressure,
             target_pressure,
-            lat,
+            f_cor,
+            beta,
             interp_kind,
             smooth_window,
             missing_value,
@@ -1017,7 +1780,8 @@ class TestGrowthRate:
             temperature_input,
             source_pressure,
             target_pressure,
-            lat,
+            f_cor,
+            beta,
             interp_kind,
             smooth_window,
             missing_value,
@@ -1103,7 +1867,8 @@ class TestGrowthRate:
             temperature_input,
             source_pressure,
             target_pressure,
-            lat,
+            f_cor,
+            beta,
             interp_kind,
             smooth_window,
             missing_value,
@@ -1118,7 +1883,8 @@ class TestGrowthRate:
             captured["target_pressure"] = np.array(
                 target_pressure, dtype=np.float64, copy=True
             )
-            captured["lat"] = np.array(lat, dtype=np.float64, copy=True)
+            captured["f_cor"] = np.array(f_cor, dtype=np.float64, copy=True)
+            captured["beta"] = np.array(beta, dtype=np.float64, copy=True)
             captured["interp_kind"] = int(interp_kind)
             captured["smooth_window"] = int(smooth_window)
             captured["missing_value"] = float(missing_value)
@@ -1142,7 +1908,14 @@ class TestGrowthRate:
         assert_allclose(result, np.array([1.0e-6, 2.0e-6]))
         assert captured["u_input"].shape == (3, 2)
         assert captured["temperature_input"].shape == (3, 2)
-        assert_allclose(captured["lat"], np.array([45.0, 45.0]))
+        assert_allclose(
+            captured["f_cor"],
+            np.full(2, 2.0 * OMEGA * np.sin(np.deg2rad(45.0))),
+        )
+        assert_allclose(
+            captured["beta"],
+            np.full(2, 2.0 * OMEGA * np.cos(np.deg2rad(45.0)) / RADIUS),
+        )
         assert captured["interp_kind"] == 2
         assert captured["smooth_window"] == 1
         assert captured["missing_value"] != 0.0
@@ -1150,6 +1923,50 @@ class TestGrowthRate:
             captured["target_pressure"][:, 0],
             np.linspace(30000.0, 100000.0, 4, dtype=np.float64),
         )
+
+    def test_baroc_growth_rate_batch_uses_chemke_latitude_band_dynamics(
+        self, monkeypatch
+    ):
+        """Batched latitude-band calls should pass band-mean ``f`` and ``beta`` arrays."""
+
+        captured = {}
+
+        def fake_backend(
+            u_input,
+            temperature_input,
+            source_pressure,
+            target_pressure,
+            f_cor,
+            beta,
+            interp_kind,
+            smooth_window,
+            missing_value,
+        ):
+            captured["f_cor"] = np.array(f_cor, dtype=np.float64, copy=True)
+            captured["beta"] = np.array(beta, dtype=np.float64, copy=True)
+            return np.array([1.0e-6, 2.0e-6]), np.array([0, 0], dtype=np.int32)
+
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_dbaroc_growth_rate_profiles",
+            fake_backend,
+        )
+
+        result = baroc_growth_rate(
+            np.array([[8.0, 14.0, 24.0], [7.0, 13.0, 23.0]]),
+            np.array([220.0, 235.0, 255.0]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat_bounds=(30.0, 60.0),
+            tropopause_pressure=300.0,
+            solver_levels=4,
+        )
+
+        sin_avg = (np.sin(np.deg2rad(30.0)) + np.sin(np.deg2rad(60.0))) / 2.0
+        cos_avg = (np.cos(np.deg2rad(30.0)) + np.cos(np.deg2rad(60.0))) / 2.0
+
+        assert_allclose(result, np.array([1.0e-6, 2.0e-6]))
+        assert_allclose(captured["f_cor"], np.full(2, 2.0 * OMEGA * sin_avg))
+        assert_allclose(captured["beta"], np.full(2, 2.0 * OMEGA * cos_avg / RADIUS))
 
     def test_baroc_growth_rate_batch_returns_xarray_series(self, monkeypatch):
         """Batched xarray input should preserve the non-pressure coordinate."""
@@ -1159,7 +1976,8 @@ class TestGrowthRate:
             temperature_input,
             source_pressure,
             target_pressure,
-            lat,
+            f_cor,
+            beta,
             interp_kind,
             smooth_window,
             missing_value,
@@ -1209,7 +2027,8 @@ class TestGrowthRate:
             temperature_input,
             source_pressure,
             target_pressure,
-            lat,
+            f_cor,
+            beta,
             interp_kind,
             smooth_window,
             missing_value,
@@ -1247,7 +2066,8 @@ class TestGrowthRate:
             temperature_input,
             source_pressure,
             target_pressure,
-            lat,
+            f_cor,
+            beta,
             interp_kind,
             smooth_window,
             missing_value,
@@ -1282,7 +2102,8 @@ class TestGrowthRate:
             temperature_input,
             source_pressure,
             target_pressure,
-            lat,
+            f_cor,
+            beta,
             interp_kind,
             smooth_window,
             missing_value,
