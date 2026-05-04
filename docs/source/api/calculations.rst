@@ -24,9 +24,60 @@ Growth-rate Diagnostics
 
 .. note::
 
-   ``skyborn.calc.baroc_growth_rate`` uses ``vertical_interp="log"`` by
+   ``skyborn.calc.baroc_growth_rate`` uses ``method="log"`` by
    default. Here ``"log"`` means interpolation that is linear in
    log-pressure, not a logarithmic transform of the field values.
+
+   The public growth-rate wrappers return ``s^-1`` directly. Missing or
+   unusable profiles return ``NaN`` instead of a user-supplied
+   missing-value marker.
+
+   By default, the compiled solver uses the fixed high-resolution
+   Chemke/MATLAB-style zonal-wavenumber grid
+
+   .. math::
+
+      k = 0, 1\times10^{-7}, \dots, 1.99\times10^{-5}\ \mathrm{m}^{-1}.
+
+   If you want the lower-resolution Chemke Python-share behavior instead,
+   pass ``wavenumber_mode="low"``. When ``lon`` is omitted, Skyborn uses
+   the original Chemke Python-share longitude grid
+   ``np.arange(0.0, 361.0, 1.5)`` by default; you may still pass a custom
+   one-dimensional longitude coordinate ``lon`` if needed. In that mode the
+   solver uses
+
+   .. math::
+
+      k = \frac{2\pi w}{\left|\lambda_0 - \lambda_1\right|\pi a \cos\phi / 180},
+
+   with :math:`w = 0, 1, \dots, \mathrm{round}(N_{\lambda}/3)-1`.
+
+   When a latitude band is more appropriate than a single representative
+   latitude, pass the band endpoints and the compiled solver uses the same
+   Chemke-style averages as the original reference scripts:
+
+   .. math::
+
+      \sin_{\mathrm{avg}} = \frac{\sin(\phi_1) + \sin(\phi_2)}{2},
+      \qquad
+      \cos_{\mathrm{avg}} = \frac{\cos(\phi_1) + \cos(\phi_2)}{2}
+
+   .. math::
+
+      f = 2\Omega \sin_{\mathrm{avg}},
+      \qquad
+      \beta = \frac{2\Omega\cos_{\mathrm{avg}}}{a}
+
+   If the input fields still carry a latitude axis, ``lat_bounds`` can also
+   drive the latitude-band reduction step directly. Xarray inputs such as
+   ``(time, level, lat)`` are selected and cosine-weighted over that band
+   automatically before the compiled profile solver runs. For raw NumPy
+   arrays with an explicit latitude axis, provide the one-dimensional
+   latitude coordinate through ``lat=...`` together with ``lat_bounds`` so the
+   requested band can be selected unambiguously. The recommended NumPy layout
+   is ``(time, level, lat)``. More generally, the wrapper expects exactly one
+   axis matching the pressure-coordinate length and one non-pressure axis
+   matching the supplied latitude-coordinate length.
 
    The function diagnoses the WMO tropopause pressure by default, or uses an
    explicit ``tropopause_pressure`` when given, and then builds a fixed solver
