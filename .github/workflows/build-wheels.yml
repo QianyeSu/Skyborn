@@ -198,7 +198,7 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_BEFORE_BUILD_WINDOWS: pip install meson ninja
-          CIBW_ENVIRONMENT_WINDOWS: SKYBORN_BUILD_GROWTH_RATE=0 CC=${{ env.MSYS2_CC }} CXX=${{ env.MSYS2_CXX }} FC=${{ env.MSYS2_FC }} F77=${{ env.MSYS2_FC }} F90=${{ env.MSYS2_FC }} PKG_CONFIG=${{ env.MSYS2_PKG_CONFIG }}
+          CIBW_ENVIRONMENT_WINDOWS: CC=${{ env.MSYS2_CC }} CXX=${{ env.MSYS2_CXX }} FC=${{ env.MSYS2_FC }} F77=${{ env.MSYS2_FC }} F90=${{ env.MSYS2_FC }} PKG_CONFIG=${{ env.MSYS2_PKG_CONFIG }}
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair -w {dest_dir} {wheel}
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
@@ -212,7 +212,7 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_BEFORE_BUILD: python -m pip install meson ninja
-          CIBW_ENVIRONMENT_MACOS: SKYBORN_BUILD_GROWTH_RATE=0 FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
+          CIBW_ENVIRONMENT_MACOS: FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
           MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
@@ -226,7 +226,7 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_BEFORE_BUILD: python -m pip install meson ninja
-          CIBW_ENVIRONMENT_MACOS: SKYBORN_BUILD_GROWTH_RATE=0 FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
+          CIBW_ENVIRONMENT_MACOS: FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
           MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
@@ -243,7 +243,7 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_BEFORE_BUILD_LINUX: |
             dnf install -y gcc-gfortran || yum install -y gcc-gfortran || echo 'gfortran install failed'
-          CIBW_ENVIRONMENT_LINUX: SKYBORN_BUILD_GROWTH_RATE=0 FC=gfortran CC=gcc
+          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
@@ -258,7 +258,7 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BEFORE_BUILD_LINUX: |
             yum install -y gcc-gfortran || echo 'gfortran install failed'
-          CIBW_ENVIRONMENT_LINUX: SKYBORN_BUILD_GROWTH_RATE=0 FC=gfortran CC=gcc
+          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
           # Skip wheel test: manylinux2014 test env lacks binary wheels for heavy deps
           # (scipy, cartopy, netCDF4, etc.) and source builds fail on old CentOS7 libraries.
           # The wheel itself is built correctly; real-world install on the target server is the actual test.
