@@ -55,6 +55,7 @@ DEFAULT_SMOOTH_WINDOW = 1
 DEFAULT_WAVENUMBER_MODE = "high"
 DEFAULT_HIGH_RES_WAVENUMBER_COUNT = 200
 DEFAULT_HIGH_RES_WAVENUMBER_STEP = 1.0e-7
+DEFAULT_LOW_RES_LONGITUDE = np.arange(0.0, 361.0, 1.5, dtype=np.float64)
 
 ProfileInput = Union[xr.DataArray, np.ndarray]
 LatitudeInput = Union[ProfileInput, float, int, np.floating, np.integer]
@@ -244,10 +245,11 @@ def _prepare_wavenumber_inputs(
     if normalized_mode == "high":
         return 1, DEFAULT_HIGH_RES_WAVENUMBER_COUNT, None
 
-    if lon is None:
-        raise ValueError("`lon` is required when `wavenumber_mode='low'`")
-
-    lon_values = _as_1d_float64(lon, "lon")
+    lon_values = (
+        np.array(DEFAULT_LOW_RES_LONGITUDE, dtype=np.float64, copy=True)
+        if lon is None
+        else _as_1d_float64(lon, "lon")
+    )
     _require_monotonic(lon_values, "lon")
     lon_span_degrees = abs(float(lon_values[0]) - float(lon_values[-1]))
     if lon_span_degrees <= 0.0:
@@ -670,6 +672,9 @@ def baroc_growth_rate(
     lon : :class:`xarray.DataArray`, :class:`numpy.ndarray`, optional
         One-dimensional longitude coordinate in degrees used only when
         ``wavenumber_mode="low"``. The coordinate must be strictly monotonic.
+        If omitted in low-resolution mode, the wrapper uses the original
+        Chemke Python-share default
+        ``np.arange(0.0, 361.0, 1.5)``.
 
     wavenumber_mode : {"high", "low"}, optional
         Zonal-wavenumber grid used by the compiled instability solver.
@@ -681,9 +686,10 @@ def baroc_growth_rate(
 
            k = \frac{2\pi w}{\left|\lambda_0 - \lambda_1\right|\pi a \cos\phi / 180},
 
-        where :math:`w = 0, 1, \dots, \mathrm{round}(N_{\lambda}/3)-1` and
-        ``lon`` supplies :math:`N_{\lambda}`, :math:`\lambda_0`, and
-        :math:`\lambda_1`. Defaults to ``"high"``.
+        where :math:`w = 0, 1, \dots, \mathrm{round}(N_{\lambda}/3)-1`.
+        When ``lon`` is omitted, the low-resolution mode uses the original
+        Chemke Python-share longitude grid
+        ``np.arange(0.0, 361.0, 1.5)``. Defaults to ``"high"``.
 
     method : {"log", "linear"}, optional
         Vertical interpolation method used to remap the input profiles onto the
