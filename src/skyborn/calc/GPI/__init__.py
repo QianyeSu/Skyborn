@@ -9,7 +9,8 @@ Features
 - High-performance Fortran implementation
 - Support for 1D profiles, 3D gridded fields, and 4D time series data
 - Automatic dimension detection and unit conversion
-- Optional profile diagnostics through ``potential_intensity(..., return_diagnostics=True)``
+- Explicit logarithmic decomposition helpers via ``log_decompose_pi`` and
+  ``pi_log_decomposition``
 - Xarray integration with metadata preservation
 
 For successful solves, ``error_flag == 1``.
@@ -59,8 +60,12 @@ Journal of Geophysical Research, 107(D24), 4801.
 """
 
 from . import xarray
-from .interface import potential_intensity
+from .interface import log_decompose_pi, pi_log_decomposition, potential_intensity
 
 __version__ = "1.0.0"
 
-__all__ = ["potential_intensity"]
+__all__ = [
+    "log_decompose_pi",
+    "pi_log_decomposition",
+    "potential_intensity",
+]
