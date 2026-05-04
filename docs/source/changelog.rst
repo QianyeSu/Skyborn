@@ -37,6 +37,7 @@ Version 0.3.22 (Current)
 * **spharm and windspharm Regression Coverage**: Added focused tests for
   the updated internal spectral-helper and wind-analysis paths,
   including shape-validation coverage for the new optimized flow
+
 Version 0.3.21
 ------------------------
 
