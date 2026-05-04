@@ -35,8 +35,12 @@ import xarray as xr
 
 from skyborn.interp.interpolation import interp_pressure_1d
 
+from ..troposphere import trop_wmo as _trop_wmo
 from ..troposphere import trop_wmo_profile as _trop_wmo_profile
 from .growth_rate_kernels import dbaroc_growth_rate_1d as _dbaroc_growth_rate_1d
+from .growth_rate_kernels import (
+    dbaroc_growth_rate_profiles as _dbaroc_growth_rate_profiles,
+)
 from .growth_rate_kernels import dbarot_growth_rate_1d as _dbarot_growth_rate_1d
 
 GAS_CONSTANT_DRY = 287.04
@@ -48,6 +52,8 @@ DEFAULT_SMOOTH_WINDOW = 1
 
 ProfileInput = xr.DataArray | np.ndarray
 MissingValue = float | int | np.floating | np.integer | None
+PressureInput = ProfileInput | float | int | np.floating | np.integer
+GrowthRateOutput = float | np.ndarray | xr.DataArray
 
 __all__ = [
     "baroc_growth_rate",
@@ -62,6 +68,100 @@ def _as_1d_float64(values: ProfileInput, name: str) -> np.ndarray:
     if array.ndim != 1:
         raise ValueError(f"`{name}` must be one-dimensional")
     return np.array(array, dtype=np.float64, copy=True)
+
+
+def _coerce_profile_matrix(
+    values: ProfileInput,
+    name: str,
+    pressure_size: int,
+    pressure_dim: str | None,
+) -> np.ndarray:
+    """Normalize profile inputs to a ``(nprofile, nlev)`` float64 matrix."""
+
+    array = np.asarray(getattr(values, "data", values), dtype=np.float64)
+    if array.ndim not in {1, 2}:
+        raise ValueError(f"`{name}` must be one- or two-dimensional")
+    array = np.array(array, dtype=np.float64, copy=True)
+    if array.ndim == 1:
+        if array.shape[0] != pressure_size:
+            raise ValueError(f"`{name}` length must match the pressure coordinate")
+        return array[np.newaxis, :]
+
+    if isinstance(values, xr.DataArray) and pressure_dim in values.dims:
+        vertical_axis = values.dims.index(pressure_dim)  # type: ignore[arg-type]
+    else:
+        candidate_axes = [
+            axis for axis, size in enumerate(array.shape) if size == pressure_size
+        ]
+        if len(candidate_axes) != 1:
+            raise ValueError(
+                f"`{name}` must have exactly one axis matching the pressure length"
+            )
+        vertical_axis = candidate_axes[0]
+
+    if array.shape[vertical_axis] != pressure_size:
+        raise ValueError(f"`{name}` vertical axis must match the pressure coordinate")
+
+    return np.array(np.moveaxis(array, vertical_axis, -1), dtype=np.float64, copy=True)
+
+
+def _broadcast_profile_matrix(
+    matrix: np.ndarray,
+    nprofile: int,
+    name: str,
+) -> np.ndarray:
+    """Broadcast a ``(1, nlev)`` climatology to ``nprofile`` profiles."""
+
+    if matrix.shape[0] == nprofile:
+        return np.array(matrix, dtype=np.float64, copy=True)
+    if matrix.shape[0] == 1:
+        return np.array(
+            np.broadcast_to(matrix, (nprofile, matrix.shape[1])),
+            dtype=np.float64,
+            copy=True,
+        )
+    raise ValueError(
+        f"`{name}` must either have one profile or match the requested profile count"
+    )
+
+
+def _as_profile_vector(
+    values: PressureInput,
+    name: str,
+    nprofile: int,
+) -> np.ndarray:
+    """Normalize scalar-or-vector inputs to a length-``nprofile`` array."""
+
+    array = np.asarray(getattr(values, "data", values), dtype=np.float64)
+    if array.ndim == 0:
+        return np.full(nprofile, float(array), dtype=np.float64)
+    if array.ndim != 1:
+        raise ValueError(f"`{name}` must be scalar or one-dimensional")
+    if array.size == nprofile:
+        return np.array(array, dtype=np.float64, copy=True)
+    if array.size == 1:
+        return np.full(nprofile, float(array[0]), dtype=np.float64)
+    raise ValueError(f"`{name}` must have length 1 or match the profile count")
+
+
+def _missing_profile_mask(
+    values: np.ndarray, missing_value: MissingValue
+) -> np.ndarray:
+    """Return a per-profile missing mask for ``(nprofile, nlev)`` matrices."""
+
+    mask = np.any(~np.isfinite(values), axis=1)
+    if not _is_nan_missing_value(missing_value):
+        mask |= np.any(values == float(missing_value), axis=1)
+    return mask
+
+
+def _missing_vector_mask(values: np.ndarray, missing_value: MissingValue) -> np.ndarray:
+    """Return a missing-value mask for profile-wise scalar vectors."""
+
+    mask = ~np.isfinite(values)
+    if not _is_nan_missing_value(missing_value):
+        mask |= values == float(missing_value)
+    return mask
 
 
 def _same_shape_or_raise(*named_arrays: tuple[str, np.ndarray]) -> None:
@@ -154,10 +254,18 @@ def _normalize_output_units(output_units: str) -> str:
     raise ValueError("`output_units` must be 's^-1' or 'day^-1'")
 
 
-def _convert_output_units(value: float, output_units: str) -> float:
+def _convert_output_units(
+    value: float | np.ndarray,
+    output_units: str,
+) -> float | np.ndarray:
     """Convert per-second growth rates into the requested public units."""
 
     normalized = _normalize_output_units(output_units)
+    if isinstance(value, np.ndarray):
+        converted = np.array(value, dtype=np.float64, copy=True)
+        if normalized == "day^-1":
+            converted *= 86400.0
+        return converted
     if normalized == "day^-1":
         return float(value) * 86400.0
     return float(value)
@@ -209,38 +317,6 @@ def _infer_tropopause_pressure_pa(
     return tropopause_pressure_hpa * 100.0
 
 
-def _build_solver_pressure_grid_pa(
-    pressure_pa: np.ndarray,
-    temperature: np.ndarray,
-    target_pressure: ProfileInput | None,
-    solver_levels: int,
-) -> np.ndarray:
-    """Build the solver pressure grid in Pascals."""
-
-    if target_pressure is not None:
-        target_pressure_pa = _target_pressure_to_pa(target_pressure)
-        _require_monotonic(target_pressure_pa, "target_pressure")
-        return target_pressure_pa
-
-    tropopause_pressure_pa = _infer_tropopause_pressure_pa(
-        temperature,
-        pressure_pa,
-    )
-    bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
-    if tropopause_pressure_pa >= bottom_pressure_pa:
-        raise ValueError(
-            "The diagnosed tropopause pressure must be lower than the lower-"
-            "tropospheric pressure bound used by the solver grid."
-        )
-
-    return np.linspace(
-        tropopause_pressure_pa,
-        bottom_pressure_pa,
-        solver_levels,
-        dtype=np.float64,
-    )
-
-
 def _normalize_solver_levels(solver_levels: int) -> int:
     """Validate the requested automatic solver-grid level count."""
 
@@ -269,6 +345,34 @@ def _normalize_smooth_window(smooth_window: int) -> int:
     if normalized % 2 == 0:
         raise ValueError("`smooth_window` must be an odd integer")
     return normalized
+
+
+def _wrap_batch_baroc_output(
+    values: np.ndarray,
+    output_units: str,
+    missing_value: MissingValue,
+    profile_coord: xr.DataArray | None,
+) -> np.ndarray | xr.DataArray:
+    """Wrap batched baroclinic growth rates back into NumPy or xarray output."""
+
+    converted = np.array(values, dtype=np.float64, copy=True)
+    if _is_nan_missing_value(missing_value):
+        valid_mask = np.isfinite(converted)
+    else:
+        valid_mask = converted != float(missing_value)
+    converted[valid_mask] = np.asarray(
+        _convert_output_units(converted[valid_mask], output_units),
+        dtype=np.float64,
+    )
+    if profile_coord is None:
+        return converted
+    return xr.DataArray(
+        converted,
+        dims=profile_coord.dims,
+        coords={profile_coord.dims[0]: profile_coord},
+        name="baroc_growth_rate",
+        attrs={"units": _normalize_output_units(output_units)},
+    )
 
 
 def barot_growth_rate(
@@ -384,20 +488,23 @@ def baroc_growth_rate(
     lat: float | int | np.floating | np.integer | None = None,
     output_units: str = "s-1",
     vertical_interp: str = "log",
+    tropopause_pressure: PressureInput | None = None,
     target_pressure: ProfileInput | None = None,
     solver_levels: int = DEFAULT_SOLVER_LEVELS,
     smooth_window: int = DEFAULT_SMOOTH_WINDOW,
     missing_value: MissingValue = np.nan,
-) -> float:
+) -> GrowthRateOutput:
     r"""Compute the maximum baroclinic normal-mode growth rate.
 
     Parameters
     ----------
     u : :class:`xarray.DataArray`, :class:`numpy.ndarray`
-        One-dimensional zonal-wind profile in ``m s^-1``.
+        One-dimensional zonal-wind profile in ``m s^-1`` or a two-dimensional
+        stack of profiles that shares one vertical axis with ``pressure``.
 
     temperature : :class:`xarray.DataArray`, :class:`numpy.ndarray`
-        One-dimensional temperature profile in Kelvin.
+        One-dimensional temperature profile in Kelvin or a two-dimensional
+        stack of profiles that shares one vertical axis with ``pressure``.
 
     pressure : :class:`xarray.DataArray`, :class:`numpy.ndarray`
         One-dimensional pressure coordinate in Pa or hPa. Values must be
@@ -418,11 +525,21 @@ def baroc_growth_rate(
         log-pressure, not logarithmic interpolation of the field itself.
         Defaults to ``"log"``. The legacy alias ``"logp"`` is still accepted.
 
+    tropopause_pressure : scalar, :class:`xarray.DataArray`, :class:`numpy.ndarray`, optional
+        Explicit tropopause pressure in Pa or hPa. If provided, the automatic
+        WMO tropopause diagnosis is skipped and the solver grid is built from
+        this pressure to the lower-tropospheric bound. For batched profile
+        input, this may be a scalar climatology or a one-dimensional vector
+        matching the profile dimension.
+
     target_pressure : :class:`xarray.DataArray`, :class:`numpy.ndarray`, optional
         Optional explicit solver pressure grid in Pa or hPa. If omitted, the
-        function diagnoses the WMO tropopause pressure from the input
-        ``temperature`` and builds a fixed-pressure solver grid from that
-        tropopause to the lower-tropospheric bound.
+        function uses ``tropopause_pressure`` when given; otherwise it
+        diagnoses the WMO tropopause pressure from the input ``temperature``
+        and builds a fixed-pressure solver grid from that tropopause to the
+        lower-tropospheric bound. Batched calls use the compiled
+        multi-profile WMO tropopause backend when both ``tropopause_pressure``
+        and ``target_pressure`` are omitted.
 
     solver_levels : int, optional
         Number of pressure levels used when ``target_pressure`` is omitted and
@@ -443,8 +560,11 @@ def baroc_growth_rate(
 
     Returns
     -------
-    float
-        Maximum baroclinic growth rate in the requested units.
+    float, :class:`numpy.ndarray`, :class:`xarray.DataArray`
+        Maximum baroclinic growth rate in the requested units. One-dimensional
+        input returns a scalar float. Batched profile input returns a
+        one-dimensional NumPy array or DataArray over the non-pressure
+        dimension.
 
     Notes
     -----
@@ -487,7 +607,10 @@ def baroc_growth_rate(
     If ``smooth_window`` is greater than 1, the compiled backend first applies
     a centered running mean along the discrete zonal-wavenumber spectrum and
     then evaluates the final Chemke-style turning-point maximum on that
-    smoothed spectrum.
+    smoothed spectrum. When ``u`` or ``temperature`` contains multiple
+    profiles, one-dimensional climatologies are broadcast across the profile
+    dimension in Python, while the per-profile pressure interpolation and
+    normal-mode solve loop run in the compiled Fortran backend.
 
     The default ``DEFAULT_SOLVER_LEVELS = 45`` is a practical resolution
     choice, not a formal optimum. Increasing ``solver_levels`` can improve
@@ -523,84 +646,296 @@ def baroc_growth_rate(
 
     if lat is None:
         raise ValueError("`lat` is required for baroc_growth_rate")
+    if target_pressure is not None and tropopause_pressure is not None:
+        raise ValueError(
+            "`target_pressure` and `tropopause_pressure` cannot be provided together"
+        )
 
-    u_values = _as_1d_float64(u, "u")
-    temperature_values = _as_1d_float64(temperature, "temperature")
     pressure_pa = _pressure_to_pa(pressure)
-    _same_shape_or_raise(
-        ("u", u_values),
-        ("temperature", temperature_values),
-        ("pressure", pressure_pa),
-    )
-
-    missing = _return_missing_value(missing_value)
-    if (
-        _contains_missing(u_values, missing_value)
-        or _contains_missing(temperature_values, missing_value)
-        or _contains_missing(pressure_pa, missing_value)
-    ):
-        return missing
-
-    if np.any(temperature_values <= 0.0):
-        raise ValueError("temperature values must be strictly positive")
-
     _require_monotonic(pressure_pa, "pressure")
     solver_levels = _normalize_solver_levels(solver_levels)
     smooth_window = _normalize_smooth_window(smooth_window)
-
-    target_pressure_pa = _build_solver_pressure_grid_pa(
-        pressure_pa,
-        temperature_values,
-        target_pressure,
-        solver_levels,
-    )
     interp_method = _normalize_vertical_interp(vertical_interp)
-    u_solver = np.asarray(
-        interp_pressure_1d(
-            u_values,
-            pressure_pa,
-            target_pressure_pa,
-            method=interp_method,
-            extrapolate=False,
-            missing_value=np.nan,
-        ),
-        dtype=np.float64,
-    )
-    temperature_solver = np.asarray(
-        interp_pressure_1d(
-            temperature_values,
-            pressure_pa,
-            target_pressure_pa,
-            method=interp_method,
-            extrapolate=False,
-            missing_value=np.nan,
-        ),
-        dtype=np.float64,
+    missing = _return_missing_value(missing_value)
+
+    pressure_dim = pressure.dims[0] if isinstance(pressure, xr.DataArray) else None
+    u_matrix_raw = _coerce_profile_matrix(u, "u", pressure_pa.size, pressure_dim)
+    temperature_matrix_raw = _coerce_profile_matrix(
+        temperature,
+        "temperature",
+        pressure_pa.size,
+        pressure_dim,
     )
 
-    if np.any(~np.isfinite(u_solver)) or np.any(~np.isfinite(temperature_solver)):
-        return missing
-
-    if target_pressure_pa[0] > target_pressure_pa[-1]:
-        target_pressure_pa = target_pressure_pa[::-1].copy()
-        u_solver = u_solver[::-1].copy()
-        temperature_solver = temperature_solver[::-1].copy()
-
-    theta_solver = (
-        temperature_solver * (REFERENCE_PRESSURE_PA / target_pressure_pa) ** KAPPA
-    )
-    max_growth, ier = _dbaroc_growth_rate_1d(
-        u_solver,
-        theta_solver,
-        target_pressure_pa,
-        temperature_solver,
-        float(lat),
-        smooth_window,
-    )
-    if ier != 0:
-        raise RuntimeError(
-            f"baroc_growth_rate Fortran backend returned ier={ier} for the "
-            "requested atmospheric column."
+    if (
+        u_matrix_raw.shape[0] == 1
+        and temperature_matrix_raw.shape[0] == 1
+        and np.asarray(getattr(u, "data", u)).ndim == 1
+        and np.asarray(getattr(temperature, "data", temperature)).ndim == 1
+    ):
+        u_values = u_matrix_raw[0]
+        temperature_values = temperature_matrix_raw[0]
+        _same_shape_or_raise(
+            ("u", u_values),
+            ("temperature", temperature_values),
+            ("pressure", pressure_pa),
         )
 
-    return _convert_output_units(max_growth, output_units)
+        if (
+            _contains_missing(u_values, missing_value)
+            or _contains_missing(temperature_values, missing_value)
+            or _contains_missing(pressure_pa, missing_value)
+        ):
+            return missing
+
+        if np.any(temperature_values <= 0.0):
+            raise ValueError("temperature values must be strictly positive")
+
+        if target_pressure is not None:
+            target_pressure_pa = _target_pressure_to_pa(target_pressure)
+            _require_monotonic(target_pressure_pa, "target_pressure")
+        else:
+            if tropopause_pressure is None:
+                tropopause_pressure_pa = _infer_tropopause_pressure_pa(
+                    temperature_values,
+                    pressure_pa,
+                )
+            else:
+                tropopause_values = _as_profile_vector(
+                    tropopause_pressure,
+                    "tropopause_pressure",
+                    1,
+                )
+                tropopause_pressure_pa = float(tropopause_values[0])
+                if (
+                    np.isfinite(tropopause_pressure_pa)
+                    and tropopause_pressure_pa <= 2000.0
+                ):
+                    tropopause_pressure_pa *= 100.0
+            bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
+            if tropopause_pressure_pa >= bottom_pressure_pa:
+                raise ValueError(
+                    "The diagnosed tropopause pressure must be lower than the lower-"
+                    "tropospheric pressure bound used by the solver grid."
+                )
+            target_pressure_pa = np.linspace(
+                tropopause_pressure_pa,
+                bottom_pressure_pa,
+                solver_levels,
+                dtype=np.float64,
+            )
+        u_solver = np.asarray(
+            interp_pressure_1d(
+                u_values,
+                pressure_pa,
+                target_pressure_pa,
+                method=interp_method,
+                extrapolate=False,
+                missing_value=np.nan,
+            ),
+            dtype=np.float64,
+        )
+        temperature_solver = np.asarray(
+            interp_pressure_1d(
+                temperature_values,
+                pressure_pa,
+                target_pressure_pa,
+                method=interp_method,
+                extrapolate=False,
+                missing_value=np.nan,
+            ),
+            dtype=np.float64,
+        )
+
+        if np.any(~np.isfinite(u_solver)) or np.any(~np.isfinite(temperature_solver)):
+            return missing
+
+        if target_pressure_pa[0] > target_pressure_pa[-1]:
+            target_pressure_pa = target_pressure_pa[::-1].copy()
+            u_solver = u_solver[::-1].copy()
+            temperature_solver = temperature_solver[::-1].copy()
+
+        theta_solver = (
+            temperature_solver * (REFERENCE_PRESSURE_PA / target_pressure_pa) ** KAPPA
+        )
+        max_growth, ier = _dbaroc_growth_rate_1d(
+            u_solver,
+            theta_solver,
+            target_pressure_pa,
+            temperature_solver,
+            float(lat),
+            smooth_window,
+        )
+        if ier != 0:
+            raise RuntimeError(
+                f"baroc_growth_rate Fortran backend returned ier={ier} for the "
+                "requested atmospheric column."
+            )
+
+        return _convert_output_units(max_growth, output_units)
+
+    nprofile = max(u_matrix_raw.shape[0], temperature_matrix_raw.shape[0])
+    profile_coord = None
+    for values in (u, temperature):
+        if (
+            not isinstance(values, xr.DataArray)
+            or values.ndim != 2
+            or pressure_dim not in values.dims
+        ):
+            continue
+        candidate_dim = (
+            values.dims[0] if values.dims[1] == pressure_dim else values.dims[1]
+        )
+        candidate_coord = values[candidate_dim]
+        if profile_coord is None:
+            profile_coord = candidate_coord
+        elif candidate_dim != profile_coord.dims[0]:
+            raise ValueError(
+                "Batched xarray inputs must share the same non-pressure dimension"
+            )
+    u_matrix = _broadcast_profile_matrix(
+        u_matrix_raw,
+        nprofile,
+        "u",
+    )
+    temperature_matrix = _broadcast_profile_matrix(
+        temperature_matrix_raw,
+        nprofile,
+        "temperature",
+    )
+    lat_values = _as_profile_vector(lat, "lat", nprofile)
+    output = np.full(nprofile, missing, dtype=np.float64)
+    valid_profile_mask = ~(
+        _missing_profile_mask(u_matrix, missing_value)
+        | _missing_profile_mask(temperature_matrix, missing_value)
+        | _missing_vector_mask(lat_values, missing_value)
+    )
+
+    tropopause_pressure_pa = None
+    if tropopause_pressure is not None:
+        tropopause_values = _as_profile_vector(
+            tropopause_pressure,
+            "tropopause_pressure",
+            nprofile,
+        )
+        tropopause_missing_mask = _missing_vector_mask(
+            tropopause_values,
+            missing_value,
+        )
+        tropopause_pressure_pa = np.array(
+            tropopause_values, dtype=np.float64, copy=True
+        )
+        finite_tropopause_values = tropopause_pressure_pa[
+            ~tropopause_missing_mask & np.isfinite(tropopause_pressure_pa)
+        ]
+        if (
+            finite_tropopause_values.size > 0
+            and np.nanmax(finite_tropopause_values) <= 2000.0
+        ):
+            tropopause_pressure_pa[~tropopause_missing_mask] *= 100.0
+        valid_profile_mask &= ~tropopause_missing_mask
+        finite_tropopause_mask = valid_profile_mask & np.isfinite(
+            tropopause_pressure_pa
+        )
+        if np.any(finite_tropopause_mask & (tropopause_pressure_pa <= 0.0)):
+            raise ValueError("tropopause pressure values must be strictly positive")
+        bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
+        if np.any(
+            finite_tropopause_mask & (tropopause_pressure_pa >= bottom_pressure_pa)
+        ):
+            raise ValueError(
+                "Each explicit tropopause pressure must be lower than the "
+                "lower-tropospheric pressure bound used by the solver grid."
+            )
+
+    if np.any(valid_profile_mask & np.any(temperature_matrix <= 0.0, axis=1)):
+        raise ValueError("temperature values must be strictly positive")
+
+    if target_pressure is not None:
+        target_pressure_pa = _target_pressure_to_pa(target_pressure)
+        _require_monotonic(target_pressure_pa, "target_pressure")
+        if target_pressure_pa[0] > target_pressure_pa[-1]:
+            target_pressure_pa = target_pressure_pa[::-1].copy()
+        target_pressure_matrix_pa = np.array(
+            np.broadcast_to(target_pressure_pa, (nprofile, target_pressure_pa.size)),
+            dtype=np.float64,
+            copy=True,
+        )
+    else:
+        if tropopause_pressure_pa is None:
+            tropopause_result = _trop_wmo(
+                temperature_matrix[valid_profile_mask],
+                pressure_pa,
+                xdim=-1,
+                ydim=0,
+                levdim=1,
+                timedim=None,
+                pressure_unit="Pa",
+                missing_value=-999.0,
+            )
+            tropopause_success = np.asarray(
+                tropopause_result["success"],
+                dtype=bool,
+            )
+            tropopause_pressure_pa_valid = (
+                np.asarray(tropopause_result["pressure"], dtype=np.float64) * 100.0
+            )
+            tropopause_pressure_pa = np.full(nprofile, np.nan, dtype=np.float64)
+            valid_indices = np.flatnonzero(valid_profile_mask)
+            tropopause_pressure_pa[valid_indices[tropopause_success]] = (
+                tropopause_pressure_pa_valid[tropopause_success]
+            )
+            valid_profile_mask[valid_indices[~tropopause_success]] = False
+            if not np.any(valid_profile_mask):
+                return _wrap_batch_baroc_output(
+                    output,
+                    output_units,
+                    missing_value,
+                    profile_coord,
+                )
+        bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
+        ramp = np.linspace(0.0, 1.0, solver_levels, dtype=np.float64)
+        target_pressure_matrix_pa = (
+            tropopause_pressure_pa[:, np.newaxis]
+            + (bottom_pressure_pa - tropopause_pressure_pa)[:, np.newaxis]
+            * ramp[np.newaxis, :]
+        )
+
+    if not np.any(valid_profile_mask):
+        return _wrap_batch_baroc_output(
+            output,
+            output_units,
+            missing_value,
+            profile_coord,
+        )
+
+    interp_kind = 1 if interp_method == "linear" else 2
+    growth_valid, ier_valid = _dbaroc_growth_rate_profiles(
+        np.asfortranarray(u_matrix[valid_profile_mask].T),
+        np.asfortranarray(temperature_matrix[valid_profile_mask].T),
+        pressure_pa,
+        np.asfortranarray(target_pressure_matrix_pa[valid_profile_mask].T),
+        np.asfortranarray(lat_values[valid_profile_mask]),
+        interp_kind,
+        smooth_window,
+        missing,
+    )
+    growth_valid = np.asarray(growth_valid, dtype=np.float64)
+    ier_valid = np.asarray(ier_valid, dtype=np.int64)
+
+    valid_indices = np.flatnonzero(valid_profile_mask)
+    output[valid_indices[ier_valid == 0]] = growth_valid[ier_valid == 0]
+    if np.any((ier_valid != 0) & (ier_valid != 100)):
+        failed = valid_indices[(ier_valid != 0) & (ier_valid != 100)]
+        failed_codes = ier_valid[(ier_valid != 0) & (ier_valid != 100)]
+        raise RuntimeError(
+            "baroc_growth_rate Fortran backend returned nonzero ier values for "
+            f"profile indices {failed.tolist()} with ier={failed_codes.tolist()}."
+        )
+
+    return _wrap_batch_baroc_output(
+        output,
+        output_units,
+        missing_value,
+        profile_coord,
+    )
