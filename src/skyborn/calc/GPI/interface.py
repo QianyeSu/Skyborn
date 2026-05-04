@@ -11,6 +11,7 @@ integration with the optimized Fortran backend.
 """
 
 import warnings
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -19,13 +20,149 @@ from . import tropical_cyclone_potential_intensity as _gpi_module
 
 # Fortran UNDEF value constant
 UNDEF = -9.99e33
+_OUTFLOW_SOURCE_FLAGS = {"cape_star": 0, "cape_env": 1}
+_TEMPERATURE_KIND_BY_NDIM = {1: "profile", 3: "3D", 4: "4D"}
+_SSTUnits = str
+
+_GRIDDED_BACKENDS = {
+    ("3D", False, False): _gpi_module.calculate_pi_gridded_data,
+    ("3D", False, True): _gpi_module.calculate_pi_gridded_with_missing,
+    ("3D", True, False): _gpi_module.calculate_pi_gridded_diagnostics,
+    ("3D", True, True): _gpi_module.calculate_pi_gridded_diagnostics_with_missing,
+    ("4D", False, False): _gpi_module.calculate_pi_4d_data,
+    ("4D", False, True): _gpi_module.calculate_pi_4d_with_missing,
+    ("4D", True, False): _gpi_module.calculate_pi_4d_diagnostics,
+    ("4D", True, True): _gpi_module.calculate_pi_4d_diagnostics_with_missing,
+}
+_PROFILE_BACKENDS = {
+    False: _gpi_module.calculate_pi_single_profile,
+    True: _gpi_module.calculate_pi_profile_diagnostics,
+}
+
+
+@dataclass(frozen=True)
+class _PreparedInputs:
+    """Normalized inputs ready for a compiled backend call."""
+
+    kind: str
+    sst: Any
+    psl: Any
+    pressure_levels: np.ndarray
+    temperature: np.ndarray
+    mixing_ratio: np.ndarray
+    has_missing: bool = False
+    actual_levels: Optional[int] = None
 
 
 def _postprocess_results(min_pressure, max_wind):
     """Convert UNDEF values to NaN in results."""
-    min_pressure = np.where(min_pressure == UNDEF, np.nan, min_pressure)
-    max_wind = np.where(max_wind == UNDEF, np.nan, max_wind)
+    min_pressure = np.where(np.isclose(min_pressure, UNDEF), np.nan, min_pressure)
+    max_wind = np.where(np.isclose(max_wind, UNDEF), np.nan, max_wind)
     return min_pressure, max_wind
+
+
+def _postprocess_scalar(value: Union[float, np.floating]) -> float:
+    """Convert scalar UNDEF output to NaN."""
+    value = float(value)
+    return np.nan if np.isclose(value, UNDEF) else value
+
+
+def _maybe_scalar(value: Union[np.ndarray, float]) -> Any:
+    """Collapse 0D NumPy outputs back to Python scalars."""
+    return float(value) if np.ndim(value) == 0 else value
+
+
+def _detect_temperature_kind(temperature: Any) -> str:
+    """Map thermodynamic input dimensionality to the supported API kind."""
+    temp_ndim = np.ndim(temperature)
+    try:
+        return _TEMPERATURE_KIND_BY_NDIM[temp_ndim]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unsupported temperature dimensions: {temp_ndim}. Expected 1, 3, or 4 dimensions."
+        ) from exc
+
+
+def _normalize_outflow_source(outflow_source: str) -> int:
+    """Map the public outflow-source string to the Fortran flag."""
+    try:
+        return _OUTFLOW_SOURCE_FLAGS[outflow_source]
+    except KeyError as exc:
+        raise ValueError(
+            f"Invalid outflow_source={outflow_source!r}; expected 'cape_star' or 'cape_env'."
+        ) from exc
+
+
+def _sst_to_kelvin(sst: Any, sst_units: _SSTUnits) -> Any:
+    """Convert sea-surface temperature to Kelvin."""
+    units = sst_units.upper()
+    if units == "K":
+        return sst
+    if units == "C":
+        return np.asarray(sst) + 273.15
+    raise ValueError(f"Unsupported sst_units={sst_units!r}; expected 'C' or 'K'.")
+
+
+def _compiled_float32_array(values: Any, *, order: Optional[str] = None) -> np.ndarray:
+    """Materialize a float32 array with an explicit compiled-boundary layout."""
+    arr = np.asarray(values, dtype=np.float32)
+
+    if order == "F":
+        if arr.ndim <= 1:
+            return np.ascontiguousarray(arr)
+        return arr if arr.flags.f_contiguous else np.asfortranarray(arr)
+
+    if order == "C":
+        return arr if arr.flags.c_contiguous else np.ascontiguousarray(arr)
+
+    if arr.flags.c_contiguous or arr.flags.f_contiguous:
+        return arr
+    return np.ascontiguousarray(arr)
+
+
+def _diagnostic_result(
+    min_pressure,
+    max_wind,
+    error_flag,
+    outflow_temp,
+    outflow_level,
+    lnpi,
+    lneff,
+    lndiseq,
+    lnCKCD,
+) -> Dict[str, Any]:
+    """Normalize compiled diagnostic outputs to Python scalars/arrays."""
+    if np.asarray(min_pressure).ndim == 0:
+        return {
+            "max_wind": _postprocess_scalar(max_wind),
+            "min_pressure": _postprocess_scalar(min_pressure),
+            "error_flag": int(error_flag),
+            "t0": _postprocess_scalar(outflow_temp),
+            "otl": _postprocess_scalar(outflow_level),
+            "lnpi": _postprocess_scalar(lnpi),
+            "lneff": _postprocess_scalar(lneff),
+            "lndiseq": _postprocess_scalar(lndiseq),
+            "lnCKCD": _postprocess_scalar(lnCKCD),
+        }
+
+    min_pressure, max_wind = _postprocess_results(min_pressure, max_wind)
+    outflow_temp = np.where(np.isclose(outflow_temp, UNDEF), np.nan, outflow_temp)
+    outflow_level = np.where(np.isclose(outflow_level, UNDEF), np.nan, outflow_level)
+    lnpi = np.where(np.isclose(lnpi, UNDEF), np.nan, lnpi)
+    lneff = np.where(np.isclose(lneff, UNDEF), np.nan, lneff)
+    lndiseq = np.where(np.isclose(lndiseq, UNDEF), np.nan, lndiseq)
+
+    return {
+        "max_wind": max_wind,
+        "min_pressure": min_pressure,
+        "error_flag": int(error_flag),
+        "t0": outflow_temp,
+        "otl": outflow_level,
+        "lnpi": lnpi,
+        "lneff": lneff,
+        "lndiseq": lndiseq,
+        "lnCKCD": _postprocess_scalar(lnCKCD),
+    }
 
 
 def _validate_input_arrays(*arrays, names=None):
@@ -114,24 +251,16 @@ def _ensure_pressure_ordering(pressure_levels, temperature, mixing_ratio):
             np.flip(temperature, axis=pressure_axis),
             np.flip(mixing_ratio, axis=pressure_axis),
         )
-    else:
-        # Already correctly ordered or single level - return original arrays
-        return pressure_levels, temperature, mixing_ratio
+
+    # Already correctly ordered or single level - return original arrays
+    return pressure_levels, temperature, mixing_ratio
 
 
 def _validate_dimensions(sst, psl, pressure_levels, temp, mixing_ratio, data_type="3D"):
     """Validate that input arrays have compatible dimensions based on temperature array."""
-
-    # Temperature and mixing_ratio must have same shape
-    if temp.shape != mixing_ratio.shape:
-        raise ValueError(
-            f"Temperature shape {temp.shape} doesn't match mixing ratio shape {mixing_ratio.shape}"
-        )
-
     expected_levels = len(pressure_levels)
 
     if data_type == "profile":
-        # Profile: temp.shape = (num_levels,), SST/PSL scalars
         if temp.shape != (expected_levels,):
             raise ValueError(
                 f"Temperature shape {temp.shape} doesn't match expected profile shape ({expected_levels},)"
@@ -142,28 +271,22 @@ def _validate_dimensions(sst, psl, pressure_levels, temp, mixing_ratio, data_typ
             raise ValueError("SST and PSL must be scalars for profile data")
 
     elif data_type == "3D":
-        # 3D: temp.shape = (num_levels, nlat, nlon), SST/PSL.shape = (nlat, nlon)
         if temp.ndim != 3 or temp.shape[0] != expected_levels:
             raise ValueError(
                 f"Temperature shape {temp.shape} doesn't match expected 3D shape ({expected_levels}, nlat, nlon)"
             )
-        expected_sst_shape = temp.shape[1:]  # (nlat, nlon)
+        expected_sst_shape = temp.shape[1:]
         if sst.shape != expected_sst_shape or psl.shape != expected_sst_shape:
             raise ValueError(
                 f"SST/PSL shape mismatch - expected {expected_sst_shape}, got SST:{sst.shape}, PSL:{psl.shape}"
             )
 
     elif data_type == "4D":
-        # 4D: temp.shape = (ntimes, num_levels, nlat, nlon), SST/PSL.shape = (ntimes, nlat, nlon)
         if temp.ndim != 4 or temp.shape[1] != expected_levels:
             raise ValueError(
                 f"Temperature shape {temp.shape} doesn't match expected 4D shape (ntimes, {expected_levels}, nlat, nlon)"
             )
-        expected_sst_shape = (
-            temp.shape[0],
-            temp.shape[2],
-            temp.shape[3],
-        )  # (ntimes, nlat, nlon)
+        expected_sst_shape = (temp.shape[0], temp.shape[2], temp.shape[3])
         if sst.shape != expected_sst_shape or psl.shape != expected_sst_shape:
             raise ValueError(
                 f"SST/PSL shape mismatch - expected {expected_sst_shape}, got SST:{sst.shape}, PSL:{psl.shape}"
@@ -171,6 +294,254 @@ def _validate_dimensions(sst, psl, pressure_levels, temp, mixing_ratio, data_typ
 
     else:
         raise ValueError(f"Unsupported data type: {data_type}")
+
+    if temp.shape != mixing_ratio.shape:
+        raise ValueError(
+            f"Temperature shape {temp.shape} doesn't match mixing ratio shape {mixing_ratio.shape}"
+        )
+
+
+def _prepare_gridded_inputs(
+    kind: str,
+    sst: np.ndarray,
+    psl: np.ndarray,
+    pressure_levels: np.ndarray,
+    temperature: np.ndarray,
+    mixing_ratio: np.ndarray,
+) -> _PreparedInputs:
+    """Validate, reorder, and materialize 3D/4D inputs for the Fortran backend."""
+    (sst, psl, pressure_levels, temperature, mixing_ratio), has_missing = (
+        _validate_input_arrays(
+            sst,
+            psl,
+            pressure_levels,
+            temperature,
+            mixing_ratio,
+            names=["SST", "PSL", "pressure_levels", "temperature", "mixing_ratio"],
+        )
+    )
+
+    pressure_levels, temperature, mixing_ratio = _ensure_pressure_ordering(
+        pressure_levels, temperature, mixing_ratio
+    )
+    _validate_dimensions(sst, psl, pressure_levels, temperature, mixing_ratio, kind)
+
+    # Multi-dimensional inputs from xarray/netCDF are usually C contiguous.
+    # f2py would need Fortran-layout copies for these signatures anyway, so we
+    # materialize the layout explicitly once at the Python boundary.
+    return _PreparedInputs(
+        kind=kind,
+        sst=_compiled_float32_array(sst, order="F"),
+        psl=_compiled_float32_array(psl, order="F"),
+        pressure_levels=_compiled_float32_array(pressure_levels),
+        temperature=_compiled_float32_array(temperature, order="F"),
+        mixing_ratio=_compiled_float32_array(mixing_ratio, order="F"),
+        has_missing=has_missing,
+    )
+
+
+def _prepare_profile_inputs(
+    sst: float,
+    psl: float,
+    pressure_levels: np.ndarray,
+    temperature: np.ndarray,
+    mixing_ratio: np.ndarray,
+    actual_levels: Optional[int] = None,
+) -> _PreparedInputs:
+    """Validate, reorder, and materialize single-profile inputs."""
+    expected_len = len(np.asarray(pressure_levels))
+    if len(temperature) != expected_len or len(mixing_ratio) != expected_len:
+        raise ValueError(
+            f"Profile lengths mismatch - pressure: {expected_len}, temperature: {len(temperature)}, mixing_ratio: {len(mixing_ratio)}"
+        )
+
+    (pressure_levels, temperature, mixing_ratio), _has_missing = _validate_input_arrays(
+        pressure_levels,
+        temperature,
+        mixing_ratio,
+        names=["pressure_levels", "temperature", "mixing_ratio"],
+    )
+
+    pressure_levels, temperature, mixing_ratio = _ensure_pressure_ordering(
+        pressure_levels, temperature, mixing_ratio
+    )
+    _validate_dimensions(
+        np.asarray(sst),
+        np.asarray(psl),
+        pressure_levels,
+        temperature,
+        mixing_ratio,
+        "profile",
+    )
+
+    if actual_levels is None:
+        actual_levels = len(pressure_levels)
+    if actual_levels < 1 or actual_levels > len(pressure_levels):
+        raise ValueError(
+            f"actual_levels must be between 1 and {len(pressure_levels)}, got {actual_levels}"
+        )
+
+    return _PreparedInputs(
+        kind="profile",
+        sst=float(sst),
+        psl=float(psl),
+        pressure_levels=_compiled_float32_array(pressure_levels),
+        temperature=_compiled_float32_array(temperature),
+        mixing_ratio=_compiled_float32_array(mixing_ratio),
+        actual_levels=int(actual_levels),
+    )
+
+
+def _prepare_inputs(
+    kind: str,
+    sst: Any,
+    psl: Any,
+    pressure_levels: np.ndarray,
+    temperature: np.ndarray,
+    mixing_ratio: np.ndarray,
+    actual_levels: Optional[int] = None,
+) -> _PreparedInputs:
+    """Dispatch to the appropriate input-normalization path."""
+    if kind == "profile":
+        return _prepare_profile_inputs(
+            float(sst),
+            float(psl),
+            pressure_levels,
+            temperature,
+            mixing_ratio,
+            actual_levels=actual_levels,
+        )
+
+    return _prepare_gridded_inputs(
+        kind,
+        sst,
+        psl,
+        pressure_levels,
+        temperature,
+        mixing_ratio,
+    )
+
+
+def _run_backend(
+    prepared: _PreparedInputs,
+    *,
+    diagnostics: bool = False,
+    outflow_source: str = "cape_star",
+    CKCD: float = 0.9,
+):
+    """Execute the requested compiled backend after normalization."""
+    if prepared.kind == "profile":
+        func = _PROFILE_BACKENDS[diagnostics]
+        if diagnostics:
+            outflow_flag = _normalize_outflow_source(outflow_source)
+            return _diagnostic_result(
+                *func(
+                    float(prepared.sst),
+                    float(prepared.psl),
+                    prepared.pressure_levels,
+                    prepared.temperature,
+                    prepared.mixing_ratio,
+                    prepared.actual_levels,
+                    outflow_source_flag=outflow_flag,
+                    ckcd_in=float(CKCD),
+                )
+            )
+
+        min_pressure, max_wind, error_flag = func(
+            float(prepared.sst),
+            float(prepared.psl),
+            prepared.pressure_levels,
+            prepared.temperature,
+            prepared.mixing_ratio,
+            prepared.actual_levels,
+        )
+        return (
+            _postprocess_scalar(min_pressure),
+            _postprocess_scalar(max_wind),
+            int(error_flag),
+        )
+
+    func = _GRIDDED_BACKENDS[(prepared.kind, diagnostics, prepared.has_missing)]
+    if diagnostics:
+        outflow_flag = _normalize_outflow_source(outflow_source)
+        return _diagnostic_result(
+            *func(
+                prepared.sst,
+                prepared.psl,
+                prepared.pressure_levels,
+                prepared.temperature,
+                prepared.mixing_ratio,
+                outflow_source_flag=outflow_flag,
+                ckcd_in=float(CKCD),
+            )
+        )
+
+    min_pressure, max_wind, error_flag = func(
+        prepared.sst,
+        prepared.psl,
+        prepared.pressure_levels,
+        prepared.temperature,
+        prepared.mixing_ratio,
+    )
+    min_pressure, max_wind = _postprocess_results(min_pressure, max_wind)
+    return min_pressure, max_wind, int(error_flag)
+
+
+def log_decompose_pi(
+    pi: Any,
+    sst: Any,
+    t0: Any,
+    CKCD: float = 0.9,
+    *,
+    sst_units: _SSTUnits = "K",
+) -> Tuple[Any, Any, Any, float]:
+    """Log-decompose potential intensity into efficiency, disequilibrium, and Ck/Cd.
+
+    Parameters
+    ----------
+    pi
+        Potential intensity wind speed [m/s].
+    sst
+        Sea surface temperature in units given by ``sst_units``.
+    t0
+        Outflow temperature [K].
+    CKCD : float, default: 0.9
+        Ratio of exchange coefficients.
+    sst_units : {"K", "C"}, default: "K"
+        Units of ``sst``.
+
+    Returns
+    -------
+    tuple
+        ``(lnpi, lneff, lndiseq, lnCKCD)`` where ``lnpi = ln(V^2)``.
+    """
+    pi_arr = np.asarray(pi, dtype=float)
+    t0_arr = np.asarray(t0, dtype=float)
+    sst_k = np.asarray(_sst_to_kelvin(sst, sst_units), dtype=float)
+
+    pi_arr, sst_k, t0_arr = np.broadcast_arrays(pi_arr, sst_k, t0_arr)
+    lnCKCD = float(np.log(CKCD))
+
+    efficiency = (sst_k - t0_arr) / t0_arr
+    valid_eff = efficiency > 0
+    valid_pi = pi_arr > 0
+
+    lneff = np.full(efficiency.shape, np.nan, dtype=float)
+    lneff[valid_eff] = np.log(efficiency[valid_eff])
+
+    lnpi = np.full(pi_arr.shape, np.nan, dtype=float)
+    lnpi[valid_pi] = 2.0 * np.log(pi_arr[valid_pi])
+
+    lndiseq = np.full(pi_arr.shape, np.nan, dtype=float)
+    valid = valid_eff & valid_pi
+    lndiseq[valid] = lnpi[valid] - lneff[valid] - lnCKCD
+
+    return (
+        _maybe_scalar(lnpi),
+        _maybe_scalar(lneff),
+        _maybe_scalar(lndiseq),
+        lnCKCD,
+    )
 
 
 def calculate_potential_intensity_3d(
@@ -204,7 +575,7 @@ def calculate_potential_intensity_3d(
     max_wind : ndarray, shape (nlat, nlon)
         Maximum sustained wind speed [m/s]
     error_flag : int
-        Error status (0 = success, non-zero = error)
+        Error status (`1` = success, other values indicate non-convergence or invalid input)
 
     Examples
     --------
@@ -212,42 +583,10 @@ def calculate_potential_intensity_3d(
     >>> min_p, max_w, err = calculate_potential_intensity_3d(
     ...     sst, psl, p_levels, temp, mixr)
     """
-    # Validate and convert inputs, detect missing values
-    (sst, psl, pressure_levels, temperature, mixing_ratio), has_missing = (
-        _validate_input_arrays(
-            sst,
-            psl,
-            pressure_levels,
-            temperature,
-            mixing_ratio,
-            names=["SST", "PSL", "pressure_levels", "temperature", "mixing_ratio"],
-        )
+    prepared = _prepare_inputs(
+        "3D", sst, psl, pressure_levels, temperature, mixing_ratio
     )
-
-    # Ensure correct pressure level ordering (surface to top)
-    pressure_levels, temperature, mixing_ratio = _ensure_pressure_ordering(
-        pressure_levels, temperature, mixing_ratio
-    )
-
-    # Validate dimensions
-    _validate_dimensions(sst, psl, pressure_levels, temperature, mixing_ratio, "3D")
-
-    # Choose appropriate Fortran function based on missing value detection
-    func = (
-        _gpi_module.calculate_pi_gridded_with_missing
-        if has_missing
-        else _gpi_module.calculate_pi_gridded_data
-    )
-
-    # Call Fortran function (dimensions are automatically inferred)
-    min_pressure, max_wind, error_flag = func(
-        sst, psl, pressure_levels, temperature, mixing_ratio
-    )
-
-    # Convert UNDEF to NaN in results
-    min_pressure, max_wind = _postprocess_results(min_pressure, max_wind)
-
-    return min_pressure, max_wind, error_flag
+    return _run_backend(prepared)
 
 
 def calculate_potential_intensity_4d(
@@ -281,7 +620,7 @@ def calculate_potential_intensity_4d(
     max_wind : ndarray, shape (ntimes, nlat, nlon)
         Maximum sustained wind speed [m/s]
     error_flag : int
-        Error status (0 = success, non-zero = error)
+        Error status (`1` = success, other values indicate non-convergence or invalid input)
 
     Examples
     --------
@@ -289,42 +628,10 @@ def calculate_potential_intensity_4d(
     >>> min_p, max_w, err = calculate_potential_intensity_4d(
     ...     sst_4d, psl_4d, p_levels, temp_4d, mixr_4d)
     """
-    # Validate and convert inputs, detect missing values
-    (sst, psl, pressure_levels, temperature, mixing_ratio), has_missing = (
-        _validate_input_arrays(
-            sst,
-            psl,
-            pressure_levels,
-            temperature,
-            mixing_ratio,
-            names=["SST", "PSL", "pressure_levels", "temperature", "mixing_ratio"],
-        )
+    prepared = _prepare_inputs(
+        "4D", sst, psl, pressure_levels, temperature, mixing_ratio
     )
-
-    # Ensure correct pressure level ordering (surface to top)
-    pressure_levels, temperature, mixing_ratio = _ensure_pressure_ordering(
-        pressure_levels, temperature, mixing_ratio
-    )
-
-    # Validate dimensions
-    _validate_dimensions(sst, psl, pressure_levels, temperature, mixing_ratio, "4D")
-
-    # Choose appropriate Fortran function based on missing value detection
-    func = (
-        _gpi_module.calculate_pi_4d_with_missing
-        if has_missing
-        else _gpi_module.calculate_pi_4d_data
-    )
-
-    # Call Fortran function (dimensions are automatically inferred)
-    min_pressure, max_wind, error_flag = func(
-        sst, psl, pressure_levels, temperature, mixing_ratio
-    )
-
-    # Convert UNDEF to NaN in results
-    min_pressure, max_wind = _postprocess_results(min_pressure, max_wind)
-
-    return min_pressure, max_wind, error_flag
+    return _run_backend(prepared)
 
 
 def calculate_potential_intensity_profile(
@@ -352,188 +659,72 @@ def calculate_potential_intensity_profile(
     mixing_ratio : ndarray, shape (num_levels,)
         Water vapor mixing ratio profile [kg/kg]
     actual_levels : int, optional
-        Number of actual levels to use (default: len(pressure_levels))
+        Number of actual levels to use (default: ``len(pressure_levels)``).
 
     Returns
     -------
-    min_pressure : float
-        Minimum central pressure [mb]
-    max_wind : float
-        Maximum sustained wind speed [m/s]
-    error_flag : int
-        Error status (0 = success, non-zero = error)
-
-    Examples
-    --------
-    >>> # Single profile calculation
-    >>> min_p, max_w, err = calculate_potential_intensity_profile(
-    ...     28.5, 1013.25, p_levels, temp_profile, mixr_profile)
+    tuple
+        ``(min_pressure, max_wind, error_flag)``.
     """
-    # Validate and convert inputs (profile data typically doesn't have missing values)
-    (pressure_levels, temperature, mixing_ratio), has_missing = _validate_input_arrays(
+    prepared = _prepare_inputs(
+        "profile",
+        sst,
+        psl,
         pressure_levels,
         temperature,
         mixing_ratio,
-        names=["pressure_levels", "temperature", "mixing_ratio"],
+        actual_levels=actual_levels,
     )
-
-    # Ensure correct pressure level ordering (surface to top)
-    pressure_levels, temperature, mixing_ratio = _ensure_pressure_ordering(
-        pressure_levels, temperature, mixing_ratio
-    )
-
-    if actual_levels is None:
-        actual_levels = len(pressure_levels)
-
-    # Validate profile dimensions
-    expected_len = len(pressure_levels)
-    if len(temperature) != expected_len or len(mixing_ratio) != expected_len:
-        raise ValueError(
-            f"Profile lengths mismatch - pressure: {expected_len}, temperature: {len(temperature)}, mixing_ratio: {len(mixing_ratio)}"
-        )
-
-    # Call Fortran function
-    min_pressure, max_wind, error_flag = _gpi_module.calculate_pi_single_profile(
-        float(sst),
-        float(psl),
-        pressure_levels,
-        temperature,
-        mixing_ratio,
-        actual_levels,
-    )
-
-    # Convert UNDEF to NaN in results (though less common for profile data)
-    min_pressure = np.nan if min_pressure == UNDEF else min_pressure
-    max_wind = np.nan if max_wind == UNDEF else max_wind
-
-    return min_pressure, max_wind, error_flag
+    return _run_backend(prepared)
 
 
-class PotentialIntensityCalculator:
-    """
-    Class-based interface for tropical cyclone potential intensity calculations.
-
-    This class provides a high-level interface for calculating potential intensity
-    with automatic dimension handling and result caching.
+def pi_log_decomposition(
+    sst: Any,
+    psl: Any,
+    pressure_levels: np.ndarray,
+    temperature: np.ndarray,
+    mixing_ratio: np.ndarray,
+    CKCD: float = 0.9,
+    *,
+    outflow_source: str = "cape_star",
+) -> Dict[str, Any]:
+    """Calculate PI plus the Wing et al. (2015) logarithmic decomposition.
 
     Parameters
     ----------
-    sst : ndarray
-        Sea surface temperature data [K]
-    psl : ndarray
-        Sea level pressure data [Pa]
+    sst
+        Sea surface temperature [K].
+    psl
+        Sea level pressure [Pa].
     pressure_levels : ndarray
-        Atmospheric pressure levels [mb]
+        Atmospheric pressure levels [mb].
     temperature : ndarray
-        Temperature profile data [K]
+        Thermodynamic input field. Supported shapes are ``(level,)``,
+        ``(level, y, x)``, and ``(time, level, y, x)``.
     mixing_ratio : ndarray
-        Water vapor mixing ratio data [kg/kg]
+        Water vapor mixing ratio [kg/kg] with the same shape as
+        ``temperature``.
+    CKCD : float, default: 0.9
+        Ratio of exchange coefficients.
+    outflow_source : {"cape_star", "cape_env"}, default: "cape_star"
+        Outflow branch used for the backend diagnostics.
 
-    Examples
-    --------
-    >>> # Create calculator instance
-    >>> pi_calc = PotentialIntensityCalculator(sst, psl, p_levels, temp, mixr)
-    >>>
-    >>> # Calculate potential intensity
-    >>> min_p, max_w, err = pi_calc.calculate()
-    >>>
-    >>> # Access results
-    >>> results = pi_calc.results
+    Returns
+    -------
+    dict
+        ``max_wind``, ``min_pressure``, ``error_flag``, ``t0``, ``otl``,
+        ``lnpi``, ``lneff``, ``lndiseq``, and ``lnCKCD``.
     """
-
-    def __init__(
-        self,
-        sst: np.ndarray,
-        psl: np.ndarray,
-        pressure_levels: np.ndarray,
-        temperature: np.ndarray,
-        mixing_ratio: np.ndarray,
-    ):
-        self.sst = np.asarray(sst)
-        self.psl = np.asarray(psl)
-        self.pressure_levels = np.asarray(pressure_levels)
-        self.temperature = np.asarray(temperature)
-        self.mixing_ratio = np.asarray(mixing_ratio)
-        self._results = None
-
-        # Auto-detect data type
-        self._data_type = self._detect_data_type()
-
-    def _detect_data_type(self) -> str:
-        """Detect whether data is 3D, 4D, or single profile based on temperature/mixing_ratio dimensions."""
-        # Use temperature dimensions to detect data type since it contains all dimension info
-        temp_ndim = self.temperature.ndim
-        # (num_levels,) | (num_levels, nlat, nlon) | (ntimes, num_levels, nlat, nlon)
-        data_types = {1: "profile", 3: "3D", 4: "4D"}
-
-        if temp_ndim not in data_types:
-            raise ValueError(
-                f"Unsupported temperature dimensions: {temp_ndim}. Expected 1, 3, or 4 dimensions."
-            )
-        return data_types[temp_ndim]
-
-    def calculate(self) -> Tuple[np.ndarray, np.ndarray, int]:
-        """
-        Calculate potential intensity based on input data dimensions.
-
-        Returns
-        -------
-        min_pressure : ndarray or float
-            Minimum central pressure [mb]
-        max_wind : ndarray or float
-            Maximum sustained wind speed [m/s]
-        error_flag : int
-            Error status (0 = success, non-zero = error)
-        """
-        # Direct function calls based on data type
-        if self._data_type == "3D":
-            result = calculate_potential_intensity_3d(
-                self.sst,
-                self.psl,
-                self.pressure_levels,
-                self.temperature,
-                self.mixing_ratio,
-            )
-        elif self._data_type == "4D":
-            result = calculate_potential_intensity_4d(
-                self.sst,
-                self.psl,
-                self.pressure_levels,
-                self.temperature,
-                self.mixing_ratio,
-            )
-        elif self._data_type == "profile":
-            result = calculate_potential_intensity_profile(
-                float(self.sst),
-                float(self.psl),
-                self.pressure_levels,
-                self.temperature,
-                self.mixing_ratio,
-            )
-        else:
-            raise ValueError(f"Unsupported data type: {self._data_type}")
-
-        self._results = {
-            "min_pressure": result[0],
-            "max_wind": result[1],
-            "error_flag": result[2],
-            "data_type": self._data_type,
-        }
-
-        return result
-
-    @property
-    def results(self) -> Optional[Dict[str, Any]]:
-        """Return calculation results if available."""
-        return self._results
-
-    @property
-    def data_type(self) -> str:
-        """Return detected data type."""
-        return self._data_type
-
-
-# Convenience functions for direct calculation
+    kind = _detect_temperature_kind(temperature)
+    prepared = _prepare_inputs(
+        kind, sst, psl, pressure_levels, temperature, mixing_ratio
+    )
+    return _run_backend(
+        prepared,
+        diagnostics=True,
+        outflow_source=outflow_source,
+        CKCD=CKCD,
+    )
 
 
 def potential_intensity(
@@ -569,9 +760,10 @@ def potential_intensity(
     max_wind : ndarray or float
         Maximum sustained wind speed [m/s]
     error_flag : int
-        Error status (0 = success, non-zero = error)
+        Error status (`1` = success, other values indicate non-convergence or invalid input)
     """
-    calc = PotentialIntensityCalculator(
-        sst, psl, pressure_levels, temperature, mixing_ratio
+    kind = _detect_temperature_kind(temperature)
+    prepared = _prepare_inputs(
+        kind, sst, psl, pressure_levels, temperature, mixing_ratio
     )
-    return calc.calculate()
+    return _run_backend(prepared)
