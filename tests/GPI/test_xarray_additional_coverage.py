@@ -18,33 +18,27 @@ except ImportError:
 
 @pytest.mark.skipif(not _has_xarray, reason="xarray not available")
 class TestCompiledBoundaryHelpers:
-    """Test explicit array materialization helpers used before compiled calls."""
+    """Test small helper utilities used by the xarray wrapper."""
 
-    def test_compiled_float32_array_layout_branches(self):
-        """xarray helper should cover 1D-F, explicit C, and fallback branches."""
-        from skyborn.calc.GPI.xarray import _compiled_float32_array
+    def test_extract_scalar_and_transpose_if_needed(self):
+        """Scalar extraction and no-op transpose helpers should be explicit."""
+        from skyborn.calc.GPI.xarray import _extract_scalar, _transpose_if_needed
 
-        arr_f_1d = _compiled_float32_array(np.array([1.0, 2.0, 3.0]), order="F")
-        assert arr_f_1d.dtype == np.float32
-        assert arr_f_1d.flags.c_contiguous
+        scalar = xr.DataArray(301.5)
+        assert _extract_scalar(scalar, "SST") == 301.5
+        assert _extract_scalar(302.5, "SST") == 302.5
 
-        base = np.arange(12, dtype=np.float64).reshape(3, 4).T
-        arr_c = _compiled_float32_array(base, order="C")
-        assert arr_c.dtype == np.float32
-        assert arr_c.flags.c_contiguous
+        with pytest.raises(ValueError, match="SST DataArray must be 0-dimensional"):
+            _extract_scalar(xr.DataArray([1.0, 2.0], dims=["x"]), "SST")
 
-        arr_default = _compiled_float32_array(
-            np.asfortranarray(np.arange(12).reshape(3, 4))
+        base = xr.DataArray(
+            np.arange(24).reshape(2, 3, 4), dims=["time", "level", "lat"]
         )
-        assert arr_default.dtype == np.float32
-        assert arr_default.flags.f_contiguous or arr_default.flags.c_contiguous
+        same = _transpose_if_needed(base, ("time", "level", "lat"))
+        assert same is base
 
-        non_contiguous = np.arange(24, dtype=np.float32).reshape(4, 6)[:, ::2]
-        assert not non_contiguous.flags.c_contiguous
-        assert not non_contiguous.flags.f_contiguous
-        arr_fallback = _compiled_float32_array(non_contiguous)
-        assert arr_fallback.dtype == np.float32
-        assert arr_fallback.flags.c_contiguous
+        transposed = _transpose_if_needed(base, ("level", "time", "lat"))
+        assert transposed.dims == ("level", "time", "lat")
 
 
 @pytest.mark.skipif(not _has_xarray, reason="xarray not available")
