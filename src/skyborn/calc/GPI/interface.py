@@ -417,7 +417,7 @@ def _prepare_inputs(
     )
 
 
-def _run_backend(
+def _calc_potential_intensity(
     prepared: _PreparedInputs,
     *,
     diagnostics: bool = False,
@@ -539,140 +539,6 @@ def log_decompose_pi(
     )
 
 
-def calculate_potential_intensity_3d(
-    sst: np.ndarray,
-    psl: np.ndarray,
-    pressure_levels: np.ndarray,
-    temperature: np.ndarray,
-    mixing_ratio: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray, int]:
-    """
-    Calculate tropical cyclone potential intensity for 3D gridded data (spatial grid with vertical levels).
-
-    Parameters
-    ----------
-    sst : ndarray, shape (nlat, nlon)
-        Sea surface temperature [K]
-    psl : ndarray, shape (nlat, nlon)
-        Sea level pressure [Pa]
-    pressure_levels : ndarray, shape (num_levels,)
-        Atmospheric pressure levels [mb]. Can be in any order - will be automatically
-        reordered from surface to top (high to low pressure) as required by the calculation
-    temperature : ndarray, shape (num_levels, nlat, nlon)
-        Temperature profiles [K]
-    mixing_ratio : ndarray, shape (num_levels, nlat, nlon)
-        Water vapor mixing ratio [kg/kg]
-
-    Returns
-    -------
-    min_pressure : ndarray, shape (nlat, nlon)
-        Minimum central pressure [mb]
-    max_wind : ndarray, shape (nlat, nlon)
-        Maximum sustained wind speed [m/s]
-    error_flag : int
-        Error status (`1` = success, other values indicate non-convergence or invalid input)
-
-    Examples
-    --------
-    >>> # 3D calculation with automatic missing value detection
-    >>> min_p, max_w, err = calculate_potential_intensity_3d(
-    ...     sst, psl, p_levels, temp, mixr)
-    """
-    prepared = _prepare_inputs(
-        "3D", sst, psl, pressure_levels, temperature, mixing_ratio
-    )
-    return _run_backend(prepared)
-
-
-def calculate_potential_intensity_4d(
-    sst: np.ndarray,
-    psl: np.ndarray,
-    pressure_levels: np.ndarray,
-    temperature: np.ndarray,
-    mixing_ratio: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray, int]:
-    """
-    Calculate tropical cyclone potential intensity for 4D time series data.
-
-    Parameters
-    ----------
-    sst : ndarray, shape (ntimes, nlat, nlon)
-        Sea surface temperature [K]
-    psl : ndarray, shape (ntimes, nlat, nlon)
-        Sea level pressure [Pa]
-    pressure_levels : ndarray, shape (num_levels,)
-        Atmospheric pressure levels [mb]. Can be in any order - will be automatically
-        reordered from surface to top (high to low pressure) as required by the calculation
-    temperature : ndarray, shape (ntimes, num_levels, nlat, nlon)
-        Temperature profiles [K]
-    mixing_ratio : ndarray, shape (ntimes, num_levels, nlat, nlon)
-        Water vapor mixing ratio [kg/kg]
-
-    Returns
-    -------
-    min_pressure : ndarray, shape (ntimes, nlat, nlon)
-        Minimum central pressure [mb]
-    max_wind : ndarray, shape (ntimes, nlat, nlon)
-        Maximum sustained wind speed [m/s]
-    error_flag : int
-        Error status (`1` = success, other values indicate non-convergence or invalid input)
-
-    Examples
-    --------
-    >>> # 4D time series calculation
-    >>> min_p, max_w, err = calculate_potential_intensity_4d(
-    ...     sst_4d, psl_4d, p_levels, temp_4d, mixr_4d)
-    """
-    prepared = _prepare_inputs(
-        "4D", sst, psl, pressure_levels, temperature, mixing_ratio
-    )
-    return _run_backend(prepared)
-
-
-def calculate_potential_intensity_profile(
-    sst: float,
-    psl: float,
-    pressure_levels: np.ndarray,
-    temperature: np.ndarray,
-    mixing_ratio: np.ndarray,
-    actual_levels: Optional[int] = None,
-) -> Tuple[float, float, int]:
-    """
-    Calculate tropical cyclone potential intensity for a single atmospheric profile.
-
-    Parameters
-    ----------
-    sst : float
-        Sea surface temperature [K]
-    psl : float
-        Sea level pressure [Pa]
-    pressure_levels : ndarray, shape (num_levels,)
-        Atmospheric pressure levels [mb]. Can be in any order - will be automatically
-        reordered from surface to top (high to low pressure) as required by the calculation
-    temperature : ndarray, shape (num_levels,)
-        Temperature profile [K]
-    mixing_ratio : ndarray, shape (num_levels,)
-        Water vapor mixing ratio profile [kg/kg]
-    actual_levels : int, optional
-        Number of actual levels to use (default: ``len(pressure_levels)``).
-
-    Returns
-    -------
-    tuple
-        ``(min_pressure, max_wind, error_flag)``.
-    """
-    prepared = _prepare_inputs(
-        "profile",
-        sst,
-        psl,
-        pressure_levels,
-        temperature,
-        mixing_ratio,
-        actual_levels=actual_levels,
-    )
-    return _run_backend(prepared)
-
-
 def pi_log_decomposition(
     sst: Any,
     psl: Any,
@@ -714,7 +580,7 @@ def pi_log_decomposition(
     prepared = _prepare_inputs(
         kind, sst, psl, pressure_levels, temperature, mixing_ratio
     )
-    return _run_backend(
+    return _calc_potential_intensity(
         prepared,
         diagnostics=True,
         outflow_source=outflow_source,
@@ -723,42 +589,54 @@ def pi_log_decomposition(
 
 
 def potential_intensity(
-    sst: np.ndarray,
-    psl: np.ndarray,
+    sst: Any,
+    psl: Any,
     pressure_levels: np.ndarray,
     temperature: np.ndarray,
     mixing_ratio: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray, int]:
+    actual_levels: Optional[int] = None,
+) -> Tuple[Any, Any, int]:
     """
     Calculate tropical cyclone potential intensity with automatic dimension detection.
 
-    This is a convenience function that automatically detects input data dimensions
-    and calls the appropriate calculation function.
+    This is the primary NumPy entry point. It automatically detects whether the
+    thermodynamic input describes a single profile, a 3D gridded field, or a
+    4D time series and dispatches to the compiled backend directly.
 
     Parameters
     ----------
-    sst : ndarray
+    sst : float or ndarray
         Sea surface temperature [K]
-    psl : ndarray
+    psl : float or ndarray
         Sea level pressure [Pa]
     pressure_levels : ndarray
         Atmospheric pressure levels [mb]
     temperature : ndarray
-        Temperature data [K]
+        Temperature data [K]. Supported shapes are ``(level,)``,
+        ``(level, y, x)``, and ``(time, level, y, x)``.
     mixing_ratio : ndarray
         Water vapor mixing ratio [kg/kg]
+    actual_levels : int, optional
+        Number of valid vertical levels to use for a 1D profile input. Ignored
+        for gridded 3D and 4D inputs.
 
     Returns
     -------
-    min_pressure : ndarray or float
+    min_pressure : float or ndarray
         Minimum central pressure [mb]
-    max_wind : ndarray or float
+    max_wind : float or ndarray
         Maximum sustained wind speed [m/s]
     error_flag : int
         Error status (`1` = success, other values indicate non-convergence or invalid input)
     """
     kind = _detect_temperature_kind(temperature)
     prepared = _prepare_inputs(
-        kind, sst, psl, pressure_levels, temperature, mixing_ratio
+        kind,
+        sst,
+        psl,
+        pressure_levels,
+        temperature,
+        mixing_ratio,
+        actual_levels=actual_levels,
     )
-    return _run_backend(prepared)
+    return _calc_potential_intensity(prepared)
