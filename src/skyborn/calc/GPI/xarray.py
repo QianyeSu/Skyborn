@@ -11,8 +11,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import xarray as xr
 
-from .interface import pi_log_decomposition as _pi_log_decomposition_numpy
-from .interface import potential_intensity as _potential_intensity_numpy
+from .interface import pi_log_decomposition as _pi_log_decomposition_core
+from .interface import potential_intensity as _potential_intensity_core
 
 
 def _extract_scalar(value: Union[float, xr.DataArray], name: str) -> float:
@@ -815,7 +815,7 @@ def potential_intensity(
                 sst, psl, pressure_levels, temperature, mixing_ratio
             )
         )
-        min_pressure, pi, error_flag = _potential_intensity_numpy(
+        min_pressure, pi, error_flag = _potential_intensity_core(
             sst_val, psl_val, p_levels, temp_vals, mixr_vals
         )
         return _create_output_dataset(
@@ -839,7 +839,7 @@ def potential_intensity(
             data_ndim=ndim,
         )
     )
-    min_pressure, pi, error_flag = _potential_intensity_numpy(
+    min_pressure, pi, error_flag = _potential_intensity_core(
         sst_vals, psl_vals, p_levels, temp_vals, mixr_vals
     )
     data_type = "3D gridded" if ndim == 3 else "4D time series"
@@ -879,7 +879,7 @@ def pi_log_decomposition(
                 sst, psl, pressure_levels, temperature, mixing_ratio
             )
         )
-        result = _pi_log_decomposition_numpy(
+        result = _pi_log_decomposition_core(
             sst_val,
             psl_val,
             p_levels,
@@ -945,7 +945,7 @@ def pi_log_decomposition(
             data_ndim=ndim,
         )
     )
-    result = _pi_log_decomposition_numpy(
+    result = _pi_log_decomposition_core(
         sst_vals,
         psl_vals,
         p_levels,
