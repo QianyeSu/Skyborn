@@ -1,8 +1,8 @@
-"""
-XArray interface for Genesis Potential Index (GPI) and Tropical Cyclone Potential Intensity calculations.
+"""Xarray-native tropical cyclone potential-intensity diagnostics.
 
-This module provides xarray-native interfaces for tropical cyclone potential intensity
-calculations, with automatic coordinate handling and metadata preservation.
+This module wraps the compiled GPI/PI backend with automatic dimension
+discovery, unit handling, metadata preservation, and profile-complete
+diagnostics compatible with the recent ``tcpyPI`` decomposition helpers.
 """
 
 import warnings
@@ -16,6 +16,115 @@ from .interface import (
     calculate_potential_intensity_4d,
     calculate_potential_intensity_profile,
 )
+from .interface import pi_log_decomposition as _pi_log_decomposition_numpy
+
+
+def _extract_scalar(value: Union[float, xr.DataArray], name: str) -> float:
+    """Return a Python float from a scalar input or scalar DataArray."""
+    if isinstance(value, xr.DataArray):
+        if value.ndim != 0:
+            raise ValueError(f"{name} DataArray must be 0-dimensional (scalar)")
+        return float(value.values)
+    return float(value)
+
+
+def _transpose_if_needed(
+    data_array: xr.DataArray, expected_dims: Tuple[str, ...]
+) -> xr.DataArray:
+    """Avoid a redundant transpose when the current dimension order is already correct."""
+    if data_array.dims == expected_dims:
+        return data_array
+    return data_array.transpose(*expected_dims)
+
+
+def _prepare_profile_inputs(
+    sst: Union[float, xr.DataArray],
+    psl: Union[float, xr.DataArray],
+    pressure_levels: xr.DataArray,
+    temperature: xr.DataArray,
+    mixing_ratio: xr.DataArray,
+) -> Tuple[str, float, float, np.ndarray, np.ndarray, np.ndarray]:
+    """Validate profile inputs and expose raw NumPy views for the compiled interface."""
+    _, _, levdim, _ = _detect_atmospheric_dimensions(temperature)
+    vertical_dim = temperature.dims[levdim]
+
+    if temperature.ndim != 1 or mixing_ratio.ndim != 1 or pressure_levels.ndim != 1:
+        raise ValueError(
+            "Only 1D profiles are supported. All arrays should have only the vertical dimension."
+        )
+
+    return (
+        vertical_dim,
+        _extract_scalar(sst, "SST"),
+        _extract_scalar(psl, "PSL"),
+        pressure_levels.values,
+        temperature.values,
+        mixing_ratio.values,
+    )
+
+
+def _prepare_gridded_inputs(
+    sst: xr.DataArray,
+    psl: xr.DataArray,
+    pressure_levels: xr.DataArray,
+    temperature: xr.DataArray,
+    mixing_ratio: xr.DataArray,
+    *,
+    data_ndim: int,
+) -> Tuple[
+    str, Tuple[str, ...], np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+]:
+    """Validate 3D/4D xarray inputs and expose NumPy views in backend order."""
+    if temperature.ndim != data_ndim or mixing_ratio.ndim != data_ndim:
+        raise ValueError(
+            "temperature and mixing_ratio must be "
+            f"{data_ndim}D arrays "
+            + (
+                "(vertical + 2 spatial dimensions)"
+                if data_ndim == 3
+                else "(time + vertical + 2 spatial dimensions)"
+            )
+        )
+
+    expected_surface_ndim = data_ndim - 1
+    if sst.ndim != expected_surface_ndim or psl.ndim != expected_surface_ndim:
+        raise ValueError(
+            "sst and psl must be "
+            f"{expected_surface_ndim}D arrays "
+            + (
+                "(2 spatial dimensions)"
+                if expected_surface_ndim == 2
+                else "(time + 2 spatial dimensions)"
+            )
+        )
+
+    _, _, levdim, timedim = _detect_atmospheric_dimensions(temperature)
+    vertical_dim = temperature.dims[levdim]
+
+    if data_ndim == 3:
+        output_dims = tuple(d for d in temperature.dims if d != vertical_dim)
+        expected_dims = (vertical_dim, *output_dims)
+    else:
+        time_dim = temperature.dims[timedim]
+        output_dims = tuple(d for d in temperature.dims if d != vertical_dim)
+        expected_dims = (
+            time_dim,
+            vertical_dim,
+            *(d for d in output_dims if d != time_dim),
+        )
+
+    temp_prepared = _transpose_if_needed(temperature, expected_dims)
+    mixr_prepared = _transpose_if_needed(mixing_ratio, expected_dims)
+
+    return (
+        vertical_dim,
+        output_dims,
+        sst.values,
+        psl.values,
+        pressure_levels.values,
+        temp_prepared.values,
+        mixr_prepared.values,
+    )
 
 
 def _detect_atmospheric_dimensions(
@@ -566,6 +675,7 @@ def _create_output_dataset(
     vertical_levels=None,
     vertical_dim="level",
     data_type="profile",
+    extra_data_vars=None,
 ):
     """
     Helper function to create output dataset with proper metadata.
@@ -615,10 +725,12 @@ def _create_output_dataset(
             {
                 "long_name": "Error flag",
                 "units": "dimensionless",
-                "description": "Error status (1 = success, other values = error)",
+                "description": "Error status (1 = success, other values indicate error or non-convergence)",
             },
         ),
     }
+    if extra_data_vars:
+        data_vars.update(extra_data_vars)
 
     # Create global attributes
     attrs = {
@@ -681,36 +793,9 @@ def _potential_intensity_profile(
         Dataset containing potential intensity results as scalar variables.
     """
 
-    # Auto-detect vertical dimension
-    _, _, levdim, _ = _detect_atmospheric_dimensions(temperature)
-    vertical_dim = list(temperature.dims)[levdim]
-
-    # Sort data by pressure levels in descending order (from surface to top)
-    pressure_levels = pressure_levels.sortby(vertical_dim, ascending=False)
-    temperature = temperature.sortby(vertical_dim, ascending=False)
-    mixing_ratio = mixing_ratio.sortby(vertical_dim, ascending=False)
-
-    # Ensure 1D profiles
-    if temperature.ndim != 1 or mixing_ratio.ndim != 1 or pressure_levels.ndim != 1:
-        raise ValueError(
-            "Only 1D profiles are supported. All arrays should have only the vertical dimension."
-        )
-
-    # Extract scalar values for SST and PSL
-    def _extract_scalar(value, name):
-        if isinstance(value, xr.DataArray):
-            if value.ndim != 0:
-                raise ValueError(f"{name} DataArray must be 0-dimensional (scalar)")
-            return float(value.values)
-        return float(value)
-
-    sst_val = _extract_scalar(sst, "SST")
-    psl_val = _extract_scalar(psl, "PSL")
-
-    # Extract numpy arrays for calculation
-    p_levels = pressure_levels.values
-    temp_vals = temperature.values
-    mixr_vals = mixing_ratio.values
+    vertical_dim, sst_val, psl_val, p_levels, temp_vals, mixr_vals = (
+        _prepare_profile_inputs(sst, psl, pressure_levels, temperature, mixing_ratio)
+    )
 
     # Perform calculation using existing interface
     min_pressure, pi, error_flag = calculate_potential_intensity_profile(
@@ -727,6 +812,154 @@ def _potential_intensity_profile(
         vertical_levels=len(p_levels),
         vertical_dim=vertical_dim,
         data_type="Single column profile",
+    )
+
+
+def _potential_intensity_profile_diagnostics(
+    sst: Union[float, xr.DataArray],
+    psl: Union[float, xr.DataArray],
+    pressure_levels: xr.DataArray,
+    temperature: xr.DataArray,
+    mixing_ratio: xr.DataArray,
+    *,
+    outflow_source: str = "cape_star",
+    CKCD: float = 0.9,
+) -> xr.Dataset:
+    """
+    Return profile PI plus outflow and logarithmic decomposition diagnostics.
+
+    Parameters
+    ----------
+    sst, psl : float or xr.DataArray
+        Scalar sea-surface temperature [K] and sea-level pressure [Pa].
+    pressure_levels, temperature, mixing_ratio : xr.DataArray
+        One-dimensional profile inputs sharing the same vertical coordinate.
+    outflow_source : {"cape_star", "cape_env"}, default: "cape_star"
+        Selects the outflow-level diagnostic branch passed to the Fortran
+        backend.
+    CKCD : float, default: 0.9
+        Exchange-coefficient ratio used for the Wing et al. (2015)
+        logarithmic decomposition.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset with the standard PI outputs plus ``t0``, ``otl``, ``lnpi``,
+        ``lneff``, ``lndiseq``, and ``lnCKCD``. ``error_flag == 1`` indicates
+        a successful solve.
+    """
+    vertical_dim, sst_val, psl_val, p_levels, temp_vals, mixr_vals = (
+        _prepare_profile_inputs(sst, psl, pressure_levels, temperature, mixing_ratio)
+    )
+    result = _pi_log_decomposition_numpy(
+        sst_val,
+        psl_val,
+        p_levels,
+        temp_vals,
+        mixr_vals,
+        CKCD=CKCD,
+        outflow_source=outflow_source,
+    )
+    extra_data_vars = {
+        "t0": (
+            [],
+            result["t0"],
+            {"long_name": "Outflow temperature", "units": "K"},
+        ),
+        "otl": (
+            [],
+            result["otl"],
+            {"long_name": "Outflow level", "units": "hPa"},
+        ),
+        "lnpi": (
+            [],
+            result["lnpi"],
+            {"long_name": "Log PI squared", "units": "dimensionless"},
+        ),
+        "lneff": (
+            [],
+            result["lneff"],
+            {"long_name": "Log PI efficiency term", "units": "dimensionless"},
+        ),
+        "lndiseq": (
+            [],
+            result["lndiseq"],
+            {"long_name": "Log disequilibrium term", "units": "dimensionless"},
+        ),
+        "lnCKCD": (
+            [],
+            result["lnCKCD"],
+            {"long_name": "Log Ck/Cd term", "units": "dimensionless"},
+        ),
+    }
+    return _create_output_dataset(
+        result["min_pressure"],
+        result["max_wind"],
+        result["error_flag"],
+        sst_val=sst_val,
+        psl_val=psl_val,
+        vertical_levels=len(p_levels),
+        vertical_dim=vertical_dim,
+        data_type="Single column profile",
+        extra_data_vars=extra_data_vars,
+    )
+
+
+def _diagnostic_data_vars(dims, result):
+    """Create xarray data_vars metadata for PI diagnostics."""
+    return {
+        "t0": (
+            dims,
+            result["t0"],
+            {"long_name": "Outflow temperature", "units": "K"},
+        ),
+        "otl": (
+            dims,
+            result["otl"],
+            {"long_name": "Outflow level", "units": "hPa"},
+        ),
+        "lnpi": (
+            dims,
+            result["lnpi"],
+            {"long_name": "Log PI squared", "units": "dimensionless"},
+        ),
+        "lneff": (
+            dims,
+            result["lneff"],
+            {"long_name": "Log PI efficiency term", "units": "dimensionless"},
+        ),
+        "lndiseq": (
+            dims,
+            result["lndiseq"],
+            {"long_name": "Log disequilibrium term", "units": "dimensionless"},
+        ),
+        "lnCKCD": (
+            [],
+            result["lnCKCD"],
+            {"long_name": "Log Ck/Cd term", "units": "dimensionless"},
+        ),
+    }
+
+
+def _create_gridded_diagnostic_dataset(
+    result,
+    *,
+    temperature: xr.DataArray,
+    output_dims: Tuple[str, ...],
+    vertical_dim: str,
+    vertical_levels: int,
+    data_type: str,
+) -> xr.Dataset:
+    """Wrap NumPy diagnostic results back into an xarray Dataset."""
+    return _create_output_dataset(
+        result["min_pressure"],
+        result["max_wind"],
+        result["error_flag"],
+        input_coords={dim: temperature.coords[dim] for dim in output_dims},
+        vertical_levels=vertical_levels,
+        vertical_dim=vertical_dim,
+        data_type=data_type,
+        extra_data_vars=_diagnostic_data_vars(output_dims, result),
     )
 
 
@@ -759,42 +992,17 @@ def _potential_intensity_3d(
         Dataset containing potential intensity results with spatial dimensions.
     """
 
-    # Auto-detect dimensions
-    _, _, levdim, _ = _detect_atmospheric_dimensions(temperature)
-    vertical_dim = list(temperature.dims)[levdim]
-
-    # Sort data by pressure levels in descending order (from surface to top)
-    pressure_levels = pressure_levels.sortby(vertical_dim, ascending=False)
-    temperature = temperature.sortby(vertical_dim, ascending=False)
-    mixing_ratio = mixing_ratio.sortby(vertical_dim, ascending=False)
-
-    # Ensure temperature and mixing_ratio are 3D (level + 2 spatial dims)
-    if temperature.ndim != 3 or mixing_ratio.ndim != 3:
-        raise ValueError(
-            "temperature and mixing_ratio must be 3D arrays (vertical + 2 spatial dimensions)"
+    vertical_dim, spatial_dims, sst_vals, psl_vals, p_levels, temp_vals, mixr_vals = (
+        _prepare_gridded_inputs(
+            sst,
+            psl,
+            pressure_levels,
+            temperature,
+            mixing_ratio,
+            data_ndim=3,
         )
+    )
 
-    # Ensure SST and PSL are 2D
-    if sst.ndim != 2 or psl.ndim != 2:
-        raise ValueError("sst and psl must be 2D arrays (2 spatial dimensions)")
-
-    # Get spatial dimensions (all dims except vertical_dim from temperature)
-    spatial_dims = [d for d in temperature.dims if d != vertical_dim]
-    if len(spatial_dims) != 2:
-        raise ValueError("Expected exactly 2 spatial dimensions")
-
-    # Reorder dimensions to match expected Fortran order: (vertical, spatial1, spatial2)
-    temp_reordered = temperature.transpose(vertical_dim, *spatial_dims)
-    mixr_reordered = mixing_ratio.transpose(vertical_dim, *spatial_dims)
-
-    # Extract numpy arrays
-    sst_vals = sst.values
-    psl_vals = psl.values
-    p_levels = pressure_levels.values
-    temp_vals = temp_reordered.values
-    mixr_vals = mixr_reordered.values
-
-    # Perform calculation
     min_pressure, pi, error_flag = calculate_potential_intensity_3d(
         sst_vals, psl_vals, p_levels, temp_vals, mixr_vals
     )
@@ -841,44 +1049,17 @@ def _potential_intensity_4d(
     result : xr.Dataset
         Dataset containing potential intensity results with time and spatial dimensions.
     """
-
-    # Auto-detect dimensions
-    _, _, levdim, timedim = _detect_atmospheric_dimensions(temperature)
-    vertical_dim = list(temperature.dims)[levdim]
-    time_dim = list(temperature.dims)[timedim]
-
-    # Sort data by pressure levels in descending order (from surface to top)
-    pressure_levels = pressure_levels.sortby(vertical_dim, ascending=False)
-    temperature = temperature.sortby(vertical_dim, ascending=False)
-    mixing_ratio = mixing_ratio.sortby(vertical_dim, ascending=False)
-
-    # Ensure correct number of dimensions
-    if temperature.ndim != 4 or mixing_ratio.ndim != 4:
-        raise ValueError(
-            "temperature and mixing_ratio must be 4D arrays (time + vertical + 2 spatial dimensions)"
+    vertical_dim, output_dims, sst_vals, psl_vals, p_levels, temp_vals, mixr_vals = (
+        _prepare_gridded_inputs(
+            sst,
+            psl,
+            pressure_levels,
+            temperature,
+            mixing_ratio,
+            data_ndim=4,
         )
+    )
 
-    if sst.ndim != 3 or psl.ndim != 3:
-        raise ValueError("sst and psl must be 3D arrays (time + 2 spatial dimensions)")
-
-    # Get output dimensions (all dims except vertical_dim from temperature)
-    output_dims = [d for d in temperature.dims if d != vertical_dim]
-    if len(output_dims) != 3:  # time + 2 spatial
-        raise ValueError("Expected time dimension plus exactly 2 spatial dimensions")
-
-    # Reorder dimensions to match expected Fortran order: (time, vertical, spatial1, spatial2)
-    expected_dims = [time_dim, vertical_dim] + [d for d in output_dims if d != time_dim]
-    temp_reordered = temperature.transpose(*expected_dims)
-    mixr_reordered = mixing_ratio.transpose(*expected_dims)
-
-    # Extract numpy arrays
-    sst_vals = sst.values
-    psl_vals = psl.values
-    p_levels = pressure_levels.values
-    temp_vals = temp_reordered.values
-    mixr_vals = mixr_reordered.values
-
-    # Perform calculation
     min_pressure, pi, error_flag = calculate_potential_intensity_4d(
         sst_vals, psl_vals, p_levels, temp_vals, mixr_vals
     )
@@ -945,11 +1126,10 @@ def potential_intensity(
     # Auto-detect calculation type based on temperature dimensions
     ndim = temperature.ndim
 
-    # Function mapping for different dimensions
     func_map = {
-        1: _potential_intensity_profile,  # Single profile
-        3: _potential_intensity_3d,  # 3D gridded
-        4: _potential_intensity_4d,  # 4D time series
+        1: _potential_intensity_profile,
+        3: _potential_intensity_3d,
+        4: _potential_intensity_4d,
     }
 
     if ndim not in func_map:
@@ -958,3 +1138,103 @@ def potential_intensity(
         )
 
     return func_map[ndim](sst, psl, pressure_levels, temperature, mixing_ratio)
+
+
+def pi_log_decomposition(
+    sst: xr.DataArray,
+    psl: xr.DataArray,
+    pressure_levels: xr.DataArray,
+    temperature: xr.DataArray,
+    mixing_ratio: xr.DataArray,
+    CKCD: float = 0.9,
+    *,
+    outflow_source: str = "cape_star",
+) -> xr.Dataset:
+    """Return PI plus outflow and logarithmic decomposition diagnostics."""
+    sst, _ = _check_units(sst, "SST", ["K"])
+    psl, _ = _check_units(psl, "PSL", ["Pa"])
+    pressure_levels, _ = _check_units(pressure_levels, "pressure_levels", ["mb", "hPa"])
+    temperature, _ = _check_units(temperature, "temperature", ["K"])
+    mixing_ratio, _ = _check_units(mixing_ratio, "mixing_ratio", ["kg/kg"])
+
+    ndim = temperature.ndim
+    if ndim == 1:
+        return _potential_intensity_profile_diagnostics(
+            sst,
+            psl,
+            pressure_levels,
+            temperature,
+            mixing_ratio,
+            outflow_source=outflow_source,
+            CKCD=CKCD,
+        )
+    if ndim == 3:
+        (
+            vertical_dim,
+            spatial_dims,
+            sst_vals,
+            psl_vals,
+            p_levels,
+            temp_vals,
+            mixr_vals,
+        ) = _prepare_gridded_inputs(
+            sst,
+            psl,
+            pressure_levels,
+            temperature,
+            mixing_ratio,
+            data_ndim=3,
+        )
+        result = _pi_log_decomposition_numpy(
+            sst_vals,
+            psl_vals,
+            p_levels,
+            temp_vals,
+            mixr_vals,
+            CKCD=CKCD,
+            outflow_source=outflow_source,
+        )
+        return _create_gridded_diagnostic_dataset(
+            result,
+            temperature=temperature,
+            output_dims=spatial_dims,
+            vertical_dim=vertical_dim,
+            vertical_levels=len(p_levels),
+            data_type="3D gridded",
+        )
+    if ndim == 4:
+        (
+            vertical_dim,
+            output_dims,
+            sst_vals,
+            psl_vals,
+            p_levels,
+            temp_vals,
+            mixr_vals,
+        ) = _prepare_gridded_inputs(
+            sst,
+            psl,
+            pressure_levels,
+            temperature,
+            mixing_ratio,
+            data_ndim=4,
+        )
+        result = _pi_log_decomposition_numpy(
+            sst_vals,
+            psl_vals,
+            p_levels,
+            temp_vals,
+            mixr_vals,
+            CKCD=CKCD,
+            outflow_source=outflow_source,
+        )
+        return _create_gridded_diagnostic_dataset(
+            result,
+            temperature=temperature,
+            output_dims=output_dims,
+            vertical_dim=vertical_dim,
+            vertical_levels=len(p_levels),
+            data_type="4D time series",
+        )
+
+    raise ValueError(f"Unsupported number of dimensions: {ndim}. Expected 1, 3, or 4.")
