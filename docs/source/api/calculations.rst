@@ -28,15 +28,15 @@ Growth-rate Diagnostics
    default. Here ``"log"`` means interpolation that is linear in
    log-pressure, not a logarithmic transform of the field values.
 
-   When ``target_pressure`` is omitted, the function diagnoses the WMO
-   tropopause pressure and builds a fixed solver grid with
+   The function diagnoses the WMO tropopause pressure by default, or uses an
+   explicit ``tropopause_pressure`` when given, and then builds a fixed solver
+   grid with
    ``solver_levels=45`` by default between that tropopause and the lower
    troposphere. This is a practical resolution choice for the compiled
    eigenvalue problem, not a universal optimum: increasing ``solver_levels``
    can improve vertical-grid convergence up to a point, but it also raises
    the per-profile cost and is not automatically better once the solution is
-   converged. If you want full control over the vertical solver grid, pass
-   ``target_pressure`` explicitly instead.
+   converged.
 
    In the original Chemke-style analysis scripts, a parameter named
    ``window_size`` is often used for a centered running mean applied to the
