@@ -28,6 +28,16 @@ DOCS_BUILD_MODE = (
     os.environ.get("SKYBORN_DOCS_BUILD") == "1" or os.environ.get("SKIP_FORTRAN") == "1"
 )
 CONDA_BUILD_MODE = os.environ.get("CONDA_BUILD") == "1"
+OPTIONAL_MESON_MODULE_FLAGS = {
+    "calc.growth_rate": "SKYBORN_BUILD_GROWTH_RATE",
+}
+
+
+def _env_flag_enabled(name: str, default: str = "1") -> bool:
+    """Interpret common truthy and falsey environment variable spellings."""
+
+    value = os.environ.get(name, default)
+    return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
 def configure_compiler_environment():
@@ -160,7 +170,18 @@ class MesonBuildExt(build_ext):
     def should_build_meson_module(self, module):
         """Check if we should build this meson module"""
         meson_build_file = module["path"] / "meson.build"
-        return meson_build_file.exists()
+        if not meson_build_file.exists():
+            return False
+
+        env_flag = OPTIONAL_MESON_MODULE_FLAGS.get(module["name"])
+        if env_flag and not _env_flag_enabled(env_flag):
+            print(
+                f"DEBUG: Skipping optional meson module {module['name']} "
+                f"because {env_flag}=0"
+            )
+            return False
+
+        return True
 
     def check_meson_available(self):
         """Check if meson and ninja are available"""
