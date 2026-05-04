@@ -81,6 +81,8 @@ if os.name == "nt":
     roots.extend([Path(r"C:/msys64/mingw64"), Path(r"C:/msys64/ucrt64")])
 elif sys.platform == "darwin":
     roots.extend([Path("/opt/homebrew/opt/openblas"), Path("/usr/local/opt/openblas")])
+elif sys.platform.startswith("linux"):
+    roots.extend([Path("/opt/mambaforge"), Path("/opt/conda"), Path("/opt/miniforge")])
 
 seen = set()
 for root in roots:
