@@ -25,6 +25,23 @@ python module growth_rate_kernels ! in
             integer intent(out) :: ier
         end subroutine dbaroc_growth_rate_1d
 
+        ! signature : growth,ier = dbaroc_growth_rate_profiles(u_input,temperature_input,source_pressure,target_pressure,lat,interp_kind,smooth_window,missing_value)
+        subroutine dbaroc_growth_rate_profiles(u_input,temperature_input,source_pressure,target_pressure,lat,interp_kind,smooth_window,missing_value,growth,ier,nlev_in,nprofile,nlev_out) ! in :growth_rate_kernels:growth_rate_kernels.f90
+            integer, optional, check(shape(u_input,0)==nlev_in), depend(u_input) :: nlev_in=shape(u_input,0)
+            integer, optional, check(shape(u_input,1)==nprofile), depend(u_input) :: nprofile=shape(u_input,1)
+            integer, optional, check(shape(target_pressure,0)==nlev_out), depend(target_pressure) :: nlev_out=shape(target_pressure,0)
+            double precision dimension(nlev_in,nprofile), intent(in) :: u_input
+            double precision dimension(nlev_in,nprofile), depend(nlev_in,nprofile), intent(in) :: temperature_input
+            double precision dimension(nlev_in), depend(nlev_in), intent(in) :: source_pressure
+            double precision dimension(nlev_out,nprofile), depend(nlev_out,nprofile), intent(in) :: target_pressure
+            double precision dimension(nprofile), depend(nprofile), intent(in) :: lat
+            integer intent(in) :: interp_kind
+            integer intent(in) :: smooth_window
+            double precision intent(in) :: missing_value
+            double precision dimension(nprofile), depend(nprofile), intent(out) :: growth
+            integer dimension(nprofile), depend(nprofile), intent(out) :: ier
+        end subroutine dbaroc_growth_rate_profiles
+
     end interface
 end python module growth_rate_kernels
 
