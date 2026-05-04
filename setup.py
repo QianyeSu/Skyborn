@@ -8,12 +8,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-import numpy as np
-from setuptools import Extension, setup
+from setuptools import Distribution, setup
 from setuptools.command.build_ext import build_ext
 from setuptools.command.develop import develop
 from setuptools.command.install import install
 from setuptools.command.install_lib import install_lib
+from wheel.bdist_wheel import bdist_wheel
 
 # Check if Cython is available
 try:
@@ -686,19 +686,32 @@ class CustomInstallLib(install_lib):
             )
 
 
+class BinaryDistribution(Distribution):
+    """Mark Skyborn distributions as platform-specific without a dummy extension."""
+
+    def has_ext_modules(self):
+        return True
+
+
+class CustomBdistWheel(bdist_wheel):
+    """Force binary wheel tags for Meson-built extension modules."""
+
+    def finalize_options(self):
+        super().finalize_options()
+        self.root_is_pure = False
+
+
 # Configuration for mixed build
 setup_config = {
     "cmdclass": {
+        "bdist_wheel": CustomBdistWheel,
         "build_ext": MesonBuildExt,
         "develop": CustomDevelop,
         "install": CustomInstall,
         "install_lib": CustomInstallLib,
     },
-    # Add extensions for dummy (Windows compatibility) only
-    # gridfill extensions now handled by meson.build
-    "ext_modules": [
-        Extension("skyborn._dummy", sources=["src/skyborn/_dummy.c"], optional=True)
-    ],
+    "distclass": BinaryDistribution,
+    "ext_modules": [],
 }
 
 if __name__ == "__main__":
