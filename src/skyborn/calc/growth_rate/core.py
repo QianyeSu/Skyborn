@@ -151,18 +151,6 @@ def _as_profile_vector(
     raise ValueError(f"`{name}` must have length 1 or match the profile count")
 
 
-def _missing_profile_mask(values: np.ndarray) -> np.ndarray:
-    """Return a per-profile missing mask for ``(nprofile, nlev)`` matrices."""
-
-    return np.any(~np.isfinite(values), axis=1)
-
-
-def _missing_vector_mask(values: np.ndarray) -> np.ndarray:
-    """Return a missing-value mask for profile-wise scalar vectors."""
-
-    return ~np.isfinite(values)
-
-
 def _same_shape_or_raise(*named_arrays: tuple[str, np.ndarray]) -> None:
     """Validate that all named one-dimensional arrays have identical shapes."""
 
@@ -995,12 +983,13 @@ def baroc_growth_rate(
     )
     output = np.full(nprofile, np.nan, dtype=np.float64)
     valid_profile_mask = ~(
-        _missing_profile_mask(u_matrix) | _missing_profile_mask(temperature_matrix)
+        np.any(~np.isfinite(u_matrix), axis=1)
+        | np.any(~np.isfinite(temperature_matrix), axis=1)
     )
 
     if lat_bounds is None:
         lat_values = _as_profile_vector(lat, "lat", nprofile)
-        valid_profile_mask &= ~_missing_vector_mask(lat_values)
+        valid_profile_mask &= np.isfinite(lat_values)
         f_values = np.full(nprofile, np.nan, dtype=np.float64)
         beta_values = np.full(nprofile, np.nan, dtype=np.float64)
         valid_lat_mask = valid_profile_mask & np.isfinite(lat_values)
@@ -1025,7 +1014,7 @@ def baroc_growth_rate(
             "tropopause_pressure",
             nprofile,
         )
-        tropopause_missing_mask = _missing_vector_mask(tropopause_values)
+        tropopause_missing_mask = ~np.isfinite(tropopause_values)
         tropopause_pressure_pa = np.array(
             tropopause_values, dtype=np.float64, copy=True
         )
