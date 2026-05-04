@@ -74,6 +74,8 @@ subroutine calculate_pi_gridded_data(sst_in, psl_in, pressure_levels, temp_in, m
     ! Local variables
     real :: sst_celsius, psl_mb
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
+    real :: dummy_outflow_temp, dummy_outflow_level
+    real :: dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd
     integer :: ilat, ilon, k
 
     ! Sequential loops with optimal cache locality for small-scale data
@@ -100,7 +102,10 @@ subroutine calculate_pi_gridded_data(sst_in, psl_in, pressure_levels, temp_in, m
 
             call calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius, &
                                  mixing_ratio_gkg, num_levels, num_levels, &
-                                 min_pressure(ilat, ilon), max_wind(ilat, ilon), error_flag)
+                                 min_pressure(ilat, ilon), max_wind(ilat, ilon), &
+                                 dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, &
+                                 dummy_lneff, dummy_lndiseq, dummy_lnckcd, error_flag, &
+                                 0, 0.9)
         end do
     end do
 
@@ -150,7 +155,11 @@ subroutine calculate_pi_gridded_with_missing(sst_in, psl_in, pressure_levels, te
     ! Local variables
     real :: sst_celsius, psl_mb
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
+    real :: dummy_outflow_temp, dummy_outflow_level
+    real :: dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd
     integer :: ilat, ilon, k, valid_start_level
+
+    error_flag = 1
 
     ! Sequential loops for missing value handling with SST/PSL pre-check optimization
     do ilon = 1, nlon
@@ -173,7 +182,7 @@ subroutine calculate_pi_gridded_with_missing(sst_in, psl_in, pressure_levels, te
                 cycle  ! Skip to next grid point
             end if
 
-            valid_start_level = num_levels
+            valid_start_level = num_levels + 1
 
             ! Find valid data and convert units (optimized)
             do k = 1, num_levels
@@ -187,6 +196,12 @@ subroutine calculate_pi_gridded_with_missing(sst_in, psl_in, pressure_levels, te
                 end if
             end do
 
+            if (valid_start_level > num_levels) then
+                min_pressure(ilat, ilon) = UNDEF
+                max_wind(ilat, ilon) = UNDEF
+                cycle
+            end if
+
             ! Call core routine with valid data subset
             call calculate_pi_core(sst_celsius, psl_mb, &
                                  pressure_levels(valid_start_level:), &
@@ -194,11 +209,214 @@ subroutine calculate_pi_gridded_with_missing(sst_in, psl_in, pressure_levels, te
                                  mixing_ratio_gkg(valid_start_level:), &
                                  num_levels - valid_start_level + 1, &
                                  num_levels - valid_start_level + 1, &
-                                 min_pressure(ilat, ilon), max_wind(ilat, ilon), error_flag)
+                                 min_pressure(ilat, ilon), max_wind(ilat, ilon), &
+                                 dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, &
+                                 dummy_lneff, dummy_lndiseq, dummy_lnckcd, error_flag, &
+                                 0, 0.9)
         end do
     end do
 
 end subroutine calculate_pi_gridded_with_missing
+
+subroutine calculate_pi_gridded_diagnostics(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+                                           nlat, nlon, num_levels, min_pressure, max_wind, error_flag, &
+                                           outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd, &
+                                           outflow_source_flag, ckcd_in)
+    implicit none
+
+    ! Input parameters
+    integer, intent(in) :: num_levels, nlat, nlon
+    real, intent(in) :: sst_in(nlat, nlon)           ! Sea surface temperature (K)
+    real, intent(in) :: psl_in(nlat, nlon)           ! Sea level pressure (Pa)
+    real, intent(in) :: pressure_levels(num_levels)  ! Pressure levels (mb)
+    real, intent(in) :: temp_in(num_levels, nlat, nlon)      ! Temperature (K)
+    real, intent(in) :: mixing_ratio_in(num_levels, nlat, nlon) ! Mixing ratio (kg/kg)
+    integer, intent(in), optional :: outflow_source_flag ! 0=cape_star, 1=cape_env
+    real, intent(in), optional :: ckcd_in           ! Optional decomposition Ck/Cd ratio
+
+    ! Output parameters
+    real, intent(out) :: min_pressure(nlat, nlon)    ! Minimum central pressure (mb)
+    real, intent(out) :: max_wind(nlat, nlon)        ! Maximum surface wind speed (m/s)
+    integer, intent(out) :: error_flag
+    real, intent(out) :: outflow_temp(nlat, nlon)    ! Outflow temperature (K)
+    real, intent(out) :: outflow_level(nlat, nlon)   ! Outflow level pressure (mb)
+    real, intent(out) :: lnpi(nlat, nlon)            ! log(V^2)
+    real, intent(out) :: lneff(nlat, nlon)           ! log thermodynamic efficiency
+    real, intent(out) :: lndiseq(nlat, nlon)         ! log disequilibrium term
+    real, intent(out) :: lnckcd                       ! log(Ck/Cd)
+
+    ! Pre-computed constants for faster arithmetic
+    real, parameter :: UNDEF = -9.99e33
+    real, parameter :: PA_TO_MB = 0.01
+    real, parameter :: K_TO_C = -273.15
+    real, parameter :: KG_TO_G = 1000.0
+
+    ! Local variables
+    real :: sst_celsius, psl_mb, ckcd_value
+    real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
+    real :: dummy_lnckcd
+    integer :: ilat, ilon, k, outflow_flag, local_error_flag
+
+    outflow_flag = 0
+    if (present(outflow_source_flag)) outflow_flag = outflow_source_flag
+    ckcd_value = 0.9
+    if (present(ckcd_in) .and. ckcd_in > 0.0) ckcd_value = ckcd_in
+
+    error_flag = 1
+    lnckcd = UNDEF
+    if (ckcd_value > 0.0) lnckcd = log(ckcd_value)
+
+    !$omp parallel do default(shared) private(ilon, ilat, k, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) schedule(static)
+    do ilon = 1, nlon
+        do ilat = 1, nlat
+            psl_mb = psl_in(ilat, ilon) * PA_TO_MB
+            sst_celsius = sst_in(ilat, ilon) + K_TO_C
+
+            if (sst_celsius <= 5.0) then
+                min_pressure(ilat, ilon) = UNDEF
+                max_wind(ilat, ilon) = UNDEF
+                outflow_temp(ilat, ilon) = UNDEF
+                outflow_level(ilat, ilon) = UNDEF
+                lnpi(ilat, ilon) = UNDEF
+                lneff(ilat, ilon) = UNDEF
+                lndiseq(ilat, ilon) = UNDEF
+                cycle
+            end if
+
+            !$omp simd
+            do k = 1, num_levels
+                temp_celsius(k) = temp_in(k, ilat, ilon) + K_TO_C
+                mixing_ratio_gkg(k) = mixing_ratio_in(k, ilat, ilon) * KG_TO_G
+            end do
+            !$omp end simd
+
+            call calculate_pi_core( &
+                sst_celsius, psl_mb, pressure_levels, temp_celsius, mixing_ratio_gkg, &
+                num_levels, num_levels, min_pressure(ilat, ilon), max_wind(ilat, ilon), &
+                outflow_temp(ilat, ilon), outflow_level(ilat, ilon), lnpi(ilat, ilon), &
+                lneff(ilat, ilon), lndiseq(ilat, ilon), dummy_lnckcd, local_error_flag, &
+                outflow_flag, ckcd_value)
+            if (local_error_flag /= 1) error_flag = local_error_flag
+        end do
+    end do
+    !$omp end parallel do
+
+end subroutine calculate_pi_gridded_diagnostics
+
+subroutine calculate_pi_gridded_diagnostics_with_missing(sst_in, psl_in, pressure_levels, temp_in, &
+                                                        mixing_ratio_in, nlat, nlon, num_levels, &
+                                                        min_pressure, max_wind, error_flag, &
+                                                        outflow_temp, outflow_level, lnpi, lneff, &
+                                                        lndiseq, lnckcd, outflow_source_flag, ckcd_in)
+    implicit none
+
+    ! Input parameters
+    integer, intent(in) :: num_levels, nlat, nlon
+    real, intent(in) :: sst_in(nlat, nlon)           ! Sea surface temperature (K)
+    real, intent(in) :: psl_in(nlat, nlon)           ! Sea level pressure (Pa)
+    real, intent(in) :: pressure_levels(num_levels)  ! Pressure levels (mb)
+    real, intent(in) :: temp_in(num_levels, nlat, nlon)      ! Temperature (K)
+    real, intent(in) :: mixing_ratio_in(num_levels, nlat, nlon) ! Mixing ratio (kg/kg)
+    integer, intent(in), optional :: outflow_source_flag ! 0=cape_star, 1=cape_env
+    real, intent(in), optional :: ckcd_in           ! Optional decomposition Ck/Cd ratio
+
+    ! Output parameters
+    real, intent(out) :: min_pressure(nlat, nlon)    ! Minimum central pressure (mb)
+    real, intent(out) :: max_wind(nlat, nlon)        ! Maximum surface wind speed (m/s)
+    integer, intent(out) :: error_flag
+    real, intent(out) :: outflow_temp(nlat, nlon)    ! Outflow temperature (K)
+    real, intent(out) :: outflow_level(nlat, nlon)   ! Outflow level pressure (mb)
+    real, intent(out) :: lnpi(nlat, nlon)            ! log(V^2)
+    real, intent(out) :: lneff(nlat, nlon)           ! log thermodynamic efficiency
+    real, intent(out) :: lndiseq(nlat, nlon)         ! log disequilibrium term
+    real, intent(out) :: lnckcd                       ! log(Ck/Cd)
+
+    ! Pre-computed constants
+    real, parameter :: UNDEF = -9.99e33
+    real, parameter :: PA_TO_MB = 0.01
+    real, parameter :: K_TO_C = -273.15
+    real, parameter :: KG_TO_G = 1000.0
+
+    ! Local variables
+    real :: sst_celsius, psl_mb, ckcd_value
+    real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
+    real :: dummy_lnckcd
+    integer :: ilat, ilon, k, valid_start_level, outflow_flag, local_error_flag
+
+    outflow_flag = 0
+    if (present(outflow_source_flag)) outflow_flag = outflow_source_flag
+    ckcd_value = 0.9
+    if (present(ckcd_in)) ckcd_value = ckcd_in
+
+    error_flag = 1
+    lnckcd = UNDEF
+    if (ckcd_value > 0.0) lnckcd = log(ckcd_value)
+
+    !$omp parallel do default(shared) private(ilon, ilat, k, valid_start_level, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) schedule(static)
+    do ilon = 1, nlon
+        do ilat = 1, nlat
+            if (sst_in(ilat, ilon) == UNDEF) then
+                min_pressure(ilat, ilon) = UNDEF
+                max_wind(ilat, ilon) = UNDEF
+                outflow_temp(ilat, ilon) = UNDEF
+                outflow_level(ilat, ilon) = UNDEF
+                lnpi(ilat, ilon) = UNDEF
+                lneff(ilat, ilon) = UNDEF
+                lndiseq(ilat, ilon) = UNDEF
+                cycle
+            end if
+
+            psl_mb = psl_in(ilat, ilon) * PA_TO_MB
+            sst_celsius = sst_in(ilat, ilon) + K_TO_C
+
+            if (sst_celsius <= 5.0) then
+                min_pressure(ilat, ilon) = UNDEF
+                max_wind(ilat, ilon) = UNDEF
+                outflow_temp(ilat, ilon) = UNDEF
+                outflow_level(ilat, ilon) = UNDEF
+                lnpi(ilat, ilon) = UNDEF
+                lneff(ilat, ilon) = UNDEF
+                lndiseq(ilat, ilon) = UNDEF
+                cycle
+            end if
+
+            valid_start_level = num_levels + 1
+
+            do k = 1, num_levels
+                if (temp_in(k, ilat, ilon) /= UNDEF .and. mixing_ratio_in(k, ilat, ilon) /= UNDEF) then
+                    valid_start_level = min(valid_start_level, k)
+                    temp_celsius(k) = temp_in(k, ilat, ilon) + K_TO_C
+                    mixing_ratio_gkg(k) = mixing_ratio_in(k, ilat, ilon) * KG_TO_G
+                else
+                    temp_celsius(k) = UNDEF
+                    mixing_ratio_gkg(k) = UNDEF
+                end if
+            end do
+
+            if (valid_start_level > num_levels) then
+                min_pressure(ilat, ilon) = UNDEF
+                max_wind(ilat, ilon) = UNDEF
+                outflow_temp(ilat, ilon) = UNDEF
+                outflow_level(ilat, ilon) = UNDEF
+                lnpi(ilat, ilon) = UNDEF
+                lneff(ilat, ilon) = UNDEF
+                lndiseq(ilat, ilon) = UNDEF
+                cycle
+            end if
+
+            call calculate_pi_core( &
+                sst_celsius, psl_mb, pressure_levels(valid_start_level:), &
+                temp_celsius(valid_start_level:), mixing_ratio_gkg(valid_start_level:), &
+                num_levels - valid_start_level + 1, num_levels - valid_start_level + 1, &
+                min_pressure(ilat, ilon), max_wind(ilat, ilon), outflow_temp(ilat, ilon), &
+                outflow_level(ilat, ilon), lnpi(ilat, ilon), lneff(ilat, ilon), &
+                lndiseq(ilat, ilon), dummy_lnckcd, local_error_flag, outflow_flag, ckcd_value)
+            if (local_error_flag /= 1) error_flag = local_error_flag
+        end do
+    end do
+    !$omp end parallel do
+
+end subroutine calculate_pi_gridded_diagnostics_with_missing
 
 !
 ! Calculate potential intensity for a single atmospheric profile
@@ -243,6 +461,8 @@ subroutine calculate_pi_single_profile(sst_in, psl_in, pressure_levels, temp_in,
     ! Local variables
     real :: sst_celsius, psl_mb
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
+    real :: dummy_outflow_temp, dummy_outflow_level
+    real :: dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd
     integer :: k
 
     ! Optimized unit conversion
@@ -267,9 +487,86 @@ subroutine calculate_pi_single_profile(sst_in, psl_in, pressure_levels, temp_in,
 
     call calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius, &
                          mixing_ratio_gkg, num_levels, actual_levels, &
-                         min_pressure, max_wind, error_flag)
+                         min_pressure, max_wind, dummy_outflow_temp, dummy_outflow_level, &
+                         dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd, &
+                         error_flag, 0, 0.9)
 
 end subroutine calculate_pi_single_profile
+
+subroutine calculate_pi_profile_diagnostics(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+                                           num_levels, actual_levels, min_pressure, max_wind, error_flag, &
+                                           outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd, &
+                                           outflow_source_flag, ckcd_in)
+    implicit none
+
+    ! Input parameters
+    integer, intent(in) :: num_levels, actual_levels
+    real, intent(in) :: sst_in                       ! Sea surface temperature (K)
+    real, intent(in) :: psl_in                       ! Sea level pressure (Pa)
+    real, intent(in) :: pressure_levels(num_levels) ! Pressure levels (mb)
+    real, intent(in) :: temp_in(num_levels)         ! Temperature (K)
+    real, intent(in) :: mixing_ratio_in(num_levels) ! Mixing ratio (kg/kg)
+    integer, intent(in), optional :: outflow_source_flag ! 0=cape_star, 1=cape_env
+    real, intent(in), optional :: ckcd_in           ! Optional decomposition Ck/Cd ratio
+
+    ! Output parameters
+    real, intent(out) :: min_pressure
+    real, intent(out) :: max_wind
+    integer, intent(out) :: error_flag
+    real, intent(out) :: outflow_temp               ! Outflow temperature (K)
+    real, intent(out) :: outflow_level              ! Outflow level pressure (mb)
+    real, intent(out) :: lnpi                       ! log(V^2)
+    real, intent(out) :: lneff                      ! log thermodynamic efficiency
+    real, intent(out) :: lndiseq                    ! log disequilibrium term
+    real, intent(out) :: lnckcd                     ! log(Ck/Cd)
+
+    ! Pre-computed constants
+    real, parameter :: UNDEF = -9.99e33
+    real, parameter :: PA_TO_MB = 0.01
+    real, parameter :: K_TO_C = -273.15
+    real, parameter :: KG_TO_G = 1000.0
+
+    real :: sst_celsius, psl_mb, ckcd_value
+    real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
+    integer :: k, levels_to_use, outflow_flag
+
+    outflow_flag = 0
+    if (present(outflow_source_flag)) outflow_flag = outflow_source_flag
+    ckcd_value = 0.9
+    if (present(ckcd_in)) ckcd_value = ckcd_in
+
+    min_pressure = UNDEF
+    max_wind = UNDEF
+    outflow_temp = UNDEF
+    outflow_level = UNDEF
+    lnpi = UNDEF
+    lneff = UNDEF
+    lndiseq = UNDEF
+    lnckcd = UNDEF
+    error_flag = 0
+    if (ckcd_value > 0.0) lnckcd = log(ckcd_value)
+
+    levels_to_use = min(max(actual_levels, 1), num_levels)
+    psl_mb = psl_in * PA_TO_MB
+    sst_celsius = sst_in + K_TO_C
+
+    if (sst_celsius <= 5.0) then
+        return
+    end if
+
+    !$omp simd
+    do k = 1, num_levels
+        temp_celsius(k) = temp_in(k) + K_TO_C
+        mixing_ratio_gkg(k) = mixing_ratio_in(k) * KG_TO_G
+    end do
+    !$omp end simd
+
+    call calculate_pi_core( &
+        sst_celsius, psl_mb, pressure_levels, temp_celsius, mixing_ratio_gkg, &
+        num_levels, levels_to_use, min_pressure, max_wind, outflow_temp, &
+        outflow_level, lnpi, lneff, lndiseq, lnckcd, error_flag, outflow_flag, ckcd_value)
+
+end subroutine calculate_pi_profile_diagnostics
 
 !
 ! Core potential intensity calculation algorithm
@@ -300,7 +597,9 @@ end subroutine calculate_pi_single_profile
 !   - Fails gracefully for hypercane conditions (P < 400 mb)
 !
 subroutine calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius, mixing_ratio_gkg, &
-                            array_size, num_points, min_pressure, max_wind, error_flag)
+                            array_size, num_points, min_pressure, max_wind, outflow_temp, &
+                            outflow_level, lnpi, lneff, lndiseq, lnckcd, error_flag, &
+                            outflow_source_flag, ckcd_in)
     implicit none
 
     ! Input parameters
@@ -312,223 +611,206 @@ subroutine calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius,
     real, intent(in) :: mixing_ratio_gkg(array_size) ! Mixing ratio (g/kg)
 
     ! Output parameters
-    real, intent(out) :: min_pressure                ! Minimum central pressure (mb)
-    real, intent(out) :: max_wind                    ! Maximum surface wind speed (m/s)
+    real, intent(out) :: min_pressure
+    real, intent(out) :: max_wind
+    real, intent(out) :: outflow_temp                ! Outflow temperature (K)
+    real, intent(out) :: outflow_level               ! Outflow level pressure (mb)
+    real, intent(out) :: lnpi                        ! log(V^2)
+    real, intent(out) :: lneff                       ! log thermodynamic efficiency
+    real, intent(out) :: lndiseq                     ! log disequilibrium term
+    real, intent(out) :: lnckcd                      ! log(Ck/Cd)
     integer, intent(out) :: error_flag
+    integer, intent(in) :: outflow_source_flag       ! 0=cape_star, 1=cape_env
+    real, intent(in) :: ckcd_in                      ! Decomposition Ck/Cd ratio
 
     ! Physical constants
     real, parameter :: UNDEF = -9.99e33
-    real, parameter :: CKCD = 0.9                    ! Ratio of Ck to CD
+    real, parameter :: CKCD_SOLVER = 0.9             ! Ratio of Ck to CD used by solver
     real, parameter :: SIG = 0.0                     ! Buoyancy parameter
     real, parameter :: B_EXPONENT = 2.0              ! Eye velocity profile exponent
     real, parameter :: WIND_REDUCTION_FACTOR = 0.8   ! Gradient to 10m wind factor
-    real, parameter :: RD = 287.04                   ! Gas constant for dry air (J/kg/K)
 
     ! Pre-computed constants for saturation vapor pressure calculation
-    real, parameter :: ES0_COEFF = 6.112              ! Base coefficient
-    real, parameter :: ES_A = 17.67                   ! Magnus formula coefficient A
-    real, parameter :: ES_B = 243.5                   ! Magnus formula coefficient B
-    real, parameter :: G_TO_DECIMAL = 0.001           ! g/kg to decimal conversion
-    real, parameter :: C_TO_K = 273.15                ! Celsius to Kelvin
+    real, parameter :: ES0_COEFF = 6.112             ! Base coefficient
+    real, parameter :: ES_A = 17.67                  ! Magnus formula coefficient A
+    real, parameter :: ES_B = 243.5                  ! Magnus formula coefficient B
+    real, parameter :: G_TO_DECIMAL = 0.001          ! g/kg to decimal conversion
+    real, parameter :: C_TO_K = 273.15               ! Celsius to Kelvin
 
     ! Precomputed reciprocals to avoid division (performance optimization)
-    real, parameter :: INV_B_EXPONENT = 0.5           ! 1.0/B_EXPONENT
-    real, parameter :: INV_RD = 0.0034838             ! 1.0/RD
-    real, parameter :: INV_0622 = 1.607717            ! 1.0/0.622
-    real, parameter :: EPS_CONST = 0.622              ! Epsilon constant
+    real, parameter :: INV_RD = 0.0034835            ! 1.0/RD
+    real, parameter :: EPS_CONST = 0.62197183        ! RD/RV, matches tcpyPI constants.EPS
+    real, parameter :: INV_0622 = 1.6077899          ! 1.0/EPS_CONST
 
     ! Precomputed iteration constants
-    real, parameter :: HALF_CKCD = 0.45               ! 0.5 * CKCD
-    real, parameter :: CATFAC_CONST = 0.75            ! 0.5 * (1.0 + 0.5)
+    real, parameter :: PRESSURE_CONVERGENCE = 0.5
+    integer, parameter :: MAX_ITERATIONS = 200
+    real, parameter :: MIN_PRESSURE_LIMIT = 400.0
 
-    ! Convergence parameters (matching tcpyPI)
-    real, parameter :: PRESSURE_CONVERGENCE = 0.2    ! mb
-    integer, parameter :: MAX_ITERATIONS = 250       ! iterations
-    real, parameter :: MIN_PRESSURE_LIMIT = 400.0    ! mb
-
-    ! Local variables
     real :: cape_environmental, cape_max_wind_radius, cape_saturated
-    real :: temp_outflow, temp_outflow_saturated
+    real :: temp_outflow_env, level_outflow_env
+    real :: temp_outflow_sat, level_outflow_sat
     real :: sst_kelvin, saturation_vapor_pressure
     real :: temp_kelvin(array_size), mixing_ratio_decimal(array_size)
-    real :: pressure_estimate, parcel_temp, parcel_mixing_ratio, parcel_pressure
-    real :: dissipation_ratio, saturation_mixing_ratio
-    real :: virtual_temp_surface, virtual_temp_average, available_energy
-    real :: pressure_new, pressure_old, energy_factor, wind_factor
-    real :: rs0, tv1, tvav, cat, catfac
-    real :: cape_diff, cape_diff_saturated  ! Precompute CAPE differences
-    real :: mixing_ratio_surface  ! Cache surface mixing ratio
-    real :: inv_tvav  ! Reciprocal of tvav for exp calculation
-    real :: denominator_cache  ! Cache for mixing ratio denominator
-    real :: exp_factor  ! Cache for exponential calculation
-    integer :: surface_level, iteration_count, cape_error_flag
-    integer :: i
-    logical :: converged
+    real :: parcel_temp, parcel_mixing_ratio, parcel_pressure
+    real :: saturation_mixing_ratio
+    real :: pnew, pm, pmold
+    real :: tv0, tvsst, tvav, cat, catfac, fac, rat
+    real :: efficiency
+    integer :: np, nk, cape_error_flag
+    integer :: i, effective_num_points, top_index
+    real :: top_diff, level_diff
+    logical :: has_valid_lnpi, has_valid_lneff, has_valid_lnckcd
 
-    ! Initialize output values
     min_pressure = UNDEF
     max_wind = UNDEF
-    cape_environmental = UNDEF
+    outflow_temp = UNDEF
+    outflow_level = UNDEF
+    lnpi = UNDEF
+    lneff = UNDEF
+    lndiseq = UNDEF
+    lnckcd = UNDEF
+    error_flag = 0
+    has_valid_lnckcd = .false.
 
-    ! Set parameters
-    surface_level = 1  ! Level from which parcels are lifted
+    if (ckcd_in > 0.0) then
+        lnckcd = log(ckcd_in)
+        has_valid_lnckcd = .true.
+    end if
 
-    ! Initial pressure guess (matching PCMIN)
-    pressure_estimate = 950.0
-
-    ! Convert and normalize input quantities (optimized)
     sst_kelvin = sst_celsius + C_TO_K
-    ! Precompute denominator for Magnus formula
     saturation_vapor_pressure = ES0_COEFF * exp(ES_A * sst_celsius / (ES_B + sst_celsius))
 
-    ! Optimized unit conversion using pre-computed constants with SIMD
     !$omp simd
     do i = 1, num_points
-        mixing_ratio_decimal(i) = mixing_ratio_gkg(i) * G_TO_DECIMAL  ! g/kg to decimal
-        temp_kelvin(i) = temp_celsius(i) + C_TO_K                     ! C to K
+        mixing_ratio_decimal(i) = max(mixing_ratio_gkg(i) * G_TO_DECIMAL, 0.0)
+        temp_kelvin(i) = temp_celsius(i) + C_TO_K
     end do
     !$omp end simd
 
-    ! Set default values
+    effective_num_points = num_points
+    top_index = 1
+    top_diff = abs(pressure_levels(1) - 50.0)
+    do i = 2, num_points
+        level_diff = abs(pressure_levels(i) - 50.0)
+        if (level_diff < top_diff) then
+            top_diff = level_diff
+            top_index = i
+        end if
+    end do
+    effective_num_points = max(1, top_index - 1)
+
+    nk = 1
     max_wind = 0.0
     min_pressure = psl_mb
-    error_flag = 1  ! Success flag
-
-    ! Calculate environmental CAPE
-    parcel_temp = temp_kelvin(surface_level)
-    mixing_ratio_surface = mixing_ratio_decimal(surface_level)  ! Cache for reuse
-    parcel_mixing_ratio = mixing_ratio_surface
-    parcel_pressure = pressure_levels(surface_level)
+    parcel_temp = temp_kelvin(nk)
+    parcel_mixing_ratio = mixing_ratio_decimal(nk)
+    parcel_pressure = pressure_levels(nk)
 
     call CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
-                     temp_kelvin, mixing_ratio_decimal, pressure_levels, &
-                     array_size, num_points, SIG, &
-                     cape_environmental, temp_outflow, cape_error_flag)
+              temp_kelvin, mixing_ratio_decimal, pressure_levels, &
+              array_size, effective_num_points, SIG, &
+              cape_environmental, temp_outflow_env, level_outflow_env, cape_error_flag)
 
     if (cape_error_flag /= 1) then
-        error_flag = 2
+        error_flag = cape_error_flag
         return
     end if
 
-    ! Iterative solution for minimum pressure
-    iteration_count = 0
-    converged = .false.
-    pressure_new = pressure_estimate  ! Initialize for convergence check
+    np = 0
+    pm = 970.0
+    pmold = pm
+    pnew = 0.0
+    error_flag = 1
 
-    ! Precompute constants for iteration loop
-    denominator_cache = EPS_CONST + mixing_ratio_surface
-
-    ! Main iteration loop with early exit optimization
-    do while (.not. converged .and. iteration_count < MAX_ITERATIONS)
-        iteration_count = iteration_count + 1
-
-        ! Early exit check for slow convergence after 100 iterations
-        if (iteration_count > 100 .and. iteration_count > 1) then
-            pressure_old = pressure_new
-            if (abs(pressure_new - pressure_estimate) > 10.0) then
-                ! Convergence too slow, likely won't converge
-                min_pressure = psl_mb
-                error_flag = 0
-                return
-            end if
-        end if
-
-        ! Calculate CAPE at radius of maximum winds
-        parcel_temp = temp_kelvin(surface_level)
-        parcel_pressure = min(pressure_estimate, 1000.0)
-
-        ! EXACT formula from pcmin_2013.f line 103 (optimized with cached denominator)
-        parcel_mixing_ratio = EPS_CONST * mixing_ratio_surface * psl_mb / &
-                             (parcel_pressure * denominator_cache - mixing_ratio_surface * psl_mb)
+    do while (abs(pnew - pmold) > PRESSURE_CONVERGENCE)
+        parcel_pressure = min(pm, 1000.0)
+        parcel_temp = temp_kelvin(nk)
+        parcel_mixing_ratio = EPS_CONST * mixing_ratio_decimal(nk) * psl_mb / &
+                             (parcel_pressure * (EPS_CONST + mixing_ratio_decimal(nk)) - &
+                              mixing_ratio_decimal(nk) * psl_mb)
 
         call CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
-                         temp_kelvin, mixing_ratio_decimal, pressure_levels, &
-                         array_size, num_points, SIG, &
-                         cape_max_wind_radius, temp_outflow, cape_error_flag)
+                  temp_kelvin, mixing_ratio_decimal, pressure_levels, &
+                  array_size, effective_num_points, SIG, &
+                  cape_max_wind_radius, temp_outflow_env, level_outflow_env, cape_error_flag)
 
         if (cape_error_flag /= 1) then
-            error_flag = 2
+            error_flag = cape_error_flag
             return
         end if
 
-        ! Calculate saturated CAPE at radius of maximum winds
         parcel_temp = sst_kelvin
-        parcel_pressure = min(pressure_estimate, 1000.0)
-
-        ! EXACT formula from pcmin_2013.f line 111 (optimized)
-        saturation_mixing_ratio = EPS_CONST * saturation_vapor_pressure / (parcel_pressure - saturation_vapor_pressure)
+        parcel_pressure = min(pm, 1000.0)
+        saturation_mixing_ratio = EPS_CONST * saturation_vapor_pressure / &
+                                  (parcel_pressure - saturation_vapor_pressure)
 
         call CAPE(parcel_temp, saturation_mixing_ratio, parcel_pressure, &
-                         temp_kelvin, mixing_ratio_decimal, pressure_levels, &
-                         array_size, num_points, SIG, &
-                         cape_saturated, temp_outflow_saturated, cape_error_flag)
+                  temp_kelvin, mixing_ratio_decimal, pressure_levels, &
+                  array_size, effective_num_points, SIG, &
+                  cape_saturated, temp_outflow_sat, level_outflow_sat, cape_error_flag)
 
         if (cape_error_flag /= 1) then
-            error_flag = 2
+            error_flag = cape_error_flag
             return
         end if
 
-        ! Calculate dissipation ratio (dissipative heating effect)
-        dissipation_ratio = sst_kelvin / temp_outflow_saturated
+        outflow_temp = temp_outflow_sat
+        outflow_level = level_outflow_sat
+        if (outflow_source_flag == 1) then
+            outflow_temp = temp_outflow_env
+            outflow_level = level_outflow_env
+        end if
 
-        ! Initial estimate of minimum pressure (EXACT from pcmin_2013.f, optimized)
-        rs0 = saturation_mixing_ratio
-        ! Use precomputed reciprocal INV_0622 = 1.0/0.622
-        tv1 = temp_kelvin(1) * (1.0 + mixing_ratio_decimal(1)*INV_0622) / (1.0 + mixing_ratio_decimal(1))
-        tvav = 0.5 * (tv1 + sst_kelvin * (1.0 + rs0*INV_0622) / (1.0 + rs0))
-
-        ! Precompute CAPE differences for reuse
-        cape_diff = cape_saturated - cape_max_wind_radius
-
-        ! EXACT formula from pcmin_2013.f line 123 (optimized)
-        cat = cape_max_wind_radius - cape_environmental + HALF_CKCD * dissipation_ratio * cape_diff
+        rat = sst_kelvin / outflow_temp
+        tv0 = temp_kelvin(nk) * (1.0 + mixing_ratio_decimal(nk) * INV_0622) / (1.0 + mixing_ratio_decimal(nk))
+        tvsst = sst_kelvin * (1.0 + saturation_mixing_ratio * INV_0622) / (1.0 + saturation_mixing_ratio)
+        tvav = 0.5 * (tv0 + tvsst)
+        cat = (cape_max_wind_radius - cape_environmental) + &
+              0.5 * CKCD_SOLVER * rat * (cape_saturated - cape_max_wind_radius)
         cat = max(cat, 0.0)
+        pnew = psl_mb * exp(-cat * INV_RD / tvav)
+        pmold = pm
+        pm = pnew
+        np = np + 1
 
-        ! Cache exponential calculation factor
-        inv_tvav = 1.0 / tvav
-        exp_factor = -cat * INV_RD * inv_tvav
-        pressure_new = psl_mb * exp(exp_factor)
-
-        ! Test for convergence (EXACT threshold from pcmin_2013.f)
-        if (abs(pressure_new - pressure_estimate) <= PRESSURE_CONVERGENCE) then
-            converged = .true.
-
-            ! Final calculation with corrected factor (EXACT from pcmin_2013.f, optimized)
-            ! Reuse most calculations, only update what changes
-            cat = cape_max_wind_radius - cape_environmental + CKCD * dissipation_ratio * CATFAC_CONST * cape_diff
-            cat = max(cat, 0.0)
-            ! Only recalculate exp if cat changed
-            if (cat /= (cape_max_wind_radius - cape_environmental + HALF_CKCD * dissipation_ratio * cape_diff)) then
-                exp_factor = -cat * INV_RD * inv_tvav
-            end if
-            min_pressure = psl_mb * exp(exp_factor)
-        else
-            pressure_estimate = pressure_new
-
-            ! Check for unrealistic values (EXACT from pcmin_2013.f)
-            if (pressure_estimate < MIN_PRESSURE_LIMIT) then
-                min_pressure = psl_mb
-                error_flag = 0  ! No convergence (hypercane)
-                return
-            end if
+        if (np > MAX_ITERATIONS .or. pm < MIN_PRESSURE_LIMIT) then
+            max_wind = UNDEF
+            min_pressure = UNDEF
+            outflow_temp = UNDEF
+            outflow_level = UNDEF
+            error_flag = 2
+            return
         end if
     end do
 
-    ! Check if iteration limit was reached
-    if (.not. converged) then
-        min_pressure = psl_mb
-        error_flag = 0
-        return
+    catfac = 0.5 * (1.0 + 1.0 / B_EXPONENT)
+    cat = (cape_max_wind_radius - cape_environmental) + &
+          CKCD_SOLVER * rat * catfac * (cape_saturated - cape_max_wind_radius)
+    cat = max(cat, 0.0)
+    min_pressure = psl_mb * exp(-cat * INV_RD / tvav)
+    fac = max(0.0, (cape_saturated - cape_max_wind_radius))
+    max_wind = WIND_REDUCTION_FACTOR * sqrt(CKCD_SOLVER * rat * fac)
+    error_flag = 1
+    has_valid_lnpi = .false.
+    has_valid_lneff = .false.
+
+    if (outflow_temp > 0.0 .and. sst_kelvin > outflow_temp) then
+        efficiency = (sst_kelvin - outflow_temp) / outflow_temp
+        if (efficiency > 0.0) then
+            lneff = log(efficiency)
+            has_valid_lneff = .true.
+        end if
     end if
 
-    ! Calculate maximum wind speed (EXACT from pcmin_2013.f, optimized)
-    ! Reuse cape_diff if already computed, otherwise compute it
-    if (converged) then
-        wind_factor = max(0.0, cape_diff)  ! Reuse precomputed difference
-    else
-        wind_factor = max(0.0, cape_saturated - cape_max_wind_radius)
+    if (max_wind > 0.0) then
+        lnpi = 2.0 * log(max_wind)
+        has_valid_lnpi = .true.
     end if
-    max_wind = WIND_REDUCTION_FACTOR * sqrt(CKCD * dissipation_ratio * wind_factor)
+
+    if (has_valid_lnpi .and. has_valid_lneff .and. has_valid_lnckcd) then
+        lndiseq = lnpi - lneff - lnckcd
+    end if
 
 end subroutine calculate_pi_core
 
@@ -580,13 +862,16 @@ subroutine calculate_pi_4d_data(sst_in, psl_in, pressure_levels, temp_in, mixing
     ! Local variables
     real :: sst_celsius, psl_mb
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
-    integer :: ilat, ilon, k, t
+    real :: dummy_outflow_temp, dummy_outflow_level
+    real :: dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd
+    integer :: ilat, ilon, k, t, local_error_flag
 
     ! Initialize error flag
     error_flag = 1
 
     ! MEMORY-OPTIMAL LOOP ORDER: j->i->t (4.2x performance improvement)
     ! Based on Fortran column-major storage and cache optimization
+    !$omp parallel do default(shared) private(ilon, ilat, t, k, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag) schedule(static)
     do ilon = 1, nlon
         do ilat = 1, nlat
             do t = 1, num_times
@@ -611,12 +896,100 @@ subroutine calculate_pi_4d_data(sst_in, psl_in, pressure_levels, temp_in, mixing
 
                 call calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius, &
                                      mixing_ratio_gkg, num_levels, num_levels, &
-                                     min_pressure(t, ilat, ilon), max_wind(t, ilat, ilon), error_flag)
+                                     min_pressure(t, ilat, ilon), max_wind(t, ilat, ilon), &
+                                     dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, &
+                                     dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag, &
+                                     0, 0.9)
+                if (local_error_flag /= 1) error_flag = local_error_flag
             end do
         end do
     end do
+    !$omp end parallel do
 
 end subroutine calculate_pi_4d_data
+
+subroutine calculate_pi_4d_diagnostics(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+                                      nlat, nlon, num_levels, num_times, min_pressure, max_wind, &
+                                      error_flag, outflow_temp, outflow_level, lnpi, lneff, lndiseq, &
+                                      lnckcd, outflow_source_flag, ckcd_in)
+    implicit none
+
+    integer, intent(in) :: num_levels, nlat, nlon, num_times
+    real, intent(in) :: sst_in(num_times, nlat, nlon)
+    real, intent(in) :: psl_in(num_times, nlat, nlon)
+    real, intent(in) :: pressure_levels(num_levels)
+    real, intent(in) :: temp_in(num_times, num_levels, nlat, nlon)
+    real, intent(in) :: mixing_ratio_in(num_times, num_levels, nlat, nlon)
+    integer, intent(in), optional :: outflow_source_flag
+    real, intent(in), optional :: ckcd_in
+
+    real, intent(out) :: min_pressure(num_times, nlat, nlon)
+    real, intent(out) :: max_wind(num_times, nlat, nlon)
+    integer, intent(out) :: error_flag
+    real, intent(out) :: outflow_temp(num_times, nlat, nlon)
+    real, intent(out) :: outflow_level(num_times, nlat, nlon)
+    real, intent(out) :: lnpi(num_times, nlat, nlon)
+    real, intent(out) :: lneff(num_times, nlat, nlon)
+    real, intent(out) :: lndiseq(num_times, nlat, nlon)
+    real, intent(out) :: lnckcd
+
+    real, parameter :: UNDEF = -9.99e33
+    real, parameter :: PA_TO_MB = 0.01
+    real, parameter :: K_TO_C = -273.15
+    real, parameter :: KG_TO_G = 1000.0
+
+    real :: sst_celsius, psl_mb, ckcd_value
+    real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
+    real :: dummy_lnckcd
+    integer :: ilat, ilon, k, t, outflow_flag, local_error_flag
+
+    outflow_flag = 0
+    if (present(outflow_source_flag)) outflow_flag = outflow_source_flag
+    ckcd_value = 0.9
+    if (present(ckcd_in)) ckcd_value = ckcd_in
+
+    error_flag = 1
+    lnckcd = UNDEF
+    if (ckcd_value > 0.0) lnckcd = log(ckcd_value)
+
+    !$omp parallel do default(shared) private(ilon, ilat, t, k, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) schedule(static)
+    do ilon = 1, nlon
+        do ilat = 1, nlat
+            do t = 1, num_times
+                psl_mb = psl_in(t, ilat, ilon) * PA_TO_MB
+                sst_celsius = sst_in(t, ilat, ilon) + K_TO_C
+
+                if (sst_celsius <= 5.0) then
+                    min_pressure(t, ilat, ilon) = UNDEF
+                    max_wind(t, ilat, ilon) = UNDEF
+                    outflow_temp(t, ilat, ilon) = UNDEF
+                    outflow_level(t, ilat, ilon) = UNDEF
+                    lnpi(t, ilat, ilon) = UNDEF
+                    lneff(t, ilat, ilon) = UNDEF
+                    lndiseq(t, ilat, ilon) = UNDEF
+                    cycle
+                end if
+
+                !$omp simd
+                do k = 1, num_levels
+                    temp_celsius(k) = temp_in(t, k, ilat, ilon) + K_TO_C
+                    mixing_ratio_gkg(k) = mixing_ratio_in(t, k, ilat, ilon) * KG_TO_G
+                end do
+                !$omp end simd
+
+                call calculate_pi_core( &
+                    sst_celsius, psl_mb, pressure_levels, temp_celsius, mixing_ratio_gkg, &
+                    num_levels, num_levels, min_pressure(t, ilat, ilon), max_wind(t, ilat, ilon), &
+                    outflow_temp(t, ilat, ilon), outflow_level(t, ilat, ilon), lnpi(t, ilat, ilon), &
+                    lneff(t, ilat, ilon), lndiseq(t, ilat, ilon), dummy_lnckcd, local_error_flag, &
+                    outflow_flag, ckcd_value)
+                if (local_error_flag /= 1) error_flag = local_error_flag
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+end subroutine calculate_pi_4d_diagnostics
 
 !
 ! Calculate potential intensity for 4D gridded data with missing value handling
@@ -667,13 +1040,16 @@ subroutine calculate_pi_4d_with_missing(sst_in, psl_in, pressure_levels, temp_in
     ! Local variables
     real :: sst_celsius, psl_mb
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
-    integer :: ilat, ilon, k, t, valid_start_level
+    real :: dummy_outflow_temp, dummy_outflow_level
+    real :: dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd
+    integer :: ilat, ilon, k, t, valid_start_level, local_error_flag
 
     ! Initialize error flag
     error_flag = 1
 
     ! MEMORY-OPTIMAL LOOP ORDER: j->i->t (4.2x performance improvement)
     ! Based on Fortran column-major storage and cache optimization
+    !$omp parallel do default(shared) private(ilon, ilat, t, k, valid_start_level, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag) schedule(static)
     do ilon = 1, nlon
         do ilat = 1, nlat
             do t = 1, num_times
@@ -695,7 +1071,7 @@ subroutine calculate_pi_4d_with_missing(sst_in, psl_in, pressure_levels, temp_in
                     cycle  ! Skip to next time step
                 end if
 
-                valid_start_level = num_levels
+                valid_start_level = num_levels + 1
 
                 ! Find valid data and convert units (optimized)
                 do k = 1, num_levels
@@ -709,6 +1085,12 @@ subroutine calculate_pi_4d_with_missing(sst_in, psl_in, pressure_levels, temp_in
                     end if
                 end do
 
+                if (valid_start_level > num_levels) then
+                    min_pressure(t, ilat, ilon) = UNDEF
+                    max_wind(t, ilat, ilon) = UNDEF
+                    cycle
+                end if
+
                 ! Call core routine with valid data subset
                 call calculate_pi_core(sst_celsius, psl_mb, &
                                      pressure_levels(valid_start_level:), &
@@ -716,12 +1098,130 @@ subroutine calculate_pi_4d_with_missing(sst_in, psl_in, pressure_levels, temp_in
                                      mixing_ratio_gkg(valid_start_level:), &
                                      num_levels - valid_start_level + 1, &
                                      num_levels - valid_start_level + 1, &
-                                     min_pressure(t, ilat, ilon), max_wind(t, ilat, ilon), error_flag)
+                                     min_pressure(t, ilat, ilon), max_wind(t, ilat, ilon), &
+                                     dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, &
+                                     dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag, &
+                                     0, 0.9)
+                if (local_error_flag /= 1) error_flag = local_error_flag
             end do
         end do
     end do
+    !$omp end parallel do
 
 end subroutine calculate_pi_4d_with_missing
+
+subroutine calculate_pi_4d_diagnostics_with_missing(sst_in, psl_in, pressure_levels, temp_in, &
+                                                    mixing_ratio_in, nlat, nlon, num_levels, num_times, &
+                                                    min_pressure, max_wind, error_flag, outflow_temp, &
+                                                    outflow_level, lnpi, lneff, lndiseq, lnckcd, &
+                                                    outflow_source_flag, ckcd_in)
+    implicit none
+
+    integer, intent(in) :: num_levels, nlat, nlon, num_times
+    real, intent(in) :: sst_in(num_times, nlat, nlon)
+    real, intent(in) :: psl_in(num_times, nlat, nlon)
+    real, intent(in) :: pressure_levels(num_levels)
+    real, intent(in) :: temp_in(num_times, num_levels, nlat, nlon)
+    real, intent(in) :: mixing_ratio_in(num_times, num_levels, nlat, nlon)
+    integer, intent(in), optional :: outflow_source_flag
+    real, intent(in), optional :: ckcd_in
+
+    real, intent(out) :: min_pressure(num_times, nlat, nlon)
+    real, intent(out) :: max_wind(num_times, nlat, nlon)
+    integer, intent(out) :: error_flag
+    real, intent(out) :: outflow_temp(num_times, nlat, nlon)
+    real, intent(out) :: outflow_level(num_times, nlat, nlon)
+    real, intent(out) :: lnpi(num_times, nlat, nlon)
+    real, intent(out) :: lneff(num_times, nlat, nlon)
+    real, intent(out) :: lndiseq(num_times, nlat, nlon)
+    real, intent(out) :: lnckcd
+
+    real, parameter :: UNDEF = -9.99e33
+    real, parameter :: PA_TO_MB = 0.01
+    real, parameter :: K_TO_C = -273.15
+    real, parameter :: KG_TO_G = 1000.0
+
+    real :: sst_celsius, psl_mb, ckcd_value
+    real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
+    real :: dummy_lnckcd
+    integer :: ilat, ilon, k, t, valid_start_level, outflow_flag, local_error_flag
+
+    outflow_flag = 0
+    if (present(outflow_source_flag)) outflow_flag = outflow_source_flag
+    ckcd_value = 0.9
+    if (present(ckcd_in)) ckcd_value = ckcd_in
+
+    error_flag = 1
+    lnckcd = UNDEF
+    if (ckcd_value > 0.0) lnckcd = log(ckcd_value)
+
+    !$omp parallel do default(shared) private(ilon, ilat, t, k, valid_start_level, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) schedule(static)
+    do ilon = 1, nlon
+        do ilat = 1, nlat
+            do t = 1, num_times
+                if (sst_in(t, ilat, ilon) == UNDEF) then
+                    min_pressure(t, ilat, ilon) = UNDEF
+                    max_wind(t, ilat, ilon) = UNDEF
+                    outflow_temp(t, ilat, ilon) = UNDEF
+                    outflow_level(t, ilat, ilon) = UNDEF
+                    lnpi(t, ilat, ilon) = UNDEF
+                    lneff(t, ilat, ilon) = UNDEF
+                    lndiseq(t, ilat, ilon) = UNDEF
+                    cycle
+                end if
+
+                psl_mb = psl_in(t, ilat, ilon) * PA_TO_MB
+                sst_celsius = sst_in(t, ilat, ilon) + K_TO_C
+
+                if (sst_celsius <= 5.0) then
+                    min_pressure(t, ilat, ilon) = UNDEF
+                    max_wind(t, ilat, ilon) = UNDEF
+                    outflow_temp(t, ilat, ilon) = UNDEF
+                    outflow_level(t, ilat, ilon) = UNDEF
+                    lnpi(t, ilat, ilon) = UNDEF
+                    lneff(t, ilat, ilon) = UNDEF
+                    lndiseq(t, ilat, ilon) = UNDEF
+                    cycle
+                end if
+
+                valid_start_level = num_levels + 1
+
+                do k = 1, num_levels
+                    if (temp_in(t, k, ilat, ilon) /= UNDEF .and. mixing_ratio_in(t, k, ilat, ilon) /= UNDEF) then
+                        valid_start_level = min(valid_start_level, k)
+                        temp_celsius(k) = temp_in(t, k, ilat, ilon) + K_TO_C
+                        mixing_ratio_gkg(k) = mixing_ratio_in(t, k, ilat, ilon) * KG_TO_G
+                    else
+                        temp_celsius(k) = UNDEF
+                        mixing_ratio_gkg(k) = UNDEF
+                    end if
+                end do
+
+                if (valid_start_level > num_levels) then
+                    min_pressure(t, ilat, ilon) = UNDEF
+                    max_wind(t, ilat, ilon) = UNDEF
+                    outflow_temp(t, ilat, ilon) = UNDEF
+                    outflow_level(t, ilat, ilon) = UNDEF
+                    lnpi(t, ilat, ilon) = UNDEF
+                    lneff(t, ilat, ilon) = UNDEF
+                    lndiseq(t, ilat, ilon) = UNDEF
+                    cycle
+                end if
+
+                call calculate_pi_core( &
+                    sst_celsius, psl_mb, pressure_levels(valid_start_level:), &
+                    temp_celsius(valid_start_level:), mixing_ratio_gkg(valid_start_level:), &
+                    num_levels - valid_start_level + 1, num_levels - valid_start_level + 1, &
+                    min_pressure(t, ilat, ilon), max_wind(t, ilat, ilon), outflow_temp(t, ilat, ilon), &
+                    outflow_level(t, ilat, ilon), lnpi(t, ilat, ilon), lneff(t, ilat, ilon), &
+                    lndiseq(t, ilat, ilon), dummy_lnckcd, local_error_flag, outflow_flag, ckcd_value)
+                if (local_error_flag /= 1) error_flag = local_error_flag
+            end do
+        end do
+    end do
+    !$omp end parallel do
+
+end subroutine calculate_pi_4d_diagnostics_with_missing
 
 !
 ! Calculate Convective Available Potential Energy (CAPE) for a given parcel
@@ -767,7 +1267,7 @@ end subroutine calculate_pi_4d_with_missing
 subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
                        temp_profile, mixing_ratio_profile, pressure_profile, &
                        array_size, num_points, buoyancy_param, &
-                       cape_value, outflow_temp, error_flag)
+                       cape_value, outflow_temp, outflow_level, error_flag)
     !$omp declare simd(CAPE) uniform(array_size, num_points, buoyancy_param)
     implicit none
 
@@ -784,128 +1284,134 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
     ! Output parameters
     real, intent(out) :: cape_value                  ! Calculated CAPE (J/kg)
     real, intent(out) :: outflow_temp                ! Temperature at level of neutral buoyancy (K)
+    real, intent(out) :: outflow_level               ! Pressure at level of neutral buoyancy (mb)
     integer, intent(out) :: error_flag
 
-    ! Thermodynamic constants (EXACT from pcmin_2013.f)
-    real, parameter :: CPD = 1005.7                  ! Specific heat of dry air (J/kg/K)
-    real, parameter :: CPV = 1870.0                  ! Specific heat of water vapor (J/kg/K)
-    real, parameter :: CL = 2500.0                   ! Note: pcmin_2013.f uses 2500, not 4190
-    real, parameter :: CPVMCL = -630.0               ! CPV - CL = -630.0 (precomputed)
-    real, parameter :: RV = 461.5                    ! Gas constant for water vapor (J/kg/K)
-    real, parameter :: RD = 287.04                   ! Gas constant for dry air (J/kg/K)
-    real, parameter :: EPS = 0.622                   ! Ratio of gas constants (precomputed)
-    real, parameter :: ALV0 = 2.501e6                ! Latent heat of vaporization at 0C (J/kg)
+    integer, parameter :: dp = kind(1.0d0)
 
-    ! Precomputed division constants for performance optimization
-    real, parameter :: RD_OVER_CPD = 0.2854          ! RD/CPD precomputed
-    real, parameter :: INV_EPS = 1.607717            ! 1.0/0.622 precomputed
-    real, parameter :: INV_RV = 0.002167             ! 1.0/461.5 precomputed
+    ! Thermodynamic constants (EXACT from pcmin_2013.f)
+    real(dp), parameter :: CPD = 1005.7_dp
+    real(dp), parameter :: CL = 2500.0_dp
+    real(dp), parameter :: CPVMCL = -630.0_dp
+    real(dp), parameter :: RV = 461.5_dp
+    real(dp), parameter :: RD = 287.04_dp
+    real(dp), parameter :: EPS = RD / RV
+    real(dp), parameter :: ALV0 = 2.501e6_dp
+
+    ! Use exact ratios inside CAPE to avoid neutral-buoyancy sign flips near
+    ! weakly unstable layers.
+    real(dp), parameter :: RD_OVER_CPD = RD / CPD
+    real(dp), parameter :: INV_EPS = 1.0_dp / EPS
+    real(dp), parameter :: INV_RV = 1.0_dp / RV
 
     ! Magnus formula precomputed constants
-    real, parameter :: MAG_CONST_A = 17.67
-    real, parameter :: MAG_CONST_B = 243.5
-    real, parameter :: MAG_BASE = 6.112
-    real, parameter :: KELVIN_OFFSET = 273.15
+    real(dp), parameter :: MAG_CONST_A = 17.67_dp
+    real(dp), parameter :: MAG_CONST_B = 243.5_dp
+    real(dp), parameter :: MAG_BASE = 6.112_dp
+    real(dp), parameter :: KELVIN_OFFSET = 273.15_dp
 
     ! Convergence parameters
-    real, parameter :: TEMP_CONVERGENCE = 0.001      ! K
+    real(dp), parameter :: TEMP_CONVERGENCE = 0.001_dp
     integer, parameter :: MAX_ITERATIONS = 500
-    real, parameter :: MIN_PRESSURE_THRESHOLD = 50.0 ! mb
+    real(dp), parameter :: MIN_PRESSURE_THRESHOLD = 50.0_dp
 
     ! Local variables
-    real :: virtual_temp_diff(100)
-    real :: env_virtual_factor(100)  ! Cache environmental virtual temperature factors
-    real :: pressure_diff(100)  ! Cache pressure differences
-    real :: pressure_sum_inv(100)  ! Cache 1/(p[i] + p[i-1])
-    real :: parcel_temp_celsius, saturation_pressure, vapor_pressure
-    real :: relative_humidity, latent_heat, reversible_entropy
-    real :: chi, lifted_condensation_pressure
-    real :: parcel_temp_lifted, parcel_mixing_ratio_lifted
-    real :: temp_celsius, saturation_pressure_env, entropy_rate_temp, vapor_pressure_parcel
-    real :: entropy_parcel, adaptation_param, temp_new
-    real :: mean_mixing_ratio, virtual_temp_parcel, positive_area, negative_area
-    real :: pressure_factor, area_above_lnb, pressure_lnb, temp_lnb
-    real :: cpd_plus_rcl  ! Cache CPD + parcel_mixing_ratio * CL
-    real :: one_minus_buoyancy  ! Cache (1.0 - buoyancy_param)
-    real :: inv_parcel_temp_sq  ! Cache 1/T^2 for iterations
+    real(dp) :: virtual_temp_diff(array_size)
+    real(dp) :: temp_profile_dp(array_size)
+    real(dp) :: mixing_ratio_profile_dp(array_size)
+    real(dp) :: pressure_profile_dp(array_size)
+    real(dp) :: parcel_temp_dp, parcel_mixing_ratio_dp, parcel_pressure_dp
+    real(dp) :: buoyancy_param_dp
+    real(dp) :: parcel_temp_celsius, saturation_pressure, vapor_pressure
+    real(dp) :: relative_humidity, latent_heat, reversible_entropy
+    real(dp) :: chi, lifted_condensation_pressure
+    real(dp) :: parcel_temp_lifted, parcel_mixing_ratio_lifted
+    real(dp) :: temp_celsius, saturation_pressure_env, entropy_rate_temp, vapor_pressure_parcel
+    real(dp) :: entropy_parcel, adaptation_param, temp_new
+    real(dp) :: mean_mixing_ratio, virtual_temp_parcel, positive_area, negative_area
+    real(dp) :: pressure_factor, area_above_lnb, pressure_lnb, temp_lnb
+    real(dp) :: cpd_plus_rcl
     integer :: level, min_level, level_neutral_buoyancy
-    integer :: iteration_count, ncmax
+    integer :: iteration_count
     logical :: converged
 
     ! Initialize output values
     cape_value = 0.0
     outflow_temp = temp_profile(1)
+    outflow_level = pressure_profile(1)
     error_flag = 1
 
+    parcel_temp_dp = real(parcel_temp, dp)
+    parcel_mixing_ratio_dp = real(parcel_mixing_ratio, dp)
+    parcel_pressure_dp = real(parcel_pressure, dp)
+    buoyancy_param_dp = real(buoyancy_param, dp)
+
+    !$omp simd
+    do level = 1, num_points
+        temp_profile_dp(level) = real(temp_profile(level), dp)
+        mixing_ratio_profile_dp(level) = real(mixing_ratio_profile(level), dp)
+        pressure_profile_dp(level) = real(pressure_profile(level), dp)
+        virtual_temp_diff(level) = 0.0_dp
+    end do
+    !$omp end simd
+
     ! Validate input parameters
-    if (parcel_mixing_ratio < 1.0e-6 .or. parcel_temp < 200.0) then
+    if (parcel_mixing_ratio_dp < 1.0e-6_dp .or. parcel_temp_dp < 200.0_dp) then
         error_flag = 0
         return
     end if
 
     ! Calculate parcel properties
-    parcel_temp_celsius = parcel_temp - KELVIN_OFFSET
+    parcel_temp_celsius = parcel_temp_dp - KELVIN_OFFSET
     ! Use precomputed Magnus constants
     saturation_pressure = MAG_BASE * exp(MAG_CONST_A * parcel_temp_celsius / (MAG_CONST_B + parcel_temp_celsius))
     ! Optimize division by precomputing denominator
-    vapor_pressure = parcel_mixing_ratio * parcel_pressure / (EPS + parcel_mixing_ratio)
-    relative_humidity = min(vapor_pressure / saturation_pressure, 1.0)
+    vapor_pressure = parcel_mixing_ratio_dp * parcel_pressure_dp / (EPS + parcel_mixing_ratio_dp)
+    relative_humidity = min(vapor_pressure / saturation_pressure, 1.0_dp)
     latent_heat = ALV0 + CPVMCL * parcel_temp_celsius
 
     ! Precompute constants for entropy calculations
-    cpd_plus_rcl = CPD + parcel_mixing_ratio * CL
-    one_minus_buoyancy = 1.0 - buoyancy_param
+    cpd_plus_rcl = CPD + parcel_mixing_ratio_dp * CL
 
     ! Entropy calculation - division by parcel_temp is unavoidable
-    reversible_entropy = cpd_plus_rcl * log(parcel_temp) - &
-                        RD * log(parcel_pressure - vapor_pressure) + &
-                        latent_heat * parcel_mixing_ratio / parcel_temp - &
-                        parcel_mixing_ratio * RV * log(relative_humidity)
+    reversible_entropy = cpd_plus_rcl * log(parcel_temp_dp) - &
+                        RD * log(parcel_pressure_dp - vapor_pressure) + &
+                        latent_heat * parcel_mixing_ratio_dp / parcel_temp_dp - &
+                        parcel_mixing_ratio_dp * RV * log(relative_humidity)
 
     ! Calculate lifted condensation level
     ! This division is specific to each calculation and can't be precomputed
-    chi = parcel_temp / (1669.0 - 122.0 * relative_humidity - parcel_temp)
-    lifted_condensation_pressure = parcel_pressure * (relative_humidity ** chi)
+    chi = parcel_temp_dp / (1669.0_dp - 122.0_dp * relative_humidity - parcel_temp_dp)
+    lifted_condensation_pressure = parcel_pressure_dp * (relative_humidity ** chi)
 
-    ! Initialize virtual temperature difference array with SIMD
-    ncmax = 0
-    !$omp simd
-    do level = 1, num_points
-        virtual_temp_diff(level) = 0.0
-    end do
-    !$omp end simd
-
-    ! Find minimum level for integration (optimized with early exit)
-    min_level = 1000000
-    do level = 1, num_points
-        if (pressure_profile(level) >= MIN_PRESSURE_THRESHOLD .and. &
-            pressure_profile(level) < parcel_pressure) then
-            min_level = level
-            exit  ! Early exit once first valid level found
-        end if
-    end do
-
-    if (min_level == 1000000) return
+    ! Match pcmin/tcpyPI semantics: jmin is the lowest valid profile level in
+    ! the working column, not the first level below parcel pressure. The
+    ! parcel-to-first-level area term below relies on this exact choice,
+    ! especially for weak-PI cases where the parcel pressure sits between the
+    ! first two model levels.
+    min_level = 1
 
     ! Calculate parcel ascent and buoyancy
     ! Split into two loops for better SIMD optimization
 
     ! First pass: Dry adiabatic calculations (vectorizable)
+    ! Match pcmin/tcpyPI: evaluate every retained model level, including
+    ! levels at or above the parcel pressure. The original algorithm uses
+    ! those lowest levels in the buoyancy profile rather than skipping them.
     !$omp simd private(parcel_temp_lifted, parcel_mixing_ratio_lifted, virtual_temp_parcel)
     do level = min_level, num_points
         if (pressure_profile(level) >= MIN_PRESSURE_THRESHOLD .and. &
-            pressure_profile(level) < parcel_pressure .and. &
             pressure_profile(level) >= lifted_condensation_pressure) then
             ! Below lifted condensation level - dry adiabatic ascent
-            parcel_temp_lifted = parcel_temp * (pressure_profile(level) / parcel_pressure) ** RD_OVER_CPD
-            parcel_mixing_ratio_lifted = parcel_mixing_ratio
+            parcel_temp_lifted = parcel_temp_dp * (pressure_profile_dp(level) / parcel_pressure_dp) ** RD_OVER_CPD
+            parcel_mixing_ratio_lifted = parcel_mixing_ratio_dp
 
             ! Virtual temperature calculation with precomputed constants
             virtual_temp_parcel = parcel_temp_lifted * (1.0 + parcel_mixing_ratio_lifted*INV_EPS) / &
                                  (1.0 + parcel_mixing_ratio_lifted)
             virtual_temp_diff(level) = virtual_temp_parcel - &
-                                      temp_profile(level) * (1.0 + mixing_ratio_profile(level)*INV_EPS) / &
-                                      (1.0 + mixing_ratio_profile(level))
+                                      temp_profile_dp(level) * (1.0_dp + mixing_ratio_profile_dp(level)*INV_EPS) / &
+                                      (1.0_dp + mixing_ratio_profile_dp(level))
         end if
     end do
     !$omp end simd
@@ -913,17 +1419,16 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
     ! Second pass: Moist adiabatic calculations (non-vectorizable due to iterations)
     do level = min_level, num_points
         ! Early exit if pressure too low
-        if (pressure_profile(level) < MIN_PRESSURE_THRESHOLD) exit
-        if (pressure_profile(level) >= parcel_pressure) cycle
+        if (pressure_profile_dp(level) < MIN_PRESSURE_THRESHOLD) exit
 
-        if (pressure_profile(level) < lifted_condensation_pressure) then
+        if (pressure_profile_dp(level) < lifted_condensation_pressure) then
             ! Above lifted condensation level - moist adiabatic ascent
-            parcel_temp_lifted = temp_profile(level)
-            temp_celsius = temp_profile(level) - KELVIN_OFFSET
+            parcel_temp_lifted = temp_profile_dp(level)
+            temp_celsius = temp_profile_dp(level) - KELVIN_OFFSET
             ! Use precomputed Magnus constants
             saturation_pressure_env = MAG_BASE * exp(MAG_CONST_A * temp_celsius / (MAG_CONST_B + temp_celsius))
             ! Precompute denominator for reuse
-            parcel_mixing_ratio_lifted = EPS * saturation_pressure_env / (pressure_profile(level) - saturation_pressure_env)
+            parcel_mixing_ratio_lifted = EPS * saturation_pressure_env / (pressure_profile_dp(level) - saturation_pressure_env)
 
             ! Iterative calculation for reversible ascent
             iteration_count = 0
@@ -935,20 +1440,20 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
                 latent_heat = ALV0 + CPVMCL * (parcel_temp_lifted - KELVIN_OFFSET)
                 ! Optimize: use INV_RV and compute 1/(T^3) once
                 ! Original: L^2*r*/(RV*T^2) / T = L^2*r/(RV*T^3)
-                entropy_rate_temp = (CPD + parcel_mixing_ratio * CL + &
+                entropy_rate_temp = (CPD + parcel_mixing_ratio_dp * CL + &
                                     latent_heat * latent_heat * parcel_mixing_ratio_lifted * INV_RV / (parcel_temp_lifted * parcel_temp_lifted)) / &
                                     parcel_temp_lifted
                 ! Division by denominator is unavoidable here
-                vapor_pressure_parcel = parcel_mixing_ratio_lifted * pressure_profile(level) / (EPS + parcel_mixing_ratio_lifted)
-                entropy_parcel = (CPD + parcel_mixing_ratio * CL) * log(parcel_temp_lifted) - &
-                                RD * log(pressure_profile(level) - vapor_pressure_parcel) + &
+                vapor_pressure_parcel = parcel_mixing_ratio_lifted * pressure_profile_dp(level) / (EPS + parcel_mixing_ratio_lifted)
+                entropy_parcel = (CPD + parcel_mixing_ratio_dp * CL) * log(parcel_temp_lifted) - &
+                                RD * log(pressure_profile_dp(level) - vapor_pressure_parcel) + &
                                 latent_heat * parcel_mixing_ratio_lifted / parcel_temp_lifted
 
                 ! Determine adaptation parameter
                 if (iteration_count < 3) then
-                    adaptation_param = 0.3
+                    adaptation_param = 0.3_dp
                 else
-                    adaptation_param = 1.0
+                    adaptation_param = 1.0_dp
                 end if
 
                 ! Newton-Raphson iteration step
@@ -964,12 +1469,12 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
                     saturation_pressure_env = MAG_BASE * exp(MAG_CONST_A * temp_celsius / (MAG_CONST_B + temp_celsius))
 
                     ! Check for unrealistic values
-                    if (iteration_count > MAX_ITERATIONS .or. saturation_pressure_env > (pressure_profile(level) - 1.0)) then
+                    if (iteration_count > MAX_ITERATIONS .or. saturation_pressure_env > (pressure_profile_dp(level) - 1.0_dp)) then
                         error_flag = 2
                         return
                     end if
 
-                    parcel_mixing_ratio_lifted = EPS * saturation_pressure_env / (pressure_profile(level) - saturation_pressure_env)
+                    parcel_mixing_ratio_lifted = EPS * saturation_pressure_env / (pressure_profile_dp(level) - saturation_pressure_env)
                 end if
             end do
 
@@ -978,16 +1483,14 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
                 return
             end if
 
-            ncmax = max(iteration_count, ncmax)
-
             ! Calculate buoyancy using precomputed INV_EPS
-            mean_mixing_ratio = buoyancy_param * parcel_mixing_ratio_lifted + (1.0 - buoyancy_param) * parcel_mixing_ratio
+            mean_mixing_ratio = buoyancy_param_dp * parcel_mixing_ratio_lifted + (1.0_dp - buoyancy_param_dp) * parcel_mixing_ratio_dp
             ! Parcel virtual temperature with entrainment
-            virtual_temp_parcel = parcel_temp_lifted * (1.0 + parcel_mixing_ratio_lifted*INV_EPS) / (1.0 + mean_mixing_ratio)
+            virtual_temp_parcel = parcel_temp_lifted * (1.0_dp + parcel_mixing_ratio_lifted*INV_EPS) / (1.0_dp + mean_mixing_ratio)
             ! Environmental virtual temperature (same calculation as dry case)
             virtual_temp_diff(level) = virtual_temp_parcel - &
-                                      temp_profile(level) * (1.0 + mixing_ratio_profile(level)*INV_EPS) / &
-                                      (1.0 + mixing_ratio_profile(level))
+                                      temp_profile_dp(level) * (1.0_dp + mixing_ratio_profile_dp(level)*INV_EPS) / &
+                                      (1.0_dp + mixing_ratio_profile_dp(level))
         end if
     end do
 
@@ -998,13 +1501,16 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
     ! Find maximum level of positive buoyancy (optimized with early exit)
     level_neutral_buoyancy = 1
     do level = num_points, min_level, -1
-        if (virtual_temp_diff(level) > 0.0) then
+        if (virtual_temp_diff(level) > 0.0_dp) then
             level_neutral_buoyancy = level
             exit  ! Early exit once highest positive buoyancy found
         end if
     end do
 
-    if (level_neutral_buoyancy == 1) return
+    if (level_neutral_buoyancy == 1) then
+        outflow_level = 0.0
+        return
+    end if
 
     ! Calculate positive and negative areas with SIMD optimization
     if (level_neutral_buoyancy > 1) then
@@ -1013,42 +1519,43 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
         do level = min_level + 1, level_neutral_buoyancy
             ! Pressure weighting factor for CAPE integration
             pressure_factor = RD * (virtual_temp_diff(level) + virtual_temp_diff(level-1)) * &
-                             (pressure_profile(level-1) - pressure_profile(level)) / &
-                             (pressure_profile(level) + pressure_profile(level-1))
-            positive_area = positive_area + max(pressure_factor, 0.0)
-            negative_area = negative_area - min(pressure_factor, 0.0)
+                             (pressure_profile_dp(level-1) - pressure_profile_dp(level)) / &
+                             (pressure_profile_dp(level) + pressure_profile_dp(level-1))
+            positive_area = positive_area + max(pressure_factor, 0.0_dp)
+            negative_area = negative_area - min(pressure_factor, 0.0_dp)
         end do
         !$omp end simd
 
         ! Add area between parcel level and first level above
         ! This division is geometry-specific and can't be precomputed
-        pressure_factor = RD * (parcel_pressure - pressure_profile(min_level)) / &
-                         (parcel_pressure + pressure_profile(min_level))
-        positive_area = positive_area + pressure_factor * max(virtual_temp_diff(min_level), 0.0)
-        negative_area = negative_area - pressure_factor * min(virtual_temp_diff(min_level), 0.0)
+        pressure_factor = RD * (parcel_pressure_dp - pressure_profile_dp(min_level)) / &
+                         (parcel_pressure_dp + pressure_profile_dp(min_level))
+        positive_area = positive_area + pressure_factor * max(virtual_temp_diff(min_level), 0.0_dp)
+        negative_area = negative_area - pressure_factor * min(virtual_temp_diff(min_level), 0.0_dp)
 
         ! Calculate residual area above level of neutral buoyancy
-        area_above_lnb = 0.0
+        area_above_lnb = 0.0_dp
         outflow_temp = temp_profile(level_neutral_buoyancy)
+        outflow_level = pressure_profile(level_neutral_buoyancy)
 
         if (level_neutral_buoyancy < num_points) then
             ! Linear interpolation to find exact LNB pressure and temperature
             ! These divisions are for interpolation and can't be precomputed
-            pressure_lnb = (pressure_profile(level_neutral_buoyancy+1) * virtual_temp_diff(level_neutral_buoyancy) - &
-                           pressure_profile(level_neutral_buoyancy) * virtual_temp_diff(level_neutral_buoyancy+1)) / &
+            pressure_lnb = (pressure_profile_dp(level_neutral_buoyancy+1) * virtual_temp_diff(level_neutral_buoyancy) - &
+                           pressure_profile_dp(level_neutral_buoyancy) * virtual_temp_diff(level_neutral_buoyancy+1)) / &
                            (virtual_temp_diff(level_neutral_buoyancy) - virtual_temp_diff(level_neutral_buoyancy+1))
             area_above_lnb = RD * virtual_temp_diff(level_neutral_buoyancy) * &
-                            (pressure_profile(level_neutral_buoyancy) - pressure_lnb) / &
-                            (pressure_profile(level_neutral_buoyancy) + pressure_lnb)
-            temp_lnb = (temp_profile(level_neutral_buoyancy) * (pressure_lnb - pressure_profile(level_neutral_buoyancy+1)) + &
-                       temp_profile(level_neutral_buoyancy+1) * (pressure_profile(level_neutral_buoyancy) - pressure_lnb)) / &
-                       (pressure_profile(level_neutral_buoyancy) - pressure_profile(level_neutral_buoyancy+1))
-            outflow_temp = temp_lnb
+                            (pressure_profile_dp(level_neutral_buoyancy) - pressure_lnb) / &
+                            (pressure_profile_dp(level_neutral_buoyancy) + pressure_lnb)
+            temp_lnb = (temp_profile_dp(level_neutral_buoyancy) * (pressure_lnb - pressure_profile_dp(level_neutral_buoyancy+1)) + &
+                       temp_profile_dp(level_neutral_buoyancy+1) * (pressure_profile_dp(level_neutral_buoyancy) - pressure_lnb)) / &
+                       (pressure_profile_dp(level_neutral_buoyancy) - pressure_profile_dp(level_neutral_buoyancy+1))
+            outflow_temp = real(temp_lnb, kind(outflow_temp))
+            outflow_level = real(pressure_lnb, kind(outflow_level))
         end if
 
         ! Calculate final CAPE
-        cape_value = positive_area + area_above_lnb - negative_area
-        cape_value = max(cape_value, 0.0)
+        cape_value = real(max(positive_area + area_above_lnb - negative_area, 0.0_dp), kind(cape_value))
     end if
 
 end subroutine CAPE
