@@ -494,7 +494,7 @@ class Test3DCalculations:
 
     def test_3d_dimension_validation(self, sample_3d_data):
         """Test dimension validation for 3D data."""
-        from skyborn.calc.GPI.xarray import _potential_intensity_3d
+        from skyborn.calc.GPI.xarray import potential_intensity
 
         data = sample_3d_data
 
@@ -510,14 +510,14 @@ class Test3DCalculations:
             data["temperature"][:, :, 0], dims=["level", "lat"]  # 2D instead of 3D
         )
 
-        with pytest.raises(ValueError, match="must be 3D arrays"):
-            _potential_intensity_3d(sst, psl, levels, temp_wrong, mixr)
+        with pytest.raises(ValueError, match="Unsupported number of dimensions"):
+            potential_intensity(sst, psl, levels, temp_wrong, mixr)
 
         # Test with wrong dimensions for SST
         sst_wrong = xr.DataArray(data["sst"][0, :], dims=["lat"])  # 1D instead of 2D
 
         with pytest.raises(ValueError, match="must be 2D arrays"):
-            _potential_intensity_3d(sst_wrong, psl, levels, temp, mixr)
+            potential_intensity(sst_wrong, psl, levels, temp, mixr)
 
 
 @pytest.mark.skipif(not _has_xarray, reason="xarray not available")
