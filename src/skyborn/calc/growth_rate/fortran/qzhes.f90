@@ -1,11 +1,10 @@
-subroutine qzhes(nm, n, a, b, matz, z)
+subroutine qzhes(nm, n, a, b)
     use, intrinsic :: iso_fortran_env, only : real64
     implicit none
 
     integer :: i, j, k, l, n, lb, l1, nm, nk1, nm1, nm2
-    real(real64) :: a(nm, n), b(nm, n), z(nm, n)
+    real(real64) :: a(nm, n), b(nm, n)
     real(real64) :: r, s, t, u1, u2, v1, v2, rho
-    logical :: matz
 
     !     this subroutine is the first step of the qz algorithm
     !     for solving generalized matrix eigenvalue problems,
@@ -28,10 +27,6 @@ subroutine qzhes(nm, n, a, b, matz, z)
     !
     !        b contains a real general matrix.
     !
-    !        matz should be set to .true. if the right hand transformations
-    !          are to be accumulated for later use in computing
-    !          eigenvectors, and to .false. otherwise.
-    !
     !     on output
     !
     !        a has been reduced to upper hessenberg form.  the elements
@@ -40,23 +35,12 @@ subroutine qzhes(nm, n, a, b, matz, z)
     !        b has been reduced to upper triangular form.  the elements
     !          below the main diagonal have been set to zero.
     !
-    !        z contains the product of the right hand transformations if
-    !          matz has been set to .true.  otherwise, z is not referenced.
-    !
     !     questions and comments should be directed to burton s. garbow,
     !     mathematics and computer science div, argonne national laboratory
     !
     !     this version dated august 1983.
     !
     !     ------------------------------------------------------------------
-
-    !     .......... initialize z ..........
-    if (matz) then
-        z = 0.0_real64
-        do j = 1, n
-            z(j, j) = 1.0_real64
-        end do
-    end if
 
     !     .......... reduce b to upper triangular form ..........
     if (n <= 1) return
@@ -174,13 +158,6 @@ subroutine qzhes(nm, n, a, b, matz, z)
                 a(i, l) = a(i, l) + t * v2
             end do
 
-            if (.not. matz) cycle
-
-            do i = 1, n
-                t = z(i, l1) + u2 * z(i, l)
-                z(i, l1) = z(i, l1) + t * v1
-                z(i, l) = z(i, l) + t * v2
-            end do
         end do
     end do
 end subroutine qzhes
