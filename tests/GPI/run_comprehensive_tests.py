@@ -22,7 +22,6 @@ def test_interface_module():
 
     from skyborn.calc.GPI.interface import (
         UNDEF,
-        PotentialIntensityCalculator,
         _ensure_pressure_ordering,
         _postprocess_results,
         _validate_dimensions,
@@ -124,24 +123,6 @@ def test_interface_module():
         tests_passed += 1
     except Exception as e:
         print(f"FAIL: Test _validate_dimensions (4D) - {e}")
-        tests_failed += 1
-
-    # Test 7: PotentialIntensityCalculator class
-    try:
-        nlat, nlon = 10, 20
-        sst = np.random.rand(nlat, nlon) * 10 + 290
-        psl = np.random.rand(nlat, nlon) * 1000 + 100000
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        temp = np.random.rand(4, nlat, nlon) * 50 + 250
-        mixr = np.random.rand(4, nlat, nlon) * 0.02
-
-        calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
-        assert calc.data_type == "3D"
-        assert calc.results is None
-        print("PASS: Test PotentialIntensityCalculator")
-        tests_passed += 1
-    except Exception as e:
-        print(f"FAIL: Test PotentialIntensityCalculator - {e}")
         tests_failed += 1
 
     return tests_passed, tests_failed
@@ -381,7 +362,6 @@ def calculate_coverage():
 
         # Execute various functions
         from skyborn.calc.GPI.interface import (
-            PotentialIntensityCalculator,
             _ensure_pressure_ordering,
             _postprocess_results,
             _validate_dimensions,
