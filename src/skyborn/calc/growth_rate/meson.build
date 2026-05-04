@@ -60,33 +60,48 @@ except Exception:
 )
 incdir_f2py = incdir_f2py_cmd.stdout().strip()
 
-openblas_lib_dir_cmd = run_command(
+linear_algebra_lib_dirs_cmd = run_command(
     py,
     [
         '-c', '''
 import sys
+import os
 from pathlib import Path
 
-root = Path(sys.executable).resolve().parent.parent
-candidates = [
-    root / "Library" / "lib",
-    root / "lib",
-]
-for candidate in candidates:
-    if candidate.exists():
-        print(candidate)
-        break
-else:
-    print("")
+roots = []
+for env_name in ("OPENBLAS_ROOT", "OPENBLAS_DIR", "OPENBLAS_PREFIX", "CONDA_PREFIX"):
+    value = os.environ.get(env_name)
+    if value:
+        roots.append(Path(value))
+
+exe_root = Path(sys.executable).resolve().parent.parent
+roots.append(exe_root)
+
+if os.name == "nt":
+    roots.extend([Path(r"C:/msys64/mingw64"), Path(r"C:/msys64/ucrt64")])
+elif sys.platform == "darwin":
+    roots.extend([Path("/opt/homebrew/opt/openblas"), Path("/usr/local/opt/openblas")])
+
+seen = set()
+for root in roots:
+    for candidate in (root / "Library" / "lib", root / "lib"):
+        resolved = candidate.resolve()
+        if candidate.exists() and str(resolved) not in seen:
+            seen.add(str(resolved))
+            print(resolved)
 ''',
     ],
     check: true,
 )
-openblas_lib_dir = openblas_lib_dir_cmd.stdout().strip()
+linear_algebra_lib_dirs_text = linear_algebra_lib_dirs_cmd.stdout().strip()
+linear_algebra_lib_dirs = []
+if linear_algebra_lib_dirs_text != ''
+    linear_algebra_lib_dirs = linear_algebra_lib_dirs_text.split('\n')
+endif
 
 message('NumPy include directory: ' + incdir_numpy)
 message('F2PY include directory: ' + incdir_f2py)
-message('OpenBLAS library directory probe: ' + openblas_lib_dir)
+message('Linear algebra library directory probe: ' + linear_algebra_lib_dirs_text)
 
 host_system = host_machine.system()
 host_cpu = host_machine.cpu_family()
@@ -128,16 +143,57 @@ try_f2py = run_command(py, '-c', 'import numpy.f2py; print("OK")', check: false)
 if try_f2py.returncode() == 0
     inc_np = include_directories(incdir_numpy, incdir_f2py)
     c_compiler = meson.get_compiler('c')
+    linear_algebra_deps = []
+
     openblas_dep = dependency('openblas', required: false)
-    if not openblas_dep.found()
-        if openblas_lib_dir != ''
+    if openblas_dep.found()
+        message('Using OpenBLAS via dependency() detection')
+        linear_algebra_deps += [openblas_dep]
+    else
+        if linear_algebra_lib_dirs.length() > 0
             openblas_dep = c_compiler.find_library(
                 'openblas',
-                dirs: [openblas_lib_dir],
-                required: true,
+                dirs: linear_algebra_lib_dirs,
+                required: false,
             )
         else
-            openblas_dep = c_compiler.find_library('openblas', required: true)
+            openblas_dep = c_compiler.find_library('openblas', required: false)
+        endif
+
+        if openblas_dep.found()
+            message('Using OpenBLAS via explicit library directory search')
+            linear_algebra_deps += [openblas_dep]
+        else
+            blas_dep = dependency('blas', required: false)
+            lapack_dep = dependency('lapack', required: false)
+
+            if not (blas_dep.found() and lapack_dep.found())
+                if linear_algebra_lib_dirs.length() > 0
+                    blas_dep = c_compiler.find_library(
+                        'blas',
+                        dirs: linear_algebra_lib_dirs,
+                        required: false,
+                    )
+                    lapack_dep = c_compiler.find_library(
+                        'lapack',
+                        dirs: linear_algebra_lib_dirs,
+                        required: false,
+                    )
+                else
+                    blas_dep = c_compiler.find_library('blas', required: false)
+                    lapack_dep = c_compiler.find_library('lapack', required: false)
+                endif
+            endif
+
+            if blas_dep.found() and lapack_dep.found()
+                message('Using generic BLAS/LAPACK dependencies')
+                linear_algebra_deps += [blas_dep, lapack_dep]
+            else
+                error(
+                    'Could not locate OpenBLAS or a BLAS/LAPACK provider. '
+                    + 'Set OPENBLAS_ROOT or PKG_CONFIG_PATH to the active prefix.'
+                )
+            endif
         endif
     endif
 
@@ -212,6 +268,9 @@ else:
         warning('fortranobject.c not found - trying to build without it')
     endif
 
+    module_deps = [py_dep]
+    module_deps += linear_algebra_deps
+
     growth_rate_ext = py.extension_module(
         'growth_rate_kernels',
         [
@@ -219,7 +278,7 @@ else:
             growth_rate_sources,
         ],
         include_directories: inc_np,
-        dependencies: [py_dep, openblas_dep],
+        dependencies: module_deps,
         fortran_args: fortran_args,
         c_args: c_args,
         install: true,
