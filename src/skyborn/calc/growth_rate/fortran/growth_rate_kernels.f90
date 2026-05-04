@@ -59,32 +59,30 @@ contains
     ! expected input shapes
     !    a_matrix(n,n) - dense generalized-eigenvalue left matrix.
     !    b_matrix(n,n) - dense generalized-eigenvalue right matrix.
-    !    zwork(n,n)    - workspace required by the EISPACK QZ routines.
     !    alfr(n), alfi(n), beta(n) - real-valued eigenvalue work arrays.
     ! output
     !    max_imag - largest finite imaginary eigenvalue component.
     !    info     - zero on success, otherwise the QZ iteration status.
-    subroutine generalized_eig_max_imag(a_matrix, b_matrix, zwork, alfr, alfi, beta, max_imag, info)
-        real(real64), intent(inout) :: a_matrix(:, :), b_matrix(:, :), zwork(:, :)
+    subroutine generalized_eig_max_imag(a_matrix, b_matrix, alfr, alfi, beta, max_imag, info)
+        real(real64), intent(inout) :: a_matrix(:, :), b_matrix(:, :)
         real(real64), intent(out) :: alfr(:), alfi(:), beta(:), max_imag
         integer, intent(out) :: info
 
         integer :: i, n
-        logical :: has_valid, matz
+        logical :: has_valid
         real(real64) :: imag_part
         external :: qzhes, qzit, qzval
 
         n = size(a_matrix, 1)
-        matz = .false.
 
-        call qzhes(n, n, a_matrix, b_matrix, matz, zwork)
-        call qzit(n, n, a_matrix, b_matrix, 0.0_real64, matz, zwork, info)
+        call qzhes(n, n, a_matrix, b_matrix)
+        call qzit(n, n, a_matrix, b_matrix, 0.0_real64, info)
         if (info /= 0) then
             max_imag = nan_value()
             return
         end if
 
-        call qzval(n, n, a_matrix, b_matrix, alfr, alfi, beta, matz, zwork)
+        call qzval(n, n, a_matrix, b_matrix, alfr, alfi, beta)
 
         max_imag = nan_value()
         has_valid = .false.
@@ -385,7 +383,7 @@ subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
     real(real64) :: b_diag_base(nlat), b_lower_coeff(nlat - 1), b_upper_coeff(nlat - 1), beta_arr(nlat)
     real(real64) :: dy(nlat - 1), dy1(nlat - 1), dy2(nlat - 2), growth(nwavenumbers)
     real(real64) :: kval, kval2, kval3, y(nlat), y1, y2, growth_k
-    real(real64), allocatable :: a_matrix(:, :), b_matrix(:, :), zwork(:, :)
+    real(real64), allocatable :: a_matrix(:, :), b_matrix(:, :)
     real(real64), allocatable :: alfr(:), alfi(:), beta_eig(:)
     integer :: info, k, n
 
@@ -427,7 +425,7 @@ subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
     b_diag_base(nlat) = (1.0_real64 / y2) * (-1.0_real64 / dy(nlat - 1) - 1.0_real64 / y2)
 
     allocate( &
-        a_matrix(nlat, nlat), b_matrix(nlat, nlat), zwork(nlat, nlat), &
+        a_matrix(nlat, nlat), b_matrix(nlat, nlat), &
         alfr(nlat), alfi(nlat), beta_eig(nlat) &
     )
 
@@ -450,11 +448,11 @@ subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
             b_matrix(n, n + 1) = b_upper_coeff(n)
         end do
 
-        call generalized_eig_max_imag(a_matrix, b_matrix, zwork, alfr, alfi, beta_eig, growth_k, info)
+        call generalized_eig_max_imag(a_matrix, b_matrix, alfr, alfi, beta_eig, growth_k, info)
         if (info == 0) growth(k) = growth_k
     end do
 
-    deallocate(a_matrix, b_matrix, zwork, alfr, alfi, beta_eig)
+    deallocate(a_matrix, b_matrix, alfr, alfi, beta_eig)
     call finalize_barot_growth(growth, max_growth, ier)
 end subroutine dbarot_growth_rate_1d
 
@@ -497,7 +495,7 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, smooth_wi
     real(real64) :: b_diag_base(nlev), b_lower_coeff(nlev - 1), b_upper_coeff(nlev - 1), dz1(nlev - 1), dz2(nlev)
     real(real64) :: growth(nwavenumbers), growth_k, kval
     real(real64) :: f, f2, beta, kval2, kval3, nz(nlev - 1), rho(nlev)
-    real(real64), allocatable :: a_matrix(:, :), b_matrix(:, :), zwork(:, :)
+    real(real64), allocatable :: a_matrix(:, :), b_matrix(:, :)
     real(real64), allocatable :: alfr(:), alfi(:), beta_eig(:)
     integer :: info, k, n
 
@@ -546,7 +544,7 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, smooth_wi
     b_diag_base(nlev) = f2 / dz2(nlev) * (-1.0_real64 / nz(nlev - 1))
 
     allocate( &
-        a_matrix(nlev, nlev), b_matrix(nlev, nlev), zwork(nlev, nlev), &
+        a_matrix(nlev, nlev), b_matrix(nlev, nlev), &
         alfr(nlev), alfi(nlev), beta_eig(nlev) &
     )
 
@@ -569,11 +567,11 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, smooth_wi
             b_matrix(n, n + 1) = b_upper_coeff(n)
         end do
 
-        call generalized_eig_max_imag(a_matrix, b_matrix, zwork, alfr, alfi, beta_eig, growth_k, info)
+        call generalized_eig_max_imag(a_matrix, b_matrix, alfr, alfi, beta_eig, growth_k, info)
         if (info == 0) growth(k) = growth_k
     end do
 
-    deallocate(a_matrix, b_matrix, zwork, alfr, alfi, beta_eig)
+    deallocate(a_matrix, b_matrix, alfr, alfi, beta_eig)
     call finalize_baroc_growth(growth, smooth_window, max_growth, ier)
 end subroutine dbaroc_growth_rate_1d
 
