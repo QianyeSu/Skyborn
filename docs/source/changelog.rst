@@ -19,13 +19,20 @@ Version 0.3.22 (Current)
   overhead in the tested wind-decomposition workflow family while
   keeping the established public numerical conventions unchanged
 * **Growth-rate and Pressure-Interpolation Additions**: Added compiled
-  growth-rate diagnostics and pressure-coordinate interpolation
-  capabilities for atmospheric profile analysis, including direct
-  Fortran-backed batch evaluation and supporting documentation for the new
-  workflow
+  atmospheric-column growth diagnostics and pressure-coordinate
+  interpolation support for Chemke-style workflows, including latitude-band
+  dynamics, native spectral smoothing, direct batch evaluation, a new
+  high-resolution / low-resolution zonal-wavenumber mode switch for the
+  baroclinic solver, and supporting documentation
+* **Growth-rate Wrapper Simplification**: Simplified the public
+  growth-rate wrappers so they return ``s^-1`` directly, use ``NaN`` for
+  missing or unusable profiles, and let the baroclinic solver accept an
+  explicit longitude coordinate only when a custom lower-resolution Chemke
+  Python-share wavenumber grid is requested, while the default low-resolution
+  path now falls back to the original ``0:1.5:360`` longitude spacing
 * **Growth-rate and Interpolation Test Coverage**: Added focused wrapper
-  tests for the new growth-rate and pressure-interpolation workflows so
-  the maintained Python dispatch and validation paths stay covered
+  regression coverage for the new atmospheric-profile diagnostics and
+  pressure-interpolation workflows
 
 **Bug Fixes**
 
