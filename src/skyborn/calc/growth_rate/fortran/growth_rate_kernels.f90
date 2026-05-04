@@ -468,6 +468,10 @@ end subroutine dbarot_growth_rate_1d
 !    temperature(nlev) - temperature profile used to compute density.
 !    lat - latitude in degrees for the coriolis terms.
 !    smooth_window - centered smoothing width applied before peak detection.
+!    wavenumber_mode - 1 for the fixed high-resolution grid, 2 for the
+!                      lower-resolution longitude-derived grid.
+!    wavenumber_count - number of zonal wavenumber samples.
+!    zonal_length - zonal domain length in meters when wavenumber_mode = 2.
 ! units
 !    f_cor - s-1
 !    beta - m-1 s-1
@@ -478,25 +482,30 @@ end subroutine dbarot_growth_rate_1d
 ! output
 !    max_growth - maximum baroclinic growth rate up to the last turning point.
 !    ier - status flag: 0 on success, 1 when nlev < 3, 2 when smooth_window < 1,
-!          300 when no turning point is found, 301 when no valid sample remains
-!          after smoothing.
-subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, f_cor, beta, smooth_window, max_growth, ier, nlev)
+!          3 when wavenumber_count < 2, 4 when wavenumber_mode is invalid,
+!          5 when a low-resolution zonal length is not positive, 300 when no
+!          turning point is found, 301 when no valid sample remains after smoothing.
+subroutine dbaroc_growth_rate_1d( &
+    u, theta, pressure, temperature, f_cor, beta, smooth_window, &
+    wavenumber_mode, wavenumber_count, zonal_length, max_growth, ier, nlev &
+)
     use growth_rate_kernels_core, only : &
-        real64, gas_constant_dry, nan_value, nwavenumbers, omega, radius, &
-        generalized_eig_max_imag, wavenumber_step, finalize_baroc_growth
+        real64, gas_constant_dry, nan_value, generalized_eig_max_imag, &
+        wavenumber_step, finalize_baroc_growth
     implicit none
 
     integer, intent(in) :: nlev
-    integer, intent(in) :: smooth_window
+    integer, intent(in) :: smooth_window, wavenumber_mode, wavenumber_count
     real(real64), intent(in) :: u(nlev), theta(nlev), pressure(nlev), temperature(nlev), f_cor, beta
+    real(real64), intent(in) :: zonal_length
     real(real64), intent(out) :: max_growth
     integer, intent(out) :: ier
 
     real(real64) :: a_diag_linear(nlev), a_lower_coeff(nlev - 1), a_upper_coeff(nlev - 1)
     real(real64) :: b_diag_base(nlev), b_lower_coeff(nlev - 1), b_upper_coeff(nlev - 1), dz1(nlev - 1), dz2(nlev)
-    real(real64) :: growth(nwavenumbers), growth_k, kval
+    real(real64) :: growth_k, kval, wavenumber_factor
     real(real64) :: f, f2, kval2, kval3, nz(nlev - 1), rho(nlev)
-    real(real64), allocatable :: a_matrix(:, :), b_matrix(:, :)
+    real(real64), allocatable :: a_matrix(:, :), b_matrix(:, :), growth(:)
     real(real64), allocatable :: alfr(:), alfi(:), beta_eig(:)
     integer :: info, k, n
 
@@ -508,6 +517,24 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, f_cor, beta, s
 
     if (smooth_window < 1) then
         ier = 2
+        max_growth = nan_value()
+        return
+    end if
+
+    if (wavenumber_count < 2) then
+        ier = 3
+        max_growth = nan_value()
+        return
+    end if
+
+    if (wavenumber_mode /= 1 .and. wavenumber_mode /= 2) then
+        ier = 4
+        max_growth = nan_value()
+        return
+    end if
+
+    if (wavenumber_mode == 2 .and. zonal_length <= 0.0_real64) then
+        ier = 5
         max_growth = nan_value()
         return
     end if
@@ -545,12 +572,18 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, f_cor, beta, s
 
     allocate( &
         a_matrix(nlev, nlev), b_matrix(nlev, nlev), &
-        alfr(nlev), alfi(nlev), beta_eig(nlev) &
+        alfr(nlev), alfi(nlev), beta_eig(nlev), growth(wavenumber_count) &
     )
 
+    if (wavenumber_mode == 1) then
+        wavenumber_factor = wavenumber_step
+    else
+        wavenumber_factor = 2.0_real64 * acos(-1.0_real64) / zonal_length
+    end if
+
     growth = nan_value()
-    do k = 1, nwavenumbers
-        kval = real(k - 1, real64) * wavenumber_step
+    do k = 1, wavenumber_count
+        kval = real(k - 1, real64) * wavenumber_factor
         kval2 = kval * kval
         kval3 = kval2 * kval
         a_matrix = 0.0_real64
@@ -573,6 +606,7 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, f_cor, beta, s
 
     deallocate(a_matrix, b_matrix, alfr, alfi, beta_eig)
     call finalize_baroc_growth(growth, smooth_window, max_growth, ier)
+    deallocate(growth)
 end subroutine dbaroc_growth_rate_1d
 
 
@@ -601,25 +635,25 @@ end subroutine dbaroc_growth_rate_1d
 !                    dbaroc_growth_rate_1d status code.
 subroutine dbaroc_growth_rate_profiles( &
     u_input, temperature_input, source_pressure, target_pressure, f_cor, beta, &
-    interp_kind, smooth_window, missing_value, growth, ier, nlev_in, nprofile, nlev_out &
+    interp_kind, smooth_window, wavenumber_mode, wavenumber_count, zonal_length, &
+    growth, ier, nlev_in, nprofile, nlev_out &
 )
     use growth_rate_kernels_core, only : &
-        real64, kappa, reference_pressure_pa, interp_pressure_profile_no_extrap
+        real64, kappa, reference_pressure_pa, interp_pressure_profile_no_extrap, nan_value
     implicit none
 
     integer, intent(in) :: nlev_in, nprofile, nlev_out
-    integer, intent(in) :: interp_kind, smooth_window
+    integer, intent(in) :: interp_kind, smooth_window, wavenumber_mode, wavenumber_count
     real(real64), intent(in) :: u_input(nlev_in, nprofile), temperature_input(nlev_in, nprofile)
     real(real64), intent(in) :: source_pressure(nlev_in), target_pressure(nlev_out, nprofile)
-    real(real64), intent(in) :: f_cor(nprofile), beta(nprofile)
-    real(real64), intent(in) :: missing_value
+    real(real64), intent(in) :: f_cor(nprofile), beta(nprofile), zonal_length(nprofile)
     real(real64), intent(out) :: growth(nprofile)
     integer, intent(out) :: ier(nprofile)
 
     real(real64) :: temperature_solver(nlev_out), theta_solver(nlev_out), u_solver(nlev_out)
     integer :: col, interp_ier, profile_ier
 
-    growth = missing_value
+    growth = nan_value()
     ier = 0
     do col = 1, nprofile
         call interp_pressure_profile_no_extrap( &
@@ -641,7 +675,8 @@ subroutine dbaroc_growth_rate_profiles( &
         theta_solver = temperature_solver * (reference_pressure_pa / target_pressure(:, col)) ** kappa
         call dbaroc_growth_rate_1d( &
             u_solver, theta_solver, target_pressure(:, col), temperature_solver, &
-            f_cor(col), beta(col), smooth_window, growth(col), profile_ier, nlev_out &
+            f_cor(col), beta(col), smooth_window, wavenumber_mode, wavenumber_count, &
+            zonal_length(col), growth(col), profile_ier, nlev_out &
         )
         ier(col) = profile_ier
     end do
