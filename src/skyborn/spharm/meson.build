@@ -60,8 +60,32 @@ except:
 )
 incdir_f2py = incdir_f2py_cmd.stdout().strip()
 
+python_include_dirs_cmd = run_command(
+    py,
+    ['-c', '''
+import os
+import sysconfig
+
+paths = []
+for key in ("include", "platinclude"):
+    value = sysconfig.get_path(key)
+    if value and os.path.exists(os.path.join(value, "Python.h")) and value not in paths:
+        paths.append(value)
+
+for path in paths:
+    print(path)
+'''],
+    check: true,
+)
+python_include_dirs_text = python_include_dirs_cmd.stdout().strip()
+python_include_dirs = []
+if python_include_dirs_text != ''
+    python_include_dirs = python_include_dirs_text.split('\n')
+endif
+
 message('NumPy include directory: ' + incdir_numpy)
 message('F2PY include directory: ' + incdir_f2py)
+message('Python include directories: ' + python_include_dirs_text)
 
 # Detect platform and architecture for optimization flags
 host_system = host_machine.system()
@@ -147,7 +171,22 @@ message('C args: ' + ' '.join(c_args))
 try_f2py = run_command(py, '-c', 'import numpy.f2py; print("OK")', check: false)
 
 if try_f2py.returncode() == 0
-    inc_np = include_directories(incdir_numpy, incdir_f2py)
+    if python_include_dirs.length() >= 2
+        inc_np = include_directories(
+            incdir_numpy,
+            incdir_f2py,
+            python_include_dirs[0],
+            python_include_dirs[1],
+        )
+    elif python_include_dirs.length() == 1
+        inc_np = include_directories(
+            incdir_numpy,
+            incdir_f2py,
+            python_include_dirs[0],
+        )
+    else
+        inc_np = include_directories(incdir_numpy, incdir_f2py)
+    endif
 
     # Verify numpy headers exist
     numpy_header_check = run_command(
