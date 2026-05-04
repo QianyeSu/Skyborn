@@ -20,9 +20,6 @@ from skyborn.calc.GPI.interface import (
     _postprocess_scalar,
     _validate_dimensions,
     _validate_input_arrays,
-    calculate_potential_intensity_3d,
-    calculate_potential_intensity_4d,
-    calculate_potential_intensity_profile,
     log_decompose_pi,
     pi_log_decomposition,
     potential_intensity,
@@ -585,8 +582,8 @@ class TestValidateDimensions:
             _validate_dimensions(sst, psl, pressure_levels, temp, mixr, "3D")
 
 
-class TestCalculatePotentialIntensity3D:
-    """Test the calculate_potential_intensity_3d function."""
+class TestPotentialIntensity3D:
+    """Test 3D potential_intensity calculations."""
 
     def test_normal_3d_calculation(self):
         """Test normal 3D calculation without missing values."""
@@ -598,9 +595,7 @@ class TestCalculatePotentialIntensity3D:
         temp = np.random.rand(num_levels, nlat, nlon) * 50 + 250
         mixr = np.random.rand(num_levels, nlat, nlon) * 0.02
 
-        min_p, max_w, err = calculate_potential_intensity_3d(
-            sst, psl, pressure_levels, temp, mixr
-        )
+        min_p, max_w, err = potential_intensity(sst, psl, pressure_levels, temp, mixr)
 
         assert min_p.shape == (nlat, nlon)
         assert max_w.shape == (nlat, nlon)
@@ -619,9 +614,7 @@ class TestCalculatePotentialIntensity3D:
         temp = np.random.rand(num_levels, nlat, nlon) * 50 + 250
         mixr = np.random.rand(num_levels, nlat, nlon) * 0.02
 
-        min_p, max_w, err = calculate_potential_intensity_3d(
-            sst, psl, pressure_levels, temp, mixr
-        )
+        min_p, max_w, err = potential_intensity(sst, psl, pressure_levels, temp, mixr)
 
         assert min_p.shape == (nlat, nlon)
         assert max_w.shape == (nlat, nlon)
@@ -642,7 +635,7 @@ class TestCalculatePotentialIntensity3D:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            min_p, max_w, err = calculate_potential_intensity_3d(
+            min_p, max_w, err = potential_intensity(
                 sst, psl, pressure_levels, temp, mixr
             )
             assert len(w) == 1
@@ -653,8 +646,8 @@ class TestCalculatePotentialIntensity3D:
         assert err == 1
 
 
-class TestCalculatePotentialIntensity4D:
-    """Test the calculate_potential_intensity_4d function."""
+class TestPotentialIntensity4D:
+    """Test 4D potential_intensity calculations."""
 
     @staticmethod
     def _realistic_4d_inputs(ntimes=5, nlat=10, nlon=20, num_levels=4):
@@ -680,9 +673,7 @@ class TestCalculatePotentialIntensity4D:
             ntimes, nlat, nlon
         )
 
-        min_p, max_w, err = calculate_potential_intensity_4d(
-            sst, psl, pressure_levels, temp, mixr
-        )
+        min_p, max_w, err = potential_intensity(sst, psl, pressure_levels, temp, mixr)
 
         assert min_p.shape == (ntimes, nlat, nlon)
         assert max_w.shape == (ntimes, nlat, nlon)
@@ -699,9 +690,7 @@ class TestCalculatePotentialIntensity4D:
         sst[0, 0, 0] = np.nan  # Add missing value
         temp[1, :, 5, 5] = UNDEF  # Add UNDEF values
 
-        min_p, max_w, err = calculate_potential_intensity_4d(
-            sst, psl, pressure_levels, temp, mixr
-        )
+        min_p, max_w, err = potential_intensity(sst, psl, pressure_levels, temp, mixr)
 
         assert min_p.shape == (ntimes, nlat, nlon)
         assert max_w.shape == (ntimes, nlat, nlon)
@@ -711,8 +700,8 @@ class TestCalculatePotentialIntensity4D:
         assert np.isnan(max_w[0, 0, 0])
 
 
-class TestCalculatePotentialIntensityProfile:
-    """Test the calculate_potential_intensity_profile function."""
+class TestPotentialIntensityProfile:
+    """Test profile potential_intensity calculations."""
 
     def test_normal_profile_calculation(self):
         """Test normal profile calculation."""
@@ -722,9 +711,7 @@ class TestCalculatePotentialIntensityProfile:
         temp = np.array([300.0, 285.0, 270.0, 250.0])
         mixr = np.array([0.012, 0.008, 0.005, 0.003])
 
-        min_p, max_w, err = calculate_potential_intensity_profile(
-            sst, psl, pressure_levels, temp, mixr
-        )
+        min_p, max_w, err = potential_intensity(sst, psl, pressure_levels, temp, mixr)
 
         assert isinstance(min_p, (float, np.floating))
         assert isinstance(max_w, (float, np.floating))
@@ -740,7 +727,7 @@ class TestCalculatePotentialIntensityProfile:
         temp = np.array([300.0, 285.0, 270.0, 250.0, 230.0])
         mixr = np.array([0.012, 0.008, 0.005, 0.003, 0.001])
 
-        min_p, max_w, err = calculate_potential_intensity_profile(
+        min_p, max_w, err = potential_intensity(
             sst, psl, pressure_levels, temp, mixr, actual_levels=3
         )
 
@@ -757,9 +744,7 @@ class TestCalculatePotentialIntensityProfile:
         mixr = np.array([0.012, 0.008, 0.005, 0.003])
 
         with pytest.raises(ValueError, match="actual_levels must be between 1 and 4"):
-            calculate_potential_intensity_profile(
-                sst, psl, pressure_levels, temp, mixr, actual_levels=0
-            )
+            potential_intensity(sst, psl, pressure_levels, temp, mixr, actual_levels=0)
 
     def test_profile_with_mismatched_lengths(self):
         """Test profile with mismatched array lengths."""
@@ -770,7 +755,7 @@ class TestCalculatePotentialIntensityProfile:
         mixr = np.array([0.012, 0.008, 0.005, 0.003])
 
         with pytest.raises(ValueError, match="Profile lengths mismatch"):
-            calculate_potential_intensity_profile(sst, psl, pressure_levels, temp, mixr)
+            potential_intensity(sst, psl, pressure_levels, temp, mixr)
 
     def test_profile_with_reversed_pressure(self):
         """Test profile with reversed pressure levels."""
@@ -782,7 +767,7 @@ class TestCalculatePotentialIntensityProfile:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            min_p, max_w, err = calculate_potential_intensity_profile(
+            min_p, max_w, err = potential_intensity(
                 sst, psl, pressure_levels, temp, mixr
             )
             assert len(w) == 1
@@ -825,9 +810,7 @@ class TestCalculatePotentialIntensityProfile:
         mixr = np.array([0.0, 0.0, 0.0, 0.0])  # No moisture
 
         # This should either return NaN or very low values
-        min_p, max_w, err = calculate_potential_intensity_profile(
-            sst, psl, pressure_levels, temp, mixr
-        )
+        min_p, max_w, err = potential_intensity(sst, psl, pressure_levels, temp, mixr)
 
         # The calculation should complete (even if results are extreme)
         assert err in [0, 1, 2]  # Accept various error codes
@@ -1024,9 +1007,7 @@ class TestIntegration:
         temp[:, 10:15, 20:25] = UNDEF
 
         # Calculate potential intensity
-        min_p, max_w, err = calculate_potential_intensity_3d(
-            sst, psl, pressure_levels, temp, mixr
-        )
+        min_p, max_w, err = potential_intensity(sst, psl, pressure_levels, temp, mixr)
 
         # Validate results
         assert min_p.shape == (nlat, nlon)
