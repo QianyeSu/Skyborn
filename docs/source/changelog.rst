@@ -1,20 +1,16 @@
 Changelog
 =========
 
-Version 0.3.22 (Planned)
+Version 0.3.22 (Current)
 ------------------------
 
 **Improvements**
 
-* **GPI / PI Diagnostics Synced With Recent ``tcpyPI``**: Updated
-  ``skyborn.calc.GPI`` so the active Fortran backend in
-  ``tropical_cyclone_potential_intensity.f90`` now exposes profile-complete
-  outflow diagnostics, supports
-  ``outflow_source={"cape_star", "cape_env"}``, and backs new public
-  NumPy/xarray ``pi_log_decomposition(...)`` helpers plus
-  ``log_decompose_pi(...)`` for the Wing et al. (2015) logarithmic PI
-  decomposition while keeping ``potential_intensity(...)`` as the pure-PI
-  entry point
+* **Tropical Cyclone Potential Intensity Diagnostics Modernization**:
+  Updated the tropical cyclone potential intensity workflow to align with
+  recent upstream validation data and decomposition conventions, while
+  simplifying the Python interface and keeping the compiled backend as the
+  primary execution path
 * **spharm Internal Optimization**: Improved the internal spherical
   harmonic helper flow so repeated potential-field reconstruction can
   reuse intermediate spectral results more efficiently and avoid
@@ -40,17 +36,11 @@ Version 0.3.22 (Planned)
 
 **Bug Fixes**
 
-* **GPI Validation, Coverage, And Missing-Column Handling**: Fixed the
-  active GPI backend and wrappers so all-missing 3D/4D columns now fall
-  back cleanly to missing outputs, restored profile-level outflow
-  diagnostics through the single retained Fortran source, and raised the
-  focused ``src/skyborn/calc/GPI`` Python coverage target to 100%; on the
-  2026-05-04 local full-diagnostics ``tcpyPI`` sample benchmark, the updated
-  Skyborn xarray path ran in about ``1.11 s`` versus ``48.04 s`` for
-  ``tcpyPI`` (about ``43.2x`` faster) while keeping mean absolute
-  differences near ``0.274 m/s`` for ``vmax``, ``0.738 hPa`` for ``pmin``,
-  ``0.0206 K`` for ``t0``, ``0.125 hPa`` for ``otl``, and an ``lnCKCD``
-  absolute difference of about ``2.96e-08``
+* **Tropical Cyclone Potential Intensity Parity And Robustness**: Fixed
+  remaining pressure, outflow, and missing-column handling issues in the
+  tropical cyclone potential intensity workflow, improved agreement with the
+  current upstream reference implementation, and restored full focused Python
+  coverage for the maintained wrapper layer
 * **spharm and windspharm Regression Coverage**: Added focused tests for
   the updated internal spectral-helper and wind-analysis paths,
   including shape-validation coverage for the new optimized flow
@@ -59,7 +49,7 @@ Version 0.3.22 (Planned)
   updated ``interp_pressure_1d`` Python dispatch paths keep their new
   public naming and validation branches covered
 
-Version 0.3.21 (Current)
+Version 0.3.21
 ------------------------
 
 **Improvements**
