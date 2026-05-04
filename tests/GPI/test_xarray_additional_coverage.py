@@ -116,7 +116,7 @@ class TestProfileValidationEdgeCases:
 
     def test_profile_1d_validation_fails(self):
         """Test that profile validation correctly identifies dimension mismatches."""
-        from skyborn.calc.GPI.xarray import _potential_intensity_profile
+        from skyborn.calc.GPI.xarray import _prepare_profile_inputs, potential_intensity
 
         # Create 2D arrays that should fail 1D validation (line 700)
         levels = xr.DataArray(
@@ -132,7 +132,10 @@ class TestProfileValidationEdgeCases:
         )
 
         with pytest.raises(ValueError, match="Only 1D profiles are supported"):
-            _potential_intensity_profile(
+            _prepare_profile_inputs(302.0, 101325.0, levels, temp, mixr)
+
+        with pytest.raises(ValueError, match="Unsupported number of dimensions"):
+            potential_intensity(
                 sst=302.0,
                 psl=101325.0,
                 pressure_levels=levels,
@@ -142,7 +145,7 @@ class TestProfileValidationEdgeCases:
 
     def test_profile_scalar_extraction_fails(self):
         """Test scalar extraction with non-scalar DataArray."""
-        from skyborn.calc.GPI.xarray import _potential_intensity_profile
+        from skyborn.calc.GPI.xarray import potential_intensity
 
         # Valid 1D arrays
         levels = xr.DataArray([1000, 850, 700], dims=["level"], attrs={"units": "mb"})
@@ -155,7 +158,7 @@ class TestProfileValidationEdgeCases:
         sst_array = xr.DataArray([301, 302], dims=["x"], attrs={"units": "K"})
 
         with pytest.raises(ValueError, match="SST DataArray must be 0-dimensional"):
-            _potential_intensity_profile(
+            potential_intensity(
                 sst=sst_array,
                 psl=101325.0,
                 pressure_levels=levels,
@@ -167,7 +170,7 @@ class TestProfileValidationEdgeCases:
         psl_array = xr.DataArray([101325, 101300], dims=["x"], attrs={"units": "Pa"})
 
         with pytest.raises(ValueError, match="PSL DataArray must be 0-dimensional"):
-            _potential_intensity_profile(
+            potential_intensity(
                 sst=302.0,
                 psl=psl_array,
                 pressure_levels=levels,
@@ -177,7 +180,7 @@ class TestProfileValidationEdgeCases:
 
     def test_profile_diagnostics_1d_validation_fails(self):
         """Diagnostic profile helper should reject non-1D thermodynamic inputs."""
-        from skyborn.calc.GPI.xarray import _potential_intensity_profile_diagnostics
+        from skyborn.calc.GPI.xarray import pi_log_decomposition
 
         levels = xr.DataArray(
             [[1000, 850], [1000, 850]], dims=["x", "level"], attrs={"units": "mb"}
@@ -191,8 +194,8 @@ class TestProfileValidationEdgeCases:
             attrs={"units": "kg/kg"},
         )
 
-        with pytest.raises(ValueError, match="Only 1D profiles are supported"):
-            _potential_intensity_profile_diagnostics(
+        with pytest.raises(ValueError, match="Unsupported number of dimensions"):
+            pi_log_decomposition(
                 sst=302.0,
                 psl=101325.0,
                 pressure_levels=levels,
@@ -207,7 +210,7 @@ class Test3DValidationEdgeCases:
 
     def test_3d_incorrect_spatial_dims(self):
         """Test 3D calculation with incorrect number of spatial dimensions."""
-        from skyborn.calc.GPI.xarray import _potential_intensity_3d
+        from skyborn.calc.GPI.xarray import _prepare_gridded_inputs, potential_intensity
 
         # Create data with only 1 spatial dimension (should have 2)
         levels = xr.DataArray([1000, 850, 700], dims=["level"], attrs={"units": "mb"})
@@ -224,9 +227,14 @@ class Test3DValidationEdgeCases:
         sst = xr.DataArray(np.random.rand(10), dims=["x"], attrs={"units": "K"})
         psl = xr.DataArray(np.random.rand(10), dims=["x"], attrs={"units": "Pa"})
 
-        # The helper rejects non-3D thermodynamic fields before spatial-dim checks.
-        with pytest.raises(ValueError, match="must be 3D arrays"):
-            _potential_intensity_3d(sst, psl, levels, temp, mixr)
+        with pytest.raises(
+            ValueError, match="temperature and mixing_ratio must be 3D arrays"
+        ):
+            _prepare_gridded_inputs(sst, psl, levels, temp, mixr, data_ndim=3)
+
+        # The public dispatcher rejects unsupported 2D thermodynamic fields directly.
+        with pytest.raises(ValueError, match="Unsupported number of dimensions"):
+            potential_intensity(sst, psl, levels, temp, mixr)
 
 
 @pytest.mark.skipif(not _has_xarray, reason="xarray not available")
@@ -235,7 +243,7 @@ class Test4DSpecificEdgeCases:
 
     def test_4d_incorrect_output_dims(self):
         """Test 4D calculation with incorrect dimension setup."""
-        from skyborn.calc.GPI.xarray import _potential_intensity_4d
+        from skyborn.calc.GPI.xarray import potential_intensity
 
         # Create data with wrong number of output dimensions (line 874-875)
         levels = xr.DataArray([1000, 850], dims=["level"], attrs={"units": "mb"})
@@ -256,13 +264,14 @@ class Test4DSpecificEdgeCases:
             np.random.rand(5, 6), dims=["lat", "lon"], attrs={"units": "Pa"}
         )
 
-        # This should fail validation (line 864, 869)
-        with pytest.raises(ValueError, match="must be 4D arrays"):
-            _potential_intensity_4d(sst_2d, psl_2d, levels, temp_3d, mixr_3d)
+        # 3D thermodynamic inputs with 2D SST/PSL are a valid 3D public call now.
+        result = potential_intensity(sst_2d, psl_2d, levels, temp_3d, mixr_3d)
+        assert isinstance(result, xr.Dataset)
+        assert "min_pressure" in result.data_vars
 
     def test_4d_mismatched_sst_psl_dims(self):
         """Test 4D calculation with mismatched SST/PSL dimensions."""
-        from skyborn.calc.GPI.xarray import _potential_intensity_4d
+        from skyborn.calc.GPI.xarray import potential_intensity
 
         # Create valid 4D temperature and mixing ratio
         temp = xr.DataArray(
@@ -287,7 +296,7 @@ class Test4DSpecificEdgeCases:
 
         # Should fail because SST doesn't have time dimension (line 869)
         with pytest.raises(ValueError, match="must be 3D arrays"):
-            _potential_intensity_4d(sst_wrong, psl_correct, levels, temp, mixr)
+            potential_intensity(sst_wrong, psl_correct, levels, temp, mixr)
 
 
 @pytest.mark.skipif(not _has_xarray, reason="xarray not available")
