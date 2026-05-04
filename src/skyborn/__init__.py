@@ -44,4 +44,4 @@ from .gridfill import fill as gridfill_fill
 fill = gridfill_fill
 
 
-__version__ = "0.3.21"
+__version__ = "0.3.22"
