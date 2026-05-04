@@ -64,13 +64,40 @@ python_include_dirs_cmd = run_command(
     py,
     ['-c', '''
 import os
+import sys
 import sysconfig
+from pathlib import Path
 
 paths = []
+
+def add(path):
+    if not path:
+        return
+    normalized = os.path.abspath(path)
+    if os.path.exists(os.path.join(normalized, "Python.h")) and normalized not in paths:
+        paths.append(normalized)
+
+version = f"python{sys.version_info[0]}.{sys.version_info[1]}"
+
+for key in ("INCLUDEPY", "CONFINCLUDEPY"):
+    add(sysconfig.get_config_var(key))
+
 for key in ("include", "platinclude"):
-    value = sysconfig.get_path(key)
-    if value and os.path.exists(os.path.join(value, "Python.h")) and value not in paths:
-        paths.append(value)
+    add(sysconfig.get_path(key))
+
+roots = [
+    sys.prefix,
+    sys.exec_prefix,
+    sys.base_prefix,
+    sys.base_exec_prefix,
+    str(Path(sys.executable).resolve().parent.parent),
+]
+
+for root in roots:
+    add(os.path.join(root, "include", version))
+    add(os.path.join(root, "include"))
+    add(os.path.join(root, "Include"))
+    add(os.path.join(root, "Headers"))
 
 for path in paths:
     print(path)
@@ -171,14 +198,7 @@ message('C args: ' + ' '.join(c_args))
 try_f2py = run_command(py, '-c', 'import numpy.f2py; print("OK")', check: false)
 
 if try_f2py.returncode() == 0
-    if python_include_dirs.length() >= 2
-        inc_np = include_directories(
-            incdir_numpy,
-            incdir_f2py,
-            python_include_dirs[0],
-            python_include_dirs[1],
-        )
-    elif python_include_dirs.length() == 1
+    if python_include_dirs.length() == 1
         inc_np = include_directories(
             incdir_numpy,
             incdir_f2py,
