@@ -52,10 +52,12 @@ KAPPA = GAS_CONSTANT_DRY / HEAT_CAPACITY
 REFERENCE_PRESSURE_PA = 100000.0
 DEFAULT_SOLVER_LEVELS = 45
 DEFAULT_SMOOTH_WINDOW = 1
+DEFAULT_WAVENUMBER_MODE = "high"
+DEFAULT_HIGH_RES_WAVENUMBER_COUNT = 200
+DEFAULT_HIGH_RES_WAVENUMBER_STEP = 1.0e-7
 
 ProfileInput = Union[xr.DataArray, np.ndarray]
 LatitudeInput = Union[ProfileInput, float, int, np.floating, np.integer]
-MissingValue = Union[float, int, np.floating, np.integer, None]
 PressureInput = Union[ProfileInput, float, int, np.floating, np.integer]
 GrowthRateOutput = Union[float, np.ndarray, xr.DataArray]
 
@@ -148,24 +150,16 @@ def _as_profile_vector(
     raise ValueError(f"`{name}` must have length 1 or match the profile count")
 
 
-def _missing_profile_mask(
-    values: np.ndarray, missing_value: MissingValue
-) -> np.ndarray:
+def _missing_profile_mask(values: np.ndarray) -> np.ndarray:
     """Return a per-profile missing mask for ``(nprofile, nlev)`` matrices."""
 
-    mask = np.any(~np.isfinite(values), axis=1)
-    if not _is_nan_missing_value(missing_value):
-        mask |= np.any(values == float(missing_value), axis=1)
-    return mask
+    return np.any(~np.isfinite(values), axis=1)
 
 
-def _missing_vector_mask(values: np.ndarray, missing_value: MissingValue) -> np.ndarray:
+def _missing_vector_mask(values: np.ndarray) -> np.ndarray:
     """Return a missing-value mask for profile-wise scalar vectors."""
 
-    mask = ~np.isfinite(values)
-    if not _is_nan_missing_value(missing_value):
-        mask |= values == float(missing_value)
-    return mask
+    return ~np.isfinite(values)
 
 
 def _same_shape_or_raise(*named_arrays: tuple[str, np.ndarray]) -> None:
@@ -183,73 +177,6 @@ def _same_shape_or_raise(*named_arrays: tuple[str, np.ndarray]) -> None:
                     for item_name, item_array in zip(names, arrays)
                 )
             )
-
-
-def _is_nan_missing_value(value: MissingValue) -> bool:
-    """Return True when ``value`` behaves like a NaN missing sentinel."""
-
-    if value is None:
-        return True
-
-    if isinstance(value, (float, int, np.floating, np.integer)):
-        return bool(np.isnan(value))
-
-    return False
-
-
-def _return_missing_value(missing_value: MissingValue) -> float:
-    """Return a normalized scalar missing value for the public APIs."""
-
-    if _is_nan_missing_value(missing_value):
-        return float("nan")
-    return float(missing_value)
-
-
-def _contains_missing(values: np.ndarray, missing_value: MissingValue) -> bool:
-    """Return True when an input profile contains missing values."""
-
-    if np.any(~np.isfinite(values)):
-        return True
-    if not _is_nan_missing_value(missing_value):
-        return bool(np.any(values == float(missing_value)))
-    return False
-
-
-def _replace_missing_with_nan(
-    values: np.ndarray,
-    missing_value: MissingValue,
-) -> np.ndarray:
-    """Return a float64 copy where public missing markers are promoted to NaN."""
-
-    array = np.array(values, dtype=np.float64, copy=True)
-    array[~np.isfinite(array)] = np.nan
-    if not _is_nan_missing_value(missing_value):
-        array[array == float(missing_value)] = np.nan
-    return array
-
-
-def _nan_weighted_mean_last_axis(
-    values: np.ndarray,
-    weights: np.ndarray,
-) -> np.ndarray:
-    """Return a NaN-aware weighted mean along the last axis."""
-
-    values = np.asarray(values, dtype=np.float64)
-    weights = np.asarray(weights, dtype=np.float64)
-    weight_view = weights.reshape((1,) * (values.ndim - 1) + (weights.size,))
-    masked_weights = np.where(np.isnan(values), np.nan, weight_view)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        numerator = np.nanmean(values * weight_view, axis=-1)
-        denominator = np.nanmean(masked_weights, axis=-1)
-
-    return np.divide(
-        numerator,
-        denominator,
-        out=np.full(numerator.shape, np.nan, dtype=np.float64),
-        where=np.isfinite(denominator) & (denominator != 0.0),
-    )
 
 
 def _require_monotonic(values: np.ndarray, name: str) -> None:
@@ -272,34 +199,6 @@ def _pressure_to_pa(pressure: ProfileInput) -> np.ndarray:
     return pressure_values
 
 
-def _normalize_output_units(output_units: str) -> str:
-    """Normalize public output-unit aliases to one canonical label."""
-
-    normalized = output_units.strip().lower()
-    if normalized in {"s^-1", "s-1", "1/s"}:
-        return "s^-1"
-    if normalized in {"day^-1", "day-1", "1/day"}:
-        return "day^-1"
-    raise ValueError("`output_units` must be 's^-1' or 'day^-1'")
-
-
-def _convert_output_units(
-    value: Union[float, np.ndarray],
-    output_units: str,
-) -> Union[float, np.ndarray]:
-    """Convert per-second growth rates into the requested public units."""
-
-    normalized = _normalize_output_units(output_units)
-    if isinstance(value, np.ndarray):
-        converted = np.array(value, dtype=np.float64, copy=True)
-        if normalized == "day^-1":
-            converted *= 86400.0
-        return converted
-    if normalized == "day^-1":
-        return float(value) * 86400.0
-    return float(value)
-
-
 def _normalize_method(method: str) -> str:
     """Map public vertical interpolation aliases to ``interp_pressure_1d`` modes."""
 
@@ -313,6 +212,17 @@ def _normalize_method(method: str) -> str:
     )
 
 
+def _normalize_wavenumber_mode(wavenumber_mode: str) -> str:
+    """Normalize public wavenumber-resolution aliases."""
+
+    normalized = wavenumber_mode.strip().lower().replace("_", "").replace("-", "")
+    if normalized in {"high", "highres", "highresolution"}:
+        return "high"
+    if normalized in {"low", "lowres", "lowresolution"}:
+        return "low"
+    raise ValueError("`wavenumber_mode` must be 'high' or 'low'")
+
+
 def _f_beta_from_lat_bounds(lat_bounds: Tuple[float, float]) -> Tuple[float, float]:
     """Return Chemke-style band-mean Coriolis terms for a latitude range."""
 
@@ -324,6 +234,35 @@ def _f_beta_from_lat_bounds(lat_bounds: Tuple[float, float]) -> Tuple[float, flo
     return float(f_cor), float(beta)
 
 
+def _prepare_wavenumber_inputs(
+    wavenumber_mode: str,
+    lon: Optional[ProfileInput],
+) -> Tuple[int, int, Optional[float]]:
+    """Return normalized wavenumber-mode inputs for the compiled backend."""
+
+    normalized_mode = _normalize_wavenumber_mode(wavenumber_mode)
+    if normalized_mode == "high":
+        return 1, DEFAULT_HIGH_RES_WAVENUMBER_COUNT, None
+
+    if lon is None:
+        raise ValueError("`lon` is required when `wavenumber_mode='low'`")
+
+    lon_values = _as_1d_float64(lon, "lon")
+    _require_monotonic(lon_values, "lon")
+    lon_span_degrees = abs(float(lon_values[0]) - float(lon_values[-1]))
+    if lon_span_degrees <= 0.0:
+        raise ValueError("`lon` must span a nonzero zonal distance")
+
+    wavenumber_count = int(round(lon_values.size / 3.0))
+    if wavenumber_count < 2:
+        raise ValueError(
+            "`lon` must contain enough points to build at least two low-resolution "
+            "zonal wavenumbers"
+        )
+
+    return 2, wavenumber_count, lon_span_degrees * np.pi / 180.0
+
+
 def _reduce_latitude_band_inputs(
     u: ProfileInput,
     temperature: ProfileInput,
@@ -331,7 +270,6 @@ def _reduce_latitude_band_inputs(
     lat_bounds: Tuple[float, float],
     pressure_pa: np.ndarray,
     pressure_dim: Optional[str],
-    missing_value: MissingValue,
 ) -> Tuple[ProfileInput, ProfileInput, Optional[LatitudeInput]]:
     """Collapse explicit latitude axes using a cosine-weighted band mean."""
 
@@ -389,8 +327,6 @@ def _reduce_latitude_band_inputs(
                 )
 
             subset = subset.where(np.isfinite(subset))
-            if not _is_nan_missing_value(missing_value):
-                subset = subset.where(subset != float(missing_value))
 
             weights = xr.DataArray(
                 np.cos(np.deg2rad(np.asarray(subset[latitude_dim], dtype=np.float64))),
@@ -464,10 +400,21 @@ def _reduce_latitude_band_inputs(
 
         subset = np.take(array, np.flatnonzero(latitude_mask), axis=latitude_axes[0])
         subset = np.moveaxis(subset, latitude_axes[0], -1)
+        subset = np.where(np.isfinite(subset), subset, np.nan)
+        weight_view = latitude_weights.reshape(
+            (1,) * (subset.ndim - 1) + (latitude_weights.size,)
+        )
+        masked_weights = np.where(np.isnan(subset), np.nan, weight_view)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            numerator = np.nanmean(subset * weight_view, axis=-1)
+            denominator = np.nanmean(masked_weights, axis=-1)
         reduced_arrays.append(
-            _nan_weighted_mean_last_axis(
-                _replace_missing_with_nan(subset, missing_value),
-                latitude_weights,
+            np.divide(
+                numerator,
+                denominator,
+                out=np.full(numerator.shape, np.nan, dtype=np.float64),
+                where=np.isfinite(denominator) & (denominator != 0.0),
             )
         )
 
@@ -538,21 +485,11 @@ def _normalize_smooth_window(smooth_window: int) -> int:
 
 def _wrap_batch_baroc_output(
     values: np.ndarray,
-    output_units: str,
-    missing_value: MissingValue,
     profile_coord: Optional[xr.DataArray],
 ) -> Union[np.ndarray, xr.DataArray]:
     """Wrap batched baroclinic growth rates back into NumPy or xarray output."""
 
     converted = np.array(values, dtype=np.float64, copy=True)
-    if _is_nan_missing_value(missing_value):
-        valid_mask = np.isfinite(converted)
-    else:
-        valid_mask = converted != float(missing_value)
-    converted[valid_mask] = np.asarray(
-        _convert_output_units(converted[valid_mask], output_units),
-        dtype=np.float64,
-    )
     if profile_coord is None:
         return converted
     return xr.DataArray(
@@ -560,7 +497,7 @@ def _wrap_batch_baroc_output(
         dims=profile_coord.dims,
         coords={profile_coord.dims[0]: profile_coord},
         name="baroc_growth_rate",
-        attrs={"units": _normalize_output_units(output_units)},
+        attrs={"units": "s^-1"},
     )
 
 
@@ -568,10 +505,8 @@ def barot_growth_rate(
     u_barotropic: ProfileInput,
     lat: ProfileInput,
     *,
-    output_units: str = "s-1",
     radius: float = 6_371_000.0,
     omega: float = 7.292e-5,
-    missing_value: MissingValue = np.nan,
 ) -> float:
     r"""Compute the maximum barotropic normal-mode growth rate from ``U(lat)``.
 
@@ -584,10 +519,6 @@ def barot_growth_rate(
         One-dimensional latitude coordinate in degrees north. Values must be
         strictly monotonic.
 
-    output_units : {"s^-1", "day^-1"}, optional
-        Output units for the returned maximum growth rate. Defaults to
-        ``"s-1"``.
-
     radius : float, optional
         Earth radius in meters. Only the default value is currently supported
         by the compiled kernel.
@@ -596,15 +527,11 @@ def barot_growth_rate(
         Planetary rotation rate in ``s^-1``. Only the default value is
         currently supported by the compiled kernel.
 
-    missing_value : scalar, optional
-        Public missing-value marker. If any input value is missing, the
-        function returns this marker normalized to ``float``. Defaults to
-        ``np.nan``.
-
     Returns
     -------
     float
-        Maximum barotropic growth rate in the requested units.
+        Maximum barotropic growth rate in ``s^-1``. Missing or unusable
+        profiles return ``NaN``.
 
     Notes
     -----
@@ -648,11 +575,8 @@ def barot_growth_rate(
     lat_values = _as_1d_float64(lat, "lat")
     _same_shape_or_raise(("u_barotropic", u_values), ("lat", lat_values))
 
-    missing = _return_missing_value(missing_value)
-    if _contains_missing(u_values, missing_value) or _contains_missing(
-        lat_values, missing_value
-    ):
-        return missing
+    if np.any(~np.isfinite(u_values)) or np.any(~np.isfinite(lat_values)):
+        return float("nan")
 
     _require_monotonic(lat_values, "lat")
     if lat_values[0] > lat_values[-1]:
@@ -666,7 +590,7 @@ def barot_growth_rate(
             "requested latitude profile."
         )
 
-    return _convert_output_units(max_growth, output_units)
+    return float(max_growth)
 
 
 def baroc_growth_rate(
@@ -676,12 +600,12 @@ def baroc_growth_rate(
     *,
     lat: Optional[LatitudeInput] = None,
     lat_bounds: Optional[Tuple[float, float]] = None,
-    output_units: str = "s-1",
+    lon: Optional[ProfileInput] = None,
+    wavenumber_mode: str = DEFAULT_WAVENUMBER_MODE,
     method: str = "log",
     tropopause_pressure: Optional[PressureInput] = None,
     solver_levels: int = DEFAULT_SOLVER_LEVELS,
     smooth_window: int = DEFAULT_SMOOTH_WINDOW,
-    missing_value: MissingValue = np.nan,
 ) -> GrowthRateOutput:
     r"""Compute the maximum baroclinic normal-mode growth rate.
 
@@ -743,9 +667,23 @@ def baroc_growth_rate(
         pressure-coordinate length and one non-pressure axis matching the
         latitude-coordinate length.
 
-    output_units : {"s^-1", "day^-1"}, optional
-        Output units for the returned maximum growth rate. Defaults to
-        ``"s-1"``.
+    lon : :class:`xarray.DataArray`, :class:`numpy.ndarray`, optional
+        One-dimensional longitude coordinate in degrees used only when
+        ``wavenumber_mode="low"``. The coordinate must be strictly monotonic.
+
+    wavenumber_mode : {"high", "low"}, optional
+        Zonal-wavenumber grid used by the compiled instability solver.
+        ``"high"`` uses the fixed high-resolution Chemke/MATLAB-style grid
+        ``k = 0, 1\times10^{-7}, \dots, 1.99\times10^{-5}\,\mathrm{m}^{-1}``.
+        ``"low"`` uses the lower-resolution Chemke Python-share formula
+
+        .. math::
+
+           k = \frac{2\pi w}{\left|\lambda_0 - \lambda_1\right|\pi a \cos\phi / 180},
+
+        where :math:`w = 0, 1, \dots, \mathrm{round}(N_{\lambda}/3)-1` and
+        ``lon`` supplies :math:`N_{\lambda}`, :math:`\lambda_0`, and
+        :math:`\lambda_1`. Defaults to ``"high"``.
 
     method : {"log", "linear"}, optional
         Vertical interpolation method used to remap the input profiles onto the
@@ -771,18 +709,13 @@ def baroc_growth_rate(
         before the final maximum-growth diagnostic is taken. ``1`` disables
         smoothing. If given, this must be a positive odd integer.
 
-    missing_value : scalar, optional
-        Public missing-value marker. If any input value is missing, the
-        function returns this marker normalized to ``float``. Defaults to
-        ``np.nan``.
-
     Returns
     -------
     float, :class:`numpy.ndarray`, :class:`xarray.DataArray`
-        Maximum baroclinic growth rate in the requested units. One-dimensional
-        input returns a scalar float. Batched profile input returns a
-        one-dimensional NumPy array or DataArray over the non-pressure
-        dimension.
+        Maximum baroclinic growth rate in ``s^-1``. One-dimensional input
+        returns a scalar float. Batched profile input returns a one-dimensional
+        NumPy array or DataArray over the non-pressure dimension. Missing or
+        unusable profiles return ``NaN``.
 
     Notes
     -----
@@ -871,7 +804,9 @@ def baroc_growth_rate(
     solver_levels = _normalize_solver_levels(solver_levels)
     smooth_window = _normalize_smooth_window(smooth_window)
     interp_method = _normalize_method(method)
-    missing = _return_missing_value(missing_value)
+    wavenumber_mode_id, wavenumber_count, lon_span_radians = _prepare_wavenumber_inputs(
+        wavenumber_mode, lon
+    )
 
     pressure_dim = pressure.dims[0] if isinstance(pressure, xr.DataArray) else None
 
@@ -883,7 +818,6 @@ def baroc_growth_rate(
             lat_bounds,
             pressure_pa,
             pressure_dim,
-            missing_value,
         )
 
     if lat is None and lat_bounds is None:
@@ -914,11 +848,11 @@ def baroc_growth_rate(
         )
 
         if (
-            _contains_missing(u_values, missing_value)
-            or _contains_missing(temperature_values, missing_value)
-            or _contains_missing(pressure_pa, missing_value)
+            np.any(~np.isfinite(u_values))
+            or np.any(~np.isfinite(temperature_values))
+            or np.any(~np.isfinite(pressure_pa))
         ):
-            return missing
+            return float("nan")
 
         if np.any(temperature_values <= 0.0):
             raise ValueError("temperature values must be strictly positive")
@@ -973,17 +907,37 @@ def baroc_growth_rate(
         )
 
         if np.any(~np.isfinite(u_solver)) or np.any(~np.isfinite(temperature_solver)):
-            return missing
+            return float("nan")
 
         theta_solver = (
             temperature_solver * (REFERENCE_PRESSURE_PA / solver_pressure_pa) ** KAPPA
         )
         if lat_bounds is None:
-            latitude_radians = np.deg2rad(float(lat))
+            latitude_value = float(_as_profile_vector(lat, "lat", 1)[0])
+            latitude_radians = np.deg2rad(latitude_value)
             f_cor = float(2.0 * 7.292e-5 * np.sin(latitude_radians))
             beta = float(2.0 * 7.292e-5 * np.cos(latitude_radians) / 6_371_000.0)
+            zonal_length = 1.0
+            if wavenumber_mode_id == 2:
+                zonal_length = float(
+                    lon_span_radians * 6_371_000.0 * np.cos(latitude_radians)
+                )
         else:
             f_cor, beta = _f_beta_from_lat_bounds(lat_bounds)
+            zonal_length = 1.0
+            if wavenumber_mode_id == 2:
+                cos_avg = (
+                    np.cos(np.deg2rad(float(lat_bounds[0])))
+                    + np.cos(np.deg2rad(float(lat_bounds[1])))
+                ) / 2.0
+                zonal_length = float(lon_span_radians * 6_371_000.0 * cos_avg)
+        if wavenumber_mode_id == 2 and (
+            not np.isfinite(zonal_length) or zonal_length <= 0.0
+        ):
+            raise ValueError(
+                "The low-resolution wavenumber grid requires a positive zonal "
+                "length from `lon` and the selected latitude geometry."
+            )
         max_growth, ier = _dbaroc_growth_rate_1d(
             u_solver,
             theta_solver,
@@ -992,6 +946,9 @@ def baroc_growth_rate(
             f_cor,
             beta,
             smooth_window,
+            wavenumber_mode_id,
+            wavenumber_count,
+            zonal_length,
         )
         if ier != 0:
             raise RuntimeError(
@@ -999,7 +956,7 @@ def baroc_growth_rate(
                 "requested atmospheric column."
             )
 
-        return _convert_output_units(max_growth, output_units)
+        return float(max_growth)
 
     nprofile = max(u_matrix_raw.shape[0], temperature_matrix_raw.shape[0])
     profile_coord = None
@@ -1030,15 +987,14 @@ def baroc_growth_rate(
         nprofile,
         "temperature",
     )
-    output = np.full(nprofile, missing, dtype=np.float64)
+    output = np.full(nprofile, np.nan, dtype=np.float64)
     valid_profile_mask = ~(
-        _missing_profile_mask(u_matrix, missing_value)
-        | _missing_profile_mask(temperature_matrix, missing_value)
+        _missing_profile_mask(u_matrix) | _missing_profile_mask(temperature_matrix)
     )
 
     if lat_bounds is None:
         lat_values = _as_profile_vector(lat, "lat", nprofile)
-        valid_profile_mask &= ~_missing_vector_mask(lat_values, missing_value)
+        valid_profile_mask &= ~_missing_vector_mask(lat_values)
         f_values = np.full(nprofile, np.nan, dtype=np.float64)
         beta_values = np.full(nprofile, np.nan, dtype=np.float64)
         valid_lat_mask = valid_profile_mask & np.isfinite(lat_values)
@@ -1063,10 +1019,7 @@ def baroc_growth_rate(
             "tropopause_pressure",
             nprofile,
         )
-        tropopause_missing_mask = _missing_vector_mask(
-            tropopause_values,
-            missing_value,
-        )
+        tropopause_missing_mask = _missing_vector_mask(tropopause_values)
         tropopause_pressure_pa = np.array(
             tropopause_values, dtype=np.float64, copy=True
         )
@@ -1123,8 +1076,6 @@ def baroc_growth_rate(
         if not np.any(valid_profile_mask):
             return _wrap_batch_baroc_output(
                 output,
-                output_units,
-                missing_value,
                 profile_coord,
             )
     bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
@@ -1138,10 +1089,33 @@ def baroc_growth_rate(
     if not np.any(valid_profile_mask):
         return _wrap_batch_baroc_output(
             output,
-            output_units,
-            missing_value,
             profile_coord,
         )
+
+    zonal_length_values = np.full(nprofile, 1.0, dtype=np.float64)
+    if wavenumber_mode_id == 2:
+        if lat_bounds is None:
+            zonal_length_values[valid_profile_mask] = (
+                lon_span_radians
+                * 6_371_000.0
+                * np.cos(np.deg2rad(lat_values[valid_profile_mask]))
+            )
+        else:
+            cos_avg = (
+                np.cos(np.deg2rad(float(lat_bounds[0])))
+                + np.cos(np.deg2rad(float(lat_bounds[1])))
+            ) / 2.0
+            zonal_length_values[valid_profile_mask] = (
+                lon_span_radians * 6_371_000.0 * cos_avg
+            )
+        if np.any(
+            valid_profile_mask
+            & (~np.isfinite(zonal_length_values) | (zonal_length_values <= 0.0))
+        ):
+            raise ValueError(
+                "The low-resolution wavenumber grid requires a positive zonal "
+                "length from `lon` and the selected latitude geometry."
+            )
 
     interp_kind = 1 if interp_method == "linear" else 2
     growth_valid, ier_valid = _dbaroc_growth_rate_profiles(
@@ -1153,7 +1127,9 @@ def baroc_growth_rate(
         np.asfortranarray(beta_values[valid_profile_mask]),
         interp_kind,
         smooth_window,
-        missing,
+        wavenumber_mode_id,
+        wavenumber_count,
+        np.asfortranarray(zonal_length_values[valid_profile_mask]),
     )
     growth_valid = np.asarray(growth_valid, dtype=np.float64)
     ier_valid = np.asarray(ier_valid, dtype=np.int64)
@@ -1170,7 +1146,5 @@ def baroc_growth_rate(
 
     return _wrap_batch_baroc_output(
         output,
-        output_units,
-        missing_value,
         profile_coord,
     )
