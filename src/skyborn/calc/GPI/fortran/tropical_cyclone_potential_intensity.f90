@@ -638,7 +638,8 @@ subroutine calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius,
     real, parameter :: C_TO_K = 273.15               ! Celsius to Kelvin
 
     ! Precomputed reciprocals to avoid division (performance optimization)
-    real, parameter :: INV_RD = 0.0034835            ! 1.0/RD
+    real, parameter :: RD = 287.04                   ! Gas constant for dry air (J/kg/K)
+    real, parameter :: INV_RD = 1.0 / RD            ! 1.0/RD, matches tcpyPI constants.RD
     real, parameter :: EPS_CONST = 0.62197183        ! RD/RV, matches tcpyPI constants.EPS
     real, parameter :: INV_0622 = 1.6077899          ! 1.0/EPS_CONST
 
@@ -652,6 +653,10 @@ subroutine calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius,
     real :: temp_outflow_sat, level_outflow_sat
     real :: sst_kelvin, saturation_vapor_pressure
     real :: temp_kelvin(array_size), mixing_ratio_decimal(array_size)
+    integer, parameter :: dp = kind(1.0d0)
+    real(dp) :: cape_temp_profile_dp(array_size), cape_mixing_ratio_profile_dp(array_size)
+    real(dp) :: cape_pressure_profile_dp(array_size), cape_env_virtual_temp(array_size)
+    real(dp) :: cape_saturation_pressure_profile(array_size), cape_pressure_layer_factor(array_size)
     real :: parcel_temp, parcel_mixing_ratio, parcel_pressure
     real :: saturation_mixing_ratio
     real :: pnew, pm, pmold
@@ -700,6 +705,11 @@ subroutine calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius,
     end do
     effective_num_points = max(1, top_index - 1)
 
+    call prepare_cape_environment( &
+        temp_kelvin, mixing_ratio_decimal, pressure_levels, array_size, effective_num_points, &
+        cape_temp_profile_dp, cape_mixing_ratio_profile_dp, cape_pressure_profile_dp, &
+        cape_env_virtual_temp, cape_saturation_pressure_profile, cape_pressure_layer_factor)
+
     nk = 1
     max_wind = 0.0
     min_pressure = psl_mb
@@ -707,8 +717,9 @@ subroutine calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius,
     parcel_mixing_ratio = mixing_ratio_decimal(nk)
     parcel_pressure = pressure_levels(nk)
 
-    call CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
-              temp_kelvin, mixing_ratio_decimal, pressure_levels, &
+    call cape_from_cached_environment(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
+              cape_temp_profile_dp, cape_pressure_profile_dp, &
+              cape_env_virtual_temp, cape_saturation_pressure_profile, cape_pressure_layer_factor, &
               array_size, effective_num_points, SIG, &
               cape_environmental, temp_outflow_env, level_outflow_env, cape_error_flag)
 
@@ -730,8 +741,9 @@ subroutine calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius,
                              (parcel_pressure * (EPS_CONST + mixing_ratio_decimal(nk)) - &
                               mixing_ratio_decimal(nk) * psl_mb)
 
-        call CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
-                  temp_kelvin, mixing_ratio_decimal, pressure_levels, &
+        call cape_from_cached_environment(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
+                  cape_temp_profile_dp, cape_pressure_profile_dp, &
+                  cape_env_virtual_temp, cape_saturation_pressure_profile, cape_pressure_layer_factor, &
                   array_size, effective_num_points, SIG, &
                   cape_max_wind_radius, temp_outflow_env, level_outflow_env, cape_error_flag)
 
@@ -745,8 +757,9 @@ subroutine calculate_pi_core(sst_celsius, psl_mb, pressure_levels, temp_celsius,
         saturation_mixing_ratio = EPS_CONST * saturation_vapor_pressure / &
                                   (parcel_pressure - saturation_vapor_pressure)
 
-        call CAPE(parcel_temp, saturation_mixing_ratio, parcel_pressure, &
-                  temp_kelvin, mixing_ratio_decimal, pressure_levels, &
+        call cape_from_cached_environment(parcel_temp, saturation_mixing_ratio, parcel_pressure, &
+                  cape_temp_profile_dp, cape_pressure_profile_dp, &
+                  cape_env_virtual_temp, cape_saturation_pressure_profile, cape_pressure_layer_factor, &
                   array_size, effective_num_points, SIG, &
                   cape_saturated, temp_outflow_sat, level_outflow_sat, cape_error_flag)
 
@@ -1264,6 +1277,61 @@ end subroutine calculate_pi_4d_diagnostics_with_missing
 !   - Handles both reversible and pseudoadiabatic processes
 !   - Exact implementation of Emanuel's CAPE formulation
 !
+subroutine prepare_cape_environment(temp_profile, mixing_ratio_profile, pressure_profile, &
+                                    array_size, num_points, temp_profile_dp, &
+                                    mixing_ratio_profile_dp, pressure_profile_dp, &
+                                    env_virtual_temp, saturation_pressure_profile, &
+                                    pressure_layer_factor)
+    implicit none
+
+    integer, intent(in) :: array_size, num_points
+    real, intent(in) :: temp_profile(array_size)
+    real, intent(in) :: mixing_ratio_profile(array_size)
+    real, intent(in) :: pressure_profile(array_size)
+    integer, parameter :: dp = kind(1.0d0)
+    real(dp), intent(out) :: temp_profile_dp(array_size)
+    real(dp), intent(out) :: mixing_ratio_profile_dp(array_size)
+    real(dp), intent(out) :: pressure_profile_dp(array_size)
+    real(dp), intent(out) :: env_virtual_temp(array_size)
+    real(dp), intent(out) :: saturation_pressure_profile(array_size)
+    real(dp), intent(out) :: pressure_layer_factor(array_size)
+
+    real(dp), parameter :: RD = 287.04_dp
+    real(dp), parameter :: RV = 461.5_dp
+    real(dp), parameter :: EPS = RD / RV
+    real(dp), parameter :: INV_EPS = 1.0_dp / EPS
+    real(dp), parameter :: MAG_CONST_A = 17.67_dp
+    real(dp), parameter :: MAG_CONST_B = 243.5_dp
+    real(dp), parameter :: MAG_BASE = 6.112_dp
+    real(dp), parameter :: KELVIN_OFFSET = 273.15_dp
+    integer :: level
+    real(dp) :: temp_celsius
+
+    pressure_layer_factor(1) = 0.0_dp
+
+    !$omp simd private(temp_celsius)
+    do level = 1, num_points
+        temp_profile_dp(level) = real(temp_profile(level), dp)
+        mixing_ratio_profile_dp(level) = real(mixing_ratio_profile(level), dp)
+        pressure_profile_dp(level) = real(pressure_profile(level), dp)
+        env_virtual_temp(level) = temp_profile_dp(level) * &
+            (1.0_dp + mixing_ratio_profile_dp(level) * INV_EPS) / &
+            (1.0_dp + mixing_ratio_profile_dp(level))
+        temp_celsius = temp_profile_dp(level) - KELVIN_OFFSET
+        saturation_pressure_profile(level) = MAG_BASE * &
+            exp(MAG_CONST_A * temp_celsius / (MAG_CONST_B + temp_celsius))
+    end do
+    !$omp end simd
+
+    !$omp simd
+    do level = 2, num_points
+        pressure_layer_factor(level) = RD * &
+            (pressure_profile_dp(level - 1) - pressure_profile_dp(level)) / &
+            (pressure_profile_dp(level) + pressure_profile_dp(level - 1))
+    end do
+    !$omp end simd
+end subroutine prepare_cape_environment
+
 subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
                        temp_profile, mixing_ratio_profile, pressure_profile, &
                        array_size, num_points, buoyancy_param, &
@@ -1271,25 +1339,59 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
     !$omp declare simd(CAPE) uniform(array_size, num_points, buoyancy_param)
     implicit none
 
-    ! Input parameters
-    real, intent(in) :: parcel_temp                  ! Initial parcel temperature (K)
-    real, intent(in) :: parcel_mixing_ratio          ! Initial parcel mixing ratio (decimal)
-    real, intent(in) :: parcel_pressure              ! Initial parcel pressure (mb)
-    real, intent(in) :: temp_profile(array_size)     ! Environmental temperature profile (K)
-    real, intent(in) :: mixing_ratio_profile(array_size) ! Environmental mixing ratio profile (decimal)
-    real, intent(in) :: pressure_profile(array_size) ! Pressure profile (mb)
+    real, intent(in) :: parcel_temp
+    real, intent(in) :: parcel_mixing_ratio
+    real, intent(in) :: parcel_pressure
+    real, intent(in) :: temp_profile(array_size)
+    real, intent(in) :: mixing_ratio_profile(array_size)
+    real, intent(in) :: pressure_profile(array_size)
     integer, intent(in) :: array_size, num_points
-    real, intent(in) :: buoyancy_param               ! Buoyancy parameter (0-1)
-
-    ! Output parameters
-    real, intent(out) :: cape_value                  ! Calculated CAPE (J/kg)
-    real, intent(out) :: outflow_temp                ! Temperature at level of neutral buoyancy (K)
-    real, intent(out) :: outflow_level               ! Pressure at level of neutral buoyancy (mb)
+    real, intent(in) :: buoyancy_param
+    real, intent(out) :: cape_value
+    real, intent(out) :: outflow_temp
+    real, intent(out) :: outflow_level
     integer, intent(out) :: error_flag
 
     integer, parameter :: dp = kind(1.0d0)
+    real(dp) :: temp_profile_dp(array_size), mixing_ratio_profile_dp(array_size)
+    real(dp) :: pressure_profile_dp(array_size), env_virtual_temp(array_size)
+    real(dp) :: saturation_pressure_profile(array_size), pressure_layer_factor(array_size)
 
-    ! Thermodynamic constants (EXACT from pcmin_2013.f)
+    call prepare_cape_environment( &
+        temp_profile, mixing_ratio_profile, pressure_profile, array_size, num_points, &
+        temp_profile_dp, mixing_ratio_profile_dp, pressure_profile_dp, &
+        env_virtual_temp, saturation_pressure_profile, pressure_layer_factor)
+
+    call cape_from_cached_environment(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
+        temp_profile_dp, pressure_profile_dp, env_virtual_temp, &
+        saturation_pressure_profile, pressure_layer_factor, array_size, num_points, &
+        buoyancy_param, cape_value, outflow_temp, outflow_level, error_flag)
+end subroutine CAPE
+
+subroutine cape_from_cached_environment(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
+                       temp_profile_dp, pressure_profile_dp, &
+                       env_virtual_temp, saturation_pressure_profile, pressure_layer_factor, &
+                       array_size, num_points, buoyancy_param, &
+                       cape_value, outflow_temp, outflow_level, error_flag)
+    implicit none
+
+    real, intent(in) :: parcel_temp
+    real, intent(in) :: parcel_mixing_ratio
+    real, intent(in) :: parcel_pressure
+    integer, intent(in) :: array_size, num_points
+    real, intent(in) :: buoyancy_param
+    integer, parameter :: dp = kind(1.0d0)
+    real(dp), intent(in) :: temp_profile_dp(array_size)
+    real(dp), intent(in) :: pressure_profile_dp(array_size)
+    real(dp), intent(in) :: env_virtual_temp(array_size)
+    real(dp), intent(in) :: saturation_pressure_profile(array_size)
+    real(dp), intent(in) :: pressure_layer_factor(array_size)
+
+    real, intent(out) :: cape_value
+    real, intent(out) :: outflow_temp
+    real, intent(out) :: outflow_level
+    integer, intent(out) :: error_flag
+
     real(dp), parameter :: CPD = 1005.7_dp
     real(dp), parameter :: CL = 2500.0_dp
     real(dp), parameter :: CPVMCL = -630.0_dp
@@ -1297,29 +1399,18 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
     real(dp), parameter :: RD = 287.04_dp
     real(dp), parameter :: EPS = RD / RV
     real(dp), parameter :: ALV0 = 2.501e6_dp
-
-    ! Use exact ratios inside CAPE to avoid neutral-buoyancy sign flips near
-    ! weakly unstable layers.
     real(dp), parameter :: RD_OVER_CPD = RD / CPD
     real(dp), parameter :: INV_EPS = 1.0_dp / EPS
     real(dp), parameter :: INV_RV = 1.0_dp / RV
-
-    ! Magnus formula precomputed constants
     real(dp), parameter :: MAG_CONST_A = 17.67_dp
     real(dp), parameter :: MAG_CONST_B = 243.5_dp
     real(dp), parameter :: MAG_BASE = 6.112_dp
     real(dp), parameter :: KELVIN_OFFSET = 273.15_dp
-
-    ! Convergence parameters
     real(dp), parameter :: TEMP_CONVERGENCE = 0.001_dp
     integer, parameter :: MAX_ITERATIONS = 500
     real(dp), parameter :: MIN_PRESSURE_THRESHOLD = 50.0_dp
 
-    ! Local variables
     real(dp) :: virtual_temp_diff(array_size)
-    real(dp) :: temp_profile_dp(array_size)
-    real(dp) :: mixing_ratio_profile_dp(array_size)
-    real(dp) :: pressure_profile_dp(array_size)
     real(dp) :: parcel_temp_dp, parcel_mixing_ratio_dp, parcel_pressure_dp
     real(dp) :: buoyancy_param_dp
     real(dp) :: parcel_temp_celsius, saturation_pressure, vapor_pressure
@@ -1330,15 +1421,14 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
     real(dp) :: entropy_parcel, adaptation_param, temp_new
     real(dp) :: mean_mixing_ratio, virtual_temp_parcel, positive_area, negative_area
     real(dp) :: pressure_factor, area_above_lnb, pressure_lnb, temp_lnb
-    real(dp) :: cpd_plus_rcl
+    real(dp) :: cpd_plus_rcl, outflow_temp_dp, outflow_level_dp
     integer :: level, min_level, level_neutral_buoyancy
     integer :: iteration_count
     logical :: converged
 
-    ! Initialize output values
     cape_value = 0.0
-    outflow_temp = temp_profile(1)
-    outflow_level = pressure_profile(1)
+    outflow_temp = real(temp_profile_dp(1), kind(outflow_temp))
+    outflow_level = real(pressure_profile_dp(1), kind(outflow_level))
     error_flag = 1
 
     parcel_temp_dp = real(parcel_temp, dp)
@@ -1346,91 +1436,55 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
     parcel_pressure_dp = real(parcel_pressure, dp)
     buoyancy_param_dp = real(buoyancy_param, dp)
 
-    !$omp simd
-    do level = 1, num_points
-        temp_profile_dp(level) = real(temp_profile(level), dp)
-        mixing_ratio_profile_dp(level) = real(mixing_ratio_profile(level), dp)
-        pressure_profile_dp(level) = real(pressure_profile(level), dp)
-        virtual_temp_diff(level) = 0.0_dp
-    end do
-    !$omp end simd
-
-    ! Validate input parameters
     if (parcel_mixing_ratio_dp < 1.0e-6_dp .or. parcel_temp_dp < 200.0_dp) then
         error_flag = 0
         return
     end if
 
-    ! Calculate parcel properties
     parcel_temp_celsius = parcel_temp_dp - KELVIN_OFFSET
-    ! Use precomputed Magnus constants
     saturation_pressure = MAG_BASE * exp(MAG_CONST_A * parcel_temp_celsius / (MAG_CONST_B + parcel_temp_celsius))
-    ! Optimize division by precomputing denominator
     vapor_pressure = parcel_mixing_ratio_dp * parcel_pressure_dp / (EPS + parcel_mixing_ratio_dp)
     relative_humidity = min(vapor_pressure / saturation_pressure, 1.0_dp)
     latent_heat = ALV0 + CPVMCL * parcel_temp_celsius
-
-    ! Precompute constants for entropy calculations
     cpd_plus_rcl = CPD + parcel_mixing_ratio_dp * CL
-
-    ! Entropy calculation - division by parcel_temp is unavoidable
     reversible_entropy = cpd_plus_rcl * log(parcel_temp_dp) - &
                         RD * log(parcel_pressure_dp - vapor_pressure) + &
                         latent_heat * parcel_mixing_ratio_dp / parcel_temp_dp - &
                         parcel_mixing_ratio_dp * RV * log(relative_humidity)
 
-    ! Calculate lifted condensation level
-    ! This division is specific to each calculation and can't be precomputed
     chi = parcel_temp_dp / (1669.0_dp - 122.0_dp * relative_humidity - parcel_temp_dp)
     lifted_condensation_pressure = parcel_pressure_dp * (relative_humidity ** chi)
 
-    ! Match pcmin/tcpyPI semantics: jmin is the lowest valid profile level in
-    ! the working column, not the first level below parcel pressure. The
-    ! parcel-to-first-level area term below relies on this exact choice,
-    ! especially for weak-PI cases where the parcel pressure sits between the
-    ! first two model levels.
+    !$omp simd
+    do level = 1, num_points
+        virtual_temp_diff(level) = 0.0_dp
+    end do
+    !$omp end simd
+
     min_level = 1
 
-    ! Calculate parcel ascent and buoyancy
-    ! Split into two loops for better SIMD optimization
-
-    ! First pass: Dry adiabatic calculations (vectorizable)
-    ! Match pcmin/tcpyPI: evaluate every retained model level, including
-    ! levels at or above the parcel pressure. The original algorithm uses
-    ! those lowest levels in the buoyancy profile rather than skipping them.
     !$omp simd private(parcel_temp_lifted, parcel_mixing_ratio_lifted, virtual_temp_parcel)
     do level = min_level, num_points
-        if (pressure_profile(level) >= MIN_PRESSURE_THRESHOLD .and. &
-            pressure_profile(level) >= lifted_condensation_pressure) then
-            ! Below lifted condensation level - dry adiabatic ascent
+        if (pressure_profile_dp(level) >= MIN_PRESSURE_THRESHOLD .and. &
+            pressure_profile_dp(level) >= lifted_condensation_pressure) then
             parcel_temp_lifted = parcel_temp_dp * (pressure_profile_dp(level) / parcel_pressure_dp) ** RD_OVER_CPD
             parcel_mixing_ratio_lifted = parcel_mixing_ratio_dp
-
-            ! Virtual temperature calculation with precomputed constants
-            virtual_temp_parcel = parcel_temp_lifted * (1.0 + parcel_mixing_ratio_lifted*INV_EPS) / &
-                                 (1.0 + parcel_mixing_ratio_lifted)
-            virtual_temp_diff(level) = virtual_temp_parcel - &
-                                      temp_profile_dp(level) * (1.0_dp + mixing_ratio_profile_dp(level)*INV_EPS) / &
-                                      (1.0_dp + mixing_ratio_profile_dp(level))
+            virtual_temp_parcel = parcel_temp_lifted * (1.0_dp + parcel_mixing_ratio_lifted * INV_EPS) / &
+                                  (1.0_dp + parcel_mixing_ratio_lifted)
+            virtual_temp_diff(level) = virtual_temp_parcel - env_virtual_temp(level)
         end if
     end do
     !$omp end simd
 
-    ! Second pass: Moist adiabatic calculations (non-vectorizable due to iterations)
     do level = min_level, num_points
-        ! Early exit if pressure too low
         if (pressure_profile_dp(level) < MIN_PRESSURE_THRESHOLD) exit
 
         if (pressure_profile_dp(level) < lifted_condensation_pressure) then
-            ! Above lifted condensation level - moist adiabatic ascent
             parcel_temp_lifted = temp_profile_dp(level)
-            temp_celsius = temp_profile_dp(level) - KELVIN_OFFSET
-            ! Use precomputed Magnus constants
-            saturation_pressure_env = MAG_BASE * exp(MAG_CONST_A * temp_celsius / (MAG_CONST_B + temp_celsius))
-            ! Precompute denominator for reuse
-            parcel_mixing_ratio_lifted = EPS * saturation_pressure_env / (pressure_profile_dp(level) - saturation_pressure_env)
+            saturation_pressure_env = saturation_pressure_profile(level)
+            parcel_mixing_ratio_lifted = EPS * saturation_pressure_env / &
+                                         (pressure_profile_dp(level) - saturation_pressure_env)
 
-            ! Iterative calculation for reversible ascent
             iteration_count = 0
             converged = .false.
 
@@ -1438,43 +1492,40 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
                 iteration_count = iteration_count + 1
 
                 latent_heat = ALV0 + CPVMCL * (parcel_temp_lifted - KELVIN_OFFSET)
-                ! Optimize: use INV_RV and compute 1/(T^3) once
-                ! Original: L^2*r*/(RV*T^2) / T = L^2*r/(RV*T^3)
                 entropy_rate_temp = (CPD + parcel_mixing_ratio_dp * CL + &
-                                    latent_heat * latent_heat * parcel_mixing_ratio_lifted * INV_RV / (parcel_temp_lifted * parcel_temp_lifted)) / &
-                                    parcel_temp_lifted
-                ! Division by denominator is unavoidable here
-                vapor_pressure_parcel = parcel_mixing_ratio_lifted * pressure_profile_dp(level) / (EPS + parcel_mixing_ratio_lifted)
+                                    latent_heat * latent_heat * parcel_mixing_ratio_lifted * INV_RV / &
+                                    (parcel_temp_lifted * parcel_temp_lifted)) / parcel_temp_lifted
+                vapor_pressure_parcel = parcel_mixing_ratio_lifted * pressure_profile_dp(level) / &
+                                        (EPS + parcel_mixing_ratio_lifted)
                 entropy_parcel = (CPD + parcel_mixing_ratio_dp * CL) * log(parcel_temp_lifted) - &
-                                RD * log(pressure_profile_dp(level) - vapor_pressure_parcel) + &
-                                latent_heat * parcel_mixing_ratio_lifted / parcel_temp_lifted
+                                 RD * log(pressure_profile_dp(level) - vapor_pressure_parcel) + &
+                                 latent_heat * parcel_mixing_ratio_lifted / parcel_temp_lifted
 
-                ! Determine adaptation parameter
                 if (iteration_count < 3) then
                     adaptation_param = 0.3_dp
                 else
                     adaptation_param = 1.0_dp
                 end if
 
-                ! Newton-Raphson iteration step
-                temp_new = parcel_temp_lifted + adaptation_param * (reversible_entropy - entropy_parcel) / entropy_rate_temp
+                temp_new = parcel_temp_lifted + adaptation_param * &
+                           (reversible_entropy - entropy_parcel) / entropy_rate_temp
 
-                ! Check for convergence
                 if (abs(temp_new - parcel_temp_lifted) <= TEMP_CONVERGENCE) then
                     converged = .true.
                 else
                     parcel_temp_lifted = temp_new
                     temp_celsius = parcel_temp_lifted - KELVIN_OFFSET
-                    ! Use precomputed Magnus constants
-                    saturation_pressure_env = MAG_BASE * exp(MAG_CONST_A * temp_celsius / (MAG_CONST_B + temp_celsius))
+                    saturation_pressure_env = MAG_BASE * exp(MAG_CONST_A * temp_celsius / &
+                                                             (MAG_CONST_B + temp_celsius))
 
-                    ! Check for unrealistic values
-                    if (iteration_count > MAX_ITERATIONS .or. saturation_pressure_env > (pressure_profile_dp(level) - 1.0_dp)) then
+                    if (iteration_count > MAX_ITERATIONS .or. &
+                        saturation_pressure_env > (pressure_profile_dp(level) - 1.0_dp)) then
                         error_flag = 2
                         return
                     end if
 
-                    parcel_mixing_ratio_lifted = EPS * saturation_pressure_env / (pressure_profile_dp(level) - saturation_pressure_env)
+                    parcel_mixing_ratio_lifted = EPS * saturation_pressure_env / &
+                                                 (pressure_profile_dp(level) - saturation_pressure_env)
                 end if
             end do
 
@@ -1483,27 +1534,22 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
                 return
             end if
 
-            ! Calculate buoyancy using precomputed INV_EPS
-            mean_mixing_ratio = buoyancy_param_dp * parcel_mixing_ratio_lifted + (1.0_dp - buoyancy_param_dp) * parcel_mixing_ratio_dp
-            ! Parcel virtual temperature with entrainment
-            virtual_temp_parcel = parcel_temp_lifted * (1.0_dp + parcel_mixing_ratio_lifted*INV_EPS) / (1.0_dp + mean_mixing_ratio)
-            ! Environmental virtual temperature (same calculation as dry case)
-            virtual_temp_diff(level) = virtual_temp_parcel - &
-                                      temp_profile_dp(level) * (1.0_dp + mixing_ratio_profile_dp(level)*INV_EPS) / &
-                                      (1.0_dp + mixing_ratio_profile_dp(level))
+            mean_mixing_ratio = buoyancy_param_dp * parcel_mixing_ratio_lifted + &
+                                (1.0_dp - buoyancy_param_dp) * parcel_mixing_ratio_dp
+            virtual_temp_parcel = parcel_temp_lifted * (1.0_dp + parcel_mixing_ratio_lifted * INV_EPS) / &
+                                  (1.0_dp + mean_mixing_ratio)
+            virtual_temp_diff(level) = virtual_temp_parcel - env_virtual_temp(level)
         end if
     end do
 
-    ! Find level of neutral buoyancy and calculate CAPE
-    positive_area = 0.0
-    negative_area = 0.0
+    positive_area = 0.0_dp
+    negative_area = 0.0_dp
 
-    ! Find maximum level of positive buoyancy (optimized with early exit)
     level_neutral_buoyancy = 1
     do level = num_points, min_level, -1
         if (virtual_temp_diff(level) > 0.0_dp) then
             level_neutral_buoyancy = level
-            exit  ! Early exit once highest positive buoyancy found
+            exit
         end if
     end do
 
@@ -1512,50 +1558,43 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
         return
     end if
 
-    ! Calculate positive and negative areas with SIMD optimization
     if (level_neutral_buoyancy > 1) then
-        ! Use SIMD with reduction for parallel accumulation
         !$omp simd private(pressure_factor) reduction(+:positive_area,negative_area)
         do level = min_level + 1, level_neutral_buoyancy
-            ! Pressure weighting factor for CAPE integration
-            pressure_factor = RD * (virtual_temp_diff(level) + virtual_temp_diff(level-1)) * &
-                             (pressure_profile_dp(level-1) - pressure_profile_dp(level)) / &
-                             (pressure_profile_dp(level) + pressure_profile_dp(level-1))
+            pressure_factor = (virtual_temp_diff(level) + virtual_temp_diff(level - 1)) * &
+                              pressure_layer_factor(level)
             positive_area = positive_area + max(pressure_factor, 0.0_dp)
             negative_area = negative_area - min(pressure_factor, 0.0_dp)
         end do
         !$omp end simd
 
-        ! Add area between parcel level and first level above
-        ! This division is geometry-specific and can't be precomputed
         pressure_factor = RD * (parcel_pressure_dp - pressure_profile_dp(min_level)) / &
                          (parcel_pressure_dp + pressure_profile_dp(min_level))
         positive_area = positive_area + pressure_factor * max(virtual_temp_diff(min_level), 0.0_dp)
         negative_area = negative_area - pressure_factor * min(virtual_temp_diff(min_level), 0.0_dp)
 
-        ! Calculate residual area above level of neutral buoyancy
         area_above_lnb = 0.0_dp
-        outflow_temp = temp_profile(level_neutral_buoyancy)
-        outflow_level = pressure_profile(level_neutral_buoyancy)
+        outflow_temp_dp = temp_profile_dp(level_neutral_buoyancy)
+        outflow_level_dp = pressure_profile_dp(level_neutral_buoyancy)
 
         if (level_neutral_buoyancy < num_points) then
-            ! Linear interpolation to find exact LNB pressure and temperature
-            ! These divisions are for interpolation and can't be precomputed
-            pressure_lnb = (pressure_profile_dp(level_neutral_buoyancy+1) * virtual_temp_diff(level_neutral_buoyancy) - &
-                           pressure_profile_dp(level_neutral_buoyancy) * virtual_temp_diff(level_neutral_buoyancy+1)) / &
-                           (virtual_temp_diff(level_neutral_buoyancy) - virtual_temp_diff(level_neutral_buoyancy+1))
+            pressure_lnb = (pressure_profile_dp(level_neutral_buoyancy + 1) * virtual_temp_diff(level_neutral_buoyancy) - &
+                           pressure_profile_dp(level_neutral_buoyancy) * virtual_temp_diff(level_neutral_buoyancy + 1)) / &
+                           (virtual_temp_diff(level_neutral_buoyancy) - virtual_temp_diff(level_neutral_buoyancy + 1))
             area_above_lnb = RD * virtual_temp_diff(level_neutral_buoyancy) * &
                             (pressure_profile_dp(level_neutral_buoyancy) - pressure_lnb) / &
                             (pressure_profile_dp(level_neutral_buoyancy) + pressure_lnb)
-            temp_lnb = (temp_profile_dp(level_neutral_buoyancy) * (pressure_lnb - pressure_profile_dp(level_neutral_buoyancy+1)) + &
-                       temp_profile_dp(level_neutral_buoyancy+1) * (pressure_profile_dp(level_neutral_buoyancy) - pressure_lnb)) / &
-                       (pressure_profile_dp(level_neutral_buoyancy) - pressure_profile_dp(level_neutral_buoyancy+1))
-            outflow_temp = real(temp_lnb, kind(outflow_temp))
-            outflow_level = real(pressure_lnb, kind(outflow_level))
+            temp_lnb = (temp_profile_dp(level_neutral_buoyancy) * &
+                       (pressure_lnb - pressure_profile_dp(level_neutral_buoyancy + 1)) + &
+                       temp_profile_dp(level_neutral_buoyancy + 1) * &
+                       (pressure_profile_dp(level_neutral_buoyancy) - pressure_lnb)) / &
+                       (pressure_profile_dp(level_neutral_buoyancy) - pressure_profile_dp(level_neutral_buoyancy + 1))
+            outflow_temp_dp = temp_lnb
+            outflow_level_dp = pressure_lnb
         end if
 
-        ! Calculate final CAPE
         cape_value = real(max(positive_area + area_above_lnb - negative_area, 0.0_dp), kind(cape_value))
+        outflow_temp = real(outflow_temp_dp, kind(outflow_temp))
+        outflow_level = real(outflow_level_dp, kind(outflow_level))
     end if
-
-end subroutine CAPE
+end subroutine cape_from_cached_environment
