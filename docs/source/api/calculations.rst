@@ -92,8 +92,6 @@ Genesis Potential Index (GPI) / Tropical Cyclone Potential Intensity
 
 .. autofunction:: skyborn.calc.GPI.interface.pi_log_decomposition
 
-.. autoclass:: skyborn.calc.GPI.interface.PotentialIntensityCalculator
-
 .. autofunction:: skyborn.calc.GPI.xarray.potential_intensity
 
 .. autofunction:: skyborn.calc.GPI.xarray.pi_log_decomposition
@@ -436,22 +434,6 @@ Example Usage
    seasonal_pi = result_4d.pi.groupby('time.season').mean()
    print(f"Summer mean PI: {seasonal_pi.sel(season='JJA').mean().values:.1f} m/s")
    print(f"Winter mean PI: {seasonal_pi.sel(season='DJF').mean().values:.1f} m/s")
-
-   # === Class Interface for Batch Processing ===
-   from skyborn.calc.GPI.interface import PotentialIntensityCalculator
-
-   # Process multiple profiles efficiently
-   calculator = PotentialIntensityCalculator(
-       sst_3d.values, psl_3d.values,
-       pressure_levels, temp_3d.values, mixr_3d.values
-   )
-   calculator.calculate()
-   results = calculator.results
-
-   print(f"\nClass interface results:")
-   print(f"  Mean PI: {results['max_wind'].mean():.1f} m/s")
-   print(f"  Std PI: {results['max_wind'].std():.1f} m/s")
-   print(f"  Successful solve: {results['error_flag'] == 1}")
 
    # === PI log decomposition diagnostics ===
    sst_profile = xr.DataArray(sst, attrs={'units': 'K'})
