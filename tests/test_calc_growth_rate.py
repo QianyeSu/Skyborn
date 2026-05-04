@@ -1154,19 +1154,53 @@ class TestGrowthRate:
                 lat_bounds=(30.0,),
             )
 
-    def test_baroc_growth_rate_low_resolution_requires_lon(self):
-        """Low-resolution wavenumber mode should require an explicit longitude coordinate."""
+    def test_baroc_growth_rate_low_resolution_uses_default_chemke_lon_grid(
+        self, monkeypatch
+    ):
+        """Low-resolution mode should fall back to the Chemke longitude grid."""
 
-        with pytest.raises(ValueError, match="`lon` is required"):
-            baroc_growth_rate(
-                np.array([10.0, 20.0, 30.0]),
-                np.array([240.0, 260.0, 280.0]),
-                np.array([30000.0, 60000.0, 100000.0]),
-                lat=45.0,
-                wavenumber_mode="low",
-                tropopause_pressure=300.0,
-                solver_levels=3,
-            )
+        captured = {}
+
+        def fake_backend(
+            u_solver,
+            theta_solver,
+            pressure_solver,
+            temperature_solver,
+            f_cor,
+            beta,
+            smooth_window,
+            *extra,
+        ):
+            captured["wavenumber_mode"] = int(extra[0])
+            captured["wavenumber_count"] = int(extra[1])
+            captured["zonal_length"] = float(extra[2])
+            return 1.0e-6, 0
+
+        monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
+
+        result = baroc_growth_rate(
+            np.array([10.0, 20.0, 30.0]),
+            np.array([240.0, 260.0, 280.0]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat=45.0,
+            wavenumber_mode="low",
+            tropopause_pressure=300.0,
+            solver_levels=3,
+        )
+
+        default_lon = np.arange(0.0, 361.0, 1.5, dtype=np.float64)
+        expected_length = (
+            abs(default_lon[0] - default_lon[-1])
+            / 180.0
+            * np.pi
+            * RADIUS
+            * np.cos(np.deg2rad(45.0))
+        )
+
+        assert_allclose(result, 1.0e-6)
+        assert captured["wavenumber_mode"] == 2
+        assert captured["wavenumber_count"] == 80
+        assert_allclose(captured["zonal_length"], expected_length)
 
     def test_barot_growth_rate_returns_per_second_growth(self):
         """The public barotropic wrapper should return per-second growth."""
