@@ -184,19 +184,20 @@ def _baroc_growth_reference(
 class TestGrowthRateHelpers:
     """Focused coverage for the growth-rate Python wrapper helpers."""
 
-    def test_helper_missing_value_and_unit_normalization_branches(self):
-        """Helper functions should normalize missing values and pressure units."""
+    def test_helper_missing_and_pressure_branches(self):
+        """Helper functions should normalize pressure and track NaN-style gaps."""
 
-        assert growth_rate_core._is_nan_missing_value(None) is True
-        assert growth_rate_core._is_nan_missing_value(object()) is False
-        assert_allclose(growth_rate_core._return_missing_value(-999.0), -999.0)
-        assert (
-            growth_rate_core._contains_missing(np.array([1.0, np.nan, 3.0]), np.nan)
-            is True
+        assert_allclose(
+            growth_rate_core._missing_profile_mask(
+                np.array([[1.0, np.nan], [2.0, 3.0]], dtype=np.float64),
+            ),
+            np.array([True, False]),
         )
-        assert (
-            growth_rate_core._contains_missing(np.array([1.0, -999.0, 3.0]), -999.0)
-            is True
+        assert_allclose(
+            growth_rate_core._missing_vector_mask(
+                np.array([1.0, np.inf], dtype=np.float64),
+            ),
+            np.array([False, True]),
         )
         assert_allclose(
             growth_rate_core._pressure_to_pa(np.array([1000.0, 850.0])),
@@ -208,29 +209,6 @@ class TestGrowthRateHelpers:
         )
         assert growth_rate_core._normalize_method("pressure") == "linear"
         assert growth_rate_core._normalize_method("logp") == "log"
-        converted = growth_rate_core._convert_output_units(
-            np.array([1.0e-6, 2.0e-6]),
-            "day^-1",
-        )
-        assert_allclose(converted, np.array([0.0864, 0.1728]))
-        replaced = growth_rate_core._replace_missing_with_nan(
-            np.array([1.0, -999.0, np.inf], dtype=np.float64),
-            -999.0,
-        )
-        assert np.isnan(replaced[1])
-        assert np.isnan(replaced[2])
-        weighted = growth_rate_core._nan_weighted_mean_last_axis(
-            np.array(
-                [
-                    [1.0, np.nan, 5.0],
-                    [np.nan, np.nan, np.nan],
-                ],
-                dtype=np.float64,
-            ),
-            np.array([1.0, 2.0, 3.0], dtype=np.float64),
-        )
-        assert_allclose(weighted[0], 4.0, rtol=0.0, atol=1e-15)
-        assert np.isnan(weighted[1])
         matrix = growth_rate_core._coerce_profile_matrix(
             np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
             "values",
@@ -267,11 +245,23 @@ class TestGrowthRateHelpers:
         with pytest.raises(ValueError, match="strictly positive"):
             growth_rate_core._pressure_to_pa(np.array([1000.0, 0.0]))
 
-        with pytest.raises(ValueError, match="output_units"):
-            growth_rate_core._normalize_output_units("month^-1")
-
         with pytest.raises(ValueError, match="method"):
             growth_rate_core._normalize_method("cubic")
+
+        with pytest.raises(ValueError, match="wavenumber_mode"):
+            growth_rate_core._normalize_wavenumber_mode("medium")
+
+        with pytest.raises(ValueError, match="nonzero zonal distance"):
+            growth_rate_core._prepare_wavenumber_inputs(
+                "low",
+                np.array([30.0], dtype=np.float64),
+            )
+
+        with pytest.raises(ValueError, match="at least two low-resolution"):
+            growth_rate_core._prepare_wavenumber_inputs(
+                "low",
+                np.array([0.0, 90.0, 180.0, 270.0], dtype=np.float64),
+            )
 
         with pytest.raises(TypeError, match="solver_levels"):
             growth_rate_core._normalize_solver_levels(3.5)
@@ -440,7 +430,7 @@ class TestGrowthRateHelpers:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             captured["u_input"] = np.array(u_input, dtype=np.float64, copy=True)
             captured["temperature_input"] = np.array(
@@ -547,7 +537,7 @@ class TestGrowthRateHelpers:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             captured["u_input"] = np.array(u_input, dtype=np.float64, copy=True)
             captured["temperature_input"] = np.array(
@@ -629,7 +619,7 @@ class TestGrowthRateHelpers:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             captured["u_input"] = np.array(u_input, dtype=np.float64, copy=True)
             captured["temperature_input"] = np.array(
@@ -795,10 +785,10 @@ class TestGrowthRateHelpers:
                 tropopause_pressure=300.0,
             )
 
-    def test_baroc_growth_rate_xarray_latitude_band_ignores_exact_missing_markers(
+    def test_baroc_growth_rate_xarray_latitude_band_ignores_nan_missing_values(
         self, monkeypatch
     ):
-        """Latitude-band xarray reduction should treat the public missing marker as invalid."""
+        """Latitude-band xarray reduction should ignore NaN samples."""
 
         captured = {}
 
@@ -811,7 +801,7 @@ class TestGrowthRateHelpers:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             captured["u_input"] = np.array(u_input, dtype=np.float64, copy=True)
             captured["temperature_input"] = np.array(
@@ -834,14 +824,14 @@ class TestGrowthRateHelpers:
             np.array(
                 [
                     [
-                        [1.0, -999.0, 5.0, 7.0],
-                        [2.0, -999.0, 6.0, 8.0],
-                        [3.0, -999.0, 7.0, 9.0],
+                        [1.0, np.nan, 5.0, 7.0],
+                        [2.0, np.nan, 6.0, 8.0],
+                        [3.0, np.nan, 7.0, 9.0],
                     ],
                     [
-                        [2.0, 4.0, -999.0, 8.0],
-                        [3.0, 5.0, -999.0, 9.0],
-                        [4.0, 6.0, -999.0, 10.0],
+                        [2.0, 4.0, np.nan, 8.0],
+                        [3.0, 5.0, np.nan, 9.0],
+                        [4.0, 6.0, np.nan, 10.0],
                     ],
                 ],
                 dtype=np.float64,
@@ -853,14 +843,14 @@ class TestGrowthRateHelpers:
             np.array(
                 [
                     [
-                        [220.0, -999.0, 224.0, 226.0],
-                        [230.0, -999.0, 234.0, 236.0],
-                        [240.0, -999.0, 244.0, 246.0],
+                        [220.0, np.nan, 224.0, 226.0],
+                        [230.0, np.nan, 234.0, 236.0],
+                        [240.0, np.nan, 244.0, 246.0],
                     ],
                     [
-                        [221.0, 223.0, -999.0, 227.0],
-                        [231.0, 233.0, -999.0, 237.0],
-                        [241.0, 243.0, -999.0, 247.0],
+                        [221.0, 223.0, np.nan, 227.0],
+                        [231.0, 233.0, np.nan, 237.0],
+                        [241.0, 243.0, np.nan, 247.0],
                     ],
                 ],
                 dtype=np.float64,
@@ -876,7 +866,6 @@ class TestGrowthRateHelpers:
             lat_bounds=(30.0, 60.0),
             tropopause_pressure=300.0,
             solver_levels=4,
-            missing_value=-999.0,
         )
 
         assert_allclose(result.values, np.array([1.0e-6, 2.0e-6]))
@@ -993,10 +982,10 @@ class TestGrowthRateHelpers:
                 solver_levels=4,
             )
 
-    def test_baroc_growth_rate_numpy_latitude_band_ignores_exact_missing_markers(
+    def test_baroc_growth_rate_numpy_latitude_band_ignores_nan_missing_values(
         self, monkeypatch
     ):
-        """NumPy latitude-band reduction should treat the public missing marker as invalid."""
+        """NumPy latitude-band reduction should ignore NaN samples."""
 
         captured = {}
 
@@ -1009,7 +998,7 @@ class TestGrowthRateHelpers:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             captured["u_input"] = np.array(u_input, dtype=np.float64, copy=True)
             captured["temperature_input"] = np.array(
@@ -1026,14 +1015,14 @@ class TestGrowthRateHelpers:
         u = np.array(
             [
                 [
-                    [1.0, -999.0, 5.0, 7.0],
-                    [2.0, -999.0, 6.0, 8.0],
-                    [3.0, -999.0, 7.0, 9.0],
+                    [1.0, np.nan, 5.0, 7.0],
+                    [2.0, np.nan, 6.0, 8.0],
+                    [3.0, np.nan, 7.0, 9.0],
                 ],
                 [
-                    [2.0, 4.0, -999.0, 8.0],
-                    [3.0, 5.0, -999.0, 9.0],
-                    [4.0, 6.0, -999.0, 10.0],
+                    [2.0, 4.0, np.nan, 8.0],
+                    [3.0, 5.0, np.nan, 9.0],
+                    [4.0, 6.0, np.nan, 10.0],
                 ],
             ],
             dtype=np.float64,
@@ -1041,14 +1030,14 @@ class TestGrowthRateHelpers:
         temperature = np.array(
             [
                 [
-                    [220.0, -999.0, 224.0, 226.0],
-                    [230.0, -999.0, 234.0, 236.0],
-                    [240.0, -999.0, 244.0, 246.0],
+                    [220.0, np.nan, 224.0, 226.0],
+                    [230.0, np.nan, 234.0, 236.0],
+                    [240.0, np.nan, 244.0, 246.0],
                 ],
                 [
-                    [221.0, 223.0, -999.0, 227.0],
-                    [231.0, 233.0, -999.0, 237.0],
-                    [241.0, 243.0, -999.0, 247.0],
+                    [221.0, 223.0, np.nan, 227.0],
+                    [231.0, 233.0, np.nan, 237.0],
+                    [241.0, 243.0, np.nan, 247.0],
                 ],
             ],
             dtype=np.float64,
@@ -1062,7 +1051,6 @@ class TestGrowthRateHelpers:
             lat_bounds=(30.0, 60.0),
             tropopause_pressure=300.0,
             solver_levels=4,
-            missing_value=-999.0,
         )
 
         assert_allclose(result, np.array([1.0e-6, 2.0e-6]))
@@ -1088,7 +1076,7 @@ class TestGrowthRate:
         u = np.array([5.0, 12.0, 28.0, 42.0, 26.0, 11.0, 4.0], dtype=np.float64)
 
         expected = _barot_growth_reference(lat, u)
-        result = barot_growth_rate(u, lat, output_units="s^-1")
+        result = barot_growth_rate(u, lat)
 
         assert_allclose(result, expected, rtol=1e-8, atol=1e-11)
 
@@ -1098,7 +1086,7 @@ class TestGrowthRate:
         lat = np.linspace(25.0, 55.0, 7)
         u = np.full(lat.shape, 20.0)
 
-        result = barot_growth_rate(u, lat, output_units="s^-1")
+        result = barot_growth_rate(u, lat)
 
         assert np.isfinite(result)
         assert abs(result) < 1e-10
@@ -1129,7 +1117,6 @@ class TestGrowthRate:
             lat=lat,
             tropopause_pressure=200.0,
             solver_levels=5,
-            output_units="s^-1",
         )
 
         assert_allclose(result, expected, rtol=1e-8, atol=1e-11)
@@ -1167,38 +1154,40 @@ class TestGrowthRate:
                 lat_bounds=(30.0,),
             )
 
-    def test_output_units_conversion_to_day_inverse(self):
-        """The public API should convert from per-second to per-day units explicitly."""
+    def test_baroc_growth_rate_low_resolution_requires_lon(self):
+        """Low-resolution wavenumber mode should require an explicit longitude coordinate."""
+
+        with pytest.raises(ValueError, match="`lon` is required"):
+            baroc_growth_rate(
+                np.array([10.0, 20.0, 30.0]),
+                np.array([240.0, 260.0, 280.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat=45.0,
+                wavenumber_mode="low",
+                tropopause_pressure=300.0,
+                solver_levels=3,
+            )
+
+    def test_barot_growth_rate_returns_per_second_growth(self):
+        """The public barotropic wrapper should return per-second growth."""
 
         lat = np.linspace(30.0, 60.0, 7)
         u = np.array([5.0, 12.0, 28.0, 42.0, 26.0, 11.0, 4.0], dtype=np.float64)
 
-        growth_s = barot_growth_rate(u, lat, output_units="s^-1")
-        growth_day = barot_growth_rate(u, lat, output_units="day^-1")
+        growth = barot_growth_rate(u, lat)
+        expected = _barot_growth_reference(lat, u)
 
-        assert_allclose(growth_day, growth_s * 86400.0, rtol=1e-12, atol=1e-12)
+        assert_allclose(growth, expected, rtol=1e-12, atol=1e-12)
 
-    def test_barot_growth_rate_defaults_to_per_second_units(self):
-        """The default public output unit should now be per-second growth."""
-
-        lat = np.linspace(30.0, 60.0, 7)
-        u = np.array([5.0, 12.0, 28.0, 42.0, 26.0, 11.0, 4.0], dtype=np.float64)
-
-        default_result = barot_growth_rate(u, lat)
-        explicit_result = barot_growth_rate(u, lat, output_units="s^-1")
-
-        assert_allclose(default_result, explicit_result, rtol=1e-12, atol=1e-12)
-
-    def test_barot_growth_rate_returns_missing_value_when_input_is_missing(self):
-        """Missing barotropic inputs should short-circuit to the public missing marker."""
+    def test_barot_growth_rate_returns_nan_when_input_is_missing(self):
+        """Missing barotropic inputs should short-circuit to NaN."""
 
         result = barot_growth_rate(
-            np.array([10.0, -999.0, 20.0]),
+            np.array([10.0, np.nan, 20.0]),
             np.array([20.0, 30.0, 40.0]),
-            missing_value=-999.0,
         )
 
-        assert result == -999.0
+        assert np.isnan(result)
 
     def test_barot_growth_rate_reorders_descending_latitudes_for_backend(
         self, monkeypatch
@@ -1219,7 +1208,6 @@ class TestGrowthRate:
         result = barot_growth_rate(
             np.array([30.0, 20.0, 10.0]),
             np.array([50.0, 40.0, 30.0]),
-            output_units="s^-1",
         )
 
         assert_allclose(result, 2.5e-6)
@@ -1271,6 +1259,7 @@ class TestGrowthRate:
             f_cor,
             beta,
             smooth_window,
+            *extra,
         ):
             captured["pressure_solver"] = np.array(
                 pressure_solver, dtype=np.float64, copy=True
@@ -1321,6 +1310,7 @@ class TestGrowthRate:
             f_cor,
             beta,
             smooth_window,
+            *extra,
         ):
             captured["pressure_solver"] = np.array(
                 pressure_solver, dtype=np.float64, copy=True
@@ -1362,6 +1352,7 @@ class TestGrowthRate:
             f_cor,
             beta,
             smooth_window,
+            *extra,
         ):
             captured["pressure_solver"] = np.array(
                 pressure_solver, dtype=np.float64, copy=True
@@ -1401,6 +1392,7 @@ class TestGrowthRate:
             f_cor,
             beta,
             smooth_window,
+            *extra,
         ):
             captured["smooth_window"] = int(smooth_window)
             return 1.0e-6, 0
@@ -1419,6 +1411,142 @@ class TestGrowthRate:
 
         assert_allclose(result, 1.0e-6, rtol=0.0, atol=0.0)
         assert captured["smooth_window"] == 5
+
+    def test_baroc_growth_rate_defaults_to_high_resolution_wavenumbers(
+        self, monkeypatch
+    ):
+        """The public API should default to the fixed high-resolution wavenumber grid."""
+
+        captured = {}
+
+        def fake_backend(
+            u_solver,
+            theta_solver,
+            pressure_solver,
+            temperature_solver,
+            f_cor,
+            beta,
+            smooth_window,
+            *extra,
+        ):
+            captured["wavenumber_mode"] = int(extra[0])
+            captured["wavenumber_count"] = int(extra[1])
+            captured["zonal_length"] = float(extra[2])
+            return 1.0e-6, 0
+
+        monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
+
+        result = baroc_growth_rate(
+            np.array([8.0, 14.0, 24.0]),
+            np.array([220.0, 235.0, 255.0]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat=45.0,
+            tropopause_pressure=300.0,
+            solver_levels=3,
+        )
+
+        assert_allclose(result, 1.0e-6)
+        assert captured["wavenumber_mode"] == 1
+        assert captured["wavenumber_count"] == 200
+        assert_allclose(captured["zonal_length"], 1.0)
+
+    def test_baroc_growth_rate_low_resolution_uses_lon_span(self, monkeypatch):
+        """Low-resolution mode should forward the longitude-derived zonal length."""
+
+        captured = {}
+
+        def fake_backend(
+            u_solver,
+            theta_solver,
+            pressure_solver,
+            temperature_solver,
+            f_cor,
+            beta,
+            smooth_window,
+            *extra,
+        ):
+            captured["wavenumber_mode"] = int(extra[0])
+            captured["wavenumber_count"] = int(extra[1])
+            captured["zonal_length"] = float(extra[2])
+            return 1.0e-6, 0
+
+        monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
+
+        lon = np.arange(0.0, 361.0, 1.5, dtype=np.float64)
+        result = baroc_growth_rate(
+            np.array([8.0, 14.0, 24.0]),
+            np.array([220.0, 235.0, 255.0]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat_bounds=(30.0, 60.0),
+            lon=lon,
+            wavenumber_mode="low",
+            tropopause_pressure=300.0,
+            solver_levels=3,
+        )
+
+        cos_avg = (np.cos(np.deg2rad(30.0)) + np.cos(np.deg2rad(60.0))) / 2.0
+        expected_length = abs(lon[0] - lon[-1]) / 180.0 * np.pi * RADIUS * cos_avg
+
+        assert_allclose(result, 1.0e-6)
+        assert captured["wavenumber_mode"] == 2
+        assert captured["wavenumber_count"] == 80
+        assert_allclose(captured["zonal_length"], expected_length)
+
+    def test_baroc_growth_rate_low_resolution_uses_single_latitude_geometry(
+        self, monkeypatch
+    ):
+        """Low-resolution mode should use the supplied single latitude when no band is given."""
+
+        captured = {}
+
+        def fake_backend(
+            u_solver,
+            theta_solver,
+            pressure_solver,
+            temperature_solver,
+            f_cor,
+            beta,
+            smooth_window,
+            *extra,
+        ):
+            captured["zonal_length"] = float(extra[2])
+            return 1.0e-6, 0
+
+        monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
+
+        lon = np.arange(0.0, 361.0, 1.5, dtype=np.float64)
+        result = baroc_growth_rate(
+            np.array([8.0, 14.0, 24.0]),
+            np.array([220.0, 235.0, 255.0]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat=45.0,
+            lon=lon,
+            wavenumber_mode="low",
+            tropopause_pressure=300.0,
+            solver_levels=3,
+        )
+
+        expected_length = (
+            abs(lon[0] - lon[-1]) / 180.0 * np.pi * RADIUS * np.cos(np.deg2rad(45.0))
+        )
+        assert_allclose(result, 1.0e-6)
+        assert_allclose(captured["zonal_length"], expected_length)
+
+    def test_baroc_growth_rate_low_resolution_rejects_zero_zonal_length(self):
+        """Low-resolution mode should reject unusable single-latitude geometry."""
+
+        lon = np.arange(0.0, 361.0, 1.5, dtype=np.float64)
+        with pytest.raises(ValueError, match="positive zonal length"):
+            baroc_growth_rate(
+                np.array([8.0, 14.0, 24.0]),
+                np.array([220.0, 235.0, 255.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat=np.nan,
+                lon=lon,
+                wavenumber_mode="low",
+                tropopause_pressure=300.0,
+                solver_levels=3,
+            )
 
     def test_baroc_growth_rate_matches_reference_with_spectrum_smoothing(self):
         """Compiled spectrum smoothing should match the NumPy reference path."""
@@ -1443,7 +1571,6 @@ class TestGrowthRate:
             tropopause_pressure=200.0,
             solver_levels=5,
             smooth_window=5,
-            output_units="s^-1",
         )
 
         assert_allclose(result, expected, rtol=1e-8, atol=1e-11)
@@ -1461,6 +1588,7 @@ class TestGrowthRate:
             f_cor,
             beta,
             smooth_window,
+            *extra,
         ):
             captured["f_cor"] = float(f_cor)
             captured["beta"] = float(beta)
@@ -1510,7 +1638,7 @@ class TestGrowthRate:
         monkeypatch.setattr(
             growth_rate_core,
             "_dbaroc_growth_rate_1d",
-            lambda u_solver, theta_solver, pressure_solver, temperature_solver, f_cor, beta, smooth_window: (
+            lambda u_solver, theta_solver, pressure_solver, temperature_solver, f_cor, beta, smooth_window, *extra: (
                 1.0e-6,
                 0,
             ),
@@ -1541,7 +1669,7 @@ class TestGrowthRate:
         monkeypatch.setattr(
             growth_rate_core,
             "_dbaroc_growth_rate_1d",
-            lambda u_solver, theta_solver, pressure_solver, temperature_solver, f_cor, beta, smooth_window: (
+            lambda u_solver, theta_solver, pressure_solver, temperature_solver, f_cor, beta, smooth_window, *extra: (
                 1.0e-6,
                 0,
             ),
@@ -1584,20 +1712,19 @@ class TestGrowthRate:
                 lat=45.0,
             )
 
-    def test_baroc_growth_rate_returns_missing_value_when_input_is_missing(self):
-        """Missing baroclinic inputs should short-circuit to the public missing marker."""
+    def test_baroc_growth_rate_returns_nan_when_input_is_missing(self):
+        """Missing baroclinic inputs should short-circuit to NaN."""
 
         result = baroc_growth_rate(
-            np.array([8.0, -999.0, 24.0]),
+            np.array([8.0, np.nan, 24.0]),
             np.array([220.0, 235.0, 255.0]),
             np.array([30000.0, 60000.0, 100000.0]),
             lat=45.0,
             tropopause_pressure=300.0,
             solver_levels=3,
-            missing_value=-999.0,
         )
 
-        assert result == -999.0
+        assert np.isnan(result)
 
     def test_baroc_growth_rate_rejects_nonpositive_temperature(self):
         """Baroclinic temperature profiles must remain strictly positive."""
@@ -1615,7 +1742,7 @@ class TestGrowthRate:
     def test_baroc_growth_rate_returns_missing_when_interpolation_has_nan(
         self, monkeypatch
     ):
-        """Interpolation failures should return the public missing marker."""
+        """Interpolation failures should return NaN."""
 
         def fake_interp(x, p_in, p_out, *, method, extrapolate, missing_value):
             if float(np.asarray(x)[0]) == 8.0:
@@ -1631,10 +1758,9 @@ class TestGrowthRate:
             lat=45.0,
             tropopause_pressure=300.0,
             solver_levels=3,
-            missing_value=-999.0,
         )
 
-        assert result == -999.0
+        assert np.isnan(result)
 
     def test_baroc_growth_rate_raises_when_backend_reports_error(self, monkeypatch):
         """Baroclinic backend errors should raise a clear runtime error."""
@@ -1642,7 +1768,7 @@ class TestGrowthRate:
         monkeypatch.setattr(
             growth_rate_core,
             "_dbaroc_growth_rate_1d",
-            lambda u_solver, theta_solver, pressure_solver, temperature_solver, f_cor, beta, smooth_window: (
+            lambda u_solver, theta_solver, pressure_solver, temperature_solver, f_cor, beta, smooth_window, *extra: (
                 0.0,
                 19,
             ),
@@ -1710,7 +1836,7 @@ class TestGrowthRate:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             captured["target_pressure"] = np.array(
                 target_pressure,
@@ -1784,7 +1910,7 @@ class TestGrowthRate:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             captured["nprofile"] = u_input.shape[1]
             return np.array([1.0e-6]), np.array([0], dtype=np.int32)
@@ -1801,12 +1927,11 @@ class TestGrowthRate:
             np.array([[220.0, 235.0, 255.0], [219.0, 234.0, 254.0]]),
             np.array([30000.0, 60000.0, 100000.0]),
             lat=45.0,
-            missing_value=-999.0,
         )
 
         assert captured["nprofile"] == 1
         assert_allclose(result[0], 1.0e-6)
-        assert result[1] == -999.0
+        assert np.isnan(result[1])
 
     def test_baroc_growth_rate_batch_all_auto_tropopause_failures_skip_backend(
         self, monkeypatch
@@ -1850,10 +1975,9 @@ class TestGrowthRate:
             np.array([[220.0, 235.0, 255.0], [219.0, 234.0, 254.0]]),
             np.array([30000.0, 60000.0, 100000.0]),
             lat=45.0,
-            missing_value=-999.0,
         )
 
-        assert_allclose(result, np.array([-999.0, -999.0]))
+        assert np.all(np.isnan(result))
 
     def test_baroc_growth_rate_batch_broadcasts_climatology_to_backend(
         self, monkeypatch
@@ -1871,7 +1995,7 @@ class TestGrowthRate:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             captured["u_input"] = np.array(u_input, dtype=np.float64, copy=True)
             captured["temperature_input"] = np.array(
@@ -1887,7 +2011,9 @@ class TestGrowthRate:
             captured["beta"] = np.array(beta, dtype=np.float64, copy=True)
             captured["interp_kind"] = int(interp_kind)
             captured["smooth_window"] = int(smooth_window)
-            captured["missing_value"] = float(missing_value)
+            captured["wavenumber_mode"] = int(extra[0])
+            captured["wavenumber_count"] = int(extra[1])
+            captured["zonal_length"] = np.array(extra[2], dtype=np.float64, copy=True)
             return np.array([1.0e-6, 2.0e-6]), np.array([0, 0], dtype=np.int32)
 
         monkeypatch.setattr(
@@ -1918,11 +2044,78 @@ class TestGrowthRate:
         )
         assert captured["interp_kind"] == 2
         assert captured["smooth_window"] == 1
-        assert captured["missing_value"] != 0.0
+        assert captured["wavenumber_mode"] == 1
+        assert captured["wavenumber_count"] == 200
+        assert_allclose(captured["zonal_length"], np.ones(2, dtype=np.float64))
         assert_allclose(
             captured["target_pressure"][:, 0],
             np.linspace(30000.0, 100000.0, 4, dtype=np.float64),
         )
+
+    def test_baroc_growth_rate_batch_low_resolution_uses_lon_span(self, monkeypatch):
+        """Batch low-resolution mode should forward one zonal length per profile."""
+
+        captured = {}
+
+        def fake_backend(
+            u_input,
+            temperature_input,
+            source_pressure,
+            target_pressure,
+            f_cor,
+            beta,
+            interp_kind,
+            smooth_window,
+            *extra,
+        ):
+            captured["wavenumber_mode"] = int(extra[0])
+            captured["wavenumber_count"] = int(extra[1])
+            captured["zonal_length"] = np.array(extra[2], dtype=np.float64, copy=True)
+            return np.array([1.0e-6, 2.0e-6]), np.array([0, 0], dtype=np.int32)
+
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_dbaroc_growth_rate_profiles",
+            fake_backend,
+        )
+
+        lon = np.arange(0.0, 361.0, 1.5, dtype=np.float64)
+        lat = np.array([40.0, 60.0], dtype=np.float64)
+        result = baroc_growth_rate(
+            np.array([[8.0, 14.0, 24.0], [7.0, 13.0, 23.0]]),
+            np.array([220.0, 235.0, 255.0]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat=lat,
+            lon=lon,
+            wavenumber_mode="low",
+            tropopause_pressure=300.0,
+            solver_levels=4,
+        )
+
+        expected_lengths = (
+            abs(lon[0] - lon[-1]) / 180.0 * np.pi * RADIUS * np.cos(np.deg2rad(lat))
+        )
+
+        assert_allclose(result, np.array([1.0e-6, 2.0e-6]))
+        assert captured["wavenumber_mode"] == 2
+        assert captured["wavenumber_count"] == 80
+        assert_allclose(captured["zonal_length"], expected_lengths)
+
+    def test_baroc_growth_rate_batch_low_resolution_rejects_zero_band_length(self):
+        """Batch low-resolution mode should reject unusable latitude-band geometry."""
+
+        lon = np.arange(0.0, 361.0, 1.5, dtype=np.float64)
+        with pytest.raises(ValueError, match="positive zonal length"):
+            baroc_growth_rate(
+                np.array([[8.0, 14.0, 24.0], [7.0, 13.0, 23.0]]),
+                np.array([220.0, 235.0, 255.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat_bounds=(np.nan, 60.0),
+                lon=lon,
+                wavenumber_mode="low",
+                tropopause_pressure=300.0,
+                solver_levels=4,
+            )
 
     def test_baroc_growth_rate_batch_uses_chemke_latitude_band_dynamics(
         self, monkeypatch
@@ -1940,7 +2133,7 @@ class TestGrowthRate:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             captured["f_cor"] = np.array(f_cor, dtype=np.float64, copy=True)
             captured["beta"] = np.array(beta, dtype=np.float64, copy=True)
@@ -1980,7 +2173,7 @@ class TestGrowthRate:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             return np.array([1.0e-6, 2.0e-6]), np.array([0, 0], dtype=np.int32)
 
@@ -2015,10 +2208,10 @@ class TestGrowthRate:
         assert_allclose(result["time"], np.array([2000, 2001]))
         assert_allclose(result.values, np.array([1.0e-6, 2.0e-6]))
 
-    def test_baroc_growth_rate_batch_masks_missing_profiles_without_scaling_marker(
+    def test_baroc_growth_rate_batch_masks_missing_profiles_with_nan_output(
         self, monkeypatch
     ):
-        """Missing profiles should short-circuit to the public marker in batched output."""
+        """Missing profiles should short-circuit to NaN output in batched mode."""
 
         captured = {}
 
@@ -2031,7 +2224,7 @@ class TestGrowthRate:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             captured["nprofile"] = u_input.shape[1]
             return np.array([1.0e-6]), np.array([0], dtype=np.int32)
@@ -2043,18 +2236,16 @@ class TestGrowthRate:
         )
 
         result = baroc_growth_rate(
-            np.array([[8.0, 14.0, 24.0], [-999.0, 13.0, 23.0]]),
+            np.array([[8.0, 14.0, 24.0], [np.nan, 13.0, 23.0]]),
             np.array([220.0, 235.0, 255.0]),
             np.array([30000.0, 60000.0, 100000.0]),
             lat=45.0,
             tropopause_pressure=300.0,
-            output_units="day^-1",
-            missing_value=-999.0,
         )
 
         assert captured["nprofile"] == 1
-        assert_allclose(result[0], 0.0864, rtol=1e-12, atol=1e-12)
-        assert result[1] == -999.0
+        assert_allclose(result[0], 1.0e-6, rtol=1e-12, atol=1e-12)
+        assert np.isnan(result[1])
 
     def test_baroc_growth_rate_batch_returns_missing_for_interp_failure_code(
         self, monkeypatch
@@ -2070,7 +2261,7 @@ class TestGrowthRate:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             return np.array([1.0e-6, -999.0]), np.array([0, 100], dtype=np.int32)
 
@@ -2086,11 +2277,10 @@ class TestGrowthRate:
             np.array([30000.0, 60000.0, 100000.0]),
             lat=45.0,
             tropopause_pressure=300.0,
-            missing_value=-999.0,
         )
 
         assert_allclose(result[0], 1.0e-6)
-        assert result[1] == -999.0
+        assert np.isnan(result[1])
 
     def test_baroc_growth_rate_batch_raises_when_profile_backend_reports_error(
         self, monkeypatch
@@ -2106,7 +2296,7 @@ class TestGrowthRate:
             beta,
             interp_kind,
             smooth_window,
-            missing_value,
+            *extra,
         ):
             return np.array([1.0e-6, 2.0e-6]), np.array([0, 300], dtype=np.int32)
 
@@ -2161,10 +2351,10 @@ class TestGrowthRate:
                 tropopause_pressure=300.0,
             )
 
-    def test_baroc_growth_rate_batch_returns_missing_when_all_profiles_are_missing(
+    def test_baroc_growth_rate_batch_returns_nan_when_all_profiles_are_missing(
         self, monkeypatch
     ):
-        """All-missing batched input should return missing markers without backend work."""
+        """All-missing batched input should return NaN without backend work."""
 
         def fail_backend(*args, **kwargs):
             raise AssertionError("batch backend should not run for all-missing input")
@@ -2176,15 +2366,14 @@ class TestGrowthRate:
         )
 
         result = baroc_growth_rate(
-            np.array([[-999.0, 14.0, 24.0], [7.0, 13.0, -999.0]]),
+            np.array([[np.nan, 14.0, 24.0], [7.0, 13.0, np.nan]]),
             np.array([220.0, 235.0, 255.0]),
             np.array([30000.0, 60000.0, 100000.0]),
             lat=45.0,
             tropopause_pressure=300.0,
-            missing_value=-999.0,
         )
 
-        assert_allclose(result, np.array([-999.0, -999.0]))
+        assert np.all(np.isnan(result))
 
     def test_baroc_growth_rate_batch_matches_single_calls_with_explicit_tropopause(
         self,
@@ -2208,7 +2397,6 @@ class TestGrowthRate:
                     lat=45.0,
                     tropopause_pressure=tropopause[idx],
                     solver_levels=5,
-                    output_units="s^-1",
                 )
                 for idx in range(2)
             ]
@@ -2220,7 +2408,6 @@ class TestGrowthRate:
             lat=45.0,
             tropopause_pressure=tropopause,
             solver_levels=5,
-            output_units="s^-1",
         )
 
         assert_allclose(result, expected, rtol=1e-10, atol=1e-12)
