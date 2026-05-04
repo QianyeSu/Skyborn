@@ -53,6 +53,7 @@ classifiers = [
 
 [tool.setuptools]
 package-dir = { "" = "src" }
+include-package-data = false
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -65,8 +66,8 @@ exclude = [
     "*.build.*",
 ]
 
-[tool.setuptools.package-data]
-"skyborn.gridfill" = ["tests/data/*.npy"]
+[tool.setuptools.exclude-package-data]
+"*" = ["*.pyc", "*.pyo", "__pycache__/*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "skyborn.__version__" }
