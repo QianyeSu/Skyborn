@@ -78,10 +78,8 @@ jobs:
           export HOMEBREW_NO_AUTO_UPDATE=1
 
           brew list gcc >/dev/null 2>&1 || brew install gcc
-          brew list openblas >/dev/null 2>&1 || brew install openblas
 
           GCC_PREFIX="$(brew --prefix gcc)"
-          OPENBLAS_PREFIX="$(brew --prefix openblas)"
           GCC_BIN_DIR="${GCC_PREFIX}/bin"
           C_BIN="$(compgen -G "${GCC_BIN_DIR}/gcc-[0-9]*" | sort -V | tail -1)"
           CXX_BIN="$(compgen -G "${GCC_BIN_DIR}/g++-[0-9]*" | sort -V | tail -1)"
@@ -97,11 +95,6 @@ jobs:
           echo "MACOS_FC=${F_BIN}" >> "$GITHUB_ENV"
           echo "MACOS_F77=${F_BIN}" >> "$GITHUB_ENV"
           echo "MACOS_F90=${F_BIN}" >> "$GITHUB_ENV"
-          echo "MACOS_OPENBLAS_ROOT=${OPENBLAS_PREFIX}" >> "$GITHUB_ENV"
-          echo "MACOS_CPPFLAGS=-I${OPENBLAS_PREFIX}/include" >> "$GITHUB_ENV"
-          echo "MACOS_LDFLAGS=-L${OPENBLAS_PREFIX}/lib" >> "$GITHUB_ENV"
-          echo "MACOS_LIBRARY_PATH=${OPENBLAS_PREFIX}/lib" >> "$GITHUB_ENV"
-          echo "MACOS_PKG_CONFIG_PATH=${OPENBLAS_PREFIX}/lib/pkgconfig" >> "$GITHUB_ENV"
 
           if [[ "${{ matrix.buildplat[1] }}" == "macosx_x86_64" ]]; then
             echo "MACOSX_DEPLOYMENT_TARGET=15.0" >> "$GITHUB_ENV"
@@ -130,7 +123,6 @@ jobs:
           update: true
           install: >-
             mingw-w64-x86_64-gcc-fortran
-            mingw-w64-x86_64-openblas
             mingw-w64-x86_64-pkgconf
 
       # Install delvewheel and expose gfortran/gcc in PATH for cibuildwheel
@@ -138,20 +130,40 @@ jobs:
         if: matrix.buildplat[1] == 'win_amd64'
         shell: pwsh
         run: |
-          if (Test-Path "C:\msys64\mingw64\bin") {
-            "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          } else {
-            throw "MSYS2 mingw64 bin path not found: C:\msys64\mingw64\bin"
+          function Resolve-MsysTool([string]$name) {
+            $candidates = @(
+              (Join-Path $env:RUNNER_TEMP "msys64\\mingw64\\bin\\$name.exe"),
+              "D:\\a\\_temp\\msys64\\mingw64\\bin\\$name.exe",
+              "C:\\msys64\\mingw64\\bin\\$name.exe"
+            )
+            foreach ($candidate in $candidates) {
+              if (Test-Path $candidate) {
+                return (Resolve-Path $candidate).Path
+              }
+            }
+
+            $command = Get-Command "$name.exe" -ErrorAction SilentlyContinue |
+              Where-Object { $_.Source -like '*mingw64\\bin\\*' } |
+              Select-Object -First 1
+            if ($command) {
+              return $command.Source
+            }
+
+            throw "Could not resolve MSYS2 tool: $name.exe"
           }
-          "MSYS2_BIN=C:/msys64/mingw64/bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MSYS2_CC=C:/msys64/mingw64/bin/gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MSYS2_CXX=C:/msys64/mingw64/bin/g++.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MSYS2_FC=C:/msys64/mingw64/bin/gfortran.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MSYS2_PKG_CONFIG=C:/msys64/mingw64/bin/pkg-config.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "OPENBLAS_ROOT=C:/msys64/mingw64" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PKG_CONFIG_PATH=C:/msys64/mingw64/lib/pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "LIBRARY_PATH=C:/msys64/mingw64/lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "C_INCLUDE_PATH=C:/msys64/mingw64/include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          $gcc = Resolve-MsysTool "gcc"
+          $gxx = Resolve-MsysTool "g++"
+          $gfortran = Resolve-MsysTool "gfortran"
+          $pkgConfig = Resolve-MsysTool "pkg-config"
+          $mingwBin = Split-Path $gcc -Parent
+
+          $mingwBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "MSYS2_BIN=$($mingwBin -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSYS2_CC=$($gcc -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSYS2_CXX=$($gxx -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSYS2_FC=$($gfortran -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSYS2_PKG_CONFIG=$($pkgConfig -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           pip install delvewheel
 
       - name: Validate matrix combination
@@ -186,7 +198,7 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_BEFORE_BUILD_WINDOWS: pip install meson ninja
-          CIBW_ENVIRONMENT_WINDOWS: CC=${{ env.MSYS2_CC }} CXX=${{ env.MSYS2_CXX }} FC=${{ env.MSYS2_FC }} F77=${{ env.MSYS2_FC }} F90=${{ env.MSYS2_FC }} PKG_CONFIG=${{ env.MSYS2_PKG_CONFIG }} OPENBLAS_ROOT=${{ env.OPENBLAS_ROOT }} PKG_CONFIG_PATH=${{ env.PKG_CONFIG_PATH }} LIBRARY_PATH=${{ env.LIBRARY_PATH }} C_INCLUDE_PATH=${{ env.C_INCLUDE_PATH }}
+          CIBW_ENVIRONMENT_WINDOWS: SKYBORN_BUILD_GROWTH_RATE=0 CC=${{ env.MSYS2_CC }} CXX=${{ env.MSYS2_CXX }} FC=${{ env.MSYS2_FC }} F77=${{ env.MSYS2_FC }} F90=${{ env.MSYS2_FC }} PKG_CONFIG=${{ env.MSYS2_PKG_CONFIG }}
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair -w {dest_dir} {wheel}
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
@@ -200,7 +212,7 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_BEFORE_BUILD: python -m pip install meson ninja
-          CIBW_ENVIRONMENT_MACOS: FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} CPPFLAGS=${{ env.MACOS_CPPFLAGS }} LDFLAGS=${{ env.MACOS_LDFLAGS }} LIBRARY_PATH=${{ env.MACOS_LIBRARY_PATH }} PKG_CONFIG_PATH=${{ env.MACOS_PKG_CONFIG_PATH }} OPENBLAS_ROOT=${{ env.MACOS_OPENBLAS_ROOT }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
+          CIBW_ENVIRONMENT_MACOS: SKYBORN_BUILD_GROWTH_RATE=0 FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
           MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
@@ -214,7 +226,7 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_BEFORE_BUILD: python -m pip install meson ninja
-          CIBW_ENVIRONMENT_MACOS: FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} CPPFLAGS=${{ env.MACOS_CPPFLAGS }} LDFLAGS=${{ env.MACOS_LDFLAGS }} LIBRARY_PATH=${{ env.MACOS_LIBRARY_PATH }} PKG_CONFIG_PATH=${{ env.MACOS_PKG_CONFIG_PATH }} OPENBLAS_ROOT=${{ env.MACOS_OPENBLAS_ROOT }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
+          CIBW_ENVIRONMENT_MACOS: SKYBORN_BUILD_GROWTH_RATE=0 FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
           MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
@@ -230,15 +242,8 @@ jobs:
           CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_BEFORE_BUILD_LINUX: |
-            # Install gfortran
-            dnf install -y gcc-gfortran openblas-devel || yum install -y gcc-gfortran openblas-devel || echo 'gfortran/openblas install failed'
-            # Install modern geospatial stack from conda-forge (more reliable)
-            curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -o mambaforge.sh
-            bash mambaforge.sh -b -p /opt/mambaforge
-            /opt/mambaforge/bin/mamba install -y -c conda-forge "proj>=9.4.0" "pyproj>=3.6.0" geos gdal hdf5 libnetcdf sqlite "libblas=*=*openblas" "liblapack=*=*openblas" libopenblas
-            # Verify PROJ version
-            /opt/mambaforge/bin/proj --version || echo 'PROJ not available'
-          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PROJ_DIR=/opt/mambaforge HDF5_DIR=/opt/mambaforge OPENBLAS_ROOT=/opt/mambaforge PKG_CONFIG_PATH=/opt/mambaforge/lib/pkgconfig PATH=/opt/mambaforge/bin:$PATH LD_LIBRARY_PATH=/opt/mambaforge/lib:$LD_LIBRARY_PATH LIBRARY_PATH=/opt/mambaforge/lib:$LIBRARY_PATH CPATH=/opt/mambaforge/include:$CPATH
+            dnf install -y gcc-gfortran || yum install -y gcc-gfortran || echo 'gfortran install failed'
+          CIBW_ENVIRONMENT_LINUX: SKYBORN_BUILD_GROWTH_RATE=0 FC=gfortran CC=gcc
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
 
@@ -252,14 +257,8 @@ jobs:
           CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BEFORE_BUILD_LINUX: |
-            # Install gfortran (manylinux2014 is CentOS7-based, uses yum)
-            yum install -y gcc-gfortran openblas-devel || echo 'gfortran/openblas install failed'
-            # Install modern geospatial stack from conda-forge
-            curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -o mambaforge.sh
-            bash mambaforge.sh -b -p /opt/mambaforge
-            /opt/mambaforge/bin/mamba install -y -c conda-forge "proj>=9.4.0" "pyproj>=3.6.0" geos gdal hdf5 libnetcdf sqlite "libblas=*=*openblas" "liblapack=*=*openblas" libopenblas
-            /opt/mambaforge/bin/proj --version || echo 'PROJ not available'
-          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PROJ_DIR=/opt/mambaforge HDF5_DIR=/opt/mambaforge NETCDF4_DIR=/opt/mambaforge OPENBLAS_ROOT=/opt/mambaforge PKG_CONFIG_PATH=/opt/mambaforge/lib/pkgconfig LD_LIBRARY_PATH=/opt/mambaforge/lib:$LD_LIBRARY_PATH LIBRARY_PATH=/opt/mambaforge/lib:$LIBRARY_PATH CPATH=/opt/mambaforge/include:$CPATH
+            yum install -y gcc-gfortran || echo 'gfortran install failed'
+          CIBW_ENVIRONMENT_LINUX: SKYBORN_BUILD_GROWTH_RATE=0 FC=gfortran CC=gcc
           # Skip wheel test: manylinux2014 test env lacks binary wheels for heavy deps
           # (scipy, cartopy, netCDF4, etc.) and source builds fail on old CentOS7 libraries.
           # The wheel itself is built correctly; real-world install on the target server is the actual test.
