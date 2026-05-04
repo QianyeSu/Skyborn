@@ -11,12 +11,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import xarray as xr
 
-from .interface import (
-    calculate_potential_intensity_3d,
-    calculate_potential_intensity_4d,
-    calculate_potential_intensity_profile,
-)
 from .interface import pi_log_decomposition as _pi_log_decomposition_numpy
+from .interface import potential_intensity as _potential_intensity_numpy
 
 
 def _extract_scalar(value: Union[float, xr.DataArray], name: str) -> float:
@@ -819,7 +815,7 @@ def potential_intensity(
                 sst, psl, pressure_levels, temperature, mixing_ratio
             )
         )
-        min_pressure, pi, error_flag = calculate_potential_intensity_profile(
+        min_pressure, pi, error_flag = _potential_intensity_numpy(
             sst_val, psl_val, p_levels, temp_vals, mixr_vals
         )
         return _create_output_dataset(
@@ -843,16 +839,10 @@ def potential_intensity(
             data_ndim=ndim,
         )
     )
-    if ndim == 3:
-        min_pressure, pi, error_flag = calculate_potential_intensity_3d(
-            sst_vals, psl_vals, p_levels, temp_vals, mixr_vals
-        )
-        data_type = "3D gridded"
-    else:
-        min_pressure, pi, error_flag = calculate_potential_intensity_4d(
-            sst_vals, psl_vals, p_levels, temp_vals, mixr_vals
-        )
-        data_type = "4D time series"
+    min_pressure, pi, error_flag = _potential_intensity_numpy(
+        sst_vals, psl_vals, p_levels, temp_vals, mixr_vals
+    )
+    data_type = "3D gridded" if ndim == 3 else "4D time series"
 
     return _create_output_dataset(
         min_pressure,
