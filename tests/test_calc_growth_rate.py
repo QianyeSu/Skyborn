@@ -213,13 +213,13 @@ class TestGrowthRateHelpers:
             "day^-1",
         )
         assert_allclose(converted, np.array([0.0864, 0.1728]))
-        layout = growth_rate_core._coerce_profile_layout(
+        matrix = growth_rate_core._coerce_profile_matrix(
             np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
             "values",
             pressure_size=2,
             pressure_dim=None,
         )
-        assert layout["matrix"].shape == (3, 2)
+        assert matrix.shape == (3, 2)
 
     def test_helper_validation_errors(self):
         """Helper validation should reject malformed shapes, coordinates, and units."""
@@ -228,7 +228,7 @@ class TestGrowthRateHelpers:
             growth_rate_core._as_1d_float64(np.ones((2, 2)), "values")
 
         with pytest.raises(ValueError, match="one- or two-dimensional"):
-            growth_rate_core._coerce_profile_layout(
+            growth_rate_core._coerce_profile_matrix(
                 np.ones((2, 2, 2)),
                 "values",
                 pressure_size=2,
@@ -280,7 +280,7 @@ class TestGrowthRateHelpers:
             growth_rate_core._normalize_smooth_window(True)
 
         with pytest.raises(ValueError, match="match the pressure coordinate"):
-            growth_rate_core._coerce_profile_layout(
+            growth_rate_core._coerce_profile_matrix(
                 np.array([1.0, 2.0]),
                 "u",
                 pressure_size=3,
@@ -288,7 +288,7 @@ class TestGrowthRateHelpers:
             )
 
         with pytest.raises(ValueError, match="exactly one axis matching"):
-            growth_rate_core._coerce_profile_layout(
+            growth_rate_core._coerce_profile_matrix(
                 np.ones((3, 3)),
                 "u",
                 pressure_size=3,
@@ -305,18 +305,16 @@ class TestGrowthRateHelpers:
             growth_rate_core._broadcast_profile_matrix(np.ones((2, 3)), 3, "u")
 
         data = xr.DataArray(np.ones((2, 3), dtype=np.float64), dims=("time", "level"))
-        layout = growth_rate_core._coerce_profile_layout(
+        matrix = growth_rate_core._coerce_profile_matrix(
             data,
             "u",
             pressure_size=3,
             pressure_dim="level",
         )
-        assert layout["profile_dim"] == "time"
-        assert isinstance(layout["profile_coord"], xr.DataArray)
-        assert_allclose(layout["profile_coord"].values, np.array([0, 1]))
+        assert matrix.shape == (2, 3)
 
         with pytest.raises(ValueError, match="vertical axis must match"):
-            growth_rate_core._coerce_profile_layout(
+            growth_rate_core._coerce_profile_matrix(
                 xr.DataArray(
                     np.ones((2, 3), dtype=np.float64),
                     dims=("level", "profile"),
@@ -1010,16 +1008,186 @@ class TestGrowthRate:
                 tropopause_pressure=300.0,
             )
 
-    def test_baroc_growth_rate_batch_requires_explicit_top_or_target(self):
-        """Batched profile input needs an explicit top boundary or target grid."""
+    def test_baroc_growth_rate_batch_auto_diagnoses_tropopause(self, monkeypatch):
+        """Batched profile input should use the compiled multi-profile WMO solver."""
 
-        with pytest.raises(ValueError, match="tropopause_pressure"):
-            baroc_growth_rate(
-                np.array([[8.0, 14.0, 24.0], [7.0, 13.0, 23.0]]),
-                np.array([220.0, 235.0, 255.0]),
-                np.array([30000.0, 60000.0, 100000.0]),
-                lat=45.0,
+        captured = {}
+
+        def fake_trop_wmo(
+            temperature,
+            pressure,
+            xdim,
+            ydim,
+            levdim,
+            timedim=None,
+            pressure_unit="hPa",
+            lapse_criterion=2.0,
+            missing_value=-999.0,
+            check_pressure_order=True,
+        ):
+            captured["temperature"] = np.array(temperature, dtype=np.float64, copy=True)
+            captured["pressure"] = np.array(pressure, dtype=np.float64, copy=True)
+            captured["dims"] = (xdim, ydim, levdim, timedim)
+            captured["pressure_unit"] = pressure_unit
+            return {
+                "pressure": np.array([300.0, 250.0], dtype=np.float64),
+                "height": np.array([11000.0, 11500.0], dtype=np.float64),
+                "level_index": np.array([1, 1], dtype=np.int32),
+                "lapse_rate": np.array([1.8, 1.7], dtype=np.float64),
+                "success": np.array([True, True]),
+            }
+
+        def fake_backend(
+            u_input,
+            temperature_input,
+            source_pressure,
+            target_pressure,
+            lat,
+            interp_kind,
+            smooth_window,
+            missing_value,
+        ):
+            captured["target_pressure"] = np.array(
+                target_pressure,
+                dtype=np.float64,
+                copy=True,
             )
+            return np.array([1.0e-6, 2.0e-6]), np.array([0, 0], dtype=np.int32)
+
+        monkeypatch.setattr(growth_rate_core, "_trop_wmo", fake_trop_wmo)
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_dbaroc_growth_rate_profiles",
+            fake_backend,
+        )
+
+        result = baroc_growth_rate(
+            np.array([[8.0, 14.0, 24.0], [7.0, 13.0, 23.0]]),
+            np.array([[220.0, 235.0, 255.0], [219.0, 234.0, 254.0]]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat=45.0,
+            solver_levels=4,
+        )
+
+        assert_allclose(result, np.array([1.0e-6, 2.0e-6]))
+        assert captured["temperature"].shape == (2, 3)
+        assert_allclose(captured["pressure"], np.array([30000.0, 60000.0, 100000.0]))
+        assert captured["dims"] == (-1, 0, 1, None)
+        assert captured["pressure_unit"] == "Pa"
+        assert_allclose(
+            captured["target_pressure"][:, 0],
+            np.linspace(30000.0, 100000.0, 4, dtype=np.float64),
+        )
+        assert_allclose(
+            captured["target_pressure"][:, 1],
+            np.linspace(25000.0, 100000.0, 4, dtype=np.float64),
+        )
+
+    def test_baroc_growth_rate_batch_auto_tropopause_failure_returns_missing(
+        self, monkeypatch
+    ):
+        """Profiles without a diagnosed WMO tropopause should return missing output."""
+
+        captured = {}
+
+        def fake_trop_wmo(
+            temperature,
+            pressure,
+            xdim,
+            ydim,
+            levdim,
+            timedim=None,
+            pressure_unit="hPa",
+            lapse_criterion=2.0,
+            missing_value=-999.0,
+            check_pressure_order=True,
+        ):
+            return {
+                "pressure": np.array([300.0, -999.0], dtype=np.float64),
+                "height": np.array([11000.0, -999.0], dtype=np.float64),
+                "level_index": np.array([1, -999], dtype=np.int32),
+                "lapse_rate": np.array([1.8, -999.0], dtype=np.float64),
+                "success": np.array([True, False]),
+            }
+
+        def fake_backend(
+            u_input,
+            temperature_input,
+            source_pressure,
+            target_pressure,
+            lat,
+            interp_kind,
+            smooth_window,
+            missing_value,
+        ):
+            captured["nprofile"] = u_input.shape[1]
+            return np.array([1.0e-6]), np.array([0], dtype=np.int32)
+
+        monkeypatch.setattr(growth_rate_core, "_trop_wmo", fake_trop_wmo)
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_dbaroc_growth_rate_profiles",
+            fake_backend,
+        )
+
+        result = baroc_growth_rate(
+            np.array([[8.0, 14.0, 24.0], [7.0, 13.0, 23.0]]),
+            np.array([[220.0, 235.0, 255.0], [219.0, 234.0, 254.0]]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat=45.0,
+            missing_value=-999.0,
+        )
+
+        assert captured["nprofile"] == 1
+        assert_allclose(result[0], 1.0e-6)
+        assert result[1] == -999.0
+
+    def test_baroc_growth_rate_batch_all_auto_tropopause_failures_skip_backend(
+        self, monkeypatch
+    ):
+        """If no batch profile gets a valid WMO tropopause, the backend should not run."""
+
+        def fake_trop_wmo(
+            temperature,
+            pressure,
+            xdim,
+            ydim,
+            levdim,
+            timedim=None,
+            pressure_unit="hPa",
+            lapse_criterion=2.0,
+            missing_value=-999.0,
+            check_pressure_order=True,
+        ):
+            return {
+                "pressure": np.array([-999.0, -999.0], dtype=np.float64),
+                "height": np.array([-999.0, -999.0], dtype=np.float64),
+                "level_index": np.array([-999, -999], dtype=np.int32),
+                "lapse_rate": np.array([-999.0, -999.0], dtype=np.float64),
+                "success": np.array([False, False]),
+            }
+
+        def fail_backend(*args, **kwargs):
+            raise AssertionError(
+                "batch backend should not run when all tropopauses fail"
+            )
+
+        monkeypatch.setattr(growth_rate_core, "_trop_wmo", fake_trop_wmo)
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_dbaroc_growth_rate_profiles",
+            fail_backend,
+        )
+
+        result = baroc_growth_rate(
+            np.array([[8.0, 14.0, 24.0], [7.0, 13.0, 23.0]]),
+            np.array([[220.0, 235.0, 255.0], [219.0, 234.0, 254.0]]),
+            np.array([30000.0, 60000.0, 100000.0]),
+            lat=45.0,
+            missing_value=-999.0,
+        )
+
+        assert_allclose(result, np.array([-999.0, -999.0]))
 
     def test_baroc_growth_rate_batch_broadcasts_climatology_to_backend(
         self, monkeypatch
