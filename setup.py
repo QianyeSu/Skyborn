@@ -13,6 +13,7 @@ from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 from setuptools.command.develop import develop
 from setuptools.command.install import install
+from setuptools.command.install_lib import install_lib
 
 # Check if Cython is available
 try:
@@ -622,12 +623,76 @@ class CustomInstall(install):
         super().run()
 
 
+class CustomInstallLib(install_lib):
+    """Prune transient build artifacts and bytecode from installed package trees."""
+
+    _PRUNE_DIR_NAMES = {
+        "__pycache__",
+        "build",
+        "build_local",
+        "meson-private",
+        "meson-logs",
+        "meson-info",
+    }
+    _PRUNE_FILE_SUFFIXES = {".pyc", ".pyo"}
+    _PRUNE_RELATIVE_DIRS = {
+        Path("spharm") / "src",
+        Path("gridfill") / "tests",
+    }
+    _PRUNE_RELATIVE_FILES = {
+        Path("spharm") / "fix_f2py_symbols.py",
+    }
+
+    def run(self):
+        super().run()
+        self._prune_install_tree()
+
+    def _prune_install_tree(self):
+        install_root = Path(self.install_dir)
+        package_root = install_root / "skyborn"
+        if not package_root.exists():
+            return
+
+        pruned_dirs = []
+        for relative_dir in self._PRUNE_RELATIVE_DIRS:
+            target = package_root / relative_dir
+            if target.exists():
+                shutil.rmtree(target, ignore_errors=True)
+                pruned_dirs.append(target)
+
+        for path in sorted(
+            package_root.rglob("*"), key=lambda item: len(item.parts), reverse=True
+        ):
+            if path.is_dir() and path.name in self._PRUNE_DIR_NAMES:
+                shutil.rmtree(path, ignore_errors=True)
+                pruned_dirs.append(path)
+
+        pruned_files = []
+        for relative_file in self._PRUNE_RELATIVE_FILES:
+            target = package_root / relative_file
+            if target.exists():
+                target.unlink()
+                pruned_files.append(target)
+
+        for path in package_root.rglob("*"):
+            if path.is_file() and path.suffix.lower() in self._PRUNE_FILE_SUFFIXES:
+                path.unlink()
+                pruned_files.append(path)
+
+        if pruned_dirs or pruned_files:
+            print(
+                "Pruned non-runtime packaging artifacts: "
+                f"{len(pruned_dirs)} directories, {len(pruned_files)} files"
+            )
+
+
 # Configuration for mixed build
 setup_config = {
     "cmdclass": {
         "build_ext": MesonBuildExt,
         "develop": CustomDevelop,
         "install": CustomInstall,
+        "install_lib": CustomInstallLib,
     },
     # Add extensions for dummy (Windows compatibility) only
     # gridfill extensions now handled by meson.build
