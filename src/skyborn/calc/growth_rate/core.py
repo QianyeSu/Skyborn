@@ -231,18 +231,6 @@ def _pressure_to_pa(pressure: ProfileInput) -> np.ndarray:
     return pressure_values
 
 
-def _target_pressure_to_pa(target_pressure: ProfileInput) -> np.ndarray:
-    """Convert explicit target pressure levels from Pa-or-hPa to Pascals."""
-
-    target_values = _as_1d_float64(target_pressure, "target_pressure")
-    if np.any(target_values <= 0.0):
-        raise ValueError("target pressure values must be strictly positive")
-
-    if np.nanmax(target_values) <= 2000.0:
-        return target_values * 100.0
-    return target_values
-
-
 def _normalize_output_units(output_units: str) -> str:
     """Normalize public output-unit aliases to one canonical label."""
 
@@ -489,7 +477,6 @@ def baroc_growth_rate(
     output_units: str = "s-1",
     vertical_interp: str = "log",
     tropopause_pressure: PressureInput | None = None,
-    target_pressure: ProfileInput | None = None,
     solver_levels: int = DEFAULT_SOLVER_LEVELS,
     smooth_window: int = DEFAULT_SMOOTH_WINDOW,
     missing_value: MissingValue = np.nan,
@@ -532,20 +519,10 @@ def baroc_growth_rate(
         input, this may be a scalar climatology or a one-dimensional vector
         matching the profile dimension.
 
-    target_pressure : :class:`xarray.DataArray`, :class:`numpy.ndarray`, optional
-        Optional explicit solver pressure grid in Pa or hPa. If omitted, the
-        function uses ``tropopause_pressure`` when given; otherwise it
-        diagnoses the WMO tropopause pressure from the input ``temperature``
-        and builds a fixed-pressure solver grid from that tropopause to the
-        lower-tropospheric bound. Batched calls use the compiled
-        multi-profile WMO tropopause backend when both ``tropopause_pressure``
-        and ``target_pressure`` are omitted.
-
     solver_levels : int, optional
-        Number of pressure levels used when ``target_pressure`` is omitted and
-        the solver grid is built automatically. Defaults to
-        ``DEFAULT_SOLVER_LEVELS``. Ignored when ``target_pressure`` is given
-        explicitly.
+        Number of pressure levels used when the solver grid is built
+        automatically from the diagnosed or explicit tropopause pressure.
+        Defaults to ``DEFAULT_SOLVER_LEVELS``.
 
     smooth_window : int, optional
         Optional centered running-mean window applied to the growth-rate
@@ -568,10 +545,11 @@ def baroc_growth_rate(
 
     Notes
     -----
-    When ``target_pressure`` is omitted, this function first diagnoses the
-    WMO tropopause pressure and then interpolates ``u`` and ``temperature`` to
-    a fixed pressure grid between that tropopause and the lower troposphere.
-    The thermodynamic profiles passed to the compiled kernel are
+    This function diagnoses the WMO tropopause pressure by default, or uses
+    an explicit ``tropopause_pressure`` when provided, and then interpolates
+    ``u`` and ``temperature`` to a fixed pressure grid between that
+    tropopause and the lower troposphere. The thermodynamic profiles passed
+    to the compiled kernel are
 
     .. math::
 
@@ -646,10 +624,6 @@ def baroc_growth_rate(
 
     if lat is None:
         raise ValueError("`lat` is required for baroc_growth_rate")
-    if target_pressure is not None and tropopause_pressure is not None:
-        raise ValueError(
-            "`target_pressure` and `tropopause_pressure` cannot be provided together"
-        )
 
     pressure_pa = _pressure_to_pa(pressure)
     _require_monotonic(pressure_pa, "pressure")
@@ -691,44 +665,37 @@ def baroc_growth_rate(
         if np.any(temperature_values <= 0.0):
             raise ValueError("temperature values must be strictly positive")
 
-        if target_pressure is not None:
-            target_pressure_pa = _target_pressure_to_pa(target_pressure)
-            _require_monotonic(target_pressure_pa, "target_pressure")
-        else:
-            if tropopause_pressure is None:
-                tropopause_pressure_pa = _infer_tropopause_pressure_pa(
-                    temperature_values,
-                    pressure_pa,
-                )
-            else:
-                tropopause_values = _as_profile_vector(
-                    tropopause_pressure,
-                    "tropopause_pressure",
-                    1,
-                )
-                tropopause_pressure_pa = float(tropopause_values[0])
-                if (
-                    np.isfinite(tropopause_pressure_pa)
-                    and tropopause_pressure_pa <= 2000.0
-                ):
-                    tropopause_pressure_pa *= 100.0
-            bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
-            if tropopause_pressure_pa >= bottom_pressure_pa:
-                raise ValueError(
-                    "The diagnosed tropopause pressure must be lower than the lower-"
-                    "tropospheric pressure bound used by the solver grid."
-                )
-            target_pressure_pa = np.linspace(
-                tropopause_pressure_pa,
-                bottom_pressure_pa,
-                solver_levels,
-                dtype=np.float64,
+        if tropopause_pressure is None:
+            tropopause_pressure_pa = _infer_tropopause_pressure_pa(
+                temperature_values,
+                pressure_pa,
             )
+        else:
+            tropopause_values = _as_profile_vector(
+                tropopause_pressure,
+                "tropopause_pressure",
+                1,
+            )
+            tropopause_pressure_pa = float(tropopause_values[0])
+            if np.isfinite(tropopause_pressure_pa) and tropopause_pressure_pa <= 2000.0:
+                tropopause_pressure_pa *= 100.0
+        bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
+        if tropopause_pressure_pa >= bottom_pressure_pa:
+            raise ValueError(
+                "The diagnosed tropopause pressure must be lower than the lower-"
+                "tropospheric pressure bound used by the solver grid."
+            )
+        solver_pressure_pa = np.linspace(
+            tropopause_pressure_pa,
+            bottom_pressure_pa,
+            solver_levels,
+            dtype=np.float64,
+        )
         u_solver = np.asarray(
             interp_pressure_1d(
                 u_values,
                 pressure_pa,
-                target_pressure_pa,
+                solver_pressure_pa,
                 method=interp_method,
                 extrapolate=False,
                 missing_value=np.nan,
@@ -739,7 +706,7 @@ def baroc_growth_rate(
             interp_pressure_1d(
                 temperature_values,
                 pressure_pa,
-                target_pressure_pa,
+                solver_pressure_pa,
                 method=interp_method,
                 extrapolate=False,
                 missing_value=np.nan,
@@ -750,18 +717,13 @@ def baroc_growth_rate(
         if np.any(~np.isfinite(u_solver)) or np.any(~np.isfinite(temperature_solver)):
             return missing
 
-        if target_pressure_pa[0] > target_pressure_pa[-1]:
-            target_pressure_pa = target_pressure_pa[::-1].copy()
-            u_solver = u_solver[::-1].copy()
-            temperature_solver = temperature_solver[::-1].copy()
-
         theta_solver = (
-            temperature_solver * (REFERENCE_PRESSURE_PA / target_pressure_pa) ** KAPPA
+            temperature_solver * (REFERENCE_PRESSURE_PA / solver_pressure_pa) ** KAPPA
         )
         max_growth, ier = _dbaroc_growth_rate_1d(
             u_solver,
             theta_solver,
-            target_pressure_pa,
+            solver_pressure_pa,
             temperature_solver,
             float(lat),
             smooth_window,
@@ -851,55 +813,44 @@ def baroc_growth_rate(
     if np.any(valid_profile_mask & np.any(temperature_matrix <= 0.0, axis=1)):
         raise ValueError("temperature values must be strictly positive")
 
-    if target_pressure is not None:
-        target_pressure_pa = _target_pressure_to_pa(target_pressure)
-        _require_monotonic(target_pressure_pa, "target_pressure")
-        if target_pressure_pa[0] > target_pressure_pa[-1]:
-            target_pressure_pa = target_pressure_pa[::-1].copy()
-        target_pressure_matrix_pa = np.array(
-            np.broadcast_to(target_pressure_pa, (nprofile, target_pressure_pa.size)),
-            dtype=np.float64,
-            copy=True,
+    if tropopause_pressure_pa is None:
+        tropopause_result = _trop_wmo(
+            temperature_matrix[valid_profile_mask],
+            pressure_pa,
+            xdim=-1,
+            ydim=0,
+            levdim=1,
+            timedim=None,
+            pressure_unit="Pa",
+            missing_value=-999.0,
         )
-    else:
-        if tropopause_pressure_pa is None:
-            tropopause_result = _trop_wmo(
-                temperature_matrix[valid_profile_mask],
-                pressure_pa,
-                xdim=-1,
-                ydim=0,
-                levdim=1,
-                timedim=None,
-                pressure_unit="Pa",
-                missing_value=-999.0,
-            )
-            tropopause_success = np.asarray(
-                tropopause_result["success"],
-                dtype=bool,
-            )
-            tropopause_pressure_pa_valid = (
-                np.asarray(tropopause_result["pressure"], dtype=np.float64) * 100.0
-            )
-            tropopause_pressure_pa = np.full(nprofile, np.nan, dtype=np.float64)
-            valid_indices = np.flatnonzero(valid_profile_mask)
-            tropopause_pressure_pa[valid_indices[tropopause_success]] = (
-                tropopause_pressure_pa_valid[tropopause_success]
-            )
-            valid_profile_mask[valid_indices[~tropopause_success]] = False
-            if not np.any(valid_profile_mask):
-                return _wrap_batch_baroc_output(
-                    output,
-                    output_units,
-                    missing_value,
-                    profile_coord,
-                )
-        bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
-        ramp = np.linspace(0.0, 1.0, solver_levels, dtype=np.float64)
-        target_pressure_matrix_pa = (
-            tropopause_pressure_pa[:, np.newaxis]
-            + (bottom_pressure_pa - tropopause_pressure_pa)[:, np.newaxis]
-            * ramp[np.newaxis, :]
+        tropopause_success = np.asarray(
+            tropopause_result["success"],
+            dtype=bool,
         )
+        tropopause_pressure_pa_valid = (
+            np.asarray(tropopause_result["pressure"], dtype=np.float64) * 100.0
+        )
+        tropopause_pressure_pa = np.full(nprofile, np.nan, dtype=np.float64)
+        valid_indices = np.flatnonzero(valid_profile_mask)
+        tropopause_pressure_pa[valid_indices[tropopause_success]] = (
+            tropopause_pressure_pa_valid[tropopause_success]
+        )
+        valid_profile_mask[valid_indices[~tropopause_success]] = False
+        if not np.any(valid_profile_mask):
+            return _wrap_batch_baroc_output(
+                output,
+                output_units,
+                missing_value,
+                profile_coord,
+            )
+    bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
+    ramp = np.linspace(0.0, 1.0, solver_levels, dtype=np.float64)
+    solver_pressure_matrix_pa = (
+        tropopause_pressure_pa[:, np.newaxis]
+        + (bottom_pressure_pa - tropopause_pressure_pa)[:, np.newaxis]
+        * ramp[np.newaxis, :]
+    )
 
     if not np.any(valid_profile_mask):
         return _wrap_batch_baroc_output(
@@ -914,7 +865,7 @@ def baroc_growth_rate(
         np.asfortranarray(u_matrix[valid_profile_mask].T),
         np.asfortranarray(temperature_matrix[valid_profile_mask].T),
         pressure_pa,
-        np.asfortranarray(target_pressure_matrix_pa[valid_profile_mask].T),
+        np.asfortranarray(solver_pressure_matrix_pa[valid_profile_mask].T),
         np.asfortranarray(lat_values[valid_profile_mask]),
         interp_kind,
         smooth_window,
