@@ -6,6 +6,15 @@ Version 0.3.22 (Planned)
 
 **Improvements**
 
+* **GPI / PI Diagnostics Synced With Recent ``tcpyPI``**: Updated
+  ``skyborn.calc.GPI`` so the active Fortran backend in
+  ``tropical_cyclone_potential_intensity.f90`` now exposes profile-complete
+  outflow diagnostics, supports
+  ``outflow_source={"cape_star", "cape_env"}``, and backs new public
+  NumPy/xarray ``pi_log_decomposition(...)`` helpers plus
+  ``log_decompose_pi(...)`` for the Wing et al. (2015) logarithmic PI
+  decomposition while keeping ``potential_intensity(...)`` as the pure-PI
+  entry point
 * **spharm Internal Optimization**: Improved the internal spherical
   harmonic helper flow so repeated potential-field reconstruction can
   reuse intermediate spectral results more efficiently and avoid
@@ -28,8 +37,20 @@ Version 0.3.22 (Planned)
   Fortran backend before the final maximum-growth diagnostic is taken; the
   public default is ``smooth_window=1`` to disable smoothing unless the caller
   explicitly requests an odd window greater than 1
+
 **Bug Fixes**
 
+* **GPI Validation, Coverage, And Missing-Column Handling**: Fixed the
+  active GPI backend and wrappers so all-missing 3D/4D columns now fall
+  back cleanly to missing outputs, restored profile-level outflow
+  diagnostics through the single retained Fortran source, and raised the
+  focused ``src/skyborn/calc/GPI`` Python coverage target to 100%; on the
+  2026-05-04 local full-diagnostics ``tcpyPI`` sample benchmark, the updated
+  Skyborn xarray path ran in about ``1.11 s`` versus ``48.04 s`` for
+  ``tcpyPI`` (about ``43.2x`` faster) while keeping mean absolute
+  differences near ``0.274 m/s`` for ``vmax``, ``0.738 hPa`` for ``pmin``,
+  ``0.0206 K`` for ``t0``, ``0.125 hPa`` for ``otl``, and an ``lnCKCD``
+  absolute difference of about ``2.96e-08``
 * **spharm and windspharm Regression Coverage**: Added focused tests for
   the updated internal spectral-helper and wind-analysis paths,
   including shape-validation coverage for the new optimized flow
@@ -301,6 +322,30 @@ Version 0.3.14
 
 Version 0.3.13
 --------------
+
+**GPI Synchronization**
+
+* **Expanded tcpyPI-style diagnostics in the active PI backend**:
+
+  - kept ``D:\Skyborn\src\skyborn\calc\GPI\fortran\tropical_cyclone_potential_intensity.f90``
+    as the sole active Fortran source
+  - added bulk Fortran diagnostics for 3D and 4D fields:
+    ``t0``, ``otl``, ``lnpi``, ``lneff``, ``lndiseq``, and ``lnCKCD``
+  - removed redundant Python compatibility helpers and restored explicit
+    public decomposition entry points:
+    ``log_decompose_pi(...)`` and ``pi_log_decomposition(...)``
+  - restored inline parameter comments/docstrings in the PI backend and
+    refreshed the package exports
+
+* **Validation against local ``tcpyPI`` sample data**:
+
+  - benchmark artifact:
+    ``D:\Skyborn\.codex_tmp\gpi_tcpyPI_full_diagnostics_compare.json``
+  - scatter plot artifact:
+    ``D:\Skyborn\.codex_tmp\gpi_tcpyPI_full_diagnostics_scatter.png``
+  - full-diagnostics benchmark:
+    Skyborn ``3.21 s`` vs ``tcpyPI 22.33 s`` (``6.96x`` faster)
+  - ``lnCKCD`` now matches stably instead of degrading to ``NaN`` on failed columns
 
 **🔧 Breaking Changes**
 
