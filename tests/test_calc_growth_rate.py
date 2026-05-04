@@ -203,8 +203,8 @@ class TestGrowthRateHelpers:
             np.array([100000.0, 85000.0]),
         )
         assert_allclose(
-            growth_rate_core._target_pressure_to_pa(np.array([300.0, 700.0])),
-            np.array([30000.0, 70000.0]),
+            growth_rate_core._as_profile_vector(np.array([300.0]), "lat", 2),
+            np.array([300.0, 300.0]),
         )
         assert growth_rate_core._normalize_vertical_interp("pressure") == "linear"
         assert growth_rate_core._normalize_vertical_interp("logp") == "log"
@@ -248,9 +248,6 @@ class TestGrowthRateHelpers:
 
         with pytest.raises(ValueError, match="strictly positive"):
             growth_rate_core._pressure_to_pa(np.array([1000.0, 0.0]))
-
-        with pytest.raises(ValueError, match="strictly positive"):
-            growth_rate_core._target_pressure_to_pa(np.array([300.0, -1.0]))
 
         with pytest.raises(ValueError, match="output_units"):
             growth_rate_core._normalize_output_units("month^-1")
@@ -427,7 +424,7 @@ class TestGrowthRate:
         assert np.isfinite(result)
         assert abs(result) < 1e-10
 
-    def test_baroc_growth_rate_matches_reference_on_explicit_solver_grid(self):
+    def test_baroc_growth_rate_matches_reference_on_solver_grid_from_tropopause(self):
         """Compiled baroclinic growth should match the Chemke-style NumPy port."""
 
         pressure = np.array([20000.0, 40000.0, 60000.0, 80000.0, 100000.0])
@@ -441,7 +438,8 @@ class TestGrowthRate:
             temperature,
             pressure,
             lat=lat,
-            target_pressure=pressure,
+            tropopause_pressure=200.0,
+            solver_levels=5,
             output_units="s^-1",
         )
 
@@ -627,45 +625,6 @@ class TestGrowthRate:
         assert_allclose(captured["pressure_solver"][0], 25000.0, atol=1e-12)
         assert_allclose(captured["pressure_solver"][-1], 100000.0, atol=1e-12)
 
-    def test_baroc_growth_rate_ignores_solver_levels_when_target_grid_is_explicit(
-        self, monkeypatch
-    ):
-        """Explicit target_pressure should override the automatic solver-level setting."""
-
-        captured = {}
-
-        def fake_backend(
-            u_solver,
-            theta_solver,
-            pressure_solver,
-            temperature_solver,
-            lat,
-            smooth_window,
-        ):
-            captured["pressure_solver"] = np.array(
-                pressure_solver, dtype=np.float64, copy=True
-            )
-            captured["smooth_window"] = int(smooth_window)
-            return 1.0e-6, 0
-
-        monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
-
-        result = baroc_growth_rate(
-            np.array([8.0, 14.0, 24.0]),
-            np.array([220.0, 235.0, 255.0]),
-            np.array([30000.0, 60000.0, 100000.0]),
-            lat=45.0,
-            target_pressure=np.array([30000.0, 55000.0, 80000.0, 100000.0]),
-            solver_levels=99,
-        )
-
-        assert_allclose(result, 1.0e-6, rtol=0.0, atol=0.0)
-        assert captured["smooth_window"] == 1
-        assert_allclose(
-            captured["pressure_solver"],
-            np.array([30000.0, 55000.0, 80000.0, 100000.0]),
-        )
-
     def test_baroc_growth_rate_uses_explicit_tropopause_pressure_when_given(
         self, monkeypatch
     ):
@@ -732,7 +691,8 @@ class TestGrowthRate:
             np.array([220.0, 235.0, 255.0]),
             np.array([30000.0, 60000.0, 100000.0]),
             lat=45.0,
-            target_pressure=np.array([30000.0, 60000.0, 100000.0]),
+            tropopause_pressure=300.0,
+            solver_levels=3,
             smooth_window=5,
         )
 
@@ -759,7 +719,8 @@ class TestGrowthRate:
             temperature,
             pressure,
             lat=lat,
-            target_pressure=pressure,
+            tropopause_pressure=200.0,
+            solver_levels=5,
             smooth_window=5,
             output_units="s^-1",
         )
@@ -798,7 +759,8 @@ class TestGrowthRate:
             np.array([230.0, 250.0, 280.0]),
             np.array([30000.0, 65000.0, 100000.0]),
             lat=45.0,
-            target_pressure=np.array([30000.0, 65000.0, 100000.0]),
+            tropopause_pressure=300.0,
+            solver_levels=3,
         )
 
         assert_allclose(result, 1.0e-6)
@@ -828,7 +790,8 @@ class TestGrowthRate:
             np.array([230.0, 250.0, 280.0]),
             np.array([30000.0, 65000.0, 100000.0]),
             lat=45.0,
-            target_pressure=np.array([30000.0, 65000.0, 100000.0]),
+            tropopause_pressure=300.0,
+            solver_levels=3,
             vertical_interp="logp",
         )
 
@@ -867,7 +830,8 @@ class TestGrowthRate:
             np.array([220.0, 235.0, 255.0]),
             np.array([30000.0, 60000.0, 100000.0]),
             lat=45.0,
-            target_pressure=np.array([30000.0, 60000.0, 100000.0]),
+            tropopause_pressure=300.0,
+            solver_levels=3,
             missing_value=-999.0,
         )
 
@@ -882,7 +846,8 @@ class TestGrowthRate:
                 np.array([220.0, 0.0, 255.0]),
                 np.array([30000.0, 60000.0, 100000.0]),
                 lat=45.0,
-                target_pressure=np.array([30000.0, 60000.0, 100000.0]),
+                tropopause_pressure=300.0,
+                solver_levels=3,
             )
 
     def test_baroc_growth_rate_returns_missing_when_interpolation_has_nan(
@@ -902,61 +867,12 @@ class TestGrowthRate:
             np.array([220.0, 235.0, 255.0]),
             np.array([30000.0, 60000.0, 100000.0]),
             lat=45.0,
-            target_pressure=np.array([30000.0, 60000.0, 100000.0]),
+            tropopause_pressure=300.0,
+            solver_levels=3,
             missing_value=-999.0,
         )
 
         assert result == -999.0
-
-    def test_baroc_growth_rate_reorders_descending_target_pressure_for_backend(
-        self, monkeypatch
-    ):
-        """Descending explicit solver grids should be reordered before the backend call."""
-
-        captured = {}
-
-        def fake_interp(x, p_in, p_out, *, method, extrapolate, missing_value):
-            first_value = float(np.asarray(x)[0])
-            if first_value == 8.0:
-                return np.array([101.0, 102.0, 103.0])
-            return np.array([201.0, 202.0, 203.0])
-
-        def fake_backend(
-            u_solver,
-            theta_solver,
-            pressure_solver,
-            temperature_solver,
-            lat,
-            smooth_window,
-        ):
-            captured["u_solver"] = np.array(u_solver, dtype=np.float64, copy=True)
-            captured["pressure_solver"] = np.array(
-                pressure_solver, dtype=np.float64, copy=True
-            )
-            captured["temperature_solver"] = np.array(
-                temperature_solver, dtype=np.float64, copy=True
-            )
-            captured["smooth_window"] = int(smooth_window)
-            return 2.0e-6, 0
-
-        monkeypatch.setattr(growth_rate_core, "interp_pressure_1d", fake_interp)
-        monkeypatch.setattr(growth_rate_core, "_dbaroc_growth_rate_1d", fake_backend)
-
-        result = baroc_growth_rate(
-            np.array([8.0, 14.0, 24.0]),
-            np.array([220.0, 235.0, 255.0]),
-            np.array([30000.0, 60000.0, 100000.0]),
-            lat=45.0,
-            target_pressure=np.array([100000.0, 60000.0, 30000.0]),
-        )
-
-        assert_allclose(result, 2.0e-6)
-        assert_allclose(
-            captured["pressure_solver"], np.array([30000.0, 60000.0, 100000.0])
-        )
-        assert captured["smooth_window"] == 1
-        assert_allclose(captured["u_solver"], np.array([103.0, 102.0, 101.0]))
-        assert_allclose(captured["temperature_solver"], np.array([203.0, 202.0, 201.0]))
 
     def test_baroc_growth_rate_raises_when_backend_reports_error(self, monkeypatch):
         """Baroclinic backend errors should raise a clear runtime error."""
@@ -976,7 +892,8 @@ class TestGrowthRate:
                 np.array([220.0, 235.0, 255.0]),
                 np.array([30000.0, 60000.0, 100000.0]),
                 lat=45.0,
-                target_pressure=np.array([30000.0, 60000.0, 100000.0]),
+                tropopause_pressure=300.0,
+                solver_levels=3,
             )
 
     def test_baroc_growth_rate_rejects_even_smooth_window(self):
@@ -988,24 +905,9 @@ class TestGrowthRate:
                 np.array([220.0, 235.0, 255.0]),
                 np.array([30000.0, 60000.0, 100000.0]),
                 lat=45.0,
-                target_pressure=np.array([30000.0, 60000.0, 100000.0]),
-                smooth_window=4,
-            )
-
-    def test_baroc_growth_rate_rejects_target_pressure_and_tropopause_together(self):
-        """The public API should reject conflicting solver-grid specifications."""
-
-        with pytest.raises(
-            ValueError,
-            match="cannot be provided together",
-        ):
-            baroc_growth_rate(
-                np.array([8.0, 14.0, 24.0]),
-                np.array([220.0, 235.0, 255.0]),
-                np.array([30000.0, 60000.0, 100000.0]),
-                lat=45.0,
-                target_pressure=np.array([30000.0, 60000.0, 100000.0]),
                 tropopause_pressure=300.0,
+                solver_levels=3,
+                smooth_window=4,
             )
 
     def test_baroc_growth_rate_batch_auto_diagnoses_tropopause(self, monkeypatch):
@@ -1294,52 +1196,6 @@ class TestGrowthRate:
         assert result.dims == ("time",)
         assert_allclose(result["time"], np.array([2000, 2001]))
         assert_allclose(result.values, np.array([1.0e-6, 2.0e-6]))
-
-    def test_baroc_growth_rate_batch_uses_explicit_target_grid(self, monkeypatch):
-        """Batched calls should accept one shared explicit target-pressure grid."""
-
-        captured = {}
-
-        def fake_backend(
-            u_input,
-            temperature_input,
-            source_pressure,
-            target_pressure,
-            lat,
-            interp_kind,
-            smooth_window,
-            missing_value,
-        ):
-            captured["target_pressure"] = np.array(
-                target_pressure, dtype=np.float64, copy=True
-            )
-            return np.array([1.0e-6, 2.0e-6]), np.array([0, 0], dtype=np.int32)
-
-        monkeypatch.setattr(
-            growth_rate_core,
-            "_dbaroc_growth_rate_profiles",
-            fake_backend,
-        )
-
-        result = baroc_growth_rate(
-            np.array([[8.0, 14.0, 24.0], [7.0, 13.0, 23.0]]),
-            np.array([220.0, 235.0, 255.0]),
-            np.array([30000.0, 60000.0, 100000.0]),
-            lat=45.0,
-            target_pressure=np.array([100000.0, 60000.0, 30000.0]),
-        )
-
-        assert_allclose(result, np.array([1.0e-6, 2.0e-6]))
-        assert_allclose(
-            captured["target_pressure"],
-            np.array(
-                [
-                    [30000.0, 30000.0],
-                    [60000.0, 60000.0],
-                    [100000.0, 100000.0],
-                ]
-            ),
-        )
 
     def test_baroc_growth_rate_batch_masks_missing_profiles_without_scaling_marker(
         self, monkeypatch
