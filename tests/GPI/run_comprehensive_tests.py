@@ -26,9 +26,6 @@ def test_interface_module():
         _postprocess_results,
         _validate_dimensions,
         _validate_input_arrays,
-        calculate_potential_intensity_3d,
-        calculate_potential_intensity_4d,
-        calculate_potential_intensity_profile,
         potential_intensity,
     )
 
@@ -316,9 +313,9 @@ def test_init_module():
     try:
         # Test that we can import from interface directly
         from skyborn.calc.GPI.interface import (
-            calculate_potential_intensity_3d,
-            calculate_potential_intensity_4d,
-            calculate_potential_intensity_profile,
+            log_decompose_pi,
+            pi_log_decomposition,
+            potential_intensity,
         )
 
         print("PASS: Test direct interface imports")
