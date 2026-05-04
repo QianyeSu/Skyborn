@@ -65,6 +65,8 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export OPENBLAS_ROOT=/usr
+          export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}
           python -m pip install --upgrade pip setuptools wheel
           # Install build dependencies first, including meson for f2py
           pip install build "cython>=3.0.0" numpy meson ninja
@@ -132,6 +134,8 @@ jobs:
           export F90=gfortran
           export CC=gcc
           export CXX=g++
+          export OPENBLAS_ROOT=/usr
+          export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}
           export FFLAGS="-O3 -fPIC -fopenmp -fno-second-underscore -std=legacy"
           export CFLAGS="-O3 -fPIC -fopenmp"
           export LDFLAGS="-fopenmp"
@@ -483,6 +487,8 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export OPENBLAS_ROOT=/usr
+          export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}
           python -m pip install --upgrade pip setuptools wheel
           pip install -e . --no-deps
           pip install -r requirements/base.txt
