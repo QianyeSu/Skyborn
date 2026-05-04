@@ -1,13 +1,12 @@
-subroutine qzval(nm,n,a,b,alfr,alfi,beta,matz,z)
+subroutine qzval(nm, n, a, b, alfr, alfi, beta)
     use, intrinsic :: iso_fortran_env, only : real64
     implicit none
     !
     integer i,j,n,en,na,nm,nn,isw
-    real(real64) a(nm,n),b(nm,n),alfr(n),alfi(n),beta(n),z(nm,n)
+    real(real64) a(nm,n),b(nm,n),alfr(n),alfi(n),beta(n)
     real(real64) c,d,e,r,s,t,an,a1,a2,bn,cq,cz,di,dr,ei,ti,tr,u1, &
     & u2,v1,v2,a1i,a11,a12,a2i,a21,a22,b11,b12,b22,sqi,sqr, &
     & ssi,ssr,szi,szr,a11i,a11r,a12i,a12r,a22i,a22r,epsb
-    logical matz
     !
     !     this subroutine is the third step of the qz algorithm
     !     for solving generalized matrix eigenvalue problems,
@@ -35,15 +34,6 @@ subroutine qzval(nm,n,a,b,alfr,alfi,beta,matz,z)
     !          location b(n,1) contains the tolerance quantity (epsb)
     !          computed and saved in  qzit.
     !
-    !        matz should be set to .true. if the right hand transformations
-    !          are to be accumulated for later use in computing
-    !          eigenvectors, and to .false. otherwise.
-    !
-    !        z contains, if matz has been set to .true., the
-    !          transformation matrix produced in the reductions by qzhes
-    !          and qzit, if performed, or else the identity matrix.
-    !          if matz has been set to .false., z is not referenced.
-    !
     !     on output
     !
     !        a has been reduced further to a quasi-triangular matrix
@@ -62,9 +52,6 @@ subroutine qzval(nm,n,a,b,alfr,alfi,beta,matz,z)
     !        beta contains the diagonal elements of the corresponding b,
     !          normalized to be real and non-negative.  the generalized
     !          eigenvalues are then the ratios ((alfr+i*alfi)/beta).
-    !
-    !        z contains the product of the right hand transformations
-    !          (for all three steps) if matz has been set to .true.
     !
     !     questions and comments should be directed to burton s. garbow,
     !     mathematics and computer science div, argonne national laboratory
@@ -151,14 +138,6 @@ subroutine qzval(nm,n,a,b,alfr,alfi,beta,matz,z)
             t = b(i,en) + u2 * b(i,na)
             b(i,en) = b(i,en) + t * v1
             b(i,na) = b(i,na) + t * v2
-        end do
-        !
-        if (.not. matz) go to 450
-        !
-        do i = 1, n
-            t = z(i,en) + u2 * z(i,na)
-            z(i,en) = z(i,en) + t * v1
-            z(i,na) = z(i,na) + t * v2
         end do
         !
         450 continue
