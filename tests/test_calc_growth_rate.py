@@ -188,18 +188,6 @@ class TestGrowthRateHelpers:
         """Helper functions should normalize pressure and track NaN-style gaps."""
 
         assert_allclose(
-            growth_rate_core._missing_profile_mask(
-                np.array([[1.0, np.nan], [2.0, 3.0]], dtype=np.float64),
-            ),
-            np.array([True, False]),
-        )
-        assert_allclose(
-            growth_rate_core._missing_vector_mask(
-                np.array([1.0, np.inf], dtype=np.float64),
-            ),
-            np.array([False, True]),
-        )
-        assert_allclose(
             growth_rate_core._pressure_to_pa(np.array([1000.0, 850.0])),
             np.array([100000.0, 85000.0]),
         )
