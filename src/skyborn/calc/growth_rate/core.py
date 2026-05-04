@@ -30,6 +30,7 @@ Chemke, R., Ming, Y., and Yuval, J. (2022):
 
 from __future__ import annotations
 
+import warnings
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -53,6 +54,7 @@ DEFAULT_SOLVER_LEVELS = 45
 DEFAULT_SMOOTH_WINDOW = 1
 
 ProfileInput = Union[xr.DataArray, np.ndarray]
+LatitudeInput = Union[ProfileInput, float, int, np.floating, np.integer]
 MissingValue = Union[float, int, np.floating, np.integer, None]
 PressureInput = Union[ProfileInput, float, int, np.floating, np.integer]
 GrowthRateOutput = Union[float, np.ndarray, xr.DataArray]
@@ -213,6 +215,43 @@ def _contains_missing(values: np.ndarray, missing_value: MissingValue) -> bool:
     return False
 
 
+def _replace_missing_with_nan(
+    values: np.ndarray,
+    missing_value: MissingValue,
+) -> np.ndarray:
+    """Return a float64 copy where public missing markers are promoted to NaN."""
+
+    array = np.array(values, dtype=np.float64, copy=True)
+    array[~np.isfinite(array)] = np.nan
+    if not _is_nan_missing_value(missing_value):
+        array[array == float(missing_value)] = np.nan
+    return array
+
+
+def _nan_weighted_mean_last_axis(
+    values: np.ndarray,
+    weights: np.ndarray,
+) -> np.ndarray:
+    """Return a NaN-aware weighted mean along the last axis."""
+
+    values = np.asarray(values, dtype=np.float64)
+    weights = np.asarray(weights, dtype=np.float64)
+    weight_view = weights.reshape((1,) * (values.ndim - 1) + (weights.size,))
+    masked_weights = np.where(np.isnan(values), np.nan, weight_view)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        numerator = np.nanmean(values * weight_view, axis=-1)
+        denominator = np.nanmean(masked_weights, axis=-1)
+
+    return np.divide(
+        numerator,
+        denominator,
+        out=np.full(numerator.shape, np.nan, dtype=np.float64),
+        where=np.isfinite(denominator) & (denominator != 0.0),
+    )
+
+
 def _require_monotonic(values: np.ndarray, name: str) -> None:
     """Require a strictly monotonic one-dimensional coordinate."""
 
@@ -283,6 +322,156 @@ def _f_beta_from_lat_bounds(lat_bounds: Tuple[float, float]) -> Tuple[float, flo
     f_cor = 2.0 * 7.292e-5 * sin_avg
     beta = 2.0 * 7.292e-5 * cos_avg / 6_371_000.0
     return float(f_cor), float(beta)
+
+
+def _reduce_latitude_band_inputs(
+    u: ProfileInput,
+    temperature: ProfileInput,
+    lat: Optional[LatitudeInput],
+    lat_bounds: Tuple[float, float],
+    pressure_pa: np.ndarray,
+    pressure_dim: Optional[str],
+    missing_value: MissingValue,
+) -> Tuple[ProfileInput, ProfileInput, Optional[LatitudeInput]]:
+    """Collapse explicit latitude axes using a cosine-weighted band mean."""
+
+    lat_min, lat_max = sorted((float(lat_bounds[0]), float(lat_bounds[1])))
+    latitude_dim = None
+
+    for values in (u, temperature):
+        if not isinstance(values, xr.DataArray):
+            continue
+
+        candidate_dims = [
+            dim
+            for dim in values.dims
+            if dim != pressure_dim and dim.lower() in {"lat", "latitude"}
+        ]
+        if len(candidate_dims) > 1:
+            raise ValueError(
+                "Latitude-band growth-rate inputs must have at most one "
+                "latitude dimension per DataArray"
+            )
+        if not candidate_dims:
+            continue
+        if latitude_dim is None:
+            latitude_dim = candidate_dims[0]
+            continue
+        if candidate_dims[0] != latitude_dim:
+            raise ValueError(
+                "Latitude-band xarray inputs must share the same latitude " "dimension"
+            )
+
+    if latitude_dim is not None:
+        if lat is not None:
+            raise ValueError(
+                "`lat` cannot be provided together with xarray latitude-band "
+                "inputs; the latitude coordinate is taken from the DataArray "
+                "dimensions"
+            )
+
+        reduced_values = []
+        for name, values in (("u", u), ("temperature", temperature)):
+            if not isinstance(values, xr.DataArray) or latitude_dim not in values.dims:
+                reduced_values.append(values)
+                continue
+
+            latitude_coord = values[latitude_dim]
+            latitude_slice = (
+                slice(lat_min, lat_max)
+                if float(latitude_coord[0]) <= float(latitude_coord[-1])
+                else slice(lat_max, lat_min)
+            )
+            subset = values.sel({latitude_dim: latitude_slice})
+            if subset.sizes[latitude_dim] == 0:
+                raise ValueError(
+                    f"`lat_bounds` does not select any latitude points for `{name}`"
+                )
+
+            subset = subset.where(np.isfinite(subset))
+            if not _is_nan_missing_value(missing_value):
+                subset = subset.where(subset != float(missing_value))
+
+            weights = xr.DataArray(
+                np.cos(np.deg2rad(np.asarray(subset[latitude_dim], dtype=np.float64))),
+                coords={latitude_dim: subset[latitude_dim]},
+                dims=(latitude_dim,),
+            )
+            reduced_values.append(subset.weighted(weights).mean(latitude_dim))
+
+        return reduced_values[0], reduced_values[1], None
+
+    if (
+        max(
+            np.asarray(getattr(u, "data", u)).ndim,
+            np.asarray(getattr(temperature, "data", temperature)).ndim,
+        )
+        < 3
+    ):
+        return u, temperature, lat
+
+    if lat is None:
+        raise ValueError(
+            "NumPy latitude-band inputs with an explicit latitude axis "
+            "require `lat` to provide the one-dimensional latitude "
+            "coordinate"
+        )
+
+    latitude_values = np.asarray(getattr(lat, "data", lat), dtype=np.float64)
+    if latitude_values.ndim != 1:
+        raise ValueError(
+            "`lat` must be one-dimensional when used as the latitude "
+            "coordinate for NumPy latitude-band inputs"
+        )
+
+    latitude_mask = (latitude_values >= lat_min) & (latitude_values <= lat_max)
+    if not np.any(latitude_mask):
+        raise ValueError("`lat_bounds` does not select any latitude points")
+
+    latitude_weights = np.cos(np.deg2rad(latitude_values[latitude_mask])).astype(
+        np.float64,
+        copy=False,
+    )
+    reduced_arrays = []
+    for name, values in (("u", u), ("temperature", temperature)):
+        array = np.asarray(getattr(values, "data", values), dtype=np.float64)
+        if array.ndim not in {2, 3}:
+            raise ValueError(
+                f"`{name}` must be two- or three-dimensional when using "
+                "NumPy latitude-band inputs"
+            )
+
+        pressure_axes = [
+            axis for axis, size in enumerate(array.shape) if size == pressure_pa.size
+        ]
+        if len(pressure_axes) != 1:
+            raise ValueError(
+                f"`{name}` must have exactly one axis matching the "
+                "pressure coordinate"
+            )
+
+        pressure_axis = pressure_axes[0]
+        latitude_axes = [
+            axis
+            for axis, size in enumerate(array.shape)
+            if axis != pressure_axis and size == latitude_values.size
+        ]
+        if len(latitude_axes) != 1:
+            raise ValueError(
+                f"`{name}` must have exactly one latitude axis matching "
+                "`lat` for NumPy latitude-band inputs"
+            )
+
+        subset = np.take(array, np.flatnonzero(latitude_mask), axis=latitude_axes[0])
+        subset = np.moveaxis(subset, latitude_axes[0], -1)
+        reduced_arrays.append(
+            _nan_weighted_mean_last_axis(
+                _replace_missing_with_nan(subset, missing_value),
+                latitude_weights,
+            )
+        )
+
+    return reduced_arrays[0], reduced_arrays[1], None
 
 
 def _infer_tropopause_pressure_pa(
@@ -485,7 +674,7 @@ def baroc_growth_rate(
     temperature: ProfileInput,
     pressure: ProfileInput,
     *,
-    lat: Optional[Union[ProfileInput, float, int, np.floating, np.integer]] = None,
+    lat: Optional[LatitudeInput] = None,
     lat_bounds: Optional[Tuple[float, float]] = None,
     output_units: str = "s-1",
     method: str = "log",
@@ -687,162 +876,15 @@ def baroc_growth_rate(
     pressure_dim = pressure.dims[0] if isinstance(pressure, xr.DataArray) else None
 
     if lat_bounds is not None:
-        latitude_dim = None
-        for values in (u, temperature):
-            if not isinstance(values, xr.DataArray):
-                continue
-            candidate_dims = [
-                dim
-                for dim in values.dims
-                if dim != pressure_dim and dim.lower() in {"lat", "latitude"}
-            ]
-            if len(candidate_dims) > 1:
-                raise ValueError(
-                    "Latitude-band growth-rate inputs must have at most one "
-                    "latitude dimension per DataArray"
-                )
-            if not candidate_dims:
-                continue
-            if latitude_dim is None:
-                latitude_dim = candidate_dims[0]
-            elif candidate_dims[0] != latitude_dim:
-                raise ValueError(
-                    "Latitude-band xarray inputs must share the same latitude "
-                    "dimension"
-                )
-
-        if latitude_dim is not None:
-            if lat is not None:
-                raise ValueError(
-                    "`lat` cannot be provided together with xarray latitude-band "
-                    "inputs; the latitude coordinate is taken from the DataArray "
-                    "dimensions"
-                )
-
-            lat_min = float(min(lat_bounds))
-            lat_max = float(max(lat_bounds))
-            reduced_values = []
-            for name, values in (("u", u), ("temperature", temperature)):
-                if isinstance(values, xr.DataArray) and latitude_dim in values.dims:
-                    latitude_coord = values[latitude_dim]
-                    latitude_slice = (
-                        slice(lat_min, lat_max)
-                        if float(latitude_coord[0]) <= float(latitude_coord[-1])
-                        else slice(lat_max, lat_min)
-                    )
-                    subset = values.sel({latitude_dim: latitude_slice})
-                    if subset.sizes[latitude_dim] == 0:
-                        raise ValueError(
-                            f"`lat_bounds` does not select any latitude points for `{name}`"
-                        )
-                    weights = xr.DataArray(
-                        np.cos(
-                            np.deg2rad(
-                                np.asarray(subset[latitude_dim], dtype=np.float64)
-                            )
-                        ),
-                        coords={latitude_dim: subset[latitude_dim]},
-                        dims=(latitude_dim,),
-                    )
-                    values = subset.weighted(weights).mean(latitude_dim)
-                reduced_values.append(values)
-            u, temperature = reduced_values
-        else:
-            u_ndim = np.asarray(getattr(u, "data", u)).ndim
-            temperature_ndim = np.asarray(
-                getattr(temperature, "data", temperature)
-            ).ndim
-            if max(u_ndim, temperature_ndim) >= 3:
-                if lat is None:
-                    raise ValueError(
-                        "NumPy latitude-band inputs with an explicit latitude axis "
-                        "require `lat` to provide the one-dimensional latitude "
-                        "coordinate"
-                    )
-
-                latitude_values = np.asarray(
-                    getattr(lat, "data", lat), dtype=np.float64
-                )
-                if latitude_values.ndim != 1:
-                    raise ValueError(
-                        "`lat` must be one-dimensional when used as the latitude "
-                        "coordinate for NumPy latitude-band inputs"
-                    )
-
-                latitude_mask = (latitude_values >= float(min(lat_bounds))) & (
-                    latitude_values <= float(max(lat_bounds))
-                )
-                if not np.any(latitude_mask):
-                    raise ValueError("`lat_bounds` does not select any latitude points")
-
-                latitude_weights = np.cos(
-                    np.deg2rad(latitude_values[latitude_mask])
-                ).astype(np.float64, copy=False)
-                reduced_arrays = []
-                for name, values in (("u", u), ("temperature", temperature)):
-                    array = np.asarray(
-                        getattr(values, "data", values), dtype=np.float64
-                    )
-                    if array.ndim not in {2, 3}:
-                        raise ValueError(
-                            f"`{name}` must be two- or three-dimensional when using "
-                            "NumPy latitude-band inputs"
-                        )
-
-                    pressure_axes = [
-                        axis
-                        for axis, size in enumerate(array.shape)
-                        if size == pressure_pa.size
-                    ]
-                    if len(pressure_axes) != 1:
-                        raise ValueError(
-                            f"`{name}` must have exactly one axis matching the "
-                            "pressure coordinate"
-                        )
-                    pressure_axis = pressure_axes[0]
-                    latitude_axes = [
-                        axis
-                        for axis, size in enumerate(array.shape)
-                        if axis != pressure_axis and size == latitude_values.size
-                    ]
-                    if len(latitude_axes) != 1:
-                        raise ValueError(
-                            f"`{name}` must have exactly one latitude axis matching "
-                            "`lat` for NumPy latitude-band inputs"
-                        )
-
-                    subset = np.take(
-                        array,
-                        np.flatnonzero(latitude_mask),
-                        axis=latitude_axes[0],
-                    )
-                    subset = np.moveaxis(subset, latitude_axes[0], -1)
-                    invalid = ~np.isfinite(subset)
-                    if not _is_nan_missing_value(missing_value):
-                        invalid |= subset == float(missing_value)
-
-                    weight_shape = (1,) * (subset.ndim - 1) + (latitude_weights.size,)
-                    weight_view = latitude_weights.reshape(weight_shape)
-                    weighted_sum = np.sum(
-                        np.where(invalid, 0.0, subset) * weight_view,
-                        axis=-1,
-                    )
-                    weight_sum = np.sum(
-                        np.where(invalid, 0.0, weight_view),
-                        axis=-1,
-                    )
-                    reduced = np.divide(
-                        weighted_sum,
-                        weight_sum,
-                        out=np.full(weight_sum.shape, np.nan, dtype=np.float64),
-                        where=weight_sum > 0.0,
-                    )
-                    reduced_arrays.append(
-                        np.array(reduced, dtype=np.float64, copy=True)
-                    )
-
-                u, temperature = reduced_arrays
-                lat = None
+        u, temperature, lat = _reduce_latitude_band_inputs(
+            u,
+            temperature,
+            lat,
+            lat_bounds,
+            pressure_pa,
+            pressure_dim,
+            missing_value,
+        )
 
     if lat is None and lat_bounds is None:
         raise ValueError("`lat` or `lat_bounds` is required for baroc_growth_rate")
