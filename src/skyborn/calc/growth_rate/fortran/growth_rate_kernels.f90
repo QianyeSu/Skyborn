@@ -31,34 +31,12 @@ module growth_rate_kernels_core
     public :: nwavenumbers
     public :: omega
     public :: radius
-    public :: dgeev_lwork
     public :: interp_pressure_profile_no_extrap
-    public :: solve_tridiagonal_system_eig_max_imag
+    public :: generalized_eig_max_imag
     public :: wavenumber_step
     public :: finalize_baroc_growth
     public :: finalize_barot_growth
     public :: apply_centered_running_mean
-
-    ! lapack interfaces used by the dense eigenvalue and tridiagonal solve
-    ! helpers below.
-    interface
-        subroutine dgtsv(n, nrhs, dl, d, du, b, ldb, info)
-            import :: real64
-            integer, intent(in) :: n, nrhs, ldb
-            real(real64), intent(inout) :: dl(*), d(*), du(*), b(ldb, *)
-            integer, intent(out) :: info
-        end subroutine dgtsv
-
-        subroutine dgeev(jobvl, jobvr, n, a, lda, wr, wi, vl, ldvl, vr, ldvr, &
-                         work, lwork, info)
-            import :: real64
-            character(len=1), intent(in) :: jobvl, jobvr
-            integer, intent(in) :: n, lda, ldvl, ldvr, lwork
-            real(real64), intent(inout) :: a(lda, *)
-            real(real64), intent(out) :: wr(*), wi(*), vl(ldvl, *), vr(ldvr, *), work(*)
-            integer, intent(out) :: info
-        end subroutine dgeev
-    end interface
 
 contains
 
@@ -76,87 +54,58 @@ contains
 
     ! quick reference
     ! purpose
-    !    query lapack dgeev for a safe workspace size for an n x n matrix.
+    !    run a small internal QZ generalized-eigenvalue solve and return the
+    !    largest finite imaginary component of lambda = (alfr + i alfi) / beta.
     ! expected input shapes
-    !    n - matrix order used to size the temporary query arrays.
+    !    a_matrix(n,n) - dense generalized-eigenvalue left matrix.
+    !    b_matrix(n,n) - dense generalized-eigenvalue right matrix.
+    !    zwork(n,n)    - workspace required by the EISPACK QZ routines.
+    !    alfr(n), alfi(n), beta(n) - real-valued eigenvalue work arrays.
     ! output
-    !    lwork - recommended workspace length for dgeev.
-    integer function dgeev_lwork(n) result(lwork)
-        integer, intent(in) :: n
-
-        real(real64), allocatable :: a(:,:), wr(:), wi(:)
-        real(real64) :: vl(1, 1), vr(1, 1), work_query(1)
-        integer :: info
-
-        allocate(a(n, n), wr(n), wi(n))
-        a = 0.0_real64
-        work_query = 0.0_real64
-        call dgeev('N', 'N', n, a, n, wr, wi, vl, 1, vr, 1, work_query, -1, info)
-        if (info == 0) then
-            lwork = max(1, int(work_query(1)))
-        else
-            lwork = max(1, 8 * n)
-        end if
-        deallocate(a, wr, wi)
-    end function dgeev_lwork
-
-
-    ! quick reference
-    ! purpose
-    !    solve the tridiagonal system, convert it to a dense eigenproblem,
-    !    and return the largest imaginary eigenvalue component.
-    ! expected input shapes
-    !    eig_matrix(n,n) - dense matrix overwritten by dgtsv and passed to dgeev.
-    !    dl(n-1)         - lower diagonal band of the tridiagonal matrix.
-    !    d(n)            - main diagonal band of the tridiagonal matrix.
-    !    du(n-1)         - upper diagonal band of the tridiagonal matrix.
-    !    wr(n)           - real parts of the lapack eigenvalues.
-    !    wi(n)           - imaginary parts of the lapack eigenvalues.
-    !    work(lwork)     - lapack workspace for dgeev.
-    ! output
-    !    max_imag - largest imaginary eigenvalue component.
-    !    info      - lapack status flag from dgtsv/dgeev.
-    subroutine solve_tridiagonal_system_eig_max_imag( &
-        eig_matrix, dl, d, du, wr, wi, work, lwork, max_imag, info &
-    )
-        real(real64), intent(inout) :: eig_matrix(:, :), dl(:), d(:), du(:), wr(:), wi(:), work(:)
-        integer, intent(in) :: lwork
-        real(real64), intent(out) :: max_imag
+    !    max_imag - largest finite imaginary eigenvalue component.
+    !    info     - zero on success, otherwise the QZ iteration status.
+    subroutine generalized_eig_max_imag(a_matrix, b_matrix, zwork, alfr, alfi, beta, max_imag, info)
+        real(real64), intent(inout) :: a_matrix(:, :), b_matrix(:, :), zwork(:, :)
+        real(real64), intent(out) :: alfr(:), alfi(:), beta(:), max_imag
         integer, intent(out) :: info
 
-        real(real64) :: vl(1, 1), vr(1, 1)
         integer :: i, n
-        logical :: has_valid
+        logical :: has_valid, matz
+        real(real64) :: imag_part
+        external :: qzhes, qzit, qzval
 
-        n = size(eig_matrix, 1)
-        call dgtsv(n, n, dl, d, du, eig_matrix, n, info)
+        n = size(a_matrix, 1)
+        matz = .false.
+
+        call qzhes(n, n, a_matrix, b_matrix, matz, zwork)
+        call qzit(n, n, a_matrix, b_matrix, 0.0_real64, matz, zwork, info)
         if (info /= 0) then
             max_imag = nan_value()
             return
         end if
 
-        call dgeev('N', 'N', n, eig_matrix, n, wr, wi, vl, 1, vr, 1, work, lwork, info)
-        if (info /= 0) then
-            max_imag = nan_value()
-            return
-        end if
+        call qzval(n, n, a_matrix, b_matrix, alfr, alfi, beta, matz, zwork)
 
         max_imag = nan_value()
         has_valid = .false.
         do i = 1, n
+            if (abs(beta(i)) <= tiny(1.0_real64)) cycle
+            imag_part = alfi(i) / beta(i)
             if (.not. has_valid) then
-                max_imag = wi(i)
+                max_imag = imag_part
                 has_valid = .true.
             else
-                max_imag = max(max_imag, wi(i))
+                max_imag = max(max_imag, imag_part)
             end if
         end do
 
         if (.not. has_valid) then
             info = 1
             max_imag = nan_value()
+        else
+            info = 0
         end if
-    end subroutine solve_tridiagonal_system_eig_max_imag
+    end subroutine generalized_eig_max_imag
 
 
     ! quick reference
@@ -423,8 +372,8 @@ end module growth_rate_kernels_core
 !          sample exists.
 subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
     use growth_rate_kernels_core, only : &
-        dgeev_lwork, real64, nan_value, nwavenumbers, omega, radius, &
-        solve_tridiagonal_system_eig_max_imag, wavenumber_step, finalize_barot_growth
+        real64, nan_value, nwavenumbers, omega, radius, generalized_eig_max_imag, &
+        wavenumber_step, finalize_barot_growth
     implicit none
 
     integer, intent(in) :: nlat
@@ -436,8 +385,9 @@ subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
     real(real64) :: b_diag_base(nlat), b_lower_coeff(nlat - 1), b_upper_coeff(nlat - 1), beta_arr(nlat)
     real(real64) :: dy(nlat - 1), dy1(nlat - 1), dy2(nlat - 2), growth(nwavenumbers)
     real(real64) :: kval, kval2, kval3, y(nlat), y1, y2, growth_k
-    real(real64), allocatable :: eig_matrix(:, :), b_diag(:), b_lower(:), b_upper(:), wr(:), wi(:), eig_work(:)
-    integer :: info, k, lwork, n
+    real(real64), allocatable :: a_matrix(:, :), b_matrix(:, :), zwork(:, :)
+    real(real64), allocatable :: alfr(:), alfi(:), beta_eig(:)
+    integer :: info, k, n
 
     if (nlat < 3) then
         ier = 1
@@ -476,34 +426,35 @@ subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
         (1.0_real64 / y2) * (((u(nlat - 1) - u(nlat)) / dy(nlat - 1)) - u(nlat) / y2)
     b_diag_base(nlat) = (1.0_real64 / y2) * (-1.0_real64 / dy(nlat - 1) - 1.0_real64 / y2)
 
-    lwork = dgeev_lwork(nlat)
-    allocate(eig_matrix(nlat, nlat), b_diag(nlat), b_lower(nlat - 1), b_upper(nlat - 1), wr(nlat), wi(nlat), eig_work(lwork))
+    allocate( &
+        a_matrix(nlat, nlat), b_matrix(nlat, nlat), zwork(nlat, nlat), &
+        alfr(nlat), alfi(nlat), beta_eig(nlat) &
+    )
 
     growth = nan_value()
     do k = 1, nwavenumbers
         kval = real(k - 1, real64) * wavenumber_step
         kval2 = kval * kval
         kval3 = kval2 * kval
-        eig_matrix = 0.0_real64
-        b_lower = b_lower_coeff
-        b_diag = b_diag_base - kval2
-        b_upper = b_upper_coeff
+        a_matrix = 0.0_real64
+        b_matrix = 0.0_real64
 
         do n = 1, nlat
-            eig_matrix(n, n) = kval * a_diag_linear(n) - kval3 * u(n)
+            a_matrix(n, n) = kval * a_diag_linear(n) - kval3 * u(n)
+            b_matrix(n, n) = b_diag_base(n) - kval2
         end do
         do n = 1, nlat - 1
-            eig_matrix(n + 1, n) = kval * a_lower_coeff(n)
-            eig_matrix(n, n + 1) = kval * a_upper_coeff(n)
+            a_matrix(n + 1, n) = kval * a_lower_coeff(n)
+            a_matrix(n, n + 1) = kval * a_upper_coeff(n)
+            b_matrix(n + 1, n) = b_lower_coeff(n)
+            b_matrix(n, n + 1) = b_upper_coeff(n)
         end do
 
-        call solve_tridiagonal_system_eig_max_imag( &
-            eig_matrix, b_lower, b_diag, b_upper, wr, wi, eig_work, lwork, growth_k, info &
-        )
+        call generalized_eig_max_imag(a_matrix, b_matrix, zwork, alfr, alfi, beta_eig, growth_k, info)
         if (info == 0) growth(k) = growth_k
     end do
 
-    deallocate(eig_matrix, b_diag, b_lower, b_upper, wr, wi, eig_work)
+    deallocate(a_matrix, b_matrix, zwork, alfr, alfi, beta_eig)
     call finalize_barot_growth(growth, max_growth, ier)
 end subroutine dbarot_growth_rate_1d
 
@@ -532,8 +483,8 @@ end subroutine dbarot_growth_rate_1d
 !          after smoothing.
 subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, smooth_window, max_growth, ier, nlev)
     use growth_rate_kernels_core, only : &
-        dgeev_lwork, real64, gas_constant_dry, nan_value, nwavenumbers, omega, &
-        radius, solve_tridiagonal_system_eig_max_imag, wavenumber_step, finalize_baroc_growth
+        real64, gas_constant_dry, nan_value, nwavenumbers, omega, radius, &
+        generalized_eig_max_imag, wavenumber_step, finalize_baroc_growth
     implicit none
 
     integer, intent(in) :: nlev
@@ -546,8 +497,9 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, smooth_wi
     real(real64) :: b_diag_base(nlev), b_lower_coeff(nlev - 1), b_upper_coeff(nlev - 1), dz1(nlev - 1), dz2(nlev)
     real(real64) :: growth(nwavenumbers), growth_k, kval
     real(real64) :: f, f2, beta, kval2, kval3, nz(nlev - 1), rho(nlev)
-    real(real64), allocatable :: eig_matrix(:, :), b_diag(:), b_lower(:), b_upper(:), wr(:), wi(:), eig_work(:)
-    integer :: info, k, lwork, n
+    real(real64), allocatable :: a_matrix(:, :), b_matrix(:, :), zwork(:, :)
+    real(real64), allocatable :: alfr(:), alfi(:), beta_eig(:)
+    integer :: info, k, n
 
     if (nlev < 3) then
         ier = 1
@@ -593,34 +545,35 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, smooth_wi
         f2 / dz2(nlev) * ((u(nlev - 1) - u(nlev)) / nz(nlev - 1))
     b_diag_base(nlev) = f2 / dz2(nlev) * (-1.0_real64 / nz(nlev - 1))
 
-    lwork = dgeev_lwork(nlev)
-    allocate(eig_matrix(nlev, nlev), b_diag(nlev), b_lower(nlev - 1), b_upper(nlev - 1), wr(nlev), wi(nlev), eig_work(lwork))
+    allocate( &
+        a_matrix(nlev, nlev), b_matrix(nlev, nlev), zwork(nlev, nlev), &
+        alfr(nlev), alfi(nlev), beta_eig(nlev) &
+    )
 
     growth = nan_value()
     do k = 1, nwavenumbers
         kval = real(k - 1, real64) * wavenumber_step
         kval2 = kval * kval
         kval3 = kval2 * kval
-        eig_matrix = 0.0_real64
-        b_lower = b_lower_coeff
-        b_diag = b_diag_base - kval2
-        b_upper = b_upper_coeff
+        a_matrix = 0.0_real64
+        b_matrix = 0.0_real64
 
         do n = 1, nlev
-            eig_matrix(n, n) = kval * a_diag_linear(n) - kval3 * u(n)
+            a_matrix(n, n) = kval * a_diag_linear(n) - kval3 * u(n)
+            b_matrix(n, n) = b_diag_base(n) - kval2
         end do
         do n = 1, nlev - 1
-            eig_matrix(n + 1, n) = kval * a_lower_coeff(n)
-            eig_matrix(n, n + 1) = kval * a_upper_coeff(n)
+            a_matrix(n + 1, n) = kval * a_lower_coeff(n)
+            a_matrix(n, n + 1) = kval * a_upper_coeff(n)
+            b_matrix(n + 1, n) = b_lower_coeff(n)
+            b_matrix(n, n + 1) = b_upper_coeff(n)
         end do
 
-        call solve_tridiagonal_system_eig_max_imag( &
-            eig_matrix, b_lower, b_diag, b_upper, wr, wi, eig_work, lwork, growth_k, info &
-        )
+        call generalized_eig_max_imag(a_matrix, b_matrix, zwork, alfr, alfi, beta_eig, growth_k, info)
         if (info == 0) growth(k) = growth_k
     end do
 
-    deallocate(eig_matrix, b_diag, b_lower, b_upper, wr, wi, eig_work)
+    deallocate(a_matrix, b_matrix, zwork, alfr, alfi, beta_eig)
     call finalize_baroc_growth(growth, smooth_window, max_growth, ier)
 end subroutine dbaroc_growth_rate_1d
 
