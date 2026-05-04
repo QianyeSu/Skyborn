@@ -1,15 +1,15 @@
-subroutine qzit(nm,n,a,b,eps1,matz,z,ierr)
+subroutine qzit(nm, n, a, b, eps1, ierr)
     use, intrinsic :: iso_fortran_env, only : real64
     implicit none
     !
     integer i,j,k,l,n,en,k1,k2,ld,ll,l1,na,nm,ish,itn,its,km1,lm1, &
     & enm2,ierr,lor1,enorn
-    real(real64) a(nm,n),b(nm,n),z(nm,n)
+    real(real64) a(nm,n),b(nm,n)
     real(real64) r,s,t,a1,a2,a3,ep,sh,u1,u2,u3,v1,v2,v3,ani,a11, &
     & a12,a21,a22,a33,a34,a43,a44,bni,b11,b12,b22,b33,b34, &
     & b44,epsa,epsb,eps1,anorm,bnorm
     real(real64), external :: epslon
-    logical matz,notlas
+    logical notlas
     !
     !     this subroutine is the second step of the qz algorithm
     !     for solving generalized matrix eigenvalue problems,
@@ -44,15 +44,6 @@ subroutine qzit(nm,n,a,b,eps1,matz,z,ierr)
     !          positive value of eps1 may result in faster execution,
     !          but less accurate results.
     !
-    !        matz should be set to .true. if the right hand transformations
-    !          are to be accumulated for later use in computing
-    !          eigenvectors, and to .false. otherwise.
-    !
-    !        z contains, if matz has been set to .true., the
-    !          transformation matrix produced in the reduction
-    !          by  qzhes, if performed, or else the identity matrix.
-    !          if matz has been set to .false., z is not referenced.
-    !
     !     on output
     !
     !        a has been reduced to quasi-triangular form.  the elements
@@ -62,9 +53,6 @@ subroutine qzit(nm,n,a,b,eps1,matz,z,ierr)
     !        b is still in upper triangular form, although its elements
     !          have been altered.  the location b(n,1) is used to store
     !          eps1 times the norm of b for later use by  qzval  and  qzvec.
-    !
-    !        z contains the product of the right hand transformations
-    !          (for both steps) if matz has been set to .true..
     !
     !        ierr is set to
     !          zero       for normal return,
@@ -115,7 +103,7 @@ subroutine qzit(nm,n,a,b,eps1,matz,z,ierr)
     !     .......... begin qz step ..........
     60 continue
     if (en .le. 2) go to 1001
-    if (.not. matz) enorn = en
+    enorn = en
     its = 0
     na = en - 1
     enm2 = na - 1
@@ -230,7 +218,7 @@ subroutine qzit(nm,n,a,b,eps1,matz,z,ierr)
     160 continue
     its = its + 1
     itn = itn - 1
-    if (.not. matz) lor1 = ld
+    lor1 = ld
     !     .......... main loop ..........
     do k = l, na
         notlas = k .ne. na .and. ish .eq. 2
@@ -324,14 +312,6 @@ subroutine qzit(nm,n,a,b,eps1,matz,z,ierr)
         !
         b(k2,k) = 0.0d0
         b(k2,k1) = 0.0d0
-        if (.not. matz) go to 240
-        !
-        do i = 1, n
-            t = z(i,k2) + u2 * z(i,k1) + u3 * z(i,k)
-            z(i,k2) = z(i,k2) + t * v1
-            z(i,k1) = z(i,k1) + t * v2
-            z(i,k) = z(i,k) + t * v3
-        end do
         !     .......... zero b(k+1,k) ..........
         240 continue
         s = abs(b(k1,k1)) + abs(b(k1,k))
@@ -353,14 +333,6 @@ subroutine qzit(nm,n,a,b,eps1,matz,z,ierr)
         end do
         !
         b(k1,k) = 0.0d0
-        if (.not. matz) go to 260
-        !
-        do i = 1, n
-            t = z(i,k1) + u2 * z(i,k)
-            z(i,k1) = z(i,k1) + t * v1
-            z(i,k) = z(i,k) + t * v2
-        end do
-        !
         260 continue
     end do
     !     .......... end qz step ..........
