@@ -1,13 +1,14 @@
 {% set name = "skyborn" %}
-{% set version = "0.3.20" %}
+{% set version = "0.3.22" %}
+{% set commit = "c5f9e0f9bf87b1139335d4eb0a987e412c9607af" %}
 
 package:
   name: {{ name|lower }}
   version: {{ version }}
 
 source:
-  url: https://github.com/QianyeSu/Skyborn/archive/refs/tags/v{{ version }}.tar.gz
-  sha256: f1d6b063283a50ae58181d6ac25627a0a25b685c782232d21be58edf424b7c95
+  url: https://github.com/QianyeSu/Skyborn/archive/{{ commit }}.tar.gz
+  sha256: 7ac26f07bceca32ec25863e70b26011046339eb6c7069a90197179523f0b2f51
 
 build:
   number: 0
@@ -27,6 +28,8 @@ requirements:
     - cython >=3
     - meson
     - ninja
+    - libblas * *openblas
+    - liblapack * *openblas
     - libgomp  # [linux]
     - llvm-openmp  # [osx]
   run:
@@ -42,6 +45,8 @@ requirements:
     - scipy
     - scikit-learn
     - dask
+    - libblas * *openblas
+    - liblapack * *openblas
     - libgomp  # [win]
 
 test:
