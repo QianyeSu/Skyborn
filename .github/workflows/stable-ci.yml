@@ -40,7 +40,10 @@ jobs:
 
       - name: Install package in development mode
         shell: bash -l {0}
-        run: pip install -e . --no-deps
+        run: |
+          export OPENBLAS_ROOT=/usr
+          export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}
+          pip install -e . --no-deps
 
       - name: List installed packages
         shell: bash -l {0}
