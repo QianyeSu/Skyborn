@@ -67,7 +67,16 @@ exclude = [
 ]
 
 [tool.setuptools.exclude-package-data]
-"*" = ["*.pyc", "*.pyo", "__pycache__/*"]
+"*" = [
+    "*.pyc",
+    "*.pyo",
+    "__pycache__/*",
+    "build/*",
+    "build_local/*",
+    "meson-private/*",
+    "meson-logs/*",
+    "meson-info/*",
+]
 
 [tool.setuptools.dynamic]
 version = { attr = "skyborn.__version__" }
