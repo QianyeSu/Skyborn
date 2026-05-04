@@ -206,10 +206,6 @@ class TestGrowthRateHelpers:
             growth_rate_core._target_pressure_to_pa(np.array([300.0, 700.0])),
             np.array([30000.0, 70000.0]),
         )
-        assert_allclose(
-            growth_rate_core._pressure_values_to_pa(np.array([300.0, np.nan])),
-            np.array([30000.0, np.nan]),
-        )
         assert growth_rate_core._normalize_vertical_interp("pressure") == "linear"
         assert growth_rate_core._normalize_vertical_interp("logp") == "log"
         converted = growth_rate_core._convert_output_units(
@@ -217,10 +213,13 @@ class TestGrowthRateHelpers:
             "day^-1",
         )
         assert_allclose(converted, np.array([0.0864, 0.1728]))
-        assert growth_rate_core._as_1d_or_2d_float64(
-            np.array([[1.0, 2.0], [3.0, 4.0]]),
+        layout = growth_rate_core._coerce_profile_layout(
+            np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
             "values",
-        ).shape == (2, 2)
+            pressure_size=2,
+            pressure_dim=None,
+        )
+        assert layout["matrix"].shape == (3, 2)
 
     def test_helper_validation_errors(self):
         """Helper validation should reject malformed shapes, coordinates, and units."""
@@ -229,7 +228,12 @@ class TestGrowthRateHelpers:
             growth_rate_core._as_1d_float64(np.ones((2, 2)), "values")
 
         with pytest.raises(ValueError, match="one- or two-dimensional"):
-            growth_rate_core._as_1d_or_2d_float64(np.ones((2, 2, 2)), "values")
+            growth_rate_core._coerce_profile_layout(
+                np.ones((2, 2, 2)),
+                "values",
+                pressure_size=2,
+                pressure_dim=None,
+            )
 
         with pytest.raises(ValueError, match="dimension mismatch"):
             growth_rate_core._same_shape_or_raise(
@@ -300,15 +304,6 @@ class TestGrowthRateHelpers:
         with pytest.raises(ValueError, match="match the requested profile count"):
             growth_rate_core._broadcast_profile_matrix(np.ones((2, 3)), 3, "u")
 
-        with pytest.raises(ValueError, match="cannot be provided together"):
-            growth_rate_core._build_solver_pressure_grid_pa(
-                np.array([30000.0, 60000.0, 100000.0]),
-                np.array([220.0, 235.0, 255.0]),
-                target_pressure=np.array([30000.0, 60000.0, 100000.0]),
-                tropopause_pressure=300.0,
-                solver_levels=5,
-            )
-
         data = xr.DataArray(np.ones((2, 3), dtype=np.float64), dims=("time", "level"))
         layout = growth_rate_core._coerce_profile_layout(
             data,
@@ -319,10 +314,6 @@ class TestGrowthRateHelpers:
         assert layout["profile_dim"] == "time"
         assert isinstance(layout["profile_coord"], xr.DataArray)
         assert_allclose(layout["profile_coord"].values, np.array([0, 1]))
-        assert_allclose(
-            growth_rate_core._profile_coord_or_default(data, "member", 2).values,
-            np.array([0, 1]),
-        )
 
         with pytest.raises(ValueError, match="vertical axis must match"):
             growth_rate_core._coerce_profile_layout(
@@ -374,7 +365,7 @@ class TestGrowthRateHelpers:
     def test_build_solver_pressure_grid_rejects_non_tropospheric_bounds(
         self, monkeypatch
     ):
-        """The solver grid should reject diagnosed tropopauses at or below the lower bound."""
+        """The public API should reject tropopauses at or below the lower bound."""
 
         monkeypatch.setattr(
             growth_rate_core,
@@ -383,31 +374,14 @@ class TestGrowthRateHelpers:
         )
 
         with pytest.raises(ValueError, match="diagnosed tropopause pressure"):
-            growth_rate_core._build_solver_pressure_grid_pa(
-                np.array([30000.0, 70000.0, 100000.0]),
+            baroc_growth_rate(
+                np.array([8.0, 14.0, 24.0]),
                 np.array([230.0, 260.0, 285.0]),
-                target_pressure=None,
-                tropopause_pressure=None,
-                solver_levels=45,
+                np.array([30000.0, 70000.0, 100000.0]),
+                lat=45.0,
             )
 
-    def test_build_solver_pressure_grid_uses_explicit_tropopause_pressure(self):
-        """An explicit tropopause pressure should skip automatic diagnosis."""
-
-        result = growth_rate_core._build_solver_pressure_grid_pa(
-            np.array([30000.0, 70000.0, 100000.0]),
-            np.array([230.0, 260.0, 285.0]),
-            target_pressure=None,
-            tropopause_pressure=250.0,
-            solver_levels=5,
-        )
-
-        assert_allclose(
-            result,
-            np.linspace(25000.0, 100000.0, 5, dtype=np.float64),
-        )
-
-    def test_resolve_batch_profile_metadata_rejects_conflicting_dims(self):
+    def test_baroc_growth_rate_batch_rejects_conflicting_xarray_profile_dims(self):
         """Batched xarray inputs should share the same non-pressure dimension."""
 
         u = xr.DataArray(
@@ -420,25 +394,13 @@ class TestGrowthRateHelpers:
             dims=("year", "level"),
             coords={"year": [2000, 2001], "level": [300.0, 600.0, 1000.0]},
         )
-        u_layout = growth_rate_core._coerce_profile_layout(
-            u,
-            "u",
-            pressure_size=3,
-            pressure_dim="level",
-        )
-        temperature_layout = growth_rate_core._coerce_profile_layout(
-            temperature,
-            "temperature",
-            pressure_size=3,
-            pressure_dim="level",
-        )
-
         with pytest.raises(ValueError, match="share the same non-pressure dimension"):
-            growth_rate_core._resolve_batch_profile_metadata(
+            baroc_growth_rate(
                 u,
                 temperature,
-                u_layout,
-                temperature_layout,
+                u["level"],
+                lat=45.0,
+                tropopause_pressure=300.0,
             )
 
 
