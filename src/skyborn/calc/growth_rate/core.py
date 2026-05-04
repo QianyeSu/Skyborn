@@ -30,6 +30,8 @@ Chemke, R., Ming, Y., and Yuval, J. (2022):
 
 from __future__ import annotations
 
+from typing import Optional, Union
+
 import numpy as np
 import xarray as xr
 
@@ -50,10 +52,10 @@ REFERENCE_PRESSURE_PA = 100000.0
 DEFAULT_SOLVER_LEVELS = 45
 DEFAULT_SMOOTH_WINDOW = 1
 
-ProfileInput = xr.DataArray | np.ndarray
-MissingValue = float | int | np.floating | np.integer | None
-PressureInput = ProfileInput | float | int | np.floating | np.integer
-GrowthRateOutput = float | np.ndarray | xr.DataArray
+ProfileInput = Union[xr.DataArray, np.ndarray]
+MissingValue = Union[float, int, np.floating, np.integer, None]
+PressureInput = Union[ProfileInput, float, int, np.floating, np.integer]
+GrowthRateOutput = Union[float, np.ndarray, xr.DataArray]
 
 __all__ = [
     "baroc_growth_rate",
@@ -74,7 +76,7 @@ def _coerce_profile_matrix(
     values: ProfileInput,
     name: str,
     pressure_size: int,
-    pressure_dim: str | None,
+    pressure_dim: Optional[str],
 ) -> np.ndarray:
     """Normalize profile inputs to a ``(nprofile, nlev)`` float64 matrix."""
 
@@ -243,9 +245,9 @@ def _normalize_output_units(output_units: str) -> str:
 
 
 def _convert_output_units(
-    value: float | np.ndarray,
+    value: Union[float, np.ndarray],
     output_units: str,
-) -> float | np.ndarray:
+) -> Union[float, np.ndarray]:
     """Convert per-second growth rates into the requested public units."""
 
     normalized = _normalize_output_units(output_units)
@@ -339,8 +341,8 @@ def _wrap_batch_baroc_output(
     values: np.ndarray,
     output_units: str,
     missing_value: MissingValue,
-    profile_coord: xr.DataArray | None,
-) -> np.ndarray | xr.DataArray:
+    profile_coord: Optional[xr.DataArray],
+) -> Union[np.ndarray, xr.DataArray]:
     """Wrap batched baroclinic growth rates back into NumPy or xarray output."""
 
     converted = np.array(values, dtype=np.float64, copy=True)
@@ -473,10 +475,10 @@ def baroc_growth_rate(
     temperature: ProfileInput,
     pressure: ProfileInput,
     *,
-    lat: float | int | np.floating | np.integer | None = None,
+    lat: Optional[Union[float, int, np.floating, np.integer]] = None,
     output_units: str = "s-1",
     vertical_interp: str = "log",
-    tropopause_pressure: PressureInput | None = None,
+    tropopause_pressure: Optional[PressureInput] = None,
     solver_levels: int = DEFAULT_SOLVER_LEVELS,
     smooth_window: int = DEFAULT_SMOOTH_WINDOW,
     missing_value: MissingValue = np.nan,
