@@ -60,8 +60,8 @@ __all__ = [
     "interp_multidim",
 ]
 
-supported_types = xr.DataArray | np.ndarray
-coordinate_types = xr.DataArray | np.ndarray | typing.Sequence[float]
+supported_types = typing.Union[xr.DataArray, np.ndarray]
+coordinate_types = typing.Union[xr.DataArray, np.ndarray, typing.Sequence[float]]
 _PRESSURE_INTERP_SPVL = np.float64(np.finfo(np.float64).max)
 _VINTH2P_SPVL = np.float64(-9.96921e36)
 
