@@ -68,20 +68,32 @@ message('Host CPU family: ' + host_cpu)
 openmp_dependencies = []
 openmp_fortran_args = []
 openmp_c_args = []
-if host_system == 'windows'
-    # These kernels do not contain OpenMP directives, so enabling `-fopenmp`
-    # on Windows only creates an unnecessary libgomp/MSVC linker mismatch.
-    message('Skipping OpenMP flags on Windows for GPI build')
-else
+openmp_link_args = []
+fortran_compiler = meson.get_compiler('fortran')
+c_compiler = meson.get_compiler('c')
+is_gcc_toolchain = fortran_compiler.get_id() == 'gcc' and c_compiler.get_id() == 'gcc'
+if is_gcc_toolchain
+    if host_system == 'windows'
+        message('Enabling OpenMP flags for GCC-based Windows GPI build')
+    endif
     openmp_dep = dependency('openmp', required: false)
     if openmp_dep.found()
         openmp_dependencies += openmp_dep
         message('Using OpenMP dependency for parallel processing')
     else
-        warning('OpenMP dependency not found - relying on compiler flags only')
+        warning('OpenMP dependency not found - relying on compiler/linker flags only')
     endif
     openmp_fortran_args += ['-fopenmp']
     openmp_c_args += ['-fopenmp']
+    openmp_link_args += ['-fopenmp']
+elif host_system != 'windows'
+    openmp_dep = dependency('openmp', required: false)
+    if openmp_dep.found()
+        openmp_dependencies += openmp_dep
+        message('Using OpenMP dependency for parallel processing')
+    else
+        warning('OpenMP dependency not found')
+    endif
 endif
 
 # Optimization flags
@@ -215,6 +227,7 @@ else:
         dependencies: dependencies,
         fortran_args: fortran_args,
         c_args: c_args,
+        link_args: openmp_link_args,
         install: true,   # Install to custom location if provided
         install_dir: get_option('python.purelibdir') / 'skyborn' / 'calc' / 'GPI',  # Use setuptools path if available
         build_by_default: true,
@@ -232,7 +245,6 @@ else:
             '''
 import os
 import shutil
-import glob
 import sys
 from pathlib import Path
 
@@ -243,56 +255,35 @@ module_dir = current_dir.parent  # This is the module source directory
 print(f"Current dir (build): {current_dir}")
 print(f"Module dir (source): {module_dir}")
 
-# Search for compiled extension files in current build directory
-patterns = ["tropical_cyclone_potential_intensity*.so", "tropical_cyclone_potential_intensity*.pyd", "tropical_cyclone_potential_intensity*.dylib"]
-built_files = []
+built_file = Path(sys.argv[1]).resolve()
+source_file = module_dir / built_file.name
 
-# Search directly in the build directory (current directory)
-for pattern in patterns:
-    found_files = glob.glob(str(current_dir / pattern), recursive=False)
-    built_files.extend(found_files)
+print(f"Built extension: {built_file}")
 
-# Also search recursively in case files are in subdirectories
-for pattern in patterns:
-    found_files = glob.glob(str(current_dir / "**" / pattern), recursive=True)
-    built_files.extend(found_files)
+if not built_file.exists():
+    raise FileNotFoundError(f"Expected built extension does not exist: {built_file}")
 
-# Remove duplicates
-built_files = list(set(built_files))
+should_copy = False
+if not source_file.exists():
+    should_copy = True
+    print(f"Source {source_file.name} doesn't exist, will copy")
+elif built_file.stat().st_mtime > source_file.stat().st_mtime:
+    should_copy = True
+    print(f"Source {source_file.name} is older, will copy")
+else:
+    print(f"Source {source_file.name} already up to date")
 
-if built_files:
-    print(f"Found built files: {built_files}")
-
-    # Check if we should copy to source directory
-    for built_file_str in built_files:
-        built_file = Path(built_file_str)
-        source_file = module_dir / built_file.name
-
-        # Copy if source doesn't exist or is older
-        if not source_file.exists():
-            should_copy = True
-            print(f"Source {built_file.name} doesn't exist, will copy")
-        elif built_file.stat().st_mtime > source_file.stat().st_mtime:
-            should_copy = True
-            print(f"Source {built_file.name} is older, will copy")
-
-        if should_copy:
-            try:
-                if source_file.exists():
-                    source_file.unlink()
-                shutil.copy2(str(built_file), str(source_file))
-                print(f"Copied {built_file.name} to source directory successfully")
-            except Exception as e:
-                print(f"Failed to copy {built_file.name}: {e}")
-if not built_files:
-    print("No compiled extension files found")
-    print("Available files in current directory:")
-    if current_dir.exists():
-        for f in current_dir.rglob("*"):
-            if f.is_file():
-                print(f"  {f}")
-    else:
-        print("  Current directory does not exist")
+if should_copy:
+    if source_file.exists():
+        try:
+            source_file.unlink()
+        except PermissionError:
+            backup = source_file.with_suffix(source_file.suffix + '.locked_old')
+            if backup.exists():
+                backup.unlink()
+            source_file.rename(backup)
+    shutil.copy2(str(built_file), str(source_file))
+    print(f"Copied {built_file.name} to source directory successfully")
 
 # Create marker
 with open("''' + '@OUTPUT@' + '''", "w") as f:
@@ -300,6 +291,8 @@ with open("''' + '@OUTPUT@' + '''", "w") as f:
 
 print("=== Extension source copy check completed ===")
 '''
+            ,
+            '@INPUT@',
         ],
         build_by_default: true,  # Always run this check
         console: true
