@@ -88,9 +88,26 @@ Genesis Potential Index (GPI) / Tropical Cyclone Potential Intensity
 
 .. autofunction:: skyborn.calc.GPI.interface.potential_intensity
 
+.. autofunction:: skyborn.calc.GPI.interface.log_decompose_pi
+
+.. autofunction:: skyborn.calc.GPI.interface.pi_log_decomposition
+
 .. autoclass:: skyborn.calc.GPI.interface.PotentialIntensityCalculator
 
 .. autofunction:: skyborn.calc.GPI.xarray.potential_intensity
+
+.. autofunction:: skyborn.calc.GPI.xarray.pi_log_decomposition
+
+.. note::
+
+   ``error_flag == 1`` indicates a successful PI solve.
+
+   ``potential_intensity(...)`` remains the pure PI entry point.
+
+   Use ``pi_log_decomposition(...)`` for supported 1D, 3D, and 4D inputs
+   when you need ``tcpyPI``-style outflow diagnostics
+   (``outflow_source={"cape_star", "cape_env"}``, ``t0``, ``otl``) and the
+   Wing et al. (2015) logarithmic decomposition where ``lnpi = ln(V^2)``.
 
 Statistical Functions
 ---------------------
@@ -432,9 +449,28 @@ Example Usage
    results = calculator.results
 
    print(f"\nClass interface results:")
-   print(f"  Mean PI: {results['pi'].mean():.1f} m/s")
-   print(f"  Std PI: {results['pi'].std():.1f} m/s")
-   print(f"  Success rate: {(results['error_flag'] == 1).mean() * 100:.1f}%")
+   print(f"  Mean PI: {results['max_wind'].mean():.1f} m/s")
+   print(f"  Std PI: {results['max_wind'].std():.1f} m/s")
+   print(f"  Successful solve: {results['error_flag'] == 1}")
+
+   # === PI log decomposition diagnostics ===
+   sst_profile = xr.DataArray(sst, attrs={'units': 'K'})
+   psl_profile = xr.DataArray(psl, attrs={'units': 'Pa'})
+   temp_profile_xr = xr.DataArray(temperature, dims=['level'], coords={'level': pressure_levels}, attrs={'units': 'K'})
+   mixr_profile_xr = xr.DataArray(mixing_ratio, dims=['level'], coords={'level': pressure_levels}, attrs={'units': 'kg/kg'})
+   pres_profile_xr = xr.DataArray(pressure_levels, dims=['level'], attrs={'units': 'mb'})
+
+   from skyborn.calc.GPI.xarray import pi_log_decomposition
+
+   profile_full = pi_log_decomposition(
+       sst_profile,
+       psl_profile,
+       pres_profile_xr,
+       temp_profile_xr,
+       mixr_profile_xr,
+       outflow_source='cape_env'
+   )
+   print(profile_full[['pi', 't0', 'otl', 'lnpi', 'lneff', 'lndiseq', 'lnCKCD']])
 
 
 **Statistical Analysis Examples**
