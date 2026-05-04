@@ -23,6 +23,9 @@ Version 0.3.22 (Current)
   capabilities for atmospheric profile analysis, including direct
   Fortran-backed batch evaluation and supporting documentation for the new
   workflow
+* **Growth-rate and Interpolation Test Coverage**: Added focused wrapper
+  tests for the new growth-rate and pressure-interpolation workflows so
+  the maintained Python dispatch and validation paths stay covered
 
 **Bug Fixes**
 
@@ -34,11 +37,6 @@ Version 0.3.22 (Current)
 * **spharm and windspharm Regression Coverage**: Added focused tests for
   the updated internal spectral-helper and wind-analysis paths,
   including shape-validation coverage for the new optimized flow
-* **Growth-rate and Interpolation Regression Coverage**: Extended
-  focused wrapper tests so the current ``skyborn.calc.growth_rate`` and
-  updated ``interp_pressure_1d`` Python dispatch paths keep their new
-  public naming and validation branches covered
-
 Version 0.3.21
 ------------------------
 
