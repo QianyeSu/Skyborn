@@ -17,16 +17,22 @@ module growth_rate_kernels_core
     real(real64), parameter :: omega = 7.292e-5_real64
     real(real64), parameter :: radius = 6.371e6_real64
     real(real64), parameter :: gas_constant_dry = 287.04_real64
+    real(real64), parameter :: heat_capacity = 1004.7_real64
+    real(real64), parameter :: kappa = gas_constant_dry / heat_capacity
+    real(real64), parameter :: reference_pressure_pa = 1.0e5_real64
     real(real64), parameter :: wavenumber_step = 1.0e-7_real64
     integer, parameter :: nwavenumbers = 200
 
     public :: real64
     public :: gas_constant_dry
+    public :: kappa
+    public :: reference_pressure_pa
     public :: nan_value
     public :: nwavenumbers
     public :: omega
     public :: radius
     public :: dgeev_lwork
+    public :: interp_pressure_profile_no_extrap
     public :: solve_tridiagonal_system_eig_max_imag
     public :: wavenumber_step
     public :: finalize_baroc_growth
@@ -151,6 +157,114 @@ contains
             max_imag = nan_value()
         end if
     end subroutine solve_tridiagonal_system_eig_max_imag
+
+
+    ! quick reference
+    ! purpose
+    !    linearly or log-linearly interpolate one monotonic pressure profile
+    !    to a new monotonic pressure grid without extrapolation.
+    ! expected input shapes
+    !    source_pressure(nin) - source pressure levels.
+    !    source_values(nin) - field values on source_pressure.
+    !    target_pressure(nout) - target pressure levels.
+    ! output
+    !    target_values(nout) - interpolated output values.
+    !    ier - status flag: 0 on success, 1 when the source coordinate is not
+    !          strictly monotonic, 2 when the target coordinate is not strictly
+    !          increasing, 3 when log interpolation sees nonpositive pressure,
+    !          4 when a target level falls outside the source range.
+    pure subroutine interp_pressure_profile_no_extrap( &
+        source_pressure, source_values, target_pressure, interp_kind, target_values, ier &
+    )
+        real(real64), intent(in) :: source_pressure(:), source_values(:), target_pressure(:)
+        integer, intent(in) :: interp_kind
+        real(real64), intent(out) :: target_values(size(target_pressure))
+        integer, intent(out) :: ier
+
+        real(real64) :: pressure_work(size(source_pressure)), values_work(size(source_values))
+        real(real64) :: delta_pressure, source_hi, source_lo, target_level, value_hi, value_lo
+        integer :: idx, jdx, nin, nout
+
+        nin = size(source_pressure)
+        nout = size(target_pressure)
+        ier = 0
+        target_values = 0.0_real64
+
+        if (nin < 2) then
+            ier = 1
+            return
+        end if
+
+        if (source_pressure(1) > source_pressure(nin)) then
+            do idx = 1, nin
+                pressure_work(idx) = source_pressure(nin - idx + 1)
+                values_work(idx) = source_values(nin - idx + 1)
+            end do
+        else
+            pressure_work = source_pressure
+            values_work = source_values
+        end if
+
+        do idx = 1, nin - 1
+            if (pressure_work(idx) >= pressure_work(idx + 1)) then
+                ier = 1
+                return
+            end if
+        end do
+
+        if (nout > 1) then
+            do idx = 1, nout - 1
+                if (target_pressure(idx) >= target_pressure(idx + 1)) then
+                    ier = 2
+                    return
+                end if
+            end do
+        end if
+
+        if (interp_kind == 2) then
+            if (any(pressure_work <= 0.0_real64) .or. any(target_pressure <= 0.0_real64)) then
+                ier = 3
+                return
+            end if
+        end if
+
+        jdx = 1
+        do idx = 1, nout
+            target_level = target_pressure(idx)
+            if (target_level < pressure_work(1) .or. target_level > pressure_work(nin)) then
+                ier = 4
+                return
+            end if
+
+            do while (jdx < nin - 1 .and. target_level > pressure_work(jdx + 1))
+                jdx = jdx + 1
+            end do
+
+            if (target_level == pressure_work(jdx)) then
+                target_values(idx) = values_work(jdx)
+                cycle
+            end if
+
+            if (target_level == pressure_work(jdx + 1)) then
+                target_values(idx) = values_work(jdx + 1)
+                cycle
+            end if
+
+            source_lo = pressure_work(jdx)
+            source_hi = pressure_work(jdx + 1)
+            value_lo = values_work(jdx)
+            value_hi = values_work(jdx + 1)
+            if (interp_kind == 1) then
+                delta_pressure = source_hi - source_lo
+                target_values(idx) = value_lo + &
+                    ((value_hi - value_lo) / delta_pressure) * (target_level - source_lo)
+            else
+                delta_pressure = log(source_hi) - log(source_lo)
+                target_values(idx) = value_lo + &
+                    ((value_hi - value_lo) / delta_pressure) * (log(target_level) - log(source_lo))
+            end if
+        end do
+    end subroutine interp_pressure_profile_no_extrap
 
 
     ! quick reference
@@ -509,3 +623,72 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, smooth_wi
     deallocate(eig_matrix, b_diag, b_lower, b_upper, wr, wi, eig_work)
     call finalize_baroc_growth(growth, smooth_window, max_growth, ier)
 end subroutine dbaroc_growth_rate_1d
+
+
+! quick reference
+! purpose
+!    compute chemke-style baroclinic growth rates for multiple independent
+!    atmospheric profiles without looping in Python.
+! expected input shapes
+!    u_input(nlev_in,nprofile) - zonal-wind profiles.
+!    temperature_input(nlev_in,nprofile) - temperature profiles.
+!    source_pressure(nlev_in) - shared source pressure coordinate.
+!    target_pressure(nlev_out,nprofile) - per-profile solver pressure grids.
+!    lat(nprofile) - latitude per profile.
+! units
+!    lat - degrees
+!    source_pressure - pa
+!    target_pressure - pa
+!    temperature_input - k
+!    u_input - m s-1
+! output
+!    growth(nprofile) - maximum baroclinic growth rate for each profile.
+!    ier(nprofile) - profile status flag: 0 on success, 100 when interpolation
+!                    cannot be performed without extrapolation, otherwise the
+!                    dbaroc_growth_rate_1d status code.
+subroutine dbaroc_growth_rate_profiles( &
+    u_input, temperature_input, source_pressure, target_pressure, lat, &
+    interp_kind, smooth_window, missing_value, growth, ier, nlev_in, nprofile, nlev_out &
+)
+    use growth_rate_kernels_core, only : &
+        real64, kappa, reference_pressure_pa, interp_pressure_profile_no_extrap
+    implicit none
+
+    integer, intent(in) :: nlev_in, nprofile, nlev_out
+    integer, intent(in) :: interp_kind, smooth_window
+    real(real64), intent(in) :: u_input(nlev_in, nprofile), temperature_input(nlev_in, nprofile)
+    real(real64), intent(in) :: source_pressure(nlev_in), target_pressure(nlev_out, nprofile), lat(nprofile)
+    real(real64), intent(in) :: missing_value
+    real(real64), intent(out) :: growth(nprofile)
+    integer, intent(out) :: ier(nprofile)
+
+    real(real64) :: temperature_solver(nlev_out), theta_solver(nlev_out), u_solver(nlev_out)
+    integer :: col, interp_ier, profile_ier
+
+    growth = missing_value
+    ier = 0
+    do col = 1, nprofile
+        call interp_pressure_profile_no_extrap( &
+            source_pressure, u_input(:, col), target_pressure(:, col), interp_kind, u_solver, interp_ier &
+        )
+        if (interp_ier /= 0) then
+            ier(col) = 100
+            cycle
+        end if
+
+        call interp_pressure_profile_no_extrap( &
+            source_pressure, temperature_input(:, col), target_pressure(:, col), interp_kind, temperature_solver, interp_ier &
+        )
+        if (interp_ier /= 0) then
+            ier(col) = 100
+            cycle
+        end if
+
+        theta_solver = temperature_solver * (reference_pressure_pa / target_pressure(:, col)) ** kappa
+        call dbaroc_growth_rate_1d( &
+            u_solver, theta_solver, target_pressure(:, col), temperature_solver, &
+            lat(col), smooth_window, growth(col), profile_ier, nlev_out &
+        )
+        ier(col) = profile_ier
+    end do
+end subroutine dbaroc_growth_rate_profiles
