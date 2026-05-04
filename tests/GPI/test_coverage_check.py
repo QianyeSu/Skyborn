@@ -17,7 +17,6 @@ def main():
     import numpy as np
 
     from skyborn.calc.GPI.interface import (
-        PotentialIntensityCalculator,
         _ensure_pressure_ordering,
         _postprocess_results,
         _validate_dimensions,

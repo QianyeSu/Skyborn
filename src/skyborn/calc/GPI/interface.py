@@ -67,11 +67,6 @@ def _postprocess_scalar(value: Union[float, np.floating]) -> float:
     return np.nan if np.isclose(value, UNDEF) else value
 
 
-def _maybe_scalar(value: Union[np.ndarray, float]) -> Any:
-    """Collapse 0D NumPy outputs back to Python scalars."""
-    return float(value) if np.ndim(value) == 0 else value
-
-
 def _detect_temperature_kind(temperature: Any) -> str:
     """Map thermodynamic input dimensionality to the supported API kind."""
     temp_ndim = np.ndim(temperature)
@@ -537,9 +532,9 @@ def log_decompose_pi(
     lndiseq[valid] = lnpi[valid] - lneff[valid] - lnCKCD
 
     return (
-        _maybe_scalar(lnpi),
-        _maybe_scalar(lneff),
-        _maybe_scalar(lndiseq),
+        float(lnpi) if np.ndim(lnpi) == 0 else lnpi,
+        float(lneff) if np.ndim(lneff) == 0 else lneff,
+        float(lndiseq) if np.ndim(lndiseq) == 0 else lndiseq,
         lnCKCD,
     )
 
