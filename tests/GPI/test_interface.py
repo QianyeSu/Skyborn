@@ -13,10 +13,8 @@ import pytest
 # Import the actual module to test (no mocking since Fortran module is available)
 from skyborn.calc.GPI.interface import (
     UNDEF,
-    PotentialIntensityCalculator,
     _compiled_float32_array,
     _ensure_pressure_ordering,
-    _maybe_scalar,
     _normalize_outflow_source,
     _postprocess_results,
     _postprocess_scalar,
@@ -29,6 +27,23 @@ from skyborn.calc.GPI.interface import (
     pi_log_decomposition,
     potential_intensity,
 )
+
+
+def _realistic_3d_inputs(nlat=10, nlon=20, num_levels=4):
+    """Create a physically plausible 3D sample that converges reliably."""
+    pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
+    sst = np.random.rand(nlat, nlon) * 5.0 + 298.0
+    psl = np.random.rand(nlat, nlon) * 1500.0 + 100000.0
+
+    temp = np.empty((num_levels, nlat, nlon), dtype=float)
+    mixr = np.empty((num_levels, nlat, nlon), dtype=float)
+    base_temp = np.array([300.0, 288.0, 275.0, 255.0])
+    base_mixr = np.array([0.016, 0.010, 0.006, 0.0025])
+    for i in range(num_levels):
+        temp[i] = base_temp[i] + np.random.rand(nlat, nlon) * 2.0
+        mixr[i] = base_mixr[i] + np.random.rand(nlat, nlon) * 0.001
+
+    return sst, psl, pressure_levels, temp, mixr
 
 
 class TestPostprocessResults:
@@ -226,14 +241,6 @@ class TestHelperUtilities:
         assert _normalize_outflow_source("cape_env") == 1
         with pytest.raises(ValueError, match="Invalid outflow_source"):
             _normalize_outflow_source("bad_mode")
-
-    def test_maybe_scalar(self):
-        """0D arrays should collapse while regular arrays stay arrays."""
-        assert _maybe_scalar(np.asarray(3.5)) == 3.5
-        arr = np.array([1.0, 2.0])
-        result = _maybe_scalar(arr)
-        assert isinstance(result, np.ndarray)
-        np.testing.assert_array_equal(result, arr)
 
     def test_compiled_float32_array_layouts(self):
         """Compiled-boundary helper should honor requested memory order."""
@@ -858,210 +865,6 @@ class TestCalculatePotentialIntensityProfile:
             )
 
 
-class TestPotentialIntensityCalculator:
-    """Test the PotentialIntensityCalculator class."""
-
-    @staticmethod
-    def _realistic_3d_inputs(nlat=10, nlon=20, num_levels=4):
-        """Create a physically plausible 3D sample that converges reliably."""
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        sst = np.random.rand(nlat, nlon) * 5.0 + 298.0
-        psl = np.random.rand(nlat, nlon) * 1500.0 + 100000.0
-
-        temp = np.empty((num_levels, nlat, nlon), dtype=float)
-        mixr = np.empty((num_levels, nlat, nlon), dtype=float)
-        base_temp = np.array([300.0, 288.0, 275.0, 255.0])
-        base_mixr = np.array([0.016, 0.010, 0.006, 0.0025])
-        for i in range(num_levels):
-            temp[i] = base_temp[i] + np.random.rand(nlat, nlon) * 2.0
-            mixr[i] = base_mixr[i] + np.random.rand(nlat, nlon) * 0.001
-
-        return sst, psl, pressure_levels, temp, mixr
-
-    def test_3d_data_detection(self):
-        """Test automatic detection of 3D data."""
-        nlat, nlon = 10, 20
-        sst, psl, pressure_levels, temp, mixr = self._realistic_3d_inputs(nlat, nlon)
-
-        calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
-
-        assert calc.data_type == "3D"
-
-        min_p, max_w, err = calc.calculate()
-
-        assert min_p.shape == (nlat, nlon)
-        assert max_w.shape == (nlat, nlon)
-        assert err == 1
-        assert calc.results is not None
-        assert calc.results["data_type"] == "3D"
-
-    def test_4d_data_detection(self):
-        """Test automatic detection of 4D data."""
-        ntimes, nlat, nlon = 5, 10, 20
-        num_levels = 4
-        sst = np.random.rand(ntimes, nlat, nlon)
-        psl = np.random.rand(ntimes, nlat, nlon)
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        temp = np.random.rand(ntimes, num_levels, nlat, nlon)
-        mixr = np.random.rand(ntimes, num_levels, nlat, nlon)
-
-        calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
-
-        assert calc.data_type == "4D"
-
-        min_p, max_w, err = calc.calculate()
-
-        assert min_p.shape == (ntimes, nlat, nlon)
-        assert max_w.shape == (ntimes, nlat, nlon)
-        assert err == 1
-
-    def test_4d_data_diagnostics(self):
-        """Calculator diagnostics should expose 4D decomposition fields."""
-        ntimes, nlat, nlon = 2, 4, 5
-        num_levels = 4
-        sst = np.random.rand(ntimes, nlat, nlon) * 5.0 + 298.0
-        psl = np.random.rand(ntimes, nlat, nlon) * 1500.0 + 100000.0
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        temp = np.empty((ntimes, num_levels, nlat, nlon), dtype=float)
-        mixr = np.empty_like(temp)
-        base_temp = np.array([300.0, 288.0, 275.0, 255.0])
-        base_mixr = np.array([0.016, 0.010, 0.006, 0.0025])
-        for i in range(num_levels):
-            temp[:, i] = base_temp[i] + np.random.rand(ntimes, nlat, nlon) * 2.0
-            mixr[:, i] = base_mixr[i] + np.random.rand(ntimes, nlat, nlon) * 0.001
-
-        calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
-        result = calc.diagnostics()
-        assert result["max_wind"].shape == (ntimes, nlat, nlon)
-        assert result["lndiseq"].shape == (ntimes, nlat, nlon)
-        assert np.isfinite(result["lnCKCD"])
-
-    def test_profile_data_detection(self):
-        """Test automatic detection of profile data."""
-        sst = 300.0
-        psl = 101325.0
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        temp = np.array([300.0, 285.0, 270.0, 250.0])
-        mixr = np.array([0.012, 0.008, 0.005, 0.003])
-
-        calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
-
-        assert calc.data_type == "profile"
-
-        min_p, max_w, err = calc.calculate()
-
-        assert isinstance(min_p, (float, np.floating))
-        assert isinstance(max_w, (float, np.floating))
-        assert err == 1
-
-    def test_diagnostics_require_profile_input(self):
-        """Class helper should support gridded diagnostics."""
-        sst, psl, pressure_levels, temp, mixr = self._realistic_3d_inputs()
-        calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
-        result = calc.diagnostics()
-        assert result["max_wind"].shape == sst.shape
-        assert result["t0"].shape == sst.shape
-        assert np.isfinite(result["lnCKCD"])
-
-    def test_diagnostics_results_cache(self):
-        """Class helper should cache full profile diagnostics."""
-        calc = PotentialIntensityCalculator(
-            300.0,
-            101325.0,
-            np.array([1000.0, 850.0, 700.0, 500.0]),
-            np.array([300.0, 285.0, 270.0, 250.0]),
-            np.array([0.012, 0.008, 0.005, 0.003]),
-        )
-        result = calc.diagnostics(outflow_source="cape_env")
-        assert result["error_flag"] == 1
-        assert calc.results is not None
-        assert calc.results["data_type"] == "profile"
-        assert "t0" in calc.results
-        assert "lnpi" in calc.results
-
-    def test_diagnostics_method(self):
-        """Class diagnostics helper should delegate to the main entry point."""
-        calc = PotentialIntensityCalculator(
-            300.0,
-            101325.0,
-            np.array([1000.0, 850.0, 700.0, 500.0]),
-            np.array([300.0, 285.0, 270.0, 250.0]),
-            np.array([0.012, 0.008, 0.005, 0.003]),
-        )
-        direct = calc.diagnostics(outflow_source="cape_star")
-        assert direct["error_flag"] == 1
-        assert np.isfinite(direct["lnCKCD"])
-
-    def test_gridded_diagnostics_helpers(self):
-        """Explicit decomposition helper should return full 3D/4D fields."""
-        sst3, psl3, levels3, temp3, mixr3 = self._realistic_3d_inputs()
-        diag3 = pi_log_decomposition(sst3, psl3, levels3, temp3, mixr3)
-        assert diag3["max_wind"].shape == sst3.shape
-        assert diag3["lnpi"].shape == sst3.shape
-        assert np.isfinite(diag3["lnCKCD"])
-
-        ntimes, nlat, nlon = 2, 4, 5
-        levels4 = np.array([1000.0, 850.0, 700.0, 500.0])
-        sst4 = np.random.rand(ntimes, nlat, nlon) * 5.0 + 298.0
-        psl4 = np.random.rand(ntimes, nlat, nlon) * 1500.0 + 100000.0
-        temp4 = np.empty((ntimes, len(levels4), nlat, nlon), dtype=float)
-        mixr4 = np.empty_like(temp4)
-        base_temp = np.array([300.0, 288.0, 275.0, 255.0])
-        base_mixr = np.array([0.016, 0.010, 0.006, 0.0025])
-        for i in range(len(levels4)):
-            temp4[:, i] = base_temp[i] + np.random.rand(ntimes, nlat, nlon) * 2.0
-            mixr4[:, i] = base_mixr[i] + np.random.rand(ntimes, nlat, nlon) * 0.001
-
-        diag4 = pi_log_decomposition(sst4, psl4, levels4, temp4, mixr4)
-        assert diag4["max_wind"].shape == sst4.shape
-        assert diag4["otl"].shape == sst4.shape
-        assert np.isfinite(diag4["lnCKCD"])
-
-    def test_unsupported_dimensions(self):
-        """Test error on unsupported dimensions."""
-        sst = np.random.rand(10, 20)
-        psl = np.random.rand(10, 20)
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        temp = np.random.rand(10, 20)  # 2D - not supported
-        mixr = np.random.rand(10, 20)
-
-        with pytest.raises(ValueError, match="Unsupported temperature dimensions"):
-            PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
-
-    def test_results_property_before_calculation(self):
-        """Test results property before calculation."""
-        sst = np.random.rand(10, 20)
-        psl = np.random.rand(10, 20)
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        temp = np.random.rand(4, 10, 20)
-        mixr = np.random.rand(4, 10, 20)
-
-        calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
-
-        assert calc.results is None  # No results before calculation
-
-    def test_results_property_after_calculation(self):
-        """Test results property after calculation."""
-        sst = np.random.rand(10, 20)
-        psl = np.random.rand(10, 20)
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        temp = np.random.rand(4, 10, 20)
-        mixr = np.random.rand(4, 10, 20)
-
-        calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
-        min_p, max_w, err = calc.calculate()
-
-        results = calc.results
-        assert results is not None
-        assert "min_pressure" in results
-        assert "max_wind" in results
-        assert "error_flag" in results
-        assert "data_type" in results
-        np.testing.assert_array_equal(results["min_pressure"], min_p)
-        np.testing.assert_array_equal(results["max_wind"], max_w)
-        assert results["error_flag"] == err
-
-
 class TestPotentialIntensityConvenienceFunction:
     """Test the potential_intensity convenience function."""
 
@@ -1074,7 +877,7 @@ class TestPotentialIntensityConvenienceFunction:
             pressure_levels,
             temp,
             mixr,
-        ) = TestPotentialIntensityCalculator._realistic_3d_inputs(nlat, nlon)
+        ) = _realistic_3d_inputs(nlat, nlon)
 
         min_p, max_w, err = potential_intensity(sst, psl, pressure_levels, temp, mixr)
 
@@ -1143,7 +946,7 @@ class TestPotentialIntensityConvenienceFunction:
             pressure_levels,
             temp,
             mixr,
-        ) = TestPotentialIntensityCalculator._realistic_3d_inputs(nlat, nlon)
+        ) = _realistic_3d_inputs(nlat, nlon)
         result = pi_log_decomposition(sst, psl, pressure_levels, temp, mixr)
         assert result["max_wind"].shape == (nlat, nlon)
         assert result["lnpi"].shape == (nlat, nlon)
@@ -1243,8 +1046,8 @@ class TestIntegration:
         assert np.all(valid_min_p > 800) and np.all(valid_min_p < 1100)
         assert np.all(valid_max_w > 0) and np.all(valid_max_w < 200)
 
-    def test_class_based_workflow(self):
-        """Test complete workflow using the class interface."""
+    def test_end_to_end_4d_workflow(self):
+        """Test complete 4D workflow through the functional convenience API."""
         # Create 4D data
         ntimes = 12
         nlat, nlon = 30, 60
@@ -1264,23 +1067,11 @@ class TestIntegration:
                 mixr[t, i] = 0.015 * (p / 1000) ** 2
                 mixr[t, i] += np.random.rand(nlat, nlon) * 0.002
 
-        # Use class interface
-        calc = PotentialIntensityCalculator(sst, psl, pressure_levels, temp, mixr)
-
-        assert calc.data_type == "4D"
-
-        min_p, max_w, err = calc.calculate()
+        min_p, max_w, err = potential_intensity(sst, psl, pressure_levels, temp, mixr)
 
         assert min_p.shape == (ntimes, nlat, nlon)
         assert max_w.shape == (ntimes, nlat, nlon)
         assert err == 1
-
-        # Check results are stored
-        results = calc.results
-        assert results["data_type"] == "4D"
-        assert results["error_flag"] == 1
-        np.testing.assert_array_equal(results["min_pressure"], min_p)
-        np.testing.assert_array_equal(results["max_wind"], max_w)
 
 
 if __name__ == "__main__":
