@@ -469,7 +469,8 @@ end subroutine dbarot_growth_rate_1d
 !    lat - latitude in degrees for the coriolis terms.
 !    smooth_window - centered smoothing width applied before peak detection.
 ! units
-!    lat - degrees
+!    f_cor - s-1
+!    beta - m-1 s-1
 !    pressure - pa
 !    temperature - k
 !    u - m s-1
@@ -479,7 +480,7 @@ end subroutine dbarot_growth_rate_1d
 !    ier - status flag: 0 on success, 1 when nlev < 3, 2 when smooth_window < 1,
 !          300 when no turning point is found, 301 when no valid sample remains
 !          after smoothing.
-subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, smooth_window, max_growth, ier, nlev)
+subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, f_cor, beta, smooth_window, max_growth, ier, nlev)
     use growth_rate_kernels_core, only : &
         real64, gas_constant_dry, nan_value, nwavenumbers, omega, radius, &
         generalized_eig_max_imag, wavenumber_step, finalize_baroc_growth
@@ -487,14 +488,14 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, smooth_wi
 
     integer, intent(in) :: nlev
     integer, intent(in) :: smooth_window
-    real(real64), intent(in) :: u(nlev), theta(nlev), pressure(nlev), temperature(nlev), lat
+    real(real64), intent(in) :: u(nlev), theta(nlev), pressure(nlev), temperature(nlev), f_cor, beta
     real(real64), intent(out) :: max_growth
     integer, intent(out) :: ier
 
     real(real64) :: a_diag_linear(nlev), a_lower_coeff(nlev - 1), a_upper_coeff(nlev - 1)
     real(real64) :: b_diag_base(nlev), b_lower_coeff(nlev - 1), b_upper_coeff(nlev - 1), dz1(nlev - 1), dz2(nlev)
     real(real64) :: growth(nwavenumbers), growth_k, kval
-    real(real64) :: f, f2, beta, kval2, kval3, nz(nlev - 1), rho(nlev)
+    real(real64) :: f, f2, kval2, kval3, nz(nlev - 1), rho(nlev)
     real(real64), allocatable :: a_matrix(:, :), b_matrix(:, :)
     real(real64), allocatable :: alfr(:), alfi(:), beta_eig(:)
     integer :: info, k, n
@@ -515,9 +516,8 @@ subroutine dbaroc_growth_rate_1d(u, theta, pressure, temperature, lat, smooth_wi
     dz2(1) = pressure(2) - pressure(1)
     dz2(2:nlev - 1) = dz1(2:) - dz1(:nlev - 2)
     dz2(nlev) = pressure(nlev) - pressure(nlev - 1)
-    f = 2.0_real64 * omega * sin((acos(-1.0_real64) / 180.0_real64) * lat)
+    f = f_cor
     f2 = f * f
-    beta = 2.0_real64 * omega * cos((acos(-1.0_real64) / 180.0_real64) * lat) / radius
     rho = pressure / (gas_constant_dry * temperature)
     nz = -((theta(2:) - theta(:nlev - 1)) * (1.0_real64 / (rho(:nlev - 1) * theta(:nlev - 1))))
 
@@ -585,9 +585,11 @@ end subroutine dbaroc_growth_rate_1d
 !    temperature_input(nlev_in,nprofile) - temperature profiles.
 !    source_pressure(nlev_in) - shared source pressure coordinate.
 !    target_pressure(nlev_out,nprofile) - per-profile solver pressure grids.
-!    lat(nprofile) - latitude per profile.
+!    f_cor(nprofile) - coriolis parameter per profile.
+!    beta(nprofile) - planetary-vorticity gradient per profile.
 ! units
-!    lat - degrees
+!    f_cor - s-1
+!    beta - m-1 s-1
 !    source_pressure - pa
 !    target_pressure - pa
 !    temperature_input - k
@@ -598,7 +600,7 @@ end subroutine dbaroc_growth_rate_1d
 !                    cannot be performed without extrapolation, otherwise the
 !                    dbaroc_growth_rate_1d status code.
 subroutine dbaroc_growth_rate_profiles( &
-    u_input, temperature_input, source_pressure, target_pressure, lat, &
+    u_input, temperature_input, source_pressure, target_pressure, f_cor, beta, &
     interp_kind, smooth_window, missing_value, growth, ier, nlev_in, nprofile, nlev_out &
 )
     use growth_rate_kernels_core, only : &
@@ -608,7 +610,8 @@ subroutine dbaroc_growth_rate_profiles( &
     integer, intent(in) :: nlev_in, nprofile, nlev_out
     integer, intent(in) :: interp_kind, smooth_window
     real(real64), intent(in) :: u_input(nlev_in, nprofile), temperature_input(nlev_in, nprofile)
-    real(real64), intent(in) :: source_pressure(nlev_in), target_pressure(nlev_out, nprofile), lat(nprofile)
+    real(real64), intent(in) :: source_pressure(nlev_in), target_pressure(nlev_out, nprofile)
+    real(real64), intent(in) :: f_cor(nprofile), beta(nprofile)
     real(real64), intent(in) :: missing_value
     real(real64), intent(out) :: growth(nprofile)
     integer, intent(out) :: ier(nprofile)
@@ -638,7 +641,7 @@ subroutine dbaroc_growth_rate_profiles( &
         theta_solver = temperature_solver * (reference_pressure_pa / target_pressure(:, col)) ** kappa
         call dbaroc_growth_rate_1d( &
             u_solver, theta_solver, target_pressure(:, col), temperature_solver, &
-            lat(col), smooth_window, growth(col), profile_ier, nlev_out &
+            f_cor(col), beta(col), smooth_window, growth(col), profile_ier, nlev_out &
         )
         ier(col) = profile_ier
     end do
