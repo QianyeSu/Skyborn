@@ -78,12 +78,10 @@ jobs:
           export HOMEBREW_NO_AUTO_UPDATE=1
 
           brew list gcc >/dev/null 2>&1 || brew install gcc
-          brew list libomp >/dev/null 2>&1 || brew install libomp
           brew list openblas >/dev/null 2>&1 || brew install openblas
 
           GCC_PREFIX="$(brew --prefix gcc)"
           OPENBLAS_PREFIX="$(brew --prefix openblas)"
-          LIBOMP_PREFIX="$(brew --prefix libomp)"
           GCC_BIN_DIR="${GCC_PREFIX}/bin"
           C_BIN="$(compgen -G "${GCC_BIN_DIR}/gcc-[0-9]*" | sort -V | tail -1)"
           CXX_BIN="$(compgen -G "${GCC_BIN_DIR}/g++-[0-9]*" | sort -V | tail -1)"
@@ -100,10 +98,10 @@ jobs:
           echo "MACOS_F77=${F_BIN}" >> "$GITHUB_ENV"
           echo "MACOS_F90=${F_BIN}" >> "$GITHUB_ENV"
           echo "MACOS_OPENBLAS_ROOT=${OPENBLAS_PREFIX}" >> "$GITHUB_ENV"
-          echo "MACOS_CPPFLAGS=-I${LIBOMP_PREFIX}/include -I${OPENBLAS_PREFIX}/include" >> "$GITHUB_ENV"
-          echo "MACOS_LDFLAGS=-L${LIBOMP_PREFIX}/lib -L${OPENBLAS_PREFIX}/lib" >> "$GITHUB_ENV"
+          echo "MACOS_CPPFLAGS=-I${OPENBLAS_PREFIX}/include" >> "$GITHUB_ENV"
+          echo "MACOS_LDFLAGS=-L${OPENBLAS_PREFIX}/lib" >> "$GITHUB_ENV"
           echo "MACOS_LIBRARY_PATH=${OPENBLAS_PREFIX}/lib" >> "$GITHUB_ENV"
-          echo "MACOS_PKG_CONFIG_PATH=${OPENBLAS_PREFIX}/lib/pkgconfig:${LIBOMP_PREFIX}/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "MACOS_PKG_CONFIG_PATH=${OPENBLAS_PREFIX}/lib/pkgconfig" >> "$GITHUB_ENV"
 
           if [[ "${{ matrix.buildplat[1] }}" == "macosx_x86_64" ]]; then
             echo "MACOSX_DEPLOYMENT_TARGET=15.0" >> "$GITHUB_ENV"
@@ -145,6 +143,11 @@ jobs:
           } else {
             throw "MSYS2 mingw64 bin path not found: C:\msys64\mingw64\bin"
           }
+          "MSYS2_BIN=C:/msys64/mingw64/bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSYS2_CC=C:/msys64/mingw64/bin/gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSYS2_CXX=C:/msys64/mingw64/bin/g++.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSYS2_FC=C:/msys64/mingw64/bin/gfortran.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSYS2_PKG_CONFIG=C:/msys64/mingw64/bin/pkg-config.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "OPENBLAS_ROOT=C:/msys64/mingw64" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "PKG_CONFIG_PATH=C:/msys64/mingw64/lib/pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "LIBRARY_PATH=C:/msys64/mingw64/lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -183,7 +186,7 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
           CIBW_SKIP: "*-win32 *-musllinux*"
           CIBW_BEFORE_BUILD_WINDOWS: pip install meson ninja
-          CIBW_ENVIRONMENT_WINDOWS: FC=gfortran CC=gcc OPENBLAS_ROOT=${{ env.OPENBLAS_ROOT }} PKG_CONFIG_PATH=${{ env.PKG_CONFIG_PATH }} LIBRARY_PATH=${{ env.LIBRARY_PATH }} C_INCLUDE_PATH=${{ env.C_INCLUDE_PATH }}
+          CIBW_ENVIRONMENT_WINDOWS: CC=${{ env.MSYS2_CC }} CXX=${{ env.MSYS2_CXX }} FC=${{ env.MSYS2_FC }} F77=${{ env.MSYS2_FC }} F90=${{ env.MSYS2_FC }} PKG_CONFIG=${{ env.MSYS2_PKG_CONFIG }} OPENBLAS_ROOT=${{ env.OPENBLAS_ROOT }} PKG_CONFIG_PATH=${{ env.PKG_CONFIG_PATH }} LIBRARY_PATH=${{ env.LIBRARY_PATH }} C_INCLUDE_PATH=${{ env.C_INCLUDE_PATH }}
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair -w {dest_dir} {wheel}
           CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
           CIBW_BUILD_VERBOSITY: 1
@@ -228,7 +231,7 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_BEFORE_BUILD_LINUX: |
             # Install gfortran
-            dnf install -y gcc-gfortran || yum install -y gcc-gfortran || echo 'gfortran install failed'
+            dnf install -y gcc-gfortran openblas-devel || yum install -y gcc-gfortran openblas-devel || echo 'gfortran/openblas install failed'
             # Install modern geospatial stack from conda-forge (more reliable)
             curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -o mambaforge.sh
             bash mambaforge.sh -b -p /opt/mambaforge
@@ -250,7 +253,7 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BEFORE_BUILD_LINUX: |
             # Install gfortran (manylinux2014 is CentOS7-based, uses yum)
-            yum install -y gcc-gfortran || echo 'gfortran install failed'
+            yum install -y gcc-gfortran openblas-devel || echo 'gfortran/openblas install failed'
             # Install modern geospatial stack from conda-forge
             curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -o mambaforge.sh
             bash mambaforge.sh -b -p /opt/mambaforge
