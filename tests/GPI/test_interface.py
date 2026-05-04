@@ -78,6 +78,22 @@ class TestHelperUtilities:
     def test_normalize_outflow_source(self):
         """Public outflow labels should map to the expected backend flags."""
         assert _normalize_outflow_source("cape_star") == 0
+
+    def test_profile_diagnostics_default_ckcd_is_finite(self):
+        """Profile diagnostics should retain the default Ck/Cd term when omitted."""
+        from skyborn.calc.GPI import tropical_cyclone_potential_intensity as backend
+
+        result = backend.calculate_pi_profile_diagnostics(
+            300.0,
+            101000.0,
+            np.array([1000.0, 900.0, 800.0], dtype=np.float32),
+            np.array([300.0, 295.0, 290.0], dtype=np.float32),
+            np.array([0.01, 0.008, 0.006], dtype=np.float32),
+            3,
+        )
+
+        assert np.isfinite(result[7])
+        assert np.isfinite(result[8])
         assert _normalize_outflow_source("cape_env") == 1
         with pytest.raises(ValueError, match="Invalid outflow_source"):
             _normalize_outflow_source("bad_mode")
@@ -504,15 +520,29 @@ class TestCalculatePotentialIntensity3D:
 class TestCalculatePotentialIntensity4D:
     """Test the calculate_potential_intensity_4d function."""
 
+    @staticmethod
+    def _realistic_4d_inputs(ntimes=5, nlat=10, nlon=20, num_levels=4):
+        """Create a physically plausible 4D sample that converges reliably."""
+        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
+        sst = np.random.rand(ntimes, nlat, nlon) * 5.0 + 298.0
+        psl = np.random.rand(ntimes, nlat, nlon) * 1500.0 + 100000.0
+
+        temp = np.empty((ntimes, num_levels, nlat, nlon), dtype=float)
+        mixr = np.empty_like(temp)
+        base_temp = np.array([300.0, 288.0, 275.0, 255.0])
+        base_mixr = np.array([0.016, 0.010, 0.006, 0.0025])
+        for i in range(num_levels):
+            temp[:, i] = base_temp[i] + np.random.rand(ntimes, nlat, nlon) * 2.0
+            mixr[:, i] = base_mixr[i] + np.random.rand(ntimes, nlat, nlon) * 0.001
+
+        return sst, psl, pressure_levels, temp, mixr
+
     def test_normal_4d_calculation(self):
         """Test normal 4D calculation without missing values."""
         ntimes, nlat, nlon = 5, 10, 20
-        num_levels = 4
-        sst = np.random.rand(ntimes, nlat, nlon) * 10 + 290
-        psl = np.random.rand(ntimes, nlat, nlon) * 1000 + 100000
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        temp = np.random.rand(ntimes, num_levels, nlat, nlon) * 50 + 250
-        mixr = np.random.rand(ntimes, num_levels, nlat, nlon) * 0.02
+        sst, psl, pressure_levels, temp, mixr = self._realistic_4d_inputs(
+            ntimes, nlat, nlon
+        )
 
         min_p, max_w, err = calculate_potential_intensity_4d(
             sst, psl, pressure_levels, temp, mixr
@@ -527,14 +557,11 @@ class TestCalculatePotentialIntensity4D:
     def test_4d_with_missing_values(self):
         """Test 4D calculation with missing values."""
         ntimes, nlat, nlon = 5, 10, 20
-        num_levels = 4
-        sst = np.random.rand(ntimes, nlat, nlon) * 10 + 290
+        sst, psl, pressure_levels, temp, mixr = self._realistic_4d_inputs(
+            ntimes, nlat, nlon
+        )
         sst[0, 0, 0] = np.nan  # Add missing value
-        psl = np.random.rand(ntimes, nlat, nlon) * 1000 + 100000
-        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
-        temp = np.random.rand(ntimes, num_levels, nlat, nlon) * 50 + 250
         temp[1, :, 5, 5] = UNDEF  # Add UNDEF values
-        mixr = np.random.rand(ntimes, num_levels, nlat, nlon) * 0.02
 
         min_p, max_w, err = calculate_potential_intensity_4d(
             sst, psl, pressure_levels, temp, mixr
@@ -584,6 +611,19 @@ class TestCalculatePotentialIntensityProfile:
         assert isinstance(min_p, (float, np.floating))
         assert isinstance(max_w, (float, np.floating))
         assert err == 1
+
+    def test_profile_with_invalid_actual_levels(self):
+        """actual_levels should be constrained to the available profile length."""
+        sst = 300.0
+        psl = 101325.0
+        pressure_levels = np.array([1000.0, 850.0, 700.0, 500.0])
+        temp = np.array([300.0, 285.0, 270.0, 250.0])
+        mixr = np.array([0.012, 0.008, 0.005, 0.003])
+
+        with pytest.raises(ValueError, match="actual_levels must be between 1 and 4"):
+            calculate_potential_intensity_profile(
+                sst, psl, pressure_levels, temp, mixr, actual_levels=0
+            )
 
     def test_profile_with_mismatched_lengths(self):
         """Test profile with mismatched array lengths."""
