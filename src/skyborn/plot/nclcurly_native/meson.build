@@ -37,7 +37,65 @@ else:
     check: true,
 )
 incdir_numpy = incdir_numpy_cmd.stdout().strip()
-inc_np = include_directories(incdir_numpy)
+
+python_include_dirs_cmd = run_command(
+    py,
+    [
+        '-c',
+        '''
+import os
+import sys
+import sysconfig
+from pathlib import Path
+
+paths = []
+
+def add(path):
+    if not path:
+        return
+    normalized = os.path.abspath(path)
+    if os.path.exists(os.path.join(normalized, "Python.h")) and normalized not in paths:
+        paths.append(normalized)
+
+version = f"python{sys.version_info[0]}.{sys.version_info[1]}"
+
+for key in ("INCLUDEPY", "CONFINCLUDEPY"):
+    add(sysconfig.get_config_var(key))
+
+for key in ("include", "platinclude"):
+    add(sysconfig.get_path(key))
+
+roots = [
+    sys.prefix,
+    sys.exec_prefix,
+    sys.base_prefix,
+    sys.base_exec_prefix,
+    str(Path(sys.executable).resolve().parent.parent),
+]
+
+for root in roots:
+    add(os.path.join(root, "include", version))
+    add(os.path.join(root, "include"))
+    add(os.path.join(root, "Include"))
+    add(os.path.join(root, "Headers"))
+
+for path in paths:
+    print(path)
+''',
+    ],
+    check: true,
+)
+python_include_dirs_text = python_include_dirs_cmd.stdout().strip()
+python_include_dirs = []
+if python_include_dirs_text != ''
+    python_include_dirs = python_include_dirs_text.split('\n')
+endif
+
+if python_include_dirs.length() >= 1
+    inc_np = include_directories(incdir_numpy, python_include_dirs[0])
+else
+    inc_np = include_directories(incdir_numpy)
+endif
 
 host_system = host_machine.system()
 cc = meson.get_compiler('c')
