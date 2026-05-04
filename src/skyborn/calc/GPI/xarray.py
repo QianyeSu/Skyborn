@@ -761,323 +761,6 @@ def _create_output_dataset(
     return xr.Dataset(data_vars=data_vars, coords=coords, attrs=attrs)
 
 
-def _potential_intensity_profile(
-    sst: Union[float, xr.DataArray],
-    psl: Union[float, xr.DataArray],
-    pressure_levels: xr.DataArray,
-    temperature: xr.DataArray,
-    mixing_ratio: xr.DataArray,
-) -> xr.Dataset:
-    """
-    Calculate tropical cyclone potential intensity for single atmospheric profile using xarray.
-
-    This function provides an xarray-native interface for single column potential intensity
-    calculations, handling coordinate preservation and metadata.
-
-    Parameters
-    ----------
-    sst : float or xr.DataArray
-        Sea surface temperature [K]. If DataArray, should be 0-dimensional (scalar).
-    psl : float or xr.DataArray
-        Sea level pressure [Pa]. If DataArray, should be 0-dimensional (scalar).
-    pressure_levels : xr.DataArray
-        Atmospheric pressure levels [mb]. Should be 1D with dimension specified by vertical_dim.
-    temperature : xr.DataArray
-        Temperature profile [K]. Should be 1D with vertical dimension.
-    mixing_ratio : xr.DataArray
-        Water vapor mixing ratio profile [kg/kg]. Should be 1D with same dimension as temperature.
-
-    Returns
-    -------
-    result : xr.Dataset
-        Dataset containing potential intensity results as scalar variables.
-    """
-
-    vertical_dim, sst_val, psl_val, p_levels, temp_vals, mixr_vals = (
-        _prepare_profile_inputs(sst, psl, pressure_levels, temperature, mixing_ratio)
-    )
-
-    # Perform calculation using existing interface
-    min_pressure, pi, error_flag = calculate_potential_intensity_profile(
-        sst_val, psl_val, p_levels, temp_vals, mixr_vals
-    )
-
-    # Create output dataset
-    return _create_output_dataset(
-        min_pressure,
-        pi,
-        error_flag,
-        sst_val=sst_val,
-        psl_val=psl_val,
-        vertical_levels=len(p_levels),
-        vertical_dim=vertical_dim,
-        data_type="Single column profile",
-    )
-
-
-def _potential_intensity_profile_diagnostics(
-    sst: Union[float, xr.DataArray],
-    psl: Union[float, xr.DataArray],
-    pressure_levels: xr.DataArray,
-    temperature: xr.DataArray,
-    mixing_ratio: xr.DataArray,
-    *,
-    outflow_source: str = "cape_star",
-    CKCD: float = 0.9,
-) -> xr.Dataset:
-    """
-    Return profile PI plus outflow and logarithmic decomposition diagnostics.
-
-    Parameters
-    ----------
-    sst, psl : float or xr.DataArray
-        Scalar sea-surface temperature [K] and sea-level pressure [Pa].
-    pressure_levels, temperature, mixing_ratio : xr.DataArray
-        One-dimensional profile inputs sharing the same vertical coordinate.
-    outflow_source : {"cape_star", "cape_env"}, default: "cape_star"
-        Selects the outflow-level diagnostic branch passed to the Fortran
-        backend.
-    CKCD : float, default: 0.9
-        Exchange-coefficient ratio used for the Wing et al. (2015)
-        logarithmic decomposition.
-
-    Returns
-    -------
-    xr.Dataset
-        Dataset with the standard PI outputs plus ``t0``, ``otl``, ``lnpi``,
-        ``lneff``, ``lndiseq``, and ``lnCKCD``. ``error_flag == 1`` indicates
-        a successful solve.
-    """
-    vertical_dim, sst_val, psl_val, p_levels, temp_vals, mixr_vals = (
-        _prepare_profile_inputs(sst, psl, pressure_levels, temperature, mixing_ratio)
-    )
-    result = _pi_log_decomposition_numpy(
-        sst_val,
-        psl_val,
-        p_levels,
-        temp_vals,
-        mixr_vals,
-        CKCD=CKCD,
-        outflow_source=outflow_source,
-    )
-    extra_data_vars = {
-        "t0": (
-            [],
-            result["t0"],
-            {"long_name": "Outflow temperature", "units": "K"},
-        ),
-        "otl": (
-            [],
-            result["otl"],
-            {"long_name": "Outflow level", "units": "hPa"},
-        ),
-        "lnpi": (
-            [],
-            result["lnpi"],
-            {"long_name": "Log PI squared", "units": "dimensionless"},
-        ),
-        "lneff": (
-            [],
-            result["lneff"],
-            {"long_name": "Log PI efficiency term", "units": "dimensionless"},
-        ),
-        "lndiseq": (
-            [],
-            result["lndiseq"],
-            {"long_name": "Log disequilibrium term", "units": "dimensionless"},
-        ),
-        "lnCKCD": (
-            [],
-            result["lnCKCD"],
-            {"long_name": "Log Ck/Cd term", "units": "dimensionless"},
-        ),
-    }
-    return _create_output_dataset(
-        result["min_pressure"],
-        result["max_wind"],
-        result["error_flag"],
-        sst_val=sst_val,
-        psl_val=psl_val,
-        vertical_levels=len(p_levels),
-        vertical_dim=vertical_dim,
-        data_type="Single column profile",
-        extra_data_vars=extra_data_vars,
-    )
-
-
-def _diagnostic_data_vars(dims, result):
-    """Create xarray data_vars metadata for PI diagnostics."""
-    return {
-        "t0": (
-            dims,
-            result["t0"],
-            {"long_name": "Outflow temperature", "units": "K"},
-        ),
-        "otl": (
-            dims,
-            result["otl"],
-            {"long_name": "Outflow level", "units": "hPa"},
-        ),
-        "lnpi": (
-            dims,
-            result["lnpi"],
-            {"long_name": "Log PI squared", "units": "dimensionless"},
-        ),
-        "lneff": (
-            dims,
-            result["lneff"],
-            {"long_name": "Log PI efficiency term", "units": "dimensionless"},
-        ),
-        "lndiseq": (
-            dims,
-            result["lndiseq"],
-            {"long_name": "Log disequilibrium term", "units": "dimensionless"},
-        ),
-        "lnCKCD": (
-            [],
-            result["lnCKCD"],
-            {"long_name": "Log Ck/Cd term", "units": "dimensionless"},
-        ),
-    }
-
-
-def _create_gridded_diagnostic_dataset(
-    result,
-    *,
-    temperature: xr.DataArray,
-    output_dims: Tuple[str, ...],
-    vertical_dim: str,
-    vertical_levels: int,
-    data_type: str,
-) -> xr.Dataset:
-    """Wrap NumPy diagnostic results back into an xarray Dataset."""
-    return _create_output_dataset(
-        result["min_pressure"],
-        result["max_wind"],
-        result["error_flag"],
-        input_coords={dim: temperature.coords[dim] for dim in output_dims},
-        vertical_levels=vertical_levels,
-        vertical_dim=vertical_dim,
-        data_type=data_type,
-        extra_data_vars=_diagnostic_data_vars(output_dims, result),
-    )
-
-
-def _potential_intensity_3d(
-    sst: xr.DataArray,
-    psl: xr.DataArray,
-    pressure_levels: xr.DataArray,
-    temperature: xr.DataArray,
-    mixing_ratio: xr.DataArray,
-) -> xr.Dataset:
-    """
-    Calculate tropical cyclone potential intensity for 3D gridded data using xarray.
-
-    Parameters
-    ----------
-    sst : xr.DataArray, shape (nlat, nlon) or (y, x)
-        Sea surface temperature [K]
-    psl : xr.DataArray, shape (nlat, nlon) or (y, x)
-        Sea level pressure [Pa]
-    pressure_levels : xr.DataArray, shape (num_levels,)
-        Atmospheric pressure levels [mb]
-    temperature : xr.DataArray, shape (num_levels, nlat, nlon) or (num_levels, y, x)
-        Temperature profiles [K]
-    mixing_ratio : xr.DataArray, shape (num_levels, nlat, nlon) or (num_levels, y, x)
-        Water vapor mixing ratio profiles [kg/kg]
-
-    Returns
-    -------
-    result : xr.Dataset
-        Dataset containing potential intensity results with spatial dimensions.
-    """
-
-    vertical_dim, spatial_dims, sst_vals, psl_vals, p_levels, temp_vals, mixr_vals = (
-        _prepare_gridded_inputs(
-            sst,
-            psl,
-            pressure_levels,
-            temperature,
-            mixing_ratio,
-            data_ndim=3,
-        )
-    )
-
-    min_pressure, pi, error_flag = calculate_potential_intensity_3d(
-        sst_vals, psl_vals, p_levels, temp_vals, mixr_vals
-    )
-
-    # Create output coordinates (spatial dimensions only)
-    output_coords = {dim: temperature.coords[dim] for dim in spatial_dims}
-
-    return _create_output_dataset(
-        min_pressure,
-        pi,
-        error_flag,
-        input_coords=output_coords,
-        vertical_levels=len(p_levels),
-        vertical_dim=vertical_dim,
-        data_type="3D gridded",
-    )
-
-
-def _potential_intensity_4d(
-    sst: xr.DataArray,
-    psl: xr.DataArray,
-    pressure_levels: xr.DataArray,
-    temperature: xr.DataArray,
-    mixing_ratio: xr.DataArray,
-) -> xr.Dataset:
-    """
-    Calculate tropical cyclone potential intensity for 4D time series data using xarray.
-
-    Parameters
-    ----------
-    sst : xr.DataArray, shape (ntimes, nlat, nlon) or (time, y, x)
-        Sea surface temperature [K]
-    psl : xr.DataArray, shape (ntimes, nlat, nlon) or (time, y, x)
-        Sea level pressure [Pa]
-    pressure_levels : xr.DataArray, shape (num_levels,)
-        Atmospheric pressure levels [mb]
-    temperature : xr.DataArray, shape (ntimes, num_levels, nlat, nlon) or (time, level, y, x)
-        Temperature profiles [K]
-    mixing_ratio : xr.DataArray, shape (ntimes, num_levels, nlat, nlon) or (time, level, y, x)
-        Water vapor mixing ratio profiles [kg/kg]
-
-    Returns
-    -------
-    result : xr.Dataset
-        Dataset containing potential intensity results with time and spatial dimensions.
-    """
-    vertical_dim, output_dims, sst_vals, psl_vals, p_levels, temp_vals, mixr_vals = (
-        _prepare_gridded_inputs(
-            sst,
-            psl,
-            pressure_levels,
-            temperature,
-            mixing_ratio,
-            data_ndim=4,
-        )
-    )
-
-    min_pressure, pi, error_flag = calculate_potential_intensity_4d(
-        sst_vals, psl_vals, p_levels, temp_vals, mixr_vals
-    )
-
-    # Create output coordinates (time + spatial dimensions)
-    output_coords = {dim: temperature.coords[dim] for dim in output_dims}
-
-    return _create_output_dataset(
-        min_pressure,
-        pi,
-        error_flag,
-        input_coords=output_coords,
-        vertical_levels=len(p_levels),
-        vertical_dim=vertical_dim,
-        data_type="4D time series",
-    )
-
-
 def potential_intensity(
     sst: xr.DataArray,
     psl: xr.DataArray,
@@ -1126,18 +809,60 @@ def potential_intensity(
     # Auto-detect calculation type based on temperature dimensions
     ndim = temperature.ndim
 
-    func_map = {
-        1: _potential_intensity_profile,
-        3: _potential_intensity_3d,
-        4: _potential_intensity_4d,
-    }
-
-    if ndim not in func_map:
+    if ndim not in {1, 3, 4}:
         raise ValueError(
             f"Unsupported number of dimensions: {ndim}. Expected 1, 3, or 4."
         )
+    if ndim == 1:
+        vertical_dim, sst_val, psl_val, p_levels, temp_vals, mixr_vals = (
+            _prepare_profile_inputs(
+                sst, psl, pressure_levels, temperature, mixing_ratio
+            )
+        )
+        min_pressure, pi, error_flag = calculate_potential_intensity_profile(
+            sst_val, psl_val, p_levels, temp_vals, mixr_vals
+        )
+        return _create_output_dataset(
+            min_pressure,
+            pi,
+            error_flag,
+            sst_val=sst_val,
+            psl_val=psl_val,
+            vertical_levels=len(p_levels),
+            vertical_dim=vertical_dim,
+            data_type="Single column profile",
+        )
 
-    return func_map[ndim](sst, psl, pressure_levels, temperature, mixing_ratio)
+    vertical_dim, output_dims, sst_vals, psl_vals, p_levels, temp_vals, mixr_vals = (
+        _prepare_gridded_inputs(
+            sst,
+            psl,
+            pressure_levels,
+            temperature,
+            mixing_ratio,
+            data_ndim=ndim,
+        )
+    )
+    if ndim == 3:
+        min_pressure, pi, error_flag = calculate_potential_intensity_3d(
+            sst_vals, psl_vals, p_levels, temp_vals, mixr_vals
+        )
+        data_type = "3D gridded"
+    else:
+        min_pressure, pi, error_flag = calculate_potential_intensity_4d(
+            sst_vals, psl_vals, p_levels, temp_vals, mixr_vals
+        )
+        data_type = "4D time series"
+
+    return _create_output_dataset(
+        min_pressure,
+        pi,
+        error_flag,
+        input_coords={dim: temperature.coords[dim] for dim in output_dims},
+        vertical_levels=len(p_levels),
+        vertical_dim=vertical_dim,
+        data_type=data_type,
+    )
 
 
 def pi_log_decomposition(
@@ -1159,82 +884,124 @@ def pi_log_decomposition(
 
     ndim = temperature.ndim
     if ndim == 1:
-        return _potential_intensity_profile_diagnostics(
-            sst,
-            psl,
-            pressure_levels,
-            temperature,
-            mixing_ratio,
-            outflow_source=outflow_source,
-            CKCD=CKCD,
-        )
-    if ndim == 3:
-        (
-            vertical_dim,
-            spatial_dims,
-            sst_vals,
-            psl_vals,
-            p_levels,
-            temp_vals,
-            mixr_vals,
-        ) = _prepare_gridded_inputs(
-            sst,
-            psl,
-            pressure_levels,
-            temperature,
-            mixing_ratio,
-            data_ndim=3,
+        vertical_dim, sst_val, psl_val, p_levels, temp_vals, mixr_vals = (
+            _prepare_profile_inputs(
+                sst, psl, pressure_levels, temperature, mixing_ratio
+            )
         )
         result = _pi_log_decomposition_numpy(
-            sst_vals,
-            psl_vals,
+            sst_val,
+            psl_val,
             p_levels,
             temp_vals,
             mixr_vals,
             CKCD=CKCD,
             outflow_source=outflow_source,
         )
-        return _create_gridded_diagnostic_dataset(
-            result,
-            temperature=temperature,
-            output_dims=spatial_dims,
-            vertical_dim=vertical_dim,
+        return _create_output_dataset(
+            result["min_pressure"],
+            result["max_wind"],
+            result["error_flag"],
+            sst_val=sst_val,
+            psl_val=psl_val,
             vertical_levels=len(p_levels),
-            data_type="3D gridded",
-        )
-    if ndim == 4:
-        (
-            vertical_dim,
-            output_dims,
-            sst_vals,
-            psl_vals,
-            p_levels,
-            temp_vals,
-            mixr_vals,
-        ) = _prepare_gridded_inputs(
-            sst,
-            psl,
-            pressure_levels,
-            temperature,
-            mixing_ratio,
-            data_ndim=4,
-        )
-        result = _pi_log_decomposition_numpy(
-            sst_vals,
-            psl_vals,
-            p_levels,
-            temp_vals,
-            mixr_vals,
-            CKCD=CKCD,
-            outflow_source=outflow_source,
-        )
-        return _create_gridded_diagnostic_dataset(
-            result,
-            temperature=temperature,
-            output_dims=output_dims,
             vertical_dim=vertical_dim,
-            vertical_levels=len(p_levels),
-            data_type="4D time series",
+            data_type="Single column profile",
+            extra_data_vars={
+                "t0": (
+                    [],
+                    result["t0"],
+                    {"long_name": "Outflow temperature", "units": "K"},
+                ),
+                "otl": (
+                    [],
+                    result["otl"],
+                    {"long_name": "Outflow level", "units": "hPa"},
+                ),
+                "lnpi": (
+                    [],
+                    result["lnpi"],
+                    {"long_name": "Log PI squared", "units": "dimensionless"},
+                ),
+                "lneff": (
+                    [],
+                    result["lneff"],
+                    {"long_name": "Log PI efficiency term", "units": "dimensionless"},
+                ),
+                "lndiseq": (
+                    [],
+                    result["lndiseq"],
+                    {"long_name": "Log disequilibrium term", "units": "dimensionless"},
+                ),
+                "lnCKCD": (
+                    [],
+                    result["lnCKCD"],
+                    {"long_name": "Log Ck/Cd term", "units": "dimensionless"},
+                ),
+            },
+        )
+    if ndim not in {3, 4}:
+        raise ValueError(
+            f"Unsupported number of dimensions: {ndim}. Expected 1, 3, or 4."
         )
 
-    raise ValueError(f"Unsupported number of dimensions: {ndim}. Expected 1, 3, or 4.")
+    vertical_dim, output_dims, sst_vals, psl_vals, p_levels, temp_vals, mixr_vals = (
+        _prepare_gridded_inputs(
+            sst,
+            psl,
+            pressure_levels,
+            temperature,
+            mixing_ratio,
+            data_ndim=ndim,
+        )
+    )
+    result = _pi_log_decomposition_numpy(
+        sst_vals,
+        psl_vals,
+        p_levels,
+        temp_vals,
+        mixr_vals,
+        CKCD=CKCD,
+        outflow_source=outflow_source,
+    )
+    return _create_output_dataset(
+        result["min_pressure"],
+        result["max_wind"],
+        result["error_flag"],
+        input_coords={dim: temperature.coords[dim] for dim in output_dims},
+        vertical_levels=len(p_levels),
+        vertical_dim=vertical_dim,
+        data_type="3D gridded" if ndim == 3 else "4D time series",
+        extra_data_vars={
+            "t0": (
+                output_dims,
+                result["t0"],
+                {"long_name": "Outflow temperature", "units": "K"},
+            ),
+            "otl": (
+                output_dims,
+                result["otl"],
+                {"long_name": "Outflow level", "units": "hPa"},
+            ),
+            "lnpi": (
+                output_dims,
+                result["lnpi"],
+                {"long_name": "Log PI squared", "units": "dimensionless"},
+            ),
+            "lneff": (
+                output_dims,
+                result["lneff"],
+                {"long_name": "Log PI efficiency term", "units": "dimensionless"},
+            ),
+            "lndiseq": (
+                output_dims,
+                result["lndiseq"],
+                {"long_name": "Log disequilibrium term", "units": "dimensionless"},
+            ),
+            "lnCKCD": (
+                [],
+                result["lnCKCD"],
+                {"long_name": "Log Ck/Cd term", "units": "dimensionless"},
+            ),
+        },
+    )
