@@ -18,21 +18,11 @@ Version 0.3.22 (Current)
 * **windspharm Performance Improvements**: Reduced the Python-side
   overhead in the tested wind-decomposition workflow family while
   keeping the established public numerical conventions unchanged
-* **Growth-rate and Pressure-Interpolation API Cleanup**: Clarified the
-  new compiled growth-rate documentation, changed the public
-  ``baroc_growth_rate`` default vertical interpolation spelling from
-  ``"logp"`` to ``"log"`` while keeping ``"logp"`` as a compatibility
-  alias, and renamed the public ``interp_pressure_1d`` parameter names
-  from ``x`` / ``p_in`` / ``p_out`` to the clearer
-  ``data`` / ``source_pressure`` / ``target_pressure`` while
-  preserving the older ``values`` keyword and the other legacy aliases;
-  ``baroc_growth_rate`` now also exposes ``solver_levels`` so callers can
-  control the automatic pressure-grid resolution without editing module
-  constants, and now exposes ``smooth_window`` to apply Chemke-style
-  centered running-mean smoothing over zonal wavenumber directly inside the
-  Fortran backend before the final maximum-growth diagnostic is taken; the
-  public default is ``smooth_window=1`` to disable smoothing unless the caller
-  explicitly requests an odd window greater than 1
+* **Growth-rate and Pressure-Interpolation Additions**: Added compiled
+  growth-rate diagnostics and pressure-coordinate interpolation
+  capabilities for atmospheric profile analysis, including direct
+  Fortran-backed batch evaluation and supporting documentation for the new
+  workflow
 
 **Bug Fixes**
 
