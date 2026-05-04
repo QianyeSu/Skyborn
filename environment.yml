@@ -5,11 +5,14 @@ channels:
 dependencies:
   - python>=3.9
   - numpy
+  - libblas=*=*openblas
+  - liblapack=*=*openblas
   - xarray
   - matplotlib
   - seaborn
   - pytest
   - pytest-cov
+  - pkg-config
   - eccodes # For GRIB processing
   # Documentation dependencies
   - sphinx
