@@ -196,15 +196,16 @@ The Genesis Potential Index (GPI) module achieves **dramatic speedups** through 
 ![GPI Speed Comparison](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/gpi_speed_comparison.png)
 
 **Performance Highlights:**
-- **19-25x faster** than point-by-point implementations
+- **About 25x faster** than point-by-point implementations
 - Processes entire atmospheric grids in seconds
 - Native multi-dimensional support (3D/4D data)
 
 ![GPI Global Distribution](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/gpi_global_distribution.png)
 
 **Accuracy Validation:**
-- Correlation coefficient > 0.99 with reference implementations
-- RMSE < 1% for both VMAX and PMIN calculations
+- Correlation is effectively 1.0 against the reference implementation
+- RMSE is now on the order of **1e-4** for the core PI outputs, with very small overall error
+- Log-decomposition diagnostics also remain tightly matched to the updated `tcpyPI` results
 
 ![GPI Scatter Comparison](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/gpi_scatter_comparison.png)
 
