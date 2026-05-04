@@ -94,6 +94,135 @@ class TestHelperUtilities:
 
         assert np.isfinite(result[7])
         assert np.isfinite(result[8])
+
+    def test_profile_diagnostics_matches_weak_pi_reference_profile(self):
+        """A weak-PI reference profile should keep the repaired outflow diagnostics."""
+        from skyborn.calc.GPI import tropical_cyclone_potential_intensity as backend
+
+        pressure = np.array(
+            [
+                1000.0,
+                975.0,
+                950.0,
+                925.0,
+                900.0,
+                875.0,
+                850.0,
+                825.0,
+                800.0,
+                775.0,
+                750.0,
+                725.0,
+                700.0,
+                650.0,
+                600.0,
+                550.0,
+                500.0,
+                450.0,
+                400.0,
+                350.0,
+                300.0,
+                250.0,
+                200.0,
+                150.0,
+                100.0,
+                70.0,
+                50.0,
+                40.0,
+                30.0,
+                20.0,
+                10.0,
+            ],
+            dtype=np.float32,
+        )
+        temperature = np.array(
+            [
+                293.88763,
+                291.75888,
+                291.1573,
+                293.55966,
+                294.65005,
+                294.286,
+                293.2548,
+                291.79144,
+                290.23657,
+                288.49313,
+                286.61826,
+                284.711,
+                282.7347,
+                278.97507,
+                275.20212,
+                271.2525,
+                267.10474,
+                262.72827,
+                257.18222,
+                250.52026,
+                242.07008,
+                231.6812,
+                218.98672,
+                205.27437,
+                194.63583,
+                198.26859,
+                206.55276,
+                210.16296,
+                214.18282,
+                220.24586,
+                230.28867,
+            ],
+            dtype=np.float32,
+        )
+        mixing_ratio = np.array(
+            [
+                1.3553351e-02,
+                1.3145609e-02,
+                1.1686340e-02,
+                9.6715530e-03,
+                9.8413313e-03,
+                9.4759287e-03,
+                9.3629621e-03,
+                9.3664555e-03,
+                9.0157352e-03,
+                8.8141104e-03,
+                8.6447019e-03,
+                8.1797363e-03,
+                7.4918712e-03,
+                6.0313386e-03,
+                4.6655103e-03,
+                3.5558715e-03,
+                2.3869141e-03,
+                1.4301763e-03,
+                8.4419337e-04,
+                4.0377824e-04,
+                2.0452886e-04,
+                1.0052809e-04,
+                4.0650654e-05,
+                9.5531608e-06,
+                3.0853794e-06,
+                2.7602934e-06,
+                2.5137867e-06,
+                2.5053700e-06,
+                2.5645911e-06,
+                2.6952043e-06,
+                2.8689381e-06,
+            ],
+            dtype=np.float32,
+        )
+
+        result = backend.calculate_pi_profile_diagnostics(
+            np.float32(296.59235),
+            np.float32(101230.06),
+            pressure,
+            temperature,
+            mixing_ratio,
+            int(len(pressure)),
+            ckcd_in=np.float32(0.9),
+        )
+
+        assert result[2] == 1
+        assert result[0] == pytest.approx(1011.89518, abs=2e-3)
+        assert result[1] == pytest.approx(5.38697, abs=2e-3)
+        assert result[3] == pytest.approx(231.67411, abs=2e-3)
+        assert result[4] == pytest.approx(249.97206, abs=2e-3)
         assert _normalize_outflow_source("cape_env") == 1
         with pytest.raises(ValueError, match="Invalid outflow_source"):
             _normalize_outflow_source("bad_mode")
