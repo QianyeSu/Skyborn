@@ -316,7 +316,6 @@ def test_init_module():
     try:
         # Test that we can import from interface directly
         from skyborn.calc.GPI.interface import (
-            PotentialIntensityCalculator,
             calculate_potential_intensity_3d,
             calculate_potential_intensity_4d,
             calculate_potential_intensity_profile,
