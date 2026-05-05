@@ -40,6 +40,11 @@ z2geouv = _geostrophic_module.z2geouv
 z2geouv_3d = _geostrophic_module.z2geouv_3d
 
 
+def _active_geostrophic_backend() -> ModuleType:
+    """Return the currently registered backend so tests can patch it dynamically."""
+    return sys.modules.get("geostrophicwind", _geostrophic_module)
+
+
 def _is_longitude_cyclic(glon: np.ndarray, tolerance: float = 1.0) -> bool:
     """
     Determine if longitude data is cyclic by checking if it spans 360 degrees.
@@ -222,7 +227,8 @@ def _geostrophic_wind_multidim(
 
     # Step 2: Use 3D function for all cases (handles any n_combined size)
     prepared_z = np.asarray(prepared_z, dtype=np.float32)
-    ug_prepared, vg_prepared = _geostrophic_module.z2geouv_3d(
+    backend = _active_geostrophic_backend()
+    ug_prepared, vg_prepared = backend.z2geouv_3d(
         z=prepared_z, zmsg=missing_value, glon=glon, glat=glat, iopt=iopt
     )
 
@@ -235,7 +241,8 @@ def _geostrophic_wind_multidim(
 
 def _calc_geostrophic_2d(z, glon, glat, missing_value, iopt):
     """Calculate 2D geostrophic wind components using Fortran backend."""
-    return _geostrophic_module.z2geouv(
+    backend = _active_geostrophic_backend()
+    return backend.z2geouv(
         np.asarray(z, dtype=np.float32),
         zmsg=missing_value,
         glon=glon,
