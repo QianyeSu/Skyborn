@@ -1,7 +1,7 @@
 """
-Comprehensive tests for skyborn.calc.geostrophic.interface module.
+Comprehensive tests for skyborn.calc.geostrophic.core module.
 
-This test suite provides >95% code coverage for the geostrophic wind interface module,
+This test suite provides >95% code coverage for the geostrophic wind core module,
 testing all functions, methods, and edge cases for geostrophic wind calculations.
 """
 
@@ -36,7 +36,7 @@ mock_geostrophic.z2geouv_3d = mock_z2geouv_3d
 sys.modules["geostrophicwind"] = mock_geostrophic
 
 
-from skyborn.calc.geostrophic.interface import (
+from skyborn.calc.geostrophic.core import (
     GeostrophicWind,
     _ensure_south_to_north,
     _is_longitude_cyclic,
@@ -369,7 +369,7 @@ class TestGeostrophicWindClass:
 
     def test_class_initialization(self):
         """Test class initialization and property access."""
-        with patch("skyborn.calc.geostrophic.interface.geostrophic_wind") as mock_func:
+        with patch("skyborn.calc.geostrophic.core.geostrophic_wind") as mock_func:
             mock_ug = np.random.randn(self.nlat, self.nlon) * 10
             mock_vg = np.random.randn(self.nlat, self.nlon) * 10
             mock_func.return_value = (mock_ug, mock_vg)
@@ -388,7 +388,7 @@ class TestGeostrophicWindClass:
 
     def test_uv_components_method(self):
         """Test uv_components method."""
-        with patch("skyborn.calc.geostrophic.interface.geostrophic_wind") as mock_func:
+        with patch("skyborn.calc.geostrophic.core.geostrophic_wind") as mock_func:
             mock_ug = np.random.randn(self.nlat, self.nlon) * 10
             mock_vg = np.random.randn(self.nlat, self.nlon) * 10
             mock_func.return_value = (mock_ug, mock_vg)
@@ -401,7 +401,7 @@ class TestGeostrophicWindClass:
 
     def test_speed_calculation(self):
         """Test wind speed calculation."""
-        with patch("skyborn.calc.geostrophic.interface.geostrophic_wind") as mock_func:
+        with patch("skyborn.calc.geostrophic.core.geostrophic_wind") as mock_func:
             mock_ug = np.array([[3.0, 4.0], [0.0, -5.0]])
             mock_vg = np.array([[4.0, 3.0], [12.0, 12.0]])
             mock_func.return_value = (mock_ug, mock_vg)
@@ -417,7 +417,7 @@ class TestGeostrophicWindClass:
 
     def test_speed_with_missing_values(self):
         """Test speed calculation with missing values."""
-        with patch("skyborn.calc.geostrophic.interface.geostrophic_wind") as mock_func:
+        with patch("skyborn.calc.geostrophic.core.geostrophic_wind") as mock_func:
             mock_ug = np.array([[3.0, -999.0], [0.0, 4.0]])
             mock_vg = np.array([[4.0, 5.0], [-999.0, 3.0]])
             mock_func.return_value = (mock_ug, mock_vg)
@@ -436,7 +436,7 @@ class TestGeostrophicWindClass:
 
     def test_custom_missing_value(self):
         """Test class with custom missing value."""
-        with patch("skyborn.calc.geostrophic.interface.geostrophic_wind") as mock_func:
+        with patch("skyborn.calc.geostrophic.core.geostrophic_wind") as mock_func:
             mock_ug = np.random.randn(self.nlat, self.nlon) * 10
             mock_vg = np.random.randn(self.nlat, self.nlon) * 10
             mock_func.return_value = (mock_ug, mock_vg)
@@ -459,7 +459,7 @@ class TestConvenienceFunctions:
         self.lon = np.linspace(0, 357.5, self.nlon)
         self.z = np.random.randn(self.nlat, self.nlon) * 100 + 5500
 
-    @patch("skyborn.calc.geostrophic.interface.GeostrophicWind")
+    @patch("skyborn.calc.geostrophic.core.GeostrophicWind")
     def test_geostrophic_uv_function(self, mock_class):
         """Test geostrophic_uv convenience function."""
         # Mock GeostrophicWind instance
@@ -480,7 +480,7 @@ class TestConvenienceFunctions:
         np.testing.assert_array_equal(ug, mock_ug)
         np.testing.assert_array_equal(vg, mock_vg)
 
-    @patch("skyborn.calc.geostrophic.interface.GeostrophicWind")
+    @patch("skyborn.calc.geostrophic.core.GeostrophicWind")
     def test_geostrophic_speed_function(self, mock_class):
         """Test geostrophic_speed convenience function."""
         # Mock GeostrophicWind instance
@@ -784,7 +784,7 @@ class TestExtraCodeCoverageTargets:
 
     def test_all_class_properties_accessed(self):
         """Test that all class properties are accessible."""
-        with patch("skyborn.calc.geostrophic.interface.geostrophic_wind") as mock_func:
+        with patch("skyborn.calc.geostrophic.core.geostrophic_wind") as mock_func:
             mock_ug = np.random.randn(10, 15) * 10
             mock_vg = np.random.randn(10, 15) * 10
             mock_func.return_value = (mock_ug, mock_vg)
@@ -807,7 +807,7 @@ class TestExtraCodeCoverageTargets:
 
     def test_speed_all_missing_values(self):
         """Test speed calculation when all values are missing."""
-        with patch("skyborn.calc.geostrophic.interface.geostrophic_wind") as mock_func:
+        with patch("skyborn.calc.geostrophic.core.geostrophic_wind") as mock_func:
             mock_ug = np.full((2, 2), -999.0)
             mock_vg = np.full((2, 2), -999.0)
             mock_func.return_value = (mock_ug, mock_vg)
@@ -827,7 +827,7 @@ class TestExtraCodeCoverageTargets:
 
     def test_mixed_missing_values_in_speed(self):
         """Test speed calculation with mixed missing and valid values."""
-        with patch("skyborn.calc.geostrophic.interface.geostrophic_wind") as mock_func:
+        with patch("skyborn.calc.geostrophic.core.geostrophic_wind") as mock_func:
             # Mixed scenario: some valid, some missing in different components
             mock_ug = np.array([[3.0, -999.0], [0.0, 4.0]])
             mock_vg = np.array([[4.0, 3.0], [-999.0, -999.0]])
@@ -859,7 +859,7 @@ class TestExtraCodeCoverageTargets:
 
 
 class TestCoverageCompletion:
-    """Tests specifically to achieve 100% coverage of interface.py."""
+    """Tests specifically to achieve 100% coverage of core.py."""
 
     def test_coordinate_length_mismatch_latitude(self):
         """Test ValueError when latitude array length doesn't match data shape."""
