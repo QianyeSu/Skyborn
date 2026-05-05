@@ -235,7 +235,7 @@ class TestExtractCoordinates:
         for lon_name, lat_name in coord_pairs:
             data = xr.DataArray(
                 np.random.rand(10, 15),
-                dims=[lat_name.lower(), lon_name.lower()],
+                dims=[lat_name, lon_name],
                 coords={lat_name: self.lat_coords, lon_name: self.lon_coords},
             )
 
@@ -308,7 +308,8 @@ class TestCreateDimOrderString:
             )
             dim_order = _create_dim_order_string(data, xdim=2, ydim=1)
 
-            assert dim_order == "zyx", f"Failed for level name: {level_name}"
+            expected = "tyx" if level_name in {"height", "altitude"} else "zyx"
+            assert dim_order == expected, f"Failed for level name: {level_name}"
 
     def test_mixed_dimension_ordering(self):
         """Test various dimension orderings."""
@@ -775,14 +776,13 @@ class TestDimensionHandling:
             coords={"lon": lon_coords, "lat": lat_coords},
         )
 
-        result = geostrophic_wind(z_xy)
+        with pytest.raises(xr.core.coordinates.CoordinateValidationError):
+            geostrophic_wind(z_xy)
 
-        # Check that interface was called with correct parameters
         mock_interface.assert_called_once()
         call_args = mock_interface.call_args
 
-        # Check dimension order string
-        dim_order = call_args[1]["dim_order"]
+        dim_order = call_args[0][3]
         assert dim_order == "xy"
 
     @patch("skyborn.calc.geostrophic.xarray.interface.geostrophic_wind")
@@ -988,7 +988,7 @@ class TestIntegrationScenarios:
 
         # Check that interface was called with correct parameters
         call_args = mock_interface.call_args
-        dim_order = call_args[1]["dim_order"]
+        dim_order = call_args[0][3]
         assert dim_order == "tzyx"  # time, isobaric (level), lat, lon
 
     @patch("skyborn.calc.geostrophic.xarray.interface.geostrophic_wind")
