@@ -321,6 +321,22 @@ class TestGrowthRateHelpers:
             np.array([45.0, 45.0, 45.0]),
         )
 
+    def test_prepare_wavenumber_inputs_synonyms_and_invalid_mode(self):
+        """Helper should normalize mode aliases and reject unsupported values."""
+        high_mode = growth_rate_core._prepare_wavenumber_inputs("high-resolution", None)
+        low_mode = growth_rate_core._prepare_wavenumber_inputs(
+            "low_resolution",
+            np.array([0.0, 60.0, 120.0, 180.0, 240.0, 300.0], dtype=np.float64),
+        )
+
+        assert high_mode[0] == 1
+        assert low_mode[0] == 2
+        assert low_mode[1] == 2
+        assert low_mode[2] is not None
+
+        with pytest.raises(ValueError, match="must be 'high' or 'low'"):
+            growth_rate_core._prepare_wavenumber_inputs("medium", None)
+
     def test_latitude_band_helper_matches_chemke_reference_formula(self):
         """Latitude-band helper should reproduce the Chemke sin/cos averages."""
 
