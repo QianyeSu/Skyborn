@@ -16,7 +16,7 @@ def main():
 
     import numpy as np
 
-    from skyborn.calc.GPI.interface import (
+    from skyborn.calc.GPI.core import (
         _ensure_pressure_ordering,
         _postprocess_results,
         _validate_dimensions,
