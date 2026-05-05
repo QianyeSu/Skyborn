@@ -271,8 +271,8 @@ def trop_wmo(
     """
 
     # Convert inputs to arrays
-    pressure = np.asarray(pressure, dtype=np.float32)
-    temperature = np.asarray(temperature, dtype=np.float32)
+    pressure = ma.asarray(pressure, dtype=np.float32)
+    temperature = ma.asarray(temperature, dtype=np.float32)
 
     # Check if pressure length matches temperature level dimension
     temp_level_size = temperature.shape[levdim]
@@ -511,8 +511,8 @@ def trop_wmo_profile(
     - For gridded data, use trop_wmo() instead.
     """
     # Validate inputs
-    pressure = np.asarray(pressure, dtype=np.float32)
-    temperature = np.asarray(temperature, dtype=np.float32)
+    pressure = ma.asarray(pressure, dtype=np.float32)
+    temperature = ma.asarray(temperature, dtype=np.float32)
 
     if pressure.ndim != 1 or temperature.ndim != 1:
         raise ValueError("Profile inputs must be 1D arrays")
