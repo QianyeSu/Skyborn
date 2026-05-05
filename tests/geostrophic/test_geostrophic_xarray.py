@@ -14,8 +14,9 @@ import xarray as xr
 
 import skyborn.calc.geostrophic.xarray as geostrophic_xarray_module
 
-# Mock the geostrophic module before importing
-sys.modules["geostrophicwind"] = MagicMock()
+# Mock the geostrophic module before importing, but do not clobber
+# a more complete backend stub installed by sibling tests.
+sys.modules.setdefault("geostrophicwind", MagicMock())
 
 
 from skyborn.calc.geostrophic.xarray import (
@@ -346,6 +347,13 @@ class TestCreateDimOrderString:
         dim_order = _create_dim_order_string(data, xdim=3, ydim=2)
 
         assert dim_order == "tzyx"
+
+    def test_time_named_season_branch(self):
+        """Exercise the named time-dimension branch for `season`."""
+        data = xr.DataArray(
+            np.random.rand(2, 3, 4, 5), dims=["season", "level", "lat", "lon"]
+        )
+        assert _create_dim_order_string(data, xdim=3, ydim=2) == "tzyx"
 
 
 class TestGeostrophicWindFunction:
@@ -1051,3 +1059,57 @@ class TestIntegrationScenarios:
         assert "source_geopotential_model" in result.attrs
         assert "source_geopotential_experiment" in result.attrs
         assert result.attrs["source_geopotential_model"] == "CESM2"
+
+    def test_current_paths_and_remaining_small_branches(self, monkeypatch):
+        """Keep stable coverage for current wrapper paths and xarray accessors."""
+
+        def fake_core_geostrophic(z, glon, glat, dim_order, missing_value=-999.0):
+            if dim_order == "xy":
+                return (
+                    np.asarray(z, dtype=np.float32).T,
+                    np.asarray(z, dtype=np.float32).T + 1.0,
+                )
+            return (
+                np.asarray(z, dtype=np.float32),
+                np.asarray(z, dtype=np.float32) + 1.0,
+            )
+
+        monkeypatch.setattr(
+            geostrophic_xarray_module.interface,
+            "geostrophic_wind",
+            fake_core_geostrophic,
+        )
+        monkeypatch.setattr(
+            geostrophic_xarray_module.interface,
+            "_is_longitude_cyclic",
+            lambda glon: True,
+        )
+
+        z = xr.DataArray(
+            np.arange(24, dtype=np.float32).reshape(3, 8),
+            dims=("lat", "lon"),
+            coords={"lat": [-30.0, 0.0, 30.0], "lon": np.linspace(0.0, 315.0, 8)},
+            attrs={"units": "gpm"},
+        )
+        result = geostrophic_wind(z, keep_attrs=True)
+        assert tuple(result.ug.dims) == ("lat", "lon")
+        assert result.attrs["longitude_cyclic"] is True
+        assert result.attrs["source_geopotential_units"] == "gpm"
+
+        z_xy = xr.DataArray(
+            np.arange(24, dtype=np.float32).reshape(8, 3),
+            dims=("lon", "lat"),
+            coords={"lon": np.linspace(0.0, 315.0, 8), "lat": [-30.0, 0.0, 30.0]},
+        )
+        with pytest.raises(xr.core.coordinates.CoordinateValidationError):
+            geostrophic_wind(z_xy)
+
+        with pytest.raises(TypeError, match="z must be xarray.DataArray"):
+            geostrophic_wind(np.zeros((2, 2), dtype=np.float32))
+
+        gw = GeostrophicWind(z)
+        speed = gw.speed()
+        assert tuple(speed.dims) == ("lat", "lon")
+        assert gw.geopotential_height.identical(z)
+        np.testing.assert_array_equal(gw.longitude, np.array(z.lon.values))
+        np.testing.assert_array_equal(gw.latitude, np.array(z.lat.values))
