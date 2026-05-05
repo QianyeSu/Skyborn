@@ -39,7 +39,7 @@ import numpy as np
 import numpy.ma as ma
 import xarray as xr
 
-from . import tropopause
+from . import core as tropopause
 
 # Type aliases
 DataArray = xr.DataArray
@@ -324,7 +324,7 @@ def trop_wmo(
 
     See Also
     --------
-    skyborn.calc.troposphere.tropopause.trop_wmo : Lower-level function for numpy arrays
+    skyborn.calc.troposphere.core.trop_wmo : Lower-level function for numpy arrays
     """
     # Validate input types
     if not isinstance(temperature, xr.DataArray):
