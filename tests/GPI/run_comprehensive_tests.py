@@ -15,12 +15,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 
 def test_interface_module():
-    """Test the interface module comprehensively."""
+    """Test the core module comprehensively."""
     print("\n" + "=" * 60)
-    print("Testing skyborn.calc.GPI.interface module")
+    print("Testing skyborn.calc.GPI.core module")
     print("=" * 60)
 
-    from skyborn.calc.GPI.interface import (
+    from skyborn.calc.GPI.core import (
         UNDEF,
         _ensure_pressure_ordering,
         _postprocess_results,
@@ -311,17 +311,17 @@ def test_init_module():
         tests_failed += 1
 
     try:
-        # Test that we can import from interface directly
-        from skyborn.calc.GPI.interface import (
+        # Test that we can import from core directly
+        from skyborn.calc.GPI.core import (
             log_decompose_pi,
             pi_log_decomposition,
             potential_intensity,
         )
 
-        print("PASS: Test direct interface imports")
+        print("PASS: Test direct core imports")
         tests_passed += 1
     except Exception as e:
-        print(f"FAIL: Test direct interface imports - {e}")
+        print(f"FAIL: Test direct core imports - {e}")
         tests_failed += 1
 
     try:
@@ -354,10 +354,10 @@ def calculate_coverage():
         cov.start()
 
         # Import all modules to get coverage
-        from skyborn.calc.GPI import __init__, interface, xarray
+        from skyborn.calc.GPI import __init__, xarray
 
         # Execute various functions
-        from skyborn.calc.GPI.interface import (
+        from skyborn.calc.GPI.core import (
             _ensure_pressure_ordering,
             _postprocess_results,
             _validate_dimensions,
