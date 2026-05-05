@@ -13,6 +13,6 @@ For xarray interface:
 """
 
 from . import xarray
-from .tropopause import trop_wmo, trop_wmo_profile
+from .core import trop_wmo, trop_wmo_profile
 
 __all__ = ["trop_wmo", "trop_wmo_profile"]
