@@ -184,19 +184,48 @@ def _baroc_growth_reference(
 class TestGrowthRateHelpers:
     """Focused coverage for the growth-rate Python wrapper helpers."""
 
-    def test_helper_missing_and_pressure_branches(self):
-        """Helper functions should normalize pressure and track NaN-style gaps."""
+    def test_helper_missing_and_pressure_branches(self, monkeypatch):
+        """Public normalization should accept hPa pressure and the pressure alias."""
 
-        assert_allclose(
-            growth_rate_core._pressure_to_pa(np.array([1000.0, 850.0])),
-            np.array([100000.0, 85000.0]),
+        captured = {"methods": [], "source_pressure": []}
+
+        def fake_interp(x, p_in, p_out, *, method, extrapolate, missing_value):
+            captured["methods"].append(method)
+            captured["source_pressure"].append(
+                np.asarray(p_in, dtype=np.float64).copy()
+            )
+            return np.asarray(x, dtype=np.float64)
+
+        monkeypatch.setattr(growth_rate_core, "interp_pressure_1d", fake_interp)
+        monkeypatch.setattr(
+            growth_rate_core,
+            "_dbaroc_growth_rate_1d",
+            lambda u_solver, theta_solver, pressure_solver, temperature_solver, f_cor, beta, smooth_window, *extra: (
+                1.0e-6,
+                0,
+            ),
         )
+
+        result = baroc_growth_rate(
+            np.array([8.0, 14.0, 24.0]),
+            np.array([230.0, 250.0, 280.0]),
+            np.array([300.0, 650.0, 1000.0]),
+            lat=45.0,
+            tropopause_pressure=300.0,
+            solver_levels=3,
+            method="pressure",
+        )
+
+        assert_allclose(result, 1.0e-6)
         assert_allclose(
             growth_rate_core._as_profile_vector(np.array([300.0]), "lat", 2),
             np.array([300.0, 300.0]),
         )
-        assert growth_rate_core._normalize_method("pressure") == "linear"
-        assert growth_rate_core._normalize_method("logp") == "log"
+        assert captured["methods"] == ["linear", "linear"]
+        assert_allclose(
+            captured["source_pressure"][0],
+            np.array([30000.0, 65000.0, 100000.0]),
+        )
         matrix = growth_rate_core._coerce_profile_matrix(
             np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
             "values",
@@ -230,15 +259,6 @@ class TestGrowthRateHelpers:
                 np.array([1000.0, 900.0, 950.0]), "pressure"
             )
 
-        with pytest.raises(ValueError, match="strictly positive"):
-            growth_rate_core._pressure_to_pa(np.array([1000.0, 0.0]))
-
-        with pytest.raises(ValueError, match="method"):
-            growth_rate_core._normalize_method("cubic")
-
-        with pytest.raises(ValueError, match="wavenumber_mode"):
-            growth_rate_core._normalize_wavenumber_mode("medium")
-
         with pytest.raises(ValueError, match="nonzero zonal distance"):
             growth_rate_core._prepare_wavenumber_inputs(
                 "low",
@@ -250,27 +270,6 @@ class TestGrowthRateHelpers:
                 "low",
                 np.array([0.0, 90.0, 180.0, 270.0], dtype=np.float64),
             )
-
-        with pytest.raises(TypeError, match="solver_levels"):
-            growth_rate_core._normalize_solver_levels(3.5)
-
-        with pytest.raises(ValueError, match="at least 2"):
-            growth_rate_core._normalize_solver_levels(1)
-
-        with pytest.raises(TypeError, match="smooth_window"):
-            growth_rate_core._normalize_smooth_window(2.5)
-
-        with pytest.raises(ValueError, match="at least 1"):
-            growth_rate_core._normalize_smooth_window(0)
-
-        with pytest.raises(ValueError, match="odd integer"):
-            growth_rate_core._normalize_smooth_window(4)
-
-        assert growth_rate_core._normalize_smooth_window(1) == 1
-        assert growth_rate_core._normalize_smooth_window(np.int64(5)) == 5
-
-        with pytest.raises(TypeError, match="smooth_window"):
-            growth_rate_core._normalize_smooth_window(True)
 
         with pytest.raises(ValueError, match="match the pressure coordinate"):
             growth_rate_core._coerce_profile_matrix(
@@ -1189,6 +1188,115 @@ class TestGrowthRate:
         assert captured["wavenumber_mode"] == 2
         assert captured["wavenumber_count"] == 80
         assert_allclose(captured["zonal_length"], expected_length)
+
+    def test_baroc_growth_rate_rejects_nonpositive_pressure(self):
+        """Baroclinic pressure coordinates must remain strictly positive."""
+
+        with pytest.raises(ValueError, match="strictly positive"):
+            baroc_growth_rate(
+                np.array([8.0, 14.0, 24.0]),
+                np.array([220.0, 235.0, 255.0]),
+                np.array([30000.0, 0.0, 100000.0]),
+                lat=45.0,
+                tropopause_pressure=300.0,
+                solver_levels=3,
+            )
+
+    def test_baroc_growth_rate_rejects_invalid_method(self):
+        """The public interpolation method must be recognized."""
+
+        with pytest.raises(ValueError, match="`method`"):
+            baroc_growth_rate(
+                np.array([8.0, 14.0, 24.0]),
+                np.array([220.0, 235.0, 255.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat=45.0,
+                tropopause_pressure=300.0,
+                solver_levels=3,
+                method="cubic",
+            )
+
+    def test_baroc_growth_rate_rejects_invalid_wavenumber_mode(self):
+        """The public wavenumber mode must be recognized."""
+
+        with pytest.raises(ValueError, match="`wavenumber_mode`"):
+            baroc_growth_rate(
+                np.array([8.0, 14.0, 24.0]),
+                np.array([220.0, 235.0, 255.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat=45.0,
+                tropopause_pressure=300.0,
+                solver_levels=3,
+                wavenumber_mode="medium",
+            )
+
+    def test_baroc_growth_rate_rejects_invalid_solver_levels_type(self):
+        """The public solver-level count must be an integer."""
+
+        with pytest.raises(TypeError, match="solver_levels"):
+            baroc_growth_rate(
+                np.array([8.0, 14.0, 24.0]),
+                np.array([220.0, 235.0, 255.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat=45.0,
+                tropopause_pressure=300.0,
+                solver_levels=3.5,
+            )
+
+    def test_baroc_growth_rate_rejects_too_small_solver_levels(self):
+        """The public solver-level count must stay above the minimum."""
+
+        with pytest.raises(ValueError, match="at least 2"):
+            baroc_growth_rate(
+                np.array([8.0, 14.0, 24.0]),
+                np.array([220.0, 235.0, 255.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat=45.0,
+                tropopause_pressure=300.0,
+                solver_levels=1,
+            )
+
+    def test_baroc_growth_rate_rejects_invalid_smooth_window_type(self):
+        """The public smoothing width must be an integer."""
+
+        with pytest.raises(TypeError, match="smooth_window"):
+            baroc_growth_rate(
+                np.array([8.0, 14.0, 24.0]),
+                np.array([220.0, 235.0, 255.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat=45.0,
+                tropopause_pressure=300.0,
+                solver_levels=3,
+                smooth_window=2.5,
+            )
+
+    def test_baroc_growth_rate_rejects_too_small_smooth_window(self):
+        """The public smoothing width must stay positive."""
+
+        with pytest.raises(ValueError, match="at least 1"):
+            baroc_growth_rate(
+                np.array([8.0, 14.0, 24.0]),
+                np.array([220.0, 235.0, 255.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat=45.0,
+                tropopause_pressure=300.0,
+                solver_levels=3,
+                smooth_window=0,
+            )
+
+    def test_baroc_growth_rate_rejects_boolean_smooth_window(self):
+        """The public smoothing width should not accept booleans."""
+
+        with pytest.raises(TypeError, match="smooth_window"):
+            baroc_growth_rate(
+                np.array([8.0, 14.0, 24.0]),
+                np.array([220.0, 235.0, 255.0]),
+                np.array([30000.0, 60000.0, 100000.0]),
+                lat=45.0,
+                tropopause_pressure=300.0,
+                solver_levels=3,
+                smooth_window=True,
+            )
 
     def test_barot_growth_rate_returns_per_second_growth(self):
         """The public barotropic wrapper should return per-second growth."""
