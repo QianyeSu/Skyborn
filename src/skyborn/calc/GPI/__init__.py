@@ -60,7 +60,7 @@ Journal of Geophysical Research, 107(D24), 4801.
 """
 
 from . import xarray
-from .interface import log_decompose_pi, pi_log_decomposition, potential_intensity
+from .core import log_decompose_pi, pi_log_decomposition, potential_intensity
 
 __version__ = "1.0.0"
 
