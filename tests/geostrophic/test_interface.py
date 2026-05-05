@@ -6,6 +6,7 @@ testing all functions, methods, and edge cases for geostrophic wind calculations
 """
 
 import sys
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -36,6 +37,7 @@ mock_geostrophic.z2geouv_3d = mock_z2geouv_3d
 sys.modules["geostrophicwind"] = mock_geostrophic
 
 
+import skyborn.calc.geostrophic.core as geostrophic_core_module
 from skyborn.calc.geostrophic.core import (
     GeostrophicWind,
     _ensure_south_to_north,
@@ -1038,3 +1040,94 @@ class TestCoverageCompletion:
         assert vg.shape == (ntime, nlat, nlon)
 
         # This should hit lines 212-215 in the _geostrophic_wind_multidim function
+
+
+class TestAdditionalStableCoverage:
+    """Additional stable coverage for loader fallbacks and simple accessors."""
+
+    def test_backend_loader_fallback_and_property_accessors(self, monkeypatch):
+        legacy_backend = ModuleType("geostrophicwind")
+        legacy_backend.z2geouv = lambda *args, **kwargs: ("legacy_u", "legacy_v")
+        legacy_backend.z2geouv_3d = lambda *args, **kwargs: ("legacy_u3", "legacy_v3")
+
+        def raise_import_error(name):
+            raise ImportError(name)
+
+        monkeypatch.setattr(
+            geostrophic_core_module, "import_module", raise_import_error
+        )
+        monkeypatch.setitem(
+            geostrophic_core_module.sys.modules, "geostrophicwind", legacy_backend
+        )
+        assert geostrophic_core_module._load_geostrophic_backend() is legacy_backend
+
+        monkeypatch.delitem(
+            geostrophic_core_module.sys.modules, "geostrophicwind", raising=False
+        )
+        with pytest.raises(ImportError):
+            geostrophic_core_module._load_geostrophic_backend()
+
+        monkeypatch.setitem(
+            geostrophic_core_module.sys.modules, "geostrophicwind", SimpleNamespace()
+        )
+        assert (
+            geostrophic_core_module._active_geostrophic_function("z2geouv")
+            is geostrophic_core_module._geostrophic_module.z2geouv
+        )
+
+        assert _is_longitude_cyclic(np.array([0.0, 180.0], dtype=np.float64)) == False
+        assert (
+            _is_longitude_cyclic(
+                np.arange(0.0, 360.0, 0.5, dtype=np.float64), tolerance=0.25
+            )
+            == False
+        )
+
+        monkeypatch.setattr(
+            geostrophic_core_module._windspharm_tools,
+            "prep_data",
+            lambda grid, dim_order: (
+                np.zeros((2, 3, 1), dtype=np.float32),
+                {"shape": grid.shape},
+            ),
+        )
+        with pytest.raises(ValueError, match="Latitude array length"):
+            geostrophic_core_module._geostrophic_wind_multidim(
+                np.zeros((4, 5, 6), dtype=np.float32),
+                np.arange(3, dtype=np.float64),
+                np.arange(3, dtype=np.float64),
+                "tzyx",
+                -999.0,
+                0,
+            )
+        with pytest.raises(ValueError, match="Longitude array length"):
+            geostrophic_core_module._geostrophic_wind_multidim(
+                np.zeros((4, 5, 6), dtype=np.float32),
+                np.arange(4, dtype=np.float64),
+                np.arange(2, dtype=np.float64),
+                "tzyx",
+                -999.0,
+                0,
+            )
+
+        monkeypatch.setattr(
+            geostrophic_core_module,
+            "geostrophic_wind",
+            lambda z, glon, glat, dim_order, missing_value=-999.0: (
+                np.zeros_like(z, dtype=np.float32),
+                np.ones_like(z, dtype=np.float32),
+            ),
+        )
+        gw = GeostrophicWind(
+            np.array([[1.0, 2.0]], dtype=np.float32),
+            np.array([0.0, 90.0], dtype=np.float32),
+            np.array([10.0], dtype=np.float32),
+            "yx",
+        )
+        np.testing.assert_array_equal(
+            gw.geopotential_height, np.array([[1.0, 2.0]], dtype=np.float32)
+        )
+        np.testing.assert_array_equal(
+            gw.longitude, np.array([0.0, 90.0], dtype=np.float32)
+        )
+        np.testing.assert_array_equal(gw.latitude, np.array([10.0], dtype=np.float32))
