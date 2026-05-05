@@ -11,7 +11,7 @@ py_dep = py.dependency()
 # Install Python module files
 py.install_sources([
     '__init__.py',
-    'tropopause.py',
+    'core.py',
     'xarray.py'
 ], subdir: 'skyborn/calc/troposphere')
 
