@@ -1,5 +1,9 @@
-"""
-Calculation module for Skyborn package.
+"""Calculation routines for Skyborn.
+
+The calculation package exposes historical convenience imports lazily. This
+keeps ``import skyborn.calc`` and imports of leaf modules such as
+``skyborn.calc.calculations`` from pulling in compiled extension stacks that are
+only needed by specific diagnostics.
 
 This module contains various calculation functions including:
 - Statistical calculations and linear regression
@@ -11,50 +15,112 @@ This module contains various calculation functions including:
 - Tropical cyclone potential intensity calculation (with Fortran extensions)
 """
 
-from .calculations import (
-    calculate_dcape,
-    calculate_potential_temperature,
-    convert_longitude_range,
-    kendall_correlation,
-    linear_regression,
-    pearson_correlation,
-    spatial_correlation,
-    spearman_correlation,
-)
-from .emergent_constraints import (  # New improved function names; Legacy function names for backward compatibility
-    calc_GAUSSIAN_PDF,
-    calc_PDF_EC,
-    calc_PDF_EC_PRIOR,
-    emergent_constraint_posterior,
-    emergent_constraint_prior,
-    find_std_from_PDF,
-    gaussian_pdf,
-)
+from __future__ import annotations
 
-# Import geostrophic wind calculation (high-level interface)
-from .geostrophic import (
-    GeostrophicWind,
-    geostrophic_speed,
-    geostrophic_uv,
-    geostrophic_wind,
-)
+from importlib import import_module
+from typing import Any
 
-# Import tropical cyclone potential intensity calculation
-from .GPI import potential_intensity
-from .growth_rate import baroc_growth_rate, barot_growth_rate
-from .mann_kendall import mk_multidim  # alias
-from .mann_kendall import mk_test  # alias
-from .mann_kendall import (
-    mann_kendall_multidim,
-    mann_kendall_test,
-    mann_kendall_xarray,
-    partial_mann_kendall_multidim,
-    partial_mann_kendall_test,
-    partial_mann_kendall_xarray,
-    partial_multidim,
-    partial_test,
-    trend_analysis,
-)
+_SUBMODULE_EXPORTS = {
+    "GPI",
+    "geostrophic",
+    "growth_rate",
+    "mann_kendall",
+    "troposphere",
+}
 
-# Import tropopause calculation (requires compiled extensions)
-from .troposphere import trop_wmo, trop_wmo_profile
+_OBJECT_EXPORTS = {
+    # Statistical calculations.
+    "calculate_dcape": ("skyborn.calc.calculations", "calculate_dcape"),
+    "calculate_potential_temperature": (
+        "skyborn.calc.calculations",
+        "calculate_potential_temperature",
+    ),
+    "convert_longitude_range": (
+        "skyborn.calc.calculations",
+        "convert_longitude_range",
+    ),
+    "kendall_correlation": ("skyborn.calc.calculations", "kendall_correlation"),
+    "linear_regression": ("skyborn.calc.calculations", "linear_regression"),
+    "pearson_correlation": ("skyborn.calc.calculations", "pearson_correlation"),
+    "spatial_correlation": ("skyborn.calc.calculations", "spatial_correlation"),
+    "spearman_correlation": ("skyborn.calc.calculations", "spearman_correlation"),
+    # Emergent constraints.
+    "calc_GAUSSIAN_PDF": (
+        "skyborn.calc.emergent_constraints",
+        "calc_GAUSSIAN_PDF",
+    ),
+    "calc_PDF_EC": ("skyborn.calc.emergent_constraints", "calc_PDF_EC"),
+    "calc_PDF_EC_PRIOR": (
+        "skyborn.calc.emergent_constraints",
+        "calc_PDF_EC_PRIOR",
+    ),
+    "emergent_constraint_posterior": (
+        "skyborn.calc.emergent_constraints",
+        "emergent_constraint_posterior",
+    ),
+    "emergent_constraint_prior": (
+        "skyborn.calc.emergent_constraints",
+        "emergent_constraint_prior",
+    ),
+    "find_std_from_PDF": ("skyborn.calc.emergent_constraints", "find_std_from_PDF"),
+    "gaussian_pdf": ("skyborn.calc.emergent_constraints", "gaussian_pdf"),
+    # Compiled or extension-backed diagnostics.
+    "GeostrophicWind": ("skyborn.calc.geostrophic", "GeostrophicWind"),
+    "geostrophic_speed": ("skyborn.calc.geostrophic", "geostrophic_speed"),
+    "geostrophic_uv": ("skyborn.calc.geostrophic", "geostrophic_uv"),
+    "geostrophic_wind": ("skyborn.calc.geostrophic", "geostrophic_wind"),
+    "potential_intensity": ("skyborn.calc.GPI.interface", "potential_intensity"),
+    "baroc_growth_rate": ("skyborn.calc.growth_rate", "baroc_growth_rate"),
+    "barot_growth_rate": ("skyborn.calc.growth_rate", "barot_growth_rate"),
+    "trop_wmo": ("skyborn.calc.troposphere", "trop_wmo"),
+    "trop_wmo_profile": ("skyborn.calc.troposphere", "trop_wmo_profile"),
+    # Mann-Kendall trend analysis.
+    "mann_kendall_multidim": (
+        "skyborn.calc.mann_kendall",
+        "mann_kendall_multidim",
+    ),
+    "mann_kendall_test": ("skyborn.calc.mann_kendall", "mann_kendall_test"),
+    "mann_kendall_xarray": ("skyborn.calc.mann_kendall", "mann_kendall_xarray"),
+    "mk_multidim": ("skyborn.calc.mann_kendall", "mk_multidim"),
+    "mk_test": ("skyborn.calc.mann_kendall", "mk_test"),
+    "partial_mann_kendall_multidim": (
+        "skyborn.calc.mann_kendall",
+        "partial_mann_kendall_multidim",
+    ),
+    "partial_mann_kendall_test": (
+        "skyborn.calc.mann_kendall",
+        "partial_mann_kendall_test",
+    ),
+    "partial_mann_kendall_xarray": (
+        "skyborn.calc.mann_kendall",
+        "partial_mann_kendall_xarray",
+    ),
+    "partial_multidim": ("skyborn.calc.mann_kendall", "partial_multidim"),
+    "partial_test": ("skyborn.calc.mann_kendall", "partial_test"),
+    "trend_analysis": ("skyborn.calc.mann_kendall", "trend_analysis"),
+}
+
+__all__ = sorted((*_SUBMODULE_EXPORTS, *_OBJECT_EXPORTS))
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve calculation package compatibility exports on first access."""
+
+    if name in _SUBMODULE_EXPORTS:
+        module = import_module(f"{__name__}.{name}")
+        globals()[name] = module
+        return module
+
+    if name in _OBJECT_EXPORTS:
+        module_name, object_name = _OBJECT_EXPORTS[name]
+        value = getattr(import_module(module_name), object_name)
+        globals()[name] = value
+        return value
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    """Include lazy exports in interactive introspection."""
+
+    return sorted(set(globals()) | set(__all__))
