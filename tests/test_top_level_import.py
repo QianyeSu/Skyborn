@@ -57,3 +57,31 @@ def test_import_skyborn_calc_does_not_preload_extension_subpackages():
     assert "skyborn.calc.troposphere" not in sys.modules
     assert "skyborn.spharm" not in sys.modules
     assert "skyborn.windspharm" not in sys.modules
+
+
+def test_calc_lazy_exports_resolve_submodules_and_objects():
+    _drop_skyborn_modules()
+
+    calc = importlib.import_module("skyborn.calc")
+
+    geostrophic_module = calc.geostrophic
+    assert geostrophic_module.__name__ == "skyborn.calc.geostrophic"
+    assert "skyborn.calc.geostrophic" in sys.modules
+
+    from skyborn.calc.calculations import pearson_correlation
+
+    assert calc.pearson_correlation is pearson_correlation
+    assert "skyborn.calc.calculations" in sys.modules
+
+
+def test_calc_unknown_attribute_raises_attribute_error():
+    _drop_skyborn_modules()
+
+    calc = importlib.import_module("skyborn.calc")
+
+    try:
+        calc.this_does_not_exist
+    except AttributeError as exc:
+        assert "this_does_not_exist" in str(exc)
+    else:
+        raise AssertionError("Expected AttributeError for unknown calc attribute")
