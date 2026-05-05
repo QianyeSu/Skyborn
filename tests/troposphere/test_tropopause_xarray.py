@@ -239,7 +239,7 @@ class TestTropWmo1DProfile:
             attrs={"units": "K", "long_name": "Temperature"},
         )
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo_profile")
+    @patch("skyborn.calc.troposphere.core.trop_wmo_profile")
     def test_1d_profile_basic(self, mock_trop_profile):
         """Test basic 1D profile calculation."""
         # Mock return values
@@ -272,7 +272,7 @@ class TestTropWmo1DProfile:
         assert result.pressure.ndim == 0
         assert float(result.pressure) == 250.0
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo_profile")
+    @patch("skyborn.calc.troposphere.core.trop_wmo_profile")
     def test_1d_profile_with_explicit_pressure(self, mock_trop_profile):
         """Test 1D profile with explicit pressure DataArray."""
         pressure_da = xr.DataArray(
@@ -296,7 +296,7 @@ class TestTropWmo1DProfile:
         mock_trop_profile.assert_called_once()
         assert isinstance(result, xr.Dataset)
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo_profile")
+    @patch("skyborn.calc.troposphere.core.trop_wmo_profile")
     def test_1d_profile_attributes_preserved(self, mock_trop_profile):
         """Test that attributes are preserved in 1D results."""
         mock_result = {
@@ -316,9 +316,7 @@ class TestTropWmo1DProfile:
 
     def test_1d_profile_auto_pressure_generation(self):
         """Test automatic pressure generation from level coordinate."""
-        with patch(
-            "skyborn.calc.troposphere.tropopause.trop_wmo_profile"
-        ) as mock_profile:
+        with patch("skyborn.calc.troposphere.core.trop_wmo_profile") as mock_profile:
             mock_profile.return_value = {
                 "pressure": 250.0,
                 "height": 10000.0,
@@ -354,7 +352,7 @@ class TestTropWmoMultiDimensional:
             300 - np.random.rand(self.ntime, self.nlev, self.nlat, self.nlon) * 80
         )
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo")
+    @patch("skyborn.calc.troposphere.core.trop_wmo")
     def test_3d_data_basic(self, mock_trop):
         """Test basic 3D data processing."""
         # Create test data
@@ -390,7 +388,7 @@ class TestTropWmoMultiDimensional:
         assert result.height.dims == ("lat", "lon")
         assert result.pressure.shape == (self.nlat, self.nlon)
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo")
+    @patch("skyborn.calc.troposphere.core.trop_wmo")
     def test_4d_data_with_time(self, mock_trop):
         """Test 4D data processing with time dimension."""
         temp_da = xr.DataArray(
@@ -421,7 +419,7 @@ class TestTropWmoMultiDimensional:
         assert result.pressure.dims == ("time", "lat", "lon")
         assert result.pressure.shape == (self.ntime, self.nlat, self.nlon)
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo")
+    @patch("skyborn.calc.troposphere.core.trop_wmo")
     def test_3d_time_lat_cross_section(self, mock_trop):
         """Test (time, level, lat) cross-section processing."""
         temp_time_lat = xr.DataArray(
@@ -453,7 +451,7 @@ class TestTropWmoMultiDimensional:
         assert result.pressure.dims == ("time", "lat")
         assert result.pressure.shape == (self.ntime, self.nlat)
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo")
+    @patch("skyborn.calc.troposphere.core.trop_wmo")
     def test_3d_time_lon_cross_section(self, mock_trop):
         """Test (time, level, lon) cross-section processing."""
         temp_time_lon = xr.DataArray(
@@ -493,7 +491,7 @@ class TestTropWmoMultiDimensional:
             coords={"level": self.pressure_levels},
         )
 
-        with patch("skyborn.calc.troposphere.tropopause.trop_wmo") as mock_trop:
+        with patch("skyborn.calc.troposphere.core.trop_wmo") as mock_trop:
             mock_trop.return_value = {
                 "pressure": np.random.rand(self.nlat, self.nlon),
                 "height": np.random.rand(self.nlat, self.nlon),
@@ -522,7 +520,7 @@ class TestTropWmoMultiDimensional:
             },
         )
 
-        with patch("skyborn.calc.troposphere.tropopause.trop_wmo") as mock_trop:
+        with patch("skyborn.calc.troposphere.core.trop_wmo") as mock_trop:
             mock_trop.return_value = {
                 "pressure": np.random.rand(self.nlat),
                 "height": np.random.rand(self.nlat),
@@ -554,9 +552,7 @@ class TestTropWmoPressureHandling:
         temp_da = xr.DataArray(unsorted_temp, dims=["level"])
         pressure_da = xr.DataArray(unsorted_pressure, dims=["level"])
 
-        with patch(
-            "skyborn.calc.troposphere.tropopause.trop_wmo_profile"
-        ) as mock_profile:
+        with patch("skyborn.calc.troposphere.core.trop_wmo_profile") as mock_profile:
             mock_profile.return_value = {
                 "pressure": 250.0,
                 "height": 10000.0,
@@ -583,9 +579,7 @@ class TestTropWmoPressureHandling:
         temp_da = xr.DataArray(unsorted_temp, dims=["level"])
         pressure_da = xr.DataArray(unsorted_pressure, dims=["level"])
 
-        with patch(
-            "skyborn.calc.troposphere.tropopause.trop_wmo_profile"
-        ) as mock_profile:
+        with patch("skyborn.calc.troposphere.core.trop_wmo_profile") as mock_profile:
             mock_profile.return_value = {
                 "pressure": 250.0,
                 "height": 10000.0,
@@ -610,7 +604,7 @@ class TestTropWmoPressureHandling:
             coords={"level": unsorted_levels},
         )
 
-        with patch("skyborn.calc.troposphere.tropopause.trop_wmo") as mock_trop:
+        with patch("skyborn.calc.troposphere.core.trop_wmo") as mock_trop:
             mock_trop.return_value = {
                 "pressure": np.random.rand(10, 15),
                 "height": np.random.rand(10, 15),
@@ -632,9 +626,7 @@ class TestTropWmoPressureHandling:
             coords={"level": [10000, 50000, 70000, 100000]},  # Pa
         )
 
-        with patch(
-            "skyborn.calc.troposphere.tropopause.trop_wmo_profile"
-        ) as mock_profile:
+        with patch("skyborn.calc.troposphere.core.trop_wmo_profile") as mock_profile:
             mock_profile.return_value = {
                 "pressure": 50000.0,
                 "height": 10000.0,
@@ -661,7 +653,7 @@ class TestTropWmoParameterHandling:
             coords={"level": [100, 300, 500, 1000]},
         )
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo_profile")
+    @patch("skyborn.calc.troposphere.core.trop_wmo_profile")
     def test_lapse_criterion_parameter(self, mock_profile):
         """Test custom lapse rate criterion."""
         mock_profile.return_value = {
@@ -677,7 +669,7 @@ class TestTropWmoParameterHandling:
         call_kwargs = mock_profile.call_args[1]
         assert call_kwargs["lapse_criterion"] == 1.5
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo_profile")
+    @patch("skyborn.calc.troposphere.core.trop_wmo_profile")
     def test_missing_value_parameter(self, mock_profile):
         """Test custom missing value."""
         mock_profile.return_value = {
@@ -693,7 +685,7 @@ class TestTropWmoParameterHandling:
         call_kwargs = mock_profile.call_args[1]
         assert call_kwargs["missing_value"] == -888.0
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo_profile")
+    @patch("skyborn.calc.troposphere.core.trop_wmo_profile")
     def test_keep_attrs_false(self, mock_profile):
         """Test disabling attribute preservation."""
         self.temp_da.attrs = {"test_attr": "test_value"}
@@ -723,7 +715,7 @@ class TestTropWmoOutputStructure:
             attrs={"units": "K", "description": "Test temperature"},
         )
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo_profile")
+    @patch("skyborn.calc.troposphere.core.trop_wmo_profile")
     def test_output_dataset_structure(self, mock_profile):
         """Test that output Dataset has correct structure."""
         mock_profile.return_value = {
@@ -742,7 +734,7 @@ class TestTropWmoOutputStructure:
         for var in required_vars:
             assert var in result.data_vars
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo_profile")
+    @patch("skyborn.calc.troposphere.core.trop_wmo_profile")
     def test_output_variable_attributes(self, mock_profile):
         """Test that output variables have correct attributes."""
         mock_profile.return_value = {
@@ -768,7 +760,7 @@ class TestTropWmoOutputStructure:
         assert result.lapse_rate.attrs["units"] == "K km-1"
         assert "standard_name" in result.lapse_rate.attrs
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo_profile")
+    @patch("skyborn.calc.troposphere.core.trop_wmo_profile")
     def test_global_attributes(self, mock_profile):
         """Test global attributes of output Dataset."""
         mock_profile.return_value = {
@@ -788,7 +780,7 @@ class TestTropWmoOutputStructure:
         assert result.attrs["pressure_unit"] == "hPa"
         assert "method" in result.attrs
 
-    @patch("skyborn.calc.troposphere.tropopause.trop_wmo_profile")
+    @patch("skyborn.calc.troposphere.core.trop_wmo_profile")
     def test_coordinate_preservation(self, mock_profile):
         """Test that coordinates are properly preserved."""
         temp_3d = xr.DataArray(
@@ -801,7 +793,7 @@ class TestTropWmoOutputStructure:
             },
         )
 
-        with patch("skyborn.calc.troposphere.tropopause.trop_wmo") as mock_trop:
+        with patch("skyborn.calc.troposphere.core.trop_wmo") as mock_trop:
             mock_trop.return_value = {
                 "pressure": np.random.rand(10, 15),
                 "height": np.random.rand(10, 15),
@@ -830,7 +822,7 @@ class TestTropWmoEdgeCases:
             coords={"plev": [100, 200, 300, 500, 1000]},
         )
 
-        with patch("skyborn.calc.troposphere.tropopause.trop_wmo") as mock_trop:
+        with patch("skyborn.calc.troposphere.core.trop_wmo") as mock_trop:
             mock_trop.return_value = {
                 "pressure": np.random.rand(10, 15),
                 "height": np.random.rand(10, 15),
@@ -852,7 +844,7 @@ class TestTropWmoEdgeCases:
             coords={"level": [100, 200, 300, 500, 1000]},
         )
 
-        with patch("skyborn.calc.troposphere.tropopause.trop_wmo") as mock_trop:
+        with patch("skyborn.calc.troposphere.core.trop_wmo") as mock_trop:
             mock_trop.return_value = {
                 "pressure": np.random.rand(10, 15),
                 "height": np.random.rand(10, 15),
@@ -879,7 +871,7 @@ if pd is not None:
     class TestTropWmoWithPandas:
         """Test trop_wmo with pandas datetime coordinates."""
 
-        @patch("skyborn.calc.troposphere.tropopause.trop_wmo")
+        @patch("skyborn.calc.troposphere.core.trop_wmo")
         def test_time_coordinate_with_pandas(self, mock_trop):
             """Test with pandas datetime time coordinate."""
             temp_da = xr.DataArray(
@@ -919,9 +911,7 @@ class TestTropWmoConsoleOutput:
             coords={"level": [100, 300, 500, 1000]},
         )
 
-        with patch(
-            "skyborn.calc.troposphere.tropopause.trop_wmo_profile"
-        ) as mock_profile:
+        with patch("skyborn.calc.troposphere.core.trop_wmo_profile") as mock_profile:
             mock_profile.return_value = {
                 "pressure": 250.0,
                 "height": 10000.0,
@@ -948,7 +938,7 @@ class TestTropWmoAdditionalXarrayCoverage:
             coords={"level": [100, 200, 300, 500, 1000]},
         )
 
-        with patch("skyborn.calc.troposphere.tropopause.trop_wmo") as mock_trop:
+        with patch("skyborn.calc.troposphere.core.trop_wmo") as mock_trop:
             mock_trop.return_value = {
                 "pressure": np.random.rand(10, 15),
                 "height": np.random.rand(10, 15),
@@ -978,7 +968,7 @@ class TestTropWmoAdditionalXarrayCoverage:
             # No level coordinate
         )
 
-        with patch("skyborn.calc.troposphere.tropopause.trop_wmo") as mock_trop:
+        with patch("skyborn.calc.troposphere.core.trop_wmo") as mock_trop:
             mock_trop.return_value = {
                 "pressure": np.random.rand(10, 15),
                 "height": np.random.rand(10, 15),
@@ -1000,9 +990,7 @@ class TestTropWmoAdditionalXarrayCoverage:
             coords={"level": [100, 300, 500, 1000]},
         )
 
-        with patch(
-            "skyborn.calc.troposphere.tropopause.trop_wmo_profile"
-        ) as mock_profile:
+        with patch("skyborn.calc.troposphere.core.trop_wmo_profile") as mock_profile:
             # Return scalar values (not numpy arrays)
             mock_profile.return_value = {
                 "pressure": 250.0,  # scalar float
@@ -1036,9 +1024,7 @@ class TestTropWmoAdditionalXarrayCoverage:
             attrs={"pressure_attr": "pressure_value", "units": "hPa"},
         )
 
-        with patch(
-            "skyborn.calc.troposphere.tropopause.trop_wmo_profile"
-        ) as mock_profile:
+        with patch("skyborn.calc.troposphere.core.trop_wmo_profile") as mock_profile:
             mock_profile.return_value = {
                 "pressure": 250.0,
                 "height": 10000.0,
@@ -1064,7 +1050,7 @@ class TestTropWmoAdditionalXarrayCoverage:
             dims=["level", "lat", "lon"],
         )
 
-        with patch("skyborn.calc.troposphere.tropopause.trop_wmo") as mock_trop:
+        with patch("skyborn.calc.troposphere.core.trop_wmo") as mock_trop:
             mock_trop.return_value = {
                 "pressure": np.random.rand(10, 15),
                 "height": np.random.rand(10, 15),
