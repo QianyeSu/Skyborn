@@ -11,8 +11,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import xarray as xr
 
-from .interface import pi_log_decomposition as _pi_log_decomposition_core
-from .interface import potential_intensity as _potential_intensity_core
+from .core import pi_log_decomposition as _pi_log_decomposition_core
+from .core import potential_intensity as _potential_intensity_core
 
 
 def _extract_scalar(value: Union[float, xr.DataArray], name: str) -> float:
