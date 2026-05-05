@@ -39,7 +39,7 @@ import numpy as np
 import numpy.ma as ma
 import xarray as xr
 
-from . import core as tropopause
+from . import core
 
 # Type aliases
 DataArray = xr.DataArray
@@ -461,7 +461,7 @@ def trop_wmo(
     # Handle different dimensionalities
     if temperature.ndim == 1:
         # 1D profile - use dedicated profile function
-        result = tropopause.trop_wmo_profile(
+        result = core.trop_wmo_profile(
             temperature_data,
             pressure_data,
             pressure_unit=pressure_unit,
@@ -481,7 +481,7 @@ def trop_wmo(
         timedim_arg = timedim if timedim is not None else -1
 
         # Call the core tropopause calculation function with 1D pressure optimization
-        result = tropopause.trop_wmo(
+        result = core.trop_wmo(
             temperature_data,
             pressure_data,  # This will be 1D for isobaric data
             xdim=xdim_arg,
