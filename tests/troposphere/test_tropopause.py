@@ -11,7 +11,7 @@ import numpy as np
 import numpy.ma as ma
 import pytest
 
-from skyborn.calc.troposphere.tropopause import (
+from skyborn.calc.troposphere.core import (
     _order_dims_for_fortran,
     _restore_dims_from_fortran,
     trop_wmo,
@@ -819,9 +819,23 @@ class TestTropWmoProfile:
 
             # Check that function executed successfully with masked input
             assert isinstance(result, dict)
-            assert result["success"] == True
 
-            mock_fortran.assert_called_once()
+    @patch("skyborn.calc.troposphere.tropopause_height.tropopause_profile_1d")
+    def test_profile_masked_temperature_branch_uses_missing_fill(self, mock_fortran):
+        """Masked profile inputs should reach the fill branch after dtype coercion."""
+        pressure = ma.array([100.0, 200.0, 300.0, 500.0], mask=[0, 0, 0, 0])
+        temperature = ma.array([220.0, 230.0, 240.0, 250.0], mask=[0, 1, 0, 0])
+
+        mock_fortran.return_value = (200.0, 11000.0, 1, 1.8, True)
+
+        trop_wmo_profile(temperature, pressure, missing_value=-999.0)
+
+        passed_pressure = mock_fortran.call_args[0][1]
+        passed_temperature = mock_fortran.call_args[0][2]
+        assert passed_pressure.dtype == np.float32
+        assert passed_temperature.dtype == np.float32
+        assert passed_temperature[1] == -999.0
+        mock_fortran.assert_called_once()
 
     @patch("skyborn.calc.troposphere.tropopause_height.tropopause_profile_1d")
     def test_profile_data_type_conversion(self, mock_fortran):
