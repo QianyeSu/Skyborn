@@ -9,9 +9,9 @@ Atmospheric Physics Functions
 Tropopause Calculations
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autofunction:: skyborn.calc.troposphere.tropopause.trop_wmo
+.. autofunction:: skyborn.calc.troposphere.core.trop_wmo
 
-.. autofunction:: skyborn.calc.troposphere.tropopause.trop_wmo_profile
+.. autofunction:: skyborn.calc.troposphere.core.trop_wmo_profile
 
 .. autofunction:: skyborn.calc.troposphere.xarray.trop_wmo
 
@@ -126,9 +126,9 @@ storm-track changes:
 Geostrophic Wind Calculations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autofunction:: skyborn.calc.geostrophic.interface.geostrophic_wind
+.. autofunction:: skyborn.calc.geostrophic.core.geostrophic_wind
 
-.. autoclass:: skyborn.calc.geostrophic.interface.GeostrophicWind
+.. autoclass:: skyborn.calc.geostrophic.core.GeostrophicWind
 
 .. autofunction:: skyborn.calc.geostrophic.xarray.geostrophic_wind
 
@@ -137,11 +137,11 @@ Geostrophic Wind Calculations
 Genesis Potential Index (GPI) / Tropical Cyclone Potential Intensity
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autofunction:: skyborn.calc.GPI.interface.potential_intensity
+.. autofunction:: skyborn.calc.GPI.core.potential_intensity
 
-.. autofunction:: skyborn.calc.GPI.interface.log_decompose_pi
+.. autofunction:: skyborn.calc.GPI.core.log_decompose_pi
 
-.. autofunction:: skyborn.calc.GPI.interface.pi_log_decomposition
+.. autofunction:: skyborn.calc.GPI.core.pi_log_decomposition
 
 .. autofunction:: skyborn.calc.GPI.xarray.potential_intensity
 
@@ -358,7 +358,7 @@ Example Usage
    psl = 101325.0  # Pa (sea level pressure)
 
    # NumPy interface
-   from skyborn.calc.GPI.interface import potential_intensity
+   from skyborn.calc.GPI.core import potential_intensity
    min_p, pi, err = potential_intensity(
        sst, psl, pressure_levels, temperature, mixing_ratio
    )
