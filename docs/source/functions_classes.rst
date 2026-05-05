@@ -24,9 +24,9 @@ Atmospheric Physics Functions
 
    * - Function
      - Description
-   * - :func:`skyborn.calc.troposphere.tropopause.trop_wmo`
+   * - :func:`skyborn.calc.troposphere.core.trop_wmo`
      - WMO tropopause calculation for multi-dimensional data
-   * - :func:`skyborn.calc.troposphere.tropopause.trop_wmo_profile`
+   * - :func:`skyborn.calc.troposphere.core.trop_wmo_profile`
      - WMO tropopause calculation for single atmospheric profiles
    * - :func:`skyborn.calc.troposphere.xarray.trop_wmo`
      - Xarray interface for tropopause calculation with automatic pressure generation
@@ -34,15 +34,15 @@ Atmospheric Physics Functions
      - Chemke-style baroclinic normal-mode growth-rate diagnostic with automatic WMO tropopause gridding
    * - :func:`skyborn.calc.barot_growth_rate`
      - Chemke-style barotropic normal-mode growth-rate diagnostic from a horizontal zonal-wind profile
-   * - :func:`skyborn.calc.geostrophic.interface.geostrophic_wind`
+   * - :func:`skyborn.calc.geostrophic.core.geostrophic_wind`
      - Geostrophic wind calculation from geopotential height (NumPy interface)
-   * - :class:`skyborn.calc.geostrophic.interface.GeostrophicWind`
+   * - :class:`skyborn.calc.geostrophic.core.GeostrophicWind`
      - Class-based interface for geostrophic wind calculations
    * - :func:`skyborn.calc.geostrophic.xarray.geostrophic_wind`
      - Xarray interface for geostrophic winds with automatic coordinate detection
    * - :class:`skyborn.calc.geostrophic.xarray.GeostrophicWind`
      - Xarray-based class interface for geostrophic wind analysis
-   * - :func:`skyborn.calc.GPI.interface.potential_intensity`
+   * - :func:`skyborn.calc.GPI.core.potential_intensity`
      - Calculate tropical cyclone potential intensity (NumPy interface)
    * - :func:`skyborn.calc.GPI.xarray.potential_intensity`
      - Xarray interface for potential intensity with automatic unit conversion
@@ -543,9 +543,9 @@ Function Usage Categories
      - Usage Category & Description
    * - **Atmospheric Physics**
      -
-   * - :func:`skyborn.calc.troposphere.tropopause.trop_wmo`
+   * - :func:`skyborn.calc.troposphere.core.trop_wmo`
      - Multi-dimensional WMO tropopause calculation
-   * - :func:`skyborn.calc.troposphere.tropopause.trop_wmo_profile`
+   * - :func:`skyborn.calc.troposphere.core.trop_wmo_profile`
      - Single profile tropopause identification
    * - :func:`skyborn.calc.troposphere.xarray.trop_wmo`
      - Xarray tropopause analysis with auto pressure generation
