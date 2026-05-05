@@ -4342,6 +4342,57 @@ class TestMannKendallComprehensive:
         except Exception:
             pass  # Complex scenario handling
 
+    def test_remaining_branch_coverage_for_partial_and_yue_wang(self):
+        """Exercise the stable partial-MK and Yue-Wang helper fallback branches."""
+        clean_data = np.array(
+            [
+                [1.0, 5.0],
+                [2.0, 4.0],
+                [3.0, 3.0],
+                [4.0, 2.0],
+                [5.0, 1.0],
+            ],
+            dtype=np.float64,
+        )
+
+        trend_batch = partial_module._response_trend_batch(clean_data, "theilslopes")
+        assert trend_batch["trend"].shape == (2,)
+
+        partial_result = partial_mann_kendall_multidim(
+            clean_data,
+            np.array(
+                [
+                    [0.0, 10.0],
+                    [1.0, 9.0],
+                    [2.0, 8.0],
+                    [3.0, 7.0],
+                    [4.0, 6.0],
+                ],
+                dtype=np.float64,
+            ),
+            axis=0,
+            method="linregress",
+            chunk_size=1,
+        )
+        assert partial_result["trend"].shape == (2,)
+
+        mk_result = mann_kendall_multidim(
+            clean_data,
+            axis=0,
+            method="linregress",
+            test="yue_wang",
+            lag=1,
+        )
+        assert mk_result["trend"].shape == (2,)
+
+        corrected = variants_module._yue_wang_variance_batch(
+            np.ones((5, 2), dtype=np.float64),
+            np.array([1.0, 2.0], dtype=np.float64),
+            np.array([0.0, 0.0], dtype=np.float64),
+            lag=1,
+        )
+        assert np.isnan(corrected).all()
+
 
 if __name__ == "__main__":
     import sys
