@@ -68,10 +68,5 @@ from __future__ import absolute_import
 from . import xarray
 from .gridfill import fill
 
-try:
-    from skyborn import __version__
-except ImportError:
-    __version__ = "1.0.0"
-
 # Note: xarray interface is available as a submodule:
 #   from skyborn.gridfill.xarray import fill
