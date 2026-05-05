@@ -12,6 +12,8 @@ import numpy as np
 import pytest
 import xarray as xr
 
+import skyborn.calc.geostrophic.xarray as geostrophic_xarray_module
+
 # Mock the geostrophic module before importing
 sys.modules["geostrophicwind"] = MagicMock()
 
