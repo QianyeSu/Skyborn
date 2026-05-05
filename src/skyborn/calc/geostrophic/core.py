@@ -22,12 +22,14 @@ from skyborn.windspharm import tools as _windspharm_tools
 
 def _load_geostrophic_backend() -> ModuleType:
     """Load the compiled backend without re-entering the package namespace."""
-    legacy_backend = sys.modules.get("geostrophicwind")
-    if legacy_backend is not None:
-        return legacy_backend
-
     qualified_name = f"{__package__}.geostrophicwind"
-    backend = import_module(qualified_name)
+    try:
+        backend = import_module(qualified_name)
+    except ImportError:
+        legacy_backend = sys.modules.get("geostrophicwind")
+        if legacy_backend is None:
+            raise
+        return legacy_backend
 
     # Preserve the legacy top-level alias used by existing tests and callers.
     sys.modules.setdefault("geostrophicwind", backend)
@@ -40,9 +42,12 @@ z2geouv = _geostrophic_module.z2geouv
 z2geouv_3d = _geostrophic_module.z2geouv_3d
 
 
-def _active_geostrophic_backend() -> ModuleType:
-    """Return the currently registered backend so tests can patch it dynamically."""
-    return sys.modules.get("geostrophicwind", _geostrophic_module)
+def _active_geostrophic_function(name: str):
+    """Return the active backend function while tolerating unrelated test shims."""
+    backend = sys.modules.get("geostrophicwind")
+    if backend is not None and name in vars(backend):
+        return getattr(backend, name)
+    return getattr(_geostrophic_module, name)
 
 
 def _is_longitude_cyclic(glon: np.ndarray, tolerance: float = 1.0) -> bool:
@@ -227,8 +232,8 @@ def _geostrophic_wind_multidim(
 
     # Step 2: Use 3D function for all cases (handles any n_combined size)
     prepared_z = np.asarray(prepared_z, dtype=np.float32)
-    backend = _active_geostrophic_backend()
-    ug_prepared, vg_prepared = backend.z2geouv_3d(
+    z2geouv_3d_func = _active_geostrophic_function("z2geouv_3d")
+    ug_prepared, vg_prepared = z2geouv_3d_func(
         z=prepared_z, zmsg=missing_value, glon=glon, glat=glat, iopt=iopt
     )
 
@@ -241,8 +246,8 @@ def _geostrophic_wind_multidim(
 
 def _calc_geostrophic_2d(z, glon, glat, missing_value, iopt):
     """Calculate 2D geostrophic wind components using Fortran backend."""
-    backend = _active_geostrophic_backend()
-    return backend.z2geouv(
+    z2geouv_func = _active_geostrophic_function("z2geouv")
+    return z2geouv_func(
         np.asarray(z, dtype=np.float32),
         zmsg=missing_value,
         glon=glon,
