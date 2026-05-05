@@ -76,6 +76,9 @@ variants_module = importlib.import_module("skyborn.calc.mann_kendall.variants")
 partial_mann_kendall_test = partial_module.partial_mann_kendall_test
 partial_mann_kendall_multidim = partial_module.partial_mann_kendall_multidim
 partial_mann_kendall_xarray = partial_module.partial_mann_kendall_xarray
+_response_trend_batch = partial_module._response_trend_batch
+_pre_whiten_series = variants_module._pre_whiten_series
+_autocorr_lag_limit = variants_module._autocorr_lag_limit
 
 
 def _equal_or_both_nan(left, right, atol=1e-12):
@@ -502,6 +505,47 @@ class TestMannKendallComprehensive:
         np.testing.assert_allclose(implicit["p"], explicit["p"])
         np.testing.assert_allclose(implicit["z"], explicit["z"])
         np.testing.assert_allclose(implicit["tau"], explicit["tau"])
+
+    def test_partial_response_trend_batch_linregress_branch(self):
+        """Partial MK helper should cover the linregress batch branch."""
+        response = np.array(
+            [[1.0, 4.0], [2.0, 3.0], [3.0, 2.0], [4.0, 1.0]], dtype=np.float64
+        )
+        result = _response_trend_batch(response, method="linregress")
+
+        assert set(result) == {"trend", "intercept", "std_error"}
+        assert result["trend"].shape == (2,)
+        assert result["intercept"].shape == (2,)
+        assert result["std_error"].shape == (2,)
+
+    def test_partial_mk_test_warns_with_insufficient_joint_valid_data(self):
+        """Partial MK scalar API should return the empty-result branch."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = partial_mann_kendall_test(
+                np.array([1.0, np.nan, 3.0]),
+                np.array([2.0, np.nan, np.nan]),
+                method="linregress",
+            )
+
+        assert any(
+            "Need at least 3 joint-valid data points" in str(w.message) for w in caught
+        )
+        assert np.isnan(result["trend"])
+        assert result["h"] is False
+
+    def test_yue_wang_linregress_branch_and_variant_helpers(self):
+        """Exercise the Yue-Wang linregress correction and variant edge helpers."""
+        data = np.arange(24, dtype=float).reshape(6, 4)
+        result = mann_kendall_multidim(
+            data, axis=0, method="linregress", test="yue_wang"
+        )
+
+        assert result["trend"].shape == (4,)
+        whitened, degenerate = _pre_whiten_series(np.ones(6, dtype=float))
+        assert whitened.shape == (5,)
+        assert degenerate is True
+        assert _autocorr_lag_limit(1, None) == 0
 
     @pytest.mark.parametrize(
         "data",
