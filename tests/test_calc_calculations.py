@@ -10,6 +10,8 @@ import pytest
 import xarray as xr
 from numpy.testing import assert_array_almost_equal, assert_array_equal
 
+import skyborn.calc.calculations as calculations_module
+import skyborn.calc.emergent_constraints as emergent_constraints_module
 from skyborn.calc.calculations import (
     calculate_dcape,
     calculate_potential_temperature,
@@ -1765,6 +1767,213 @@ class TestCalculationsPerformance:
         assert p_values.shape == (100, 100)
         assert np.all(np.isfinite(slopes))
         assert np.all(np.isfinite(p_values))
+
+
+class TestAdditionalCoverage:
+    """Focused branch coverage tests merged from the temporary calc target suite."""
+
+    def test_dcape_internal_helpers_cover_numba_paths(self):
+        sat_hpa = calculations_module._sat_vapor_pressure_hpa.py_func
+        sat_pa = calculations_module._sat_vapor_pressure_pa_from_tk.py_func
+        mixr = calculations_module._mixing_ratio_from_e_pa.py_func
+        virtual_temp = calculations_module._virtual_temp_k.py_func
+        thetae = calculations_module._thetae_bolton_like_metpy.py_func
+        moist_dt = calculations_module._dt_dp_moist.py_func
+        rk4 = calculations_module._rk4_integrate_moist_t.py_func
+        lcl = calculations_module._lcl_bolton.py_func
+        interp = calculations_module._interp_linear_p.py_func
+        thetae_min = calculations_module._thetae_min_in_700_500.py_func
+        dcape_profile_func = calculations_module._compute_dcape_profile_numba.py_func
+        dcape_grid_func = calculations_module._compute_dcape_grid_numba.py_func
+
+        assert np.isfinite(sat_hpa(20.0))
+        assert np.isfinite(sat_pa(300.0))
+        assert mixr(100000.0, 50000.0) > 0.0
+        assert virtual_temp(300.0, 0.01) > 300.0
+        assert np.isfinite(thetae(850.0, 20.0, 15.0))
+        assert np.isfinite(moist_dt(90000.0, 290.0))
+        assert np.isfinite(rk4(90000.0, 290.0, 80000.0))
+        plcl, tlcl = lcl(900.0, 25.0, 20.0)
+        assert plcl > 0.0
+        assert tlcl > 0.0
+        assert interp(1000.0, 10.0, 1000.0, 20.0, 1000.0) == 10.0
+        assert np.isfinite(interp(1000.0, 10.0, 800.0, 20.0, 900.0))
+
+        pressure = np.array([1000.0, 850.0, 700.0, 600.0, 500.0], dtype=np.float64)
+        temperature = np.array([30.0, 22.0, 12.0, 5.0, -3.0], dtype=np.float64)
+        dewpoint = np.array([22.0, 14.0, 3.0, -4.0, -12.0], dtype=np.float64)
+
+        found, start_p, start_t, start_td = thetae_min(
+            pressure, temperature, dewpoint, len(pressure)
+        )
+        assert found is True
+        assert np.isfinite(start_p)
+        assert np.isfinite(start_t)
+        assert np.isfinite(start_td)
+
+        dcape_profile = dcape_profile_func(pressure, temperature, dewpoint)
+        assert np.isfinite(dcape_profile) or np.isnan(dcape_profile)
+
+        pressure_3d = np.broadcast_to(pressure[:, None, None], (5, 2, 2)).copy()
+        temperature_3d = np.broadcast_to(temperature[:, None, None], (5, 2, 2)).copy()
+        dewpoint_3d = np.broadcast_to(dewpoint[:, None, None], (5, 2, 2)).copy()
+        grid = dcape_grid_func(
+            pressure_3d,
+            temperature_3d,
+            dewpoint_3d,
+            np.arange(2, dtype=np.int64),
+            np.arange(2, dtype=np.int64),
+        )
+        assert grid.shape == (2, 2)
+
+        assert calculations_module._get_pearsonr().__name__ == "pearsonr"
+
+    def test_calculations_attr_array_branch(self):
+        class AttrArray(np.ndarray):
+            pass
+
+        temperature = np.array([280.0, 285.0], dtype=np.float32).view(AttrArray)
+        pressure = np.array([1000.0, 900.0], dtype=np.float32).view(AttrArray)
+        temperature.attrs = {"units": "K"}
+
+        result = calculate_potential_temperature(temperature, pressure)
+        assert isinstance(result, xr.DataArray)
+
+    def test_calculations_remaining_branch_paths(self, monkeypatch):
+        rk4 = calculations_module._rk4_integrate_moist_t.py_func
+        interp = calculations_module._interp_linear_p.py_func
+        thetae_min = calculations_module._thetae_min_in_700_500.py_func
+        dcape_profile = calculations_module._compute_dcape_profile_numba.py_func
+
+        assert rk4(90000.0, 290.0, 90000.0) == 290.0
+        assert interp(1.0e12, 10.0, 1.0e12 + 0.5, 20.0, 1.0e12 + 0.25) == 10.0
+        assert interp(-100.0, 0.0, 100.0, 10.0, 0.0) == 5.0
+
+        found, start_p, start_t, start_td = thetae_min(
+            np.array([800.0, 400.0, 300.0], dtype=np.float64),
+            np.array([10.0, -10.0, -20.0], dtype=np.float64),
+            np.array([5.0, -15.0, -25.0], dtype=np.float64),
+            3,
+        )
+        assert found is True
+        assert np.isfinite(start_p)
+        assert np.isfinite(start_t)
+        assert np.isfinite(start_td)
+
+        assert np.isnan(
+            dcape_profile(
+                np.array([1000.0, 900.0, 800.0], dtype=np.float64),
+                np.array([20.0, 15.0, 10.0], dtype=np.float64),
+                np.array([10.0, 5.0, 0.0], dtype=np.float64),
+            )
+        )
+        assert np.isnan(
+            dcape_profile(
+                np.array([1000.0, 800.0, 750.0, 720.0], dtype=np.float64),
+                np.array([20.0, 15.0, 12.0, 10.0], dtype=np.float64),
+                np.array([10.0, 5.0, 2.0, 0.0], dtype=np.float64),
+            )
+        )
+        assert np.isnan(
+            dcape_profile(
+                np.array([700.0, 400.0, 300.0, 200.0], dtype=np.float64),
+                np.array([10.0, 0.0, -10.0, -20.0], dtype=np.float64),
+                np.array([5.0, -5.0, -15.0, -25.0], dtype=np.float64),
+            )
+        )
+
+        reversed_profile = dcape_profile(
+            np.array([400.0, 500.0, 700.0, 900.0], dtype=np.float64),
+            np.array([-20.0, -10.0, 0.0, 10.0], dtype=np.float64),
+            np.array([-25.0, -15.0, -5.0, 5.0], dtype=np.float64),
+        )
+        assert np.isfinite(reversed_profile) or np.isnan(reversed_profile)
+
+        monkeypatch.setattr(
+            calculations_module, "_virtual_temp_k", lambda *args: np.inf
+        )
+        assert np.isnan(
+            dcape_profile(
+                np.array([1000.0, 900.0, 700.0, 500.0], dtype=np.float64),
+                np.array([25.0, 20.0, 10.0, -5.0], dtype=np.float64),
+                np.array([20.0, 15.0, 5.0, -10.0], dtype=np.float64),
+            )
+        )
+
+    def test_emergent_constraint_remaining_branches(self):
+        x_models = xr.DataArray(
+            np.array([1.0, np.nan, 1.0], dtype=np.float32), dims=["m"]
+        )
+        y_models = xr.DataArray(
+            np.array([2.0, 3.0, np.nan], dtype=np.float32), dims=["m"]
+        )
+        constraint_grid = np.linspace(0.5, 1.5, 5, dtype=np.float32)
+        target_grid = np.linspace(1.0, 3.0, 5, dtype=np.float32)
+        obs_pdf = np.ones_like(constraint_grid, dtype=np.float32)
+
+        with pytest.raises(ValueError):
+            emergent_constraints_module._fit_linear_relationship(
+                np.array([np.nan], dtype=np.float32),
+                np.array([np.nan], dtype=np.float32),
+                np.dtype(np.float32),
+            )
+
+        assert emergent_constraints_module._preferred_float_dtype(
+            np.array([1], dtype=np.int16)
+        ) == np.dtype(np.float32)
+        prediction_std = emergent_constraints_module._prediction_std(
+            0.0,
+            2,
+            constraint_grid,
+            1.0,
+            0.0,
+        )
+        assert np.all(prediction_std == 0.0)
+
+        posterior_pdf, _, posterior_mean = emergent_constraint_posterior(
+            xr.DataArray(np.array([1.0, 1.0, 1.0], dtype=np.float32), dims=["m"]),
+            xr.DataArray(np.array([2.0, 2.0, 2.0], dtype=np.float32), dims=["m"]),
+            constraint_grid,
+            target_grid,
+            obs_pdf,
+        )
+        assert posterior_pdf.shape == target_grid.shape
+        assert np.isfinite(posterior_mean)
+        assert np.isnan(
+            emergent_constraints_module._calculate_std_from_pdf(
+                0.341, target_grid, np.zeros_like(target_grid)
+            )
+        )
+        assert (
+            emergent_constraints_module._calculate_std_from_pdf(
+                0.99, target_grid, posterior_pdf
+            )
+            == 0.0
+        )
+
+    def test_emergent_constraints_fallback_branches(self):
+        assert emergent_constraints_module._preferred_float_dtype(
+            np.array([1.0], dtype=np.float16)
+        ) == np.dtype(np.float32)
+
+        _, _, _, _, prediction_error, _ = (
+            emergent_constraints_module._fit_linear_relationship(
+                np.array([0.0, 1.0, 2.0], dtype=np.float32),
+                np.array([0.0, 1.0e38, -1.0e38], dtype=np.float32),
+                np.dtype(np.float32),
+            )
+        )
+        assert prediction_error == 0.0
+
+        values = np.array([0.0, 1.0, 2.0], dtype=np.float64)
+        pdf = np.array([0.2, 0.3, 0.5], dtype=np.float64)
+        expected = float(
+            np.sqrt(np.average((values - values[pdf.argmax()]) ** 2, weights=pdf))
+        )
+        assert (
+            emergent_constraints_module._calculate_std_from_pdf(1.1, values, pdf)
+            == expected
+        )
 
 
 if __name__ == "__main__":
