@@ -31,7 +31,7 @@ __all__ = ["geostrophic_wind", "GeostrophicWind"]
 import numpy as np
 import xarray as xr
 
-from . import interface
+from . import core as interface
 
 # Type aliases
 DataArray = xr.DataArray
@@ -295,7 +295,7 @@ def geostrophic_wind(
 
     See Also
     --------
-    skyborn.calc.geostrophic.interface.geostrophic_wind : Lower-level function for numpy arrays
+    skyborn.calc.geostrophic.core.geostrophic_wind : Lower-level function for numpy arrays
     GeostrophicWind : Class-based interface for xarray DataArrays
     """
     # Validate input type
