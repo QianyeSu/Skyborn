@@ -4,12 +4,7 @@ on: [push, pull_request, workflow_dispatch]
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ["ubuntu-latest"]
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout source
@@ -31,7 +26,7 @@ jobs:
         with:
           miniconda-version: "latest"
           conda-solver: classic
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.10"
           environment-file: environment.yml
           activate-environment: skyborn
           auto-activate-base: false
