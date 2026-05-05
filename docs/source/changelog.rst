@@ -24,15 +24,6 @@ Version 0.3.22 (Current)
   dynamics, native spectral smoothing, direct batch evaluation, a new
   high-resolution / low-resolution zonal-wavenumber mode switch for the
   baroclinic solver, and supporting documentation
-* **Growth-rate Wrapper Simplification**: Simplified the public
-  growth-rate wrappers so they return ``s^-1`` directly, use ``NaN`` for
-  missing or unusable profiles, and let the baroclinic solver accept an
-  explicit longitude coordinate only when a custom lower-resolution Chemke
-  Python-share wavenumber grid is requested, while the default low-resolution
-  path now falls back to the original ``0:1.5:360`` longitude spacing
-* **Growth-rate and Interpolation Test Coverage**: Added focused wrapper
-  regression coverage for the new atmospheric-profile diagnostics and
-  pressure-interpolation workflows
 
 **Bug Fixes**
 
