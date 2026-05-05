@@ -69,7 +69,7 @@ _OBJECT_EXPORTS = {
     "geostrophic_speed": ("skyborn.calc.geostrophic", "geostrophic_speed"),
     "geostrophic_uv": ("skyborn.calc.geostrophic", "geostrophic_uv"),
     "geostrophic_wind": ("skyborn.calc.geostrophic", "geostrophic_wind"),
-    "potential_intensity": ("skyborn.calc.GPI.interface", "potential_intensity"),
+    "potential_intensity": ("skyborn.calc.GPI.core", "potential_intensity"),
     "baroc_growth_rate": ("skyborn.calc.growth_rate", "baroc_growth_rate"),
     "barot_growth_rate": ("skyborn.calc.growth_rate", "barot_growth_rate"),
     "trop_wmo": ("skyborn.calc.troposphere", "trop_wmo"),
