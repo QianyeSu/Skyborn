@@ -11,6 +11,8 @@ py_dep = py.dependency()
 # Install Python module files
 py.install_sources([
     '__init__.py',
+    'core.py',
+    'xarray.py',
 ], subdir: 'skyborn/calc/geostrophic')
 
 # Get numpy include directories
