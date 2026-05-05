@@ -63,7 +63,7 @@ _OBJECT_EXPORTS = {
     "mk_multidim": ("skyborn.calc.mann_kendall", "mk_multidim"),
     "mk_test": ("skyborn.calc.mann_kendall", "mk_test"),
     "pearson_correlation": ("skyborn.calc.calculations", "pearson_correlation"),
-    "potential_intensity": ("skyborn.calc.GPI.interface", "potential_intensity"),
+    "potential_intensity": ("skyborn.calc.GPI.core", "potential_intensity"),
     "spearman_correlation": ("skyborn.calc.calculations", "spearman_correlation"),
     "trend_analysis": ("skyborn.calc.mann_kendall", "trend_analysis"),
     "troposphere": ("skyborn.calc", "troposphere"),
