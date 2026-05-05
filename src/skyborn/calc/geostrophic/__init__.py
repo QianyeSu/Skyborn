@@ -50,13 +50,8 @@ Examples
 >>> speed = gw.speed()
 """
 
-# Import high-level Python interface (user-facing API)
-from .interface import (
-    GeostrophicWind,
-    geostrophic_speed,
-    geostrophic_uv,
-    geostrophic_wind,
-)
+# Import high-level Python core interface (user-facing API)
+from .core import GeostrophicWind, geostrophic_speed, geostrophic_uv, geostrophic_wind
 
 __version__ = "1.0.0"
 
