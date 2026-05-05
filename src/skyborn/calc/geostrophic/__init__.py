@@ -53,8 +53,6 @@ Examples
 # Import high-level Python core interface (user-facing API)
 from .core import GeostrophicWind, geostrophic_speed, geostrophic_uv, geostrophic_wind
 
-__version__ = "1.0.0"
-
 # Define public API - only high-level functions for users
 __all__ = [
     "geostrophic_wind",
