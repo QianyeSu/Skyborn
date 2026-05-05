@@ -1,7 +1,7 @@
 """
-Comprehensive tests for skyborn.calc.GPI.interface module.
+Comprehensive tests for skyborn.calc.GPI.core module.
 
-This test suite provides 100% code coverage for the GPI interface module,
+This test suite provides 100% code coverage for the GPI core module,
 testing all functions, methods, and edge cases for potential intensity calculations.
 """
 
@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 # Import the actual module to test (no mocking since Fortran module is available)
-from skyborn.calc.GPI.interface import (
+from skyborn.calc.GPI.core import (
     UNDEF,
     _compiled_float32_array,
     _ensure_pressure_ordering,
