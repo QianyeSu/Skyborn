@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
+import skyborn.calc.troposphere.xarray as tropopause_xarray_module
 from skyborn.calc.troposphere.xarray import _detect_atmospheric_dimensions, trop_wmo
 
 
@@ -1062,3 +1063,114 @@ class TestTropWmoAdditionalXarrayCoverage:
             result = trop_wmo(temp_da, pressure=pressure_da, auto_sort_levels=True)
 
             mock_trop.assert_called_once()
+
+    def test_current_paths_and_remaining_branches(self, monkeypatch, capsys):
+        """Merge the stable xarray wrapper coverage paths back into the main file."""
+        monkeypatch.setattr(
+            tropopause_xarray_module.core,
+            "trop_wmo_profile",
+            lambda temperature, pressure, **kwargs: {
+                "pressure": 200.0,
+                "height": 11000.0,
+                "level_index": 1,
+                "lapse_rate": 1.8,
+                "success": True,
+            },
+        )
+
+        captured = {}
+
+        def fake_trop_wmo(temperature, pressure, **kwargs):
+            captured["temperature"] = np.array(temperature, copy=True)
+            captured["pressure"] = np.array(pressure, copy=True)
+            captured["kwargs"] = dict(kwargs)
+            return {
+                "pressure": np.full(temperature.shape[1:], 200.0),
+                "height": np.full(temperature.shape[1:], 11000.0),
+                "level_index": np.zeros(temperature.shape[1:], dtype=int),
+                "lapse_rate": np.full(temperature.shape[1:], 1.8),
+                "success": np.ones(temperature.shape[1:], dtype=bool),
+            }
+
+        monkeypatch.setattr(tropopause_xarray_module.core, "trop_wmo", fake_trop_wmo)
+
+        profile = xr.DataArray(
+            [220.0, 240.0, 260.0],
+            dims=("level",),
+            coords={"level": [100.0, 300.0, 700.0]},
+            attrs={"units": "K"},
+        )
+        profile_result = trop_wmo(profile)
+        assert float(profile_result.pressure) == 200.0
+        assert "Generated pressure from level coordinate" in capsys.readouterr().out
+
+        field = xr.DataArray(
+            np.arange(24, dtype=np.float32).reshape(3, 2, 4),
+            dims=("level", "lat", "lon"),
+            coords={
+                "level": [700.0, 300.0, 100.0],
+                "lat": [-10.0, 10.0],
+                "lon": [0.0, 90.0, 180.0, 270.0],
+            },
+        )
+        field_result = trop_wmo(field, auto_sort_levels=True)
+        assert tuple(field_result.pressure.dims) == ("lat", "lon")
+
+        with pytest.raises(ValueError, match="need both lat and lon dimensions"):
+            _detect_atmospheric_dimensions(
+                xr.DataArray(
+                    np.zeros((2, 3, 4, 5), dtype=np.float32),
+                    dims=("time", "level", "member", "lon"),
+                )
+            )
+
+        temperature = xr.DataArray(
+            np.arange(12, dtype=np.float32).reshape(2, 2, 3),
+            dims=("level", "lat", "lon"),
+            coords={
+                "level": [700.0, 300.0],
+                "lat": [-10.0, 10.0],
+                "lon": [0.0, 90.0, 180.0],
+            },
+        )
+        pressure_1d = xr.DataArray(
+            np.array([700.0, 300.0], dtype=np.float32),
+            dims=("level",),
+            coords={"level": [700.0, 300.0]},
+        )
+        trop_wmo(
+            temperature,
+            pressure=pressure_1d,
+            xdim="lon",
+            ydim="lat",
+            levdim="level",
+            timedim="not_a_dimension",
+            auto_sort_levels=False,
+        )
+        assert captured["kwargs"]["timedim"] == -1
+
+        pressure_3d = xr.DataArray(
+            np.broadcast_to(
+                np.array([700.0, 300.0], dtype=np.float32)[:, None, None], (2, 2, 3)
+            ),
+            dims=("level", "lat", "lon"),
+            coords={
+                "level": [700.0, 300.0],
+                "lat": [-10.0, 10.0],
+                "lon": [0.0, 90.0, 180.0],
+            },
+        )
+        trop_wmo(
+            temperature,
+            pressure=pressure_3d,
+            xdim="lon",
+            ydim="lat",
+            levdim="level",
+            auto_sort_levels=True,
+        )
+        np.testing.assert_array_equal(
+            captured["pressure"][:, 0, 0], np.array([300.0, 700.0], dtype=np.float32)
+        )
+        np.testing.assert_array_equal(
+            captured["temperature"][:, 0, 0], np.array([6.0, 0.0], dtype=np.float32)
+        )
