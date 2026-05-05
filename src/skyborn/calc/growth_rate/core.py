@@ -176,42 +176,6 @@ def _require_monotonic(values: np.ndarray, name: str) -> None:
         raise ValueError(f"`{name}` must be strictly monotonic")
 
 
-def _pressure_to_pa(pressure: ProfileInput) -> np.ndarray:
-    """Convert a pressure axis from Pa-or-hPa input to Pascals."""
-
-    pressure_values = _as_1d_float64(pressure, "pressure")
-    if np.any(pressure_values <= 0.0):
-        raise ValueError("pressure values must be strictly positive")
-
-    if np.nanmax(pressure_values) <= 2000.0:
-        return pressure_values * 100.0
-    return pressure_values
-
-
-def _normalize_method(method: str) -> str:
-    """Map public vertical interpolation aliases to ``interp_pressure_1d`` modes."""
-
-    normalized = method.strip().lower().replace("_", "")
-    if normalized in {"logp", "log"}:
-        return "log"
-    if normalized in {"linear", "pressure"}:
-        return "linear"
-    raise ValueError(
-        "`method` must be 'log' or 'linear' " "(the alias 'logp' is also accepted)"
-    )
-
-
-def _normalize_wavenumber_mode(wavenumber_mode: str) -> str:
-    """Normalize public wavenumber-resolution aliases."""
-
-    normalized = wavenumber_mode.strip().lower().replace("_", "").replace("-", "")
-    if normalized in {"high", "highres", "highresolution"}:
-        return "high"
-    if normalized in {"low", "lowres", "lowresolution"}:
-        return "low"
-    raise ValueError("`wavenumber_mode` must be 'high' or 'low'")
-
-
 def _f_beta_from_lat_bounds(lat_bounds: Tuple[float, float]) -> Tuple[float, float]:
     """Return Chemke-style band-mean Coriolis terms for a latitude range."""
 
@@ -229,7 +193,13 @@ def _prepare_wavenumber_inputs(
 ) -> Tuple[int, int, Optional[float]]:
     """Return normalized wavenumber-mode inputs for the compiled backend."""
 
-    normalized_mode = _normalize_wavenumber_mode(wavenumber_mode)
+    normalized_mode = wavenumber_mode.strip().lower().replace("_", "").replace("-", "")
+    if normalized_mode in {"highres", "highresolution"}:
+        normalized_mode = "high"
+    elif normalized_mode in {"lowres", "lowresolution"}:
+        normalized_mode = "low"
+    elif normalized_mode not in {"high", "low"}:
+        raise ValueError("`wavenumber_mode` must be 'high' or 'low'")
     if normalized_mode == "high":
         return 1, DEFAULT_HIGH_RES_WAVENUMBER_COUNT, None
 
@@ -441,36 +411,6 @@ def _infer_tropopause_pressure_pa(
         )
 
     return tropopause_pressure_hpa * 100.0
-
-
-def _normalize_solver_levels(solver_levels: int) -> int:
-    """Validate the requested automatic solver-grid level count."""
-
-    if isinstance(solver_levels, bool) or not isinstance(
-        solver_levels, (int, np.integer)
-    ):
-        raise TypeError("`solver_levels` must be an integer >= 2")
-
-    normalized = int(solver_levels)
-    if normalized < 2:
-        raise ValueError("`solver_levels` must be at least 2")
-    return normalized
-
-
-def _normalize_smooth_window(smooth_window: int) -> int:
-    """Validate the zonal-wavenumber smoothing window for growth spectra."""
-
-    if isinstance(smooth_window, bool) or not isinstance(
-        smooth_window, (int, np.integer)
-    ):
-        raise TypeError("`smooth_window` must be a positive odd integer")
-
-    normalized = int(smooth_window)
-    if normalized < 1:
-        raise ValueError("`smooth_window` must be at least 1")
-    if normalized % 2 == 0:
-        raise ValueError("`smooth_window` must be an odd integer")
-    return normalized
 
 
 def _wrap_batch_baroc_output(
@@ -793,11 +733,40 @@ def baroc_growth_rate(
     if lat_bounds is not None and len(lat_bounds) != 2:
         raise ValueError("`lat_bounds` must contain exactly two latitude values")
 
-    pressure_pa = _pressure_to_pa(pressure)
+    pressure_pa = _as_1d_float64(pressure, "pressure")
+    if np.any(pressure_pa <= 0.0):
+        raise ValueError("pressure values must be strictly positive")
+    if np.nanmax(pressure_pa) <= 2000.0:
+        pressure_pa = pressure_pa * 100.0
     _require_monotonic(pressure_pa, "pressure")
-    solver_levels = _normalize_solver_levels(solver_levels)
-    smooth_window = _normalize_smooth_window(smooth_window)
-    interp_method = _normalize_method(method)
+    bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
+    if isinstance(solver_levels, bool) or not isinstance(
+        solver_levels, (int, np.integer)
+    ):
+        raise TypeError("`solver_levels` must be an integer >= 2")
+    solver_levels = int(solver_levels)
+    if solver_levels < 2:
+        raise ValueError("`solver_levels` must be at least 2")
+
+    if isinstance(smooth_window, bool) or not isinstance(
+        smooth_window, (int, np.integer)
+    ):
+        raise TypeError("`smooth_window` must be a positive odd integer")
+    smooth_window = int(smooth_window)
+    if smooth_window < 1:
+        raise ValueError("`smooth_window` must be at least 1")
+    if smooth_window % 2 == 0:
+        raise ValueError("`smooth_window` must be an odd integer")
+
+    interp_method = method.strip().lower().replace("_", "")
+    if interp_method in {"logp", "log"}:
+        interp_method = "log"
+    elif interp_method in {"linear", "pressure"}:
+        interp_method = "linear"
+    else:
+        raise ValueError(
+            "`method` must be 'log' or 'linear' " "(the alias 'logp' is also accepted)"
+        )
     wavenumber_mode_id, wavenumber_count, lon_span_radians = _prepare_wavenumber_inputs(
         wavenumber_mode, lon
     )
@@ -813,6 +782,12 @@ def baroc_growth_rate(
             pressure_pa,
             pressure_dim,
         )
+        lat_bounds_cos_avg = (
+            np.cos(np.deg2rad(float(lat_bounds[0])))
+            + np.cos(np.deg2rad(float(lat_bounds[1])))
+        ) / 2.0
+    else:
+        lat_bounds_cos_avg = None
 
     if lat is None and lat_bounds is None:
         raise ValueError("`lat` or `lat_bounds` is required for baroc_growth_rate")
@@ -865,7 +840,6 @@ def baroc_growth_rate(
             tropopause_pressure_pa = float(tropopause_values[0])
             if np.isfinite(tropopause_pressure_pa) and tropopause_pressure_pa <= 2000.0:
                 tropopause_pressure_pa *= 100.0
-        bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
         if tropopause_pressure_pa >= bottom_pressure_pa:
             raise ValueError(
                 "The diagnosed tropopause pressure must be lower than the lower-"
@@ -920,11 +894,9 @@ def baroc_growth_rate(
             f_cor, beta = _f_beta_from_lat_bounds(lat_bounds)
             zonal_length = 1.0
             if wavenumber_mode_id == 2:
-                cos_avg = (
-                    np.cos(np.deg2rad(float(lat_bounds[0])))
-                    + np.cos(np.deg2rad(float(lat_bounds[1])))
-                ) / 2.0
-                zonal_length = float(lon_span_radians * 6_371_000.0 * cos_avg)
+                zonal_length = float(
+                    lon_span_radians * 6_371_000.0 * lat_bounds_cos_avg
+                )
         if wavenumber_mode_id == 2 and (
             not np.isfinite(zonal_length) or zonal_length <= 0.0
         ):
@@ -1032,7 +1004,6 @@ def baroc_growth_rate(
         )
         if np.any(finite_tropopause_mask & (tropopause_pressure_pa <= 0.0)):
             raise ValueError("tropopause pressure values must be strictly positive")
-        bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
         if np.any(
             finite_tropopause_mask & (tropopause_pressure_pa >= bottom_pressure_pa)
         ):
@@ -1073,7 +1044,6 @@ def baroc_growth_rate(
                 output,
                 profile_coord,
             )
-    bottom_pressure_pa = min(REFERENCE_PRESSURE_PA, float(np.max(pressure_pa)))
     ramp = np.linspace(0.0, 1.0, solver_levels, dtype=np.float64)
     solver_pressure_matrix_pa = (
         tropopause_pressure_pa[:, np.newaxis]
@@ -1096,12 +1066,8 @@ def baroc_growth_rate(
                 * np.cos(np.deg2rad(lat_values[valid_profile_mask]))
             )
         else:
-            cos_avg = (
-                np.cos(np.deg2rad(float(lat_bounds[0])))
-                + np.cos(np.deg2rad(float(lat_bounds[1])))
-            ) / 2.0
             zonal_length_values[valid_profile_mask] = (
-                lon_span_radians * 6_371_000.0 * cos_avg
+                lon_span_radians * 6_371_000.0 * lat_bounds_cos_avg
             )
         if np.any(
             valid_profile_mask
