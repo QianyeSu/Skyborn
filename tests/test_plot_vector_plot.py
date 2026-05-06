@@ -1278,6 +1278,54 @@ class TestCurlyVector:
         finally:
             plt.close(fig)
 
+    def test_curly_vector_select_center_adapter_normalizes_1d_and_empty_points(
+        self, monkeypatch
+    ):
+        captured = {}
+
+        def _capture_impl(**kwargs):
+            captured["sample_grid_field_array"] = kwargs[
+                "select_ncl_centers_fn"
+            ].keywords["sample_grid_field_array"]
+            return Mock()
+
+        monkeypatch.setattr(
+            vector_plot_module._vector_engine, "_curly_vector_ncl_impl", _capture_impl
+        )
+
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            vector_plot_module._curly_vector_ncl(
+                ax,
+                np.array([0.0, 1.0, 2.0]),
+                np.array([0.0, 1.0]),
+                np.ones((2, 3)),
+                np.ones((2, 3)),
+            )
+        finally:
+            plt.close(fig)
+
+        helper = captured["sample_grid_field_array"]
+        grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0]))
+
+        called = {"shapes": []}
+
+        def _sample_array(native_sampler, grid_arg, field, points, expected_shape):
+            called["shapes"].append(tuple(np.asarray(points).shape))
+            return np.ones(len(points), dtype=float)
+
+        monkeypatch.setattr(
+            vector_plot_module._native_helpers,
+            "_call_native_sample_grid_field_array",
+            _sample_array,
+        )
+
+        helper(grid, np.ones(grid.shape), np.array([0.5, 0.5]))
+        empty = helper(grid, np.ones(grid.shape), np.empty((0, 2)))
+
+        assert called["shapes"][0] == (1, 2)
+        assert empty.shape == (0,)
+
     def test_candidate_data_from_display_step_uses_local_jacobian_inverse(self):
         """Display-space step inversion should stay consistent with the local transform."""
         fig, ax = plt.subplots(figsize=(6, 4))
