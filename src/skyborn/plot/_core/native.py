@@ -106,6 +106,54 @@ def _call_native_generate_cell_candidates(
     )
 
 
+def _call_native_build_open_arrow_segments(
+    native_builder,
+    display_points,
+    curve_offsets,
+    head_lengths_px,
+    head_widths_px,
+):
+    """Build compact batched open-arrow display segments through the native kernel."""
+
+    segments, source_positions = native_builder(
+        display_points=np.asarray(display_points, dtype=float),
+        curve_offsets=np.asarray(curve_offsets, dtype=np.intp),
+        head_lengths_px=np.asarray(head_lengths_px, dtype=float),
+        head_widths_px=np.asarray(head_widths_px, dtype=float),
+    )
+    segments = np.asarray(segments, dtype=float)
+    source_positions = np.asarray(source_positions, dtype=int)
+    if segments.ndim != 3 or segments.shape[1:] != (2, 2):
+        return None
+    if source_positions.shape != (segments.shape[0],):
+        return None
+    return segments, source_positions
+
+
+def _call_native_build_filled_arrow_polygons(
+    native_builder,
+    display_points,
+    curve_offsets,
+    head_lengths_px,
+    head_widths_px,
+):
+    """Build compact batched filled-arrow polygons through the native kernel."""
+
+    polygons, source_positions = native_builder(
+        display_points=np.asarray(display_points, dtype=float),
+        curve_offsets=np.asarray(curve_offsets, dtype=np.intp),
+        head_lengths_px=np.asarray(head_lengths_px, dtype=float),
+        head_widths_px=np.asarray(head_widths_px, dtype=float),
+    )
+    polygons = np.asarray(polygons, dtype=float)
+    source_positions = np.asarray(source_positions, dtype=int)
+    if polygons.ndim != 3 or polygons.shape[1:] != (3, 2):
+        return None
+    if source_positions.shape != (polygons.shape[0],):
+        return None
+    return polygons, source_positions
+
+
 def _call_native_trace_ncl_direction(
     native_tracer,
     native_trace_context,
