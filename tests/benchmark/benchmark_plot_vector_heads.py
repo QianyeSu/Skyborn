@@ -20,33 +20,38 @@ from pathlib import Path
 
 import cartopy.crs as ccrs
 import matplotlib
-
-matplotlib.use("Agg")
-
 import matplotlib.pyplot as plt
 import numpy as np
 import psutil
 import xarray as xr
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from skyborn.plot import curly_vector
 from skyborn.plot import vector as vector_module
 from skyborn.plot._artists import vector_artists as _artist_helpers
 from skyborn.plot._core import native as _native_helpers
+from skyborn.plot._core.vector_engine import _build_ncl_curve as _build_ncl_curve_core
 from skyborn.plot._core.vector_engine import (
     _curve_length_from_magnitude,
     _resolve_curly_anchor,
     _resolve_ncl_length_scale,
     _resolve_ncl_reference_length_px,
 )
+from skyborn.plot._core.vector_engine import (
+    _select_ncl_centers as _select_ncl_centers_core,
+)
 from skyborn.plot._shared.style import _ncl_arrow_edge_size_px, _resolve_open_arrow_size
 from tests.plot_reference_geometry import (
     filled_arrow_geometry_reference,
     open_arrow_geometry_reference,
 )
+
+matplotlib.use("Agg")
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 
 DATA_PATH = r"M:\CESM2LE\model\model_1011_001\Month\model_1011_001_Month_1850.nc"
 
@@ -93,6 +98,98 @@ def _build_filled_arrow_polygons_batch(
     )
 
 
+def _select_ncl_centers_native_adapter(
+    *,
+    grid,
+    magnitude,
+    transform,
+    axes,
+    density,
+    start_points,
+    min_distance,
+    display_sampler=None,
+    ncl_preset=None,
+):
+    def sample_grid_field_array(grid, field, points):
+        points = np.asarray(points, dtype=float)
+        if points.ndim == 1:
+            points = points[np.newaxis, :]
+        if len(points) == 0:
+            return np.empty(0, dtype=float)
+        return _native_helpers._call_native_sample_grid_field_array(
+            vector_module._sample_grid_field_array_native,
+            grid,
+            field,
+            points,
+            (len(points),),
+        )
+
+    thin_mapped_candidates = partial(
+        _native_helpers._call_native_thin_ncl_mapped_candidates,
+        vector_module._thin_ncl_mapped_candidates_native,
+    )
+    thin_display_candidates = partial(
+        _native_helpers._call_native_thin_ncl_display_candidates,
+        vector_module._thin_ncl_display_candidates_native,
+    )
+    return _select_ncl_centers_core(
+        grid=grid,
+        magnitude=magnitude,
+        transform=transform,
+        axes=axes,
+        density=density,
+        start_points=start_points,
+        min_distance=min_distance,
+        display_sampler=display_sampler,
+        ncl_preset=ncl_preset,
+        sample_grid_field_array=sample_grid_field_array,
+        thin_ncl_mapped_candidates=thin_mapped_candidates,
+        thin_ncl_display_candidates=thin_display_candidates,
+    )
+
+
+def _build_ncl_curve_native_adapter(
+    *,
+    start_point,
+    total_length_px,
+    anchor,
+    grid,
+    u,
+    v,
+    transform,
+    step_px,
+    speed_scale,
+    viewport,
+    display_sampler=None,
+    native_trace_context=None,
+):
+    return _build_ncl_curve_core(
+        start_point=start_point,
+        total_length_px=total_length_px,
+        anchor=anchor,
+        grid=grid,
+        u=u,
+        v=v,
+        transform=transform,
+        step_px=step_px,
+        speed_scale=speed_scale,
+        viewport=viewport,
+        display_sampler=display_sampler,
+        native_trace_context=native_trace_context,
+        trace_ncl_curve_fn=vector_module._trace_ncl_curve_with_display,
+        evaluate_ncl_display_curve_fn=lambda curve, transform, viewport=None, display_curve=None: (
+            (
+                display_curve,
+                False,
+            )
+            if display_curve is not None
+            and len(curve) >= 2
+            and vector_module._validate_display_curve(display_curve, viewport)
+            else (None, False)
+        ),
+    )
+
+
 @dataclass
 class CurveSample:
     """One traced curly-vector shaft plus the head size used for it."""
@@ -118,13 +215,13 @@ def _collect_curve_samples() -> tuple[list[CurveSample], dict[str, float]]:
             ds["u"]
             .sel(level=200.0)
             .mean("time")
-            .isel(lat=slice(None, None, 6), lon=slice(None, None, 6))
+            .isel(lat=slice(None, None, 1), lon=slice(None, None, 1))
         )
         v = (
             ds["v"]
             .sel(level=200.0)
             .mean("time")
-            .isel(lat=slice(None, None, 6), lon=slice(None, None, 6))
+            .isel(lat=slice(None, None, 1), lon=slice(None, None, 1))
         )
 
         fig = plt.figure(figsize=(10, 4))
@@ -161,7 +258,7 @@ def _collect_curve_samples() -> tuple[list[CurveSample], dict[str, float]]:
             ax.bbox,
             display_sampler,
         )
-        selected_centers = vector_module._select_ncl_centers(
+        selected_centers = _select_ncl_centers_native_adapter(
             grid=grid,
             magnitude=magnitude,
             transform=transform,
@@ -200,7 +297,7 @@ def _collect_curve_samples() -> tuple[list[CurveSample], dict[str, float]]:
         samples: list[CurveSample] = []
         for center, center_mag in selected_centers:
             target_length_px = _curve_length_from_magnitude(center_mag, length_scale)
-            curve_result = vector_module._build_ncl_curve(
+            curve_result = _build_ncl_curve_native_adapter(
                 start_point=np.asarray(center, dtype=float),
                 total_length_px=target_length_px,
                 anchor=anchor,
