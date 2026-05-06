@@ -682,37 +682,6 @@ def _thin_ncl_display_candidates(display_points, viewport, spacing_frac):
     )
 
 
-def _trace_ncl_curve(
-    start_point,
-    total_length_px,
-    anchor,
-    grid,
-    u,
-    v,
-    transform,
-    step_px,
-    speed_scale,
-    viewport,
-    display_sampler=None,
-    native_trace_context=None,
-):
-    return _vector_engine._trace_ncl_curve(
-        start_point=start_point,
-        total_length_px=total_length_px,
-        anchor=anchor,
-        grid=grid,
-        u=u,
-        v=v,
-        transform=transform,
-        step_px=step_px,
-        speed_scale=speed_scale,
-        viewport=viewport,
-        display_sampler=display_sampler,
-        native_trace_context=native_trace_context,
-        trace_ncl_direction_fn=_trace_ncl_direction,
-    )
-
-
 def _build_ncl_curve(
     start_point,
     total_length_px,
