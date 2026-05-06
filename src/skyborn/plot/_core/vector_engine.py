@@ -671,7 +671,8 @@ def _curly_vector_ncl_impl(
     select_ncl_centers_fn=None,
     build_ncl_curve_fn=None,
     sample_grid_field_fn=None,
-    build_ncl_arrow_artists_fn=None,
+    build_open_arrow_segments_batch_fn=None,
+    build_filled_arrow_polygons_batch_fn=None,
     display_points_to_data_fn=None,
     result_cls=None,
 ):
@@ -830,6 +831,24 @@ def _curly_vector_ncl_impl(
     line_colors = []
     line_widths = []
     arrows = []
+    normalized_arrowstyle = str(arrowstyle).strip()
+    use_batched_open_heads = normalized_arrowstyle == "->"
+    use_batched_filled_heads = normalized_arrowstyle == "-|>"
+    if use_batched_open_heads:
+        if build_open_arrow_segments_batch_fn is None:
+            raise RuntimeError(
+                "Open-arrow rendering requires build_open_arrow_segments_batch_fn"
+            )
+    elif use_batched_filled_heads:
+        if build_filled_arrow_polygons_batch_fn is None:
+            raise RuntimeError(
+                "Filled-arrow rendering requires "
+                "build_filled_arrow_polygons_batch_fn"
+            )
+    else:
+        raise ValueError(f"Unsupported arrowstyle {arrowstyle!r}")
+    open_head_entries = []
+    filled_head_entries = []
 
     for center, center_mag in selected_centers:
         target_length_px = _curve_length_from_magnitude(center_mag, length_scale)
@@ -901,35 +920,114 @@ def _curly_vector_ncl_impl(
             if baked_curve is not None and len(baked_curve) >= 2:
                 artist_curve = baked_curve
 
-        streamlines.append(artist_curve)
-        if use_multicolor_lines:
-            line_colors.append(curve_color)
-        if line_width_field is not None:
-            line_widths.append(current_linewidth)
+        if use_batched_open_heads:
+            open_head_entries.append(
+                {
+                    "shaft": artist_curve,
+                    "display_curve": display_curve,
+                    "head_length_px": head_length_px,
+                    "head_width_px": head_width_px,
+                    "curve_color": curve_color,
+                    "linewidth": current_linewidth,
+                }
+            )
+            continue
 
-        head_segments, arrow = build_ncl_arrow_artists_fn(
-            curve=artist_curve,
-            grid=grid,
-            transform=artist_transform,
-            arrowstyle=arrowstyle,
-            head_length_px=head_length_px,
-            head_width_px=head_width_px,
-            facecolor=head_facecolor,
-            edgecolor=head_edgecolor,
-            linewidth=current_linewidth,
-            alpha=alpha,
-            zorder=zorder,
-            inverse_transform=artist_inverse_transform,
-            display_curve=display_curve,
+        filled_head_entries.append(
+            {
+                "shaft": artist_curve,
+                "display_curve": display_curve,
+                "head_length_px": head_length_px,
+                "head_width_px": head_width_px,
+                "curve_color": curve_color,
+                "linewidth": current_linewidth,
+                "facecolor": head_facecolor,
+                "edgecolor": head_edgecolor,
+            }
         )
-        if head_segments:
-            streamlines.extend(head_segments)
+
+    if open_head_entries:
+        open_head_segments, source_positions = build_open_arrow_segments_batch_fn(
+            transform=artist_transform,
+            display_curves=[entry["display_curve"] for entry in open_head_entries],
+            head_lengths_px=np.asarray(
+                [entry["head_length_px"] for entry in open_head_entries],
+                dtype=float,
+            ),
+            head_widths_px=np.asarray(
+                [entry["head_width_px"] for entry in open_head_entries],
+                dtype=float,
+            ),
+            inverse_transform=artist_inverse_transform,
+        )
+        head_segments_by_source = [[] for _ in open_head_entries]
+        for segment, source_idx in zip(
+            open_head_segments, source_positions, strict=False
+        ):
+            head_segments_by_source[int(source_idx)].append(segment)
+
+        for source_idx, entry in enumerate(open_head_entries):
+            streamlines.append(entry["shaft"])
             if use_multicolor_lines:
-                line_colors.extend([curve_color] * len(head_segments))
+                line_colors.append(entry["curve_color"])
             if line_width_field is not None:
-                line_widths.extend([current_linewidth] * len(head_segments))
-        if arrow is not None:
-            arrows.append(arrow)
+                line_widths.append(entry["linewidth"])
+
+            head_segments = head_segments_by_source[source_idx]
+            if head_segments:
+                streamlines.extend(head_segments)
+                if use_multicolor_lines:
+                    line_colors.extend([entry["curve_color"]] * len(head_segments))
+                if line_width_field is not None:
+                    line_widths.extend([entry["linewidth"]] * len(head_segments))
+
+    if filled_head_entries:
+        filled_polygons, polygon_sources = build_filled_arrow_polygons_batch_fn(
+            transform=artist_transform,
+            display_curves=[entry["display_curve"] for entry in filled_head_entries],
+            head_lengths_px=np.asarray(
+                [entry["head_length_px"] for entry in filled_head_entries],
+                dtype=float,
+            ),
+            head_widths_px=np.asarray(
+                [entry["head_width_px"] for entry in filled_head_entries],
+                dtype=float,
+            ),
+            inverse_transform=artist_inverse_transform,
+        )
+
+        for source_idx, entry in enumerate(filled_head_entries):
+            streamlines.append(entry["shaft"])
+            if use_multicolor_lines:
+                line_colors.append(entry["curve_color"])
+            if line_width_field is not None:
+                line_widths.append(entry["linewidth"])
+
+        if len(filled_polygons) > 0:
+            facecolors = [
+                filled_head_entries[int(source_idx)]["facecolor"]
+                for source_idx in polygon_sources
+            ]
+            edgecolors = [
+                filled_head_entries[int(source_idx)]["edgecolor"]
+                for source_idx in polygon_sources
+            ]
+            linewidths = [
+                max(float(filled_head_entries[int(source_idx)]["linewidth"]) * 0.5, 0.5)
+                for source_idx in polygon_sources
+            ]
+            arrows.append(
+                mcollections.PolyCollection(
+                    filled_polygons,
+                    closed=True,
+                    transform=artist_transform,
+                    facecolors=facecolors,
+                    edgecolors=edgecolors,
+                    linewidths=linewidths,
+                    alpha=alpha,
+                    zorder=zorder,
+                )
+            )
 
     line_kw = {"zorder": zorder}
     if use_multicolor_lines:
@@ -949,10 +1047,13 @@ def _curly_vector_ncl_impl(
         lc.set_rasterized(bool(rasterized))
     axes.add_collection(lc, autolim=False)
 
-    for patch in arrows:
+    for artist in arrows:
         if rasterized is not None:
-            patch.set_rasterized(bool(rasterized))
-        axes.add_patch(patch)
+            artist.set_rasterized(bool(rasterized))
+        if isinstance(artist, mcollections.Collection):
+            axes.add_collection(artist, autolim=False)
+        else:
+            axes.add_patch(artist)
 
     axes.autoscale_view()
     return result_cls(
