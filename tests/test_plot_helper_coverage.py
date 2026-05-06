@@ -41,6 +41,7 @@ from skyborn.plot._artists.vector_artists import (
     _build_arrow_polygon,
     _build_ncl_arrow_artists,
     _build_open_arrow_segments,
+    _build_open_arrow_segments_batch,
     _open_arrow_geometry,
     _trim_curve_for_open_head,
     _uses_open_arrow_head,
@@ -117,9 +118,15 @@ from skyborn.plot._shared.style import (
     _resolve_curly_style_aliases,
     _resolve_scatter_aliases,
 )
+from skyborn.plot.nclcurly_native import (
+    build_filled_arrow_polygons,
+    build_open_arrow_segments,
+    build_open_arrow_vertices,
+)
 from skyborn.plot.scatter import scatter as public_scatter
 from skyborn.plot.vector import (
     _array_curly_vector,
+    _build_filled_arrow_polygons_batch,
     _regrid_non_uniform_vectors_to_uniform,
     curly_vector,
 )
@@ -2154,6 +2161,49 @@ class TestVectorEngineHelpers:
         finally:
             plt.close(fig)
 
+    def test_curly_vector_ncl_impl_uses_batched_open_arrow_segments(self):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            open_head_segments = np.array(
+                [
+                    [[0.70, 0.70], [0.75, 0.75]],
+                    [[0.80, 0.80], [0.75, 0.75]],
+                ],
+                dtype=float,
+            )
+            batch_builder = Mock(
+                return_value=(open_head_segments, np.array([0, 0], dtype=int))
+            )
+
+            result = _curly_vector_ncl_impl(
+                ax,
+                np.array([0.0, 1.0]),
+                np.array([0.0, 1.0]),
+                np.ones((2, 2)),
+                np.ones((2, 2)),
+                arrowstyle="->",
+                prepare_ncl_display_sampler_fn=lambda grid, transform: None,
+                prepare_ncl_native_trace_context_fn=lambda **kwargs: None,
+                select_ncl_centers_fn=lambda **kwargs: [(np.array([0.5, 0.5]), 1.0)],
+                build_ncl_curve_fn=lambda **kwargs: (
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                ),
+                sample_grid_field_fn=lambda grid, field, x, y: None,
+                build_ncl_arrow_artists_fn=lambda **kwargs: (_ for _ in ()).throw(
+                    AssertionError("old per-glyph open-arrow path should not run")
+                ),
+                build_open_arrow_segments_batch_fn=batch_builder,
+                display_points_to_data_fn=lambda *args, **kwargs: None,
+                result_cls=CurlyVectorPlotSet,
+            )
+
+            assert len(result.lines.get_segments()) == 3
+            batch_builder.assert_called_once()
+            assert len(batch_builder.call_args.kwargs["display_curves"]) == 1
+        finally:
+            plt.close(fig)
+
 
 class TestResultHelpers:
     def _make_plot_set(
@@ -2633,6 +2683,137 @@ class TestVectorArtistCoverage:
             )
             is None
         )
+
+    def test_batched_open_arrow_helpers_match_scalar_geometry(self):
+        curve_1 = np.array([[0.0, 0.0], [2.0, 0.0], [3.0, 0.0]], dtype=float)
+        curve_2 = np.array([[1.0, 1.0], [2.0, 2.0]], dtype=float)
+        head_lengths = np.array([1.0, 0.5], dtype=float)
+        head_widths = np.array([2.0, 1.0], dtype=float)
+
+        display_points = np.vstack([curve_1, curve_2])
+        curve_offsets = np.array([0, len(curve_1), len(curve_1) + len(curve_2)])
+        vertices, valid = build_open_arrow_vertices(
+            display_points=display_points,
+            curve_offsets=curve_offsets,
+            head_lengths_px=head_lengths,
+            head_widths_px=head_widths,
+        )
+
+        assert vertices.shape == (2, 3, 2)
+        np.testing.assert_array_equal(valid, np.array([True, True]))
+
+        expected_1 = vector_module._open_arrow_geometry(
+            curve_1,
+            Affine2D(),
+            head_lengths[0],
+            head_widths[0],
+            display_curve=curve_1,
+        )
+        expected_2 = vector_module._open_arrow_geometry(
+            curve_2,
+            Affine2D(),
+            head_lengths[1],
+            head_widths[1],
+            display_curve=curve_2,
+        )
+        np.testing.assert_allclose(vertices[0, 0], expected_1["left_display"])
+        np.testing.assert_allclose(vertices[0, 1], expected_1["tip_display"])
+        np.testing.assert_allclose(vertices[0, 2], expected_1["right_display"])
+        np.testing.assert_allclose(vertices[1, 0], expected_2["left_display"])
+        np.testing.assert_allclose(vertices[1, 1], expected_2["tip_display"])
+        np.testing.assert_allclose(vertices[1, 2], expected_2["right_display"])
+
+        native_batch = (
+            lambda points, offsets, lengths, widths: build_open_arrow_vertices(
+                display_points=points,
+                curve_offsets=offsets,
+                head_lengths_px=lengths,
+                head_widths_px=widths,
+            )
+        )
+        segments, source_positions = _build_open_arrow_segments_batch(
+            transform=Affine2D(),
+            display_curves=[curve_1, curve_2],
+            head_lengths_px=head_lengths,
+            head_widths_px=head_widths,
+            build_open_arrow_vertices_batch_fn=native_batch,
+            open_arrow_geometry_fn=_open_arrow_geometry,
+        )
+
+        assert segments.shape == (4, 2, 2)
+        np.testing.assert_array_equal(source_positions, np.array([0, 0, 1, 1]))
+        np.testing.assert_allclose(
+            segments[0], np.vstack([vertices[0, 0], vertices[0, 1]])
+        )
+        np.testing.assert_allclose(
+            segments[1], np.vstack([vertices[0, 2], vertices[0, 1]])
+        )
+        np.testing.assert_allclose(
+            segments[2], np.vstack([vertices[1, 0], vertices[1, 1]])
+        )
+        np.testing.assert_allclose(
+            segments[3], np.vstack([vertices[1, 2], vertices[1, 1]])
+        )
+
+        native_segments = build_open_arrow_segments(
+            display_points=display_points,
+            curve_offsets=curve_offsets,
+            head_lengths_px=head_lengths,
+            head_widths_px=head_widths,
+        )
+        native_display_segments, native_sources = native_segments
+        np.testing.assert_array_equal(native_sources, np.array([0, 0, 1, 1]))
+        np.testing.assert_allclose(native_display_segments, segments)
+
+    def test_batched_filled_arrow_helpers_match_scalar_geometry(self):
+        curve_1 = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 1.0]], dtype=float)
+        curve_2 = np.array([[2.0, 0.0], [3.0, 0.0]], dtype=float)
+        head_lengths = np.array([0.8, 0.5], dtype=float)
+        head_widths = np.array([1.2, 0.8], dtype=float)
+
+        display_points = np.vstack([curve_1, curve_2])
+        curve_offsets = np.array([0, len(curve_1), len(curve_1) + len(curve_2)])
+        polygons, sources = build_filled_arrow_polygons(
+            display_points=display_points,
+            curve_offsets=curve_offsets,
+            head_lengths_px=head_lengths,
+            head_widths_px=head_widths,
+        )
+
+        assert polygons.shape == (2, 3, 2)
+        np.testing.assert_array_equal(sources, np.array([0, 1]))
+
+        def _scalar_polygon(display_curve, head_length_px, head_width_px):
+            tip_display, unit = vector_module._tip_display_geometry(
+                display_curve,
+                Affine2D(),
+                head_length_px * 1.25,
+                display_curve=display_curve,
+            )
+            normal = np.array([-unit[1], unit[0]], dtype=float)
+            base_center = tip_display - unit * head_length_px
+            return np.vstack(
+                [
+                    tip_display,
+                    base_center + normal * head_width_px / 2.0,
+                    base_center - normal * head_width_px / 2.0,
+                ]
+            )
+
+        expected_1 = _scalar_polygon(curve_1, head_lengths[0], head_widths[0])
+        expected_2 = _scalar_polygon(curve_2, head_lengths[1], head_widths[1])
+        np.testing.assert_allclose(polygons[0], expected_1)
+        np.testing.assert_allclose(polygons[1], expected_2)
+
+        batched_polygons, source_positions = _build_filled_arrow_polygons_batch(
+            transform=Affine2D(),
+            display_curves=[curve_1, curve_2],
+            head_lengths_px=head_lengths,
+            head_widths_px=head_widths,
+            inverse_transform=Affine2D().inverted(),
+        )
+        np.testing.assert_array_equal(source_positions, np.array([0, 1]))
+        np.testing.assert_allclose(batched_polygons, polygons)
 
 
 class TestVectorKeyCoverage:
