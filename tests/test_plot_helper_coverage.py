@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import sys
 import types
+from functools import partial
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -41,6 +42,8 @@ from skyborn.plot._adapters.grid_prepare import (
 from skyborn.plot._artists.vector_artists import (
     _assemble_filled_head_artists,
     _assemble_open_head_streamlines,
+    _build_filled_arrow_polygons_batch,
+    _build_open_arrow_segments_batch,
 )
 from skyborn.plot._artists.vector_key_artist import CurlyVectorKey
 from skyborn.plot._core.geometry import (
@@ -121,8 +124,6 @@ from skyborn.plot.nclcurly_native import (
 from skyborn.plot.scatter import scatter as public_scatter
 from skyborn.plot.vector import (
     _array_curly_vector,
-    _build_filled_arrow_polygons_batch,
-    _build_open_arrow_segments_batch,
     _regrid_non_uniform_vectors_to_uniform,
     curly_vector,
 )
@@ -2456,12 +2457,17 @@ class TestVectorArtistCoverage:
             head_lengths[1],
             head_widths[1],
         )
+        native_builder = partial(
+            vector_module._native_helpers._call_native_build_open_arrow_segments,
+            vector_module._build_open_arrow_segments_native,
+        )
 
         segments, source_positions = _build_open_arrow_segments_batch(
             transform=Affine2D(),
             display_curves=[curve_1, curve_2],
             head_lengths_px=head_lengths,
             head_widths_px=head_widths,
+            build_open_arrow_segments_batch_fn=native_builder,
         )
 
         assert segments.shape == (4, 2, 2)
@@ -2541,6 +2547,10 @@ class TestVectorArtistCoverage:
                 ]
             ),
         )
+        native_builder = partial(
+            vector_module._native_helpers._call_native_build_filled_arrow_polygons,
+            vector_module._build_filled_arrow_polygons_native,
+        )
 
         batched_polygons, source_positions = _build_filled_arrow_polygons_batch(
             transform=Affine2D(),
@@ -2548,6 +2558,8 @@ class TestVectorArtistCoverage:
             head_lengths_px=head_lengths,
             head_widths_px=head_widths,
             inverse_transform=Affine2D().inverted(),
+            build_filled_arrow_polygons_batch_fn=native_builder,
+            display_points_to_data_fn=_display_points_to_data,
         )
         np.testing.assert_array_equal(source_positions, np.array([0, 1]))
         np.testing.assert_allclose(batched_polygons, polygons)
@@ -2771,9 +2783,15 @@ class TestVectorWrapperCoverage:
             prepare_context,
         )
         monkeypatch.setattr(
-            vector_module,
-            "_trace_ncl_direction_with_display_via_native",
-            trace_via_native,
+            vector_module._native_helpers,
+            "_call_native_trace_ncl_direction_with_display",
+            lambda *args, **kwargs: trace_via_native(
+                native_trace_context=(
+                    kwargs.get("native_trace_context", args[1])
+                    if len(args) > 1
+                    else None
+                )
+            ),
         )
         traced = vector_module._trace_ncl_direction_with_display(
             start_point=np.array([0.0, 0.0]),
