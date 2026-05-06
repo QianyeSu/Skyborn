@@ -12,9 +12,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import xarray as xr
+from matplotlib.collections import PolyCollection
 from matplotlib.transforms import Affine2D, Bbox
 
 import skyborn.plot.vector as vector_module
+from plot_reference_geometry import (
+    filled_arrow_geometry_reference,
+    open_arrow_geometry_reference,
+)
 from skyborn.plot._adapters.cartopy_vector import (
     _build_projection_target_grid,
     _extract_regular_grid_from_regridded_vectors,
@@ -2702,19 +2707,15 @@ class TestVectorArtistCoverage:
         assert vertices.shape == (2, 3, 2)
         np.testing.assert_array_equal(valid, np.array([True, True]))
 
-        expected_1 = vector_module._open_arrow_geometry(
+        expected_1 = open_arrow_geometry_reference(
             curve_1,
-            Affine2D(),
             head_lengths[0],
             head_widths[0],
-            display_curve=curve_1,
         )
-        expected_2 = vector_module._open_arrow_geometry(
+        expected_2 = open_arrow_geometry_reference(
             curve_2,
-            Affine2D(),
             head_lengths[1],
             head_widths[1],
-            display_curve=curve_2,
         )
         np.testing.assert_allclose(vertices[0, 0], expected_1["left_display"])
         np.testing.assert_allclose(vertices[0, 1], expected_1["tip_display"])
@@ -2723,21 +2724,19 @@ class TestVectorArtistCoverage:
         np.testing.assert_allclose(vertices[1, 1], expected_2["tip_display"])
         np.testing.assert_allclose(vertices[1, 2], expected_2["right_display"])
 
-        native_batch = (
-            lambda points, offsets, lengths, widths: build_open_arrow_vertices(
-                display_points=points,
-                curve_offsets=offsets,
-                head_lengths_px=lengths,
-                head_widths_px=widths,
-            )
-        )
         segments, source_positions = _build_open_arrow_segments_batch(
             transform=Affine2D(),
             display_curves=[curve_1, curve_2],
             head_lengths_px=head_lengths,
             head_widths_px=head_widths,
-            build_open_arrow_vertices_batch_fn=native_batch,
-            open_arrow_geometry_fn=_open_arrow_geometry,
+            build_open_arrow_segments_batch_fn=lambda points, offsets, lengths, widths: (
+                build_open_arrow_segments(
+                    display_points=points,
+                    curve_offsets=offsets,
+                    head_lengths_px=lengths,
+                    head_widths_px=widths,
+                )
+            ),
         )
 
         assert segments.shape == (4, 2, 2)
@@ -2783,27 +2782,36 @@ class TestVectorArtistCoverage:
         assert polygons.shape == (2, 3, 2)
         np.testing.assert_array_equal(sources, np.array([0, 1]))
 
-        def _scalar_polygon(display_curve, head_length_px, head_width_px):
-            tip_display, unit = vector_module._tip_display_geometry(
-                display_curve,
-                Affine2D(),
-                head_length_px * 1.25,
-                display_curve=display_curve,
-            )
-            normal = np.array([-unit[1], unit[0]], dtype=float)
-            base_center = tip_display - unit * head_length_px
-            return np.vstack(
+        expected_1 = filled_arrow_geometry_reference(
+            curve_1,
+            head_lengths[0],
+            head_widths[0],
+        )
+        expected_2 = filled_arrow_geometry_reference(
+            curve_2,
+            head_lengths[1],
+            head_widths[1],
+        )
+        np.testing.assert_allclose(
+            polygons[0],
+            np.vstack(
                 [
-                    tip_display,
-                    base_center + normal * head_width_px / 2.0,
-                    base_center - normal * head_width_px / 2.0,
+                    expected_1["tip_display"],
+                    expected_1["left_display"],
+                    expected_1["right_display"],
                 ]
-            )
-
-        expected_1 = _scalar_polygon(curve_1, head_lengths[0], head_widths[0])
-        expected_2 = _scalar_polygon(curve_2, head_lengths[1], head_widths[1])
-        np.testing.assert_allclose(polygons[0], expected_1)
-        np.testing.assert_allclose(polygons[1], expected_2)
+            ),
+        )
+        np.testing.assert_allclose(
+            polygons[1],
+            np.vstack(
+                [
+                    expected_2["tip_display"],
+                    expected_2["left_display"],
+                    expected_2["right_display"],
+                ]
+            ),
+        )
 
         batched_polygons, source_positions = _build_filled_arrow_polygons_batch(
             transform=Affine2D(),
@@ -2814,6 +2822,47 @@ class TestVectorArtistCoverage:
         )
         np.testing.assert_array_equal(source_positions, np.array([0, 1]))
         np.testing.assert_allclose(batched_polygons, polygons)
+
+    def test_vector_engine_uses_batched_filled_head_path(self):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            polygon = np.array(
+                [[[0.70, 0.75], [0.65, 0.70], [0.75, 0.70]]],
+                dtype=float,
+            )
+            batch_builder = Mock(return_value=(polygon, np.array([0], dtype=int)))
+
+            result = _curly_vector_ncl_impl(
+                ax,
+                np.array([0.0, 1.0]),
+                np.array([0.0, 1.0]),
+                np.ones((2, 2)),
+                np.ones((2, 2)),
+                arrowstyle="-|>",
+                prepare_ncl_display_sampler_fn=lambda grid, transform: None,
+                prepare_ncl_native_trace_context_fn=lambda **kwargs: None,
+                select_ncl_centers_fn=lambda **kwargs: [(np.array([0.5, 0.5]), 1.0)],
+                build_ncl_curve_fn=lambda **kwargs: (
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                ),
+                sample_grid_field_fn=lambda grid, field, x, y: None,
+                build_ncl_arrow_artists_fn=lambda **kwargs: (_ for _ in ()).throw(
+                    AssertionError("old per-glyph filled-arrow path should not run")
+                ),
+                build_open_arrow_segments_batch_fn=None,
+                build_filled_arrow_polygons_batch_fn=batch_builder,
+                display_points_to_data_fn=lambda *args, **kwargs: None,
+                result_cls=CurlyVectorPlotSet,
+            )
+
+            assert len(result.lines.get_segments()) == 1
+            assert len(result.arrows) == 1
+            assert isinstance(result.arrows[0], PolyCollection)
+            batch_builder.assert_called_once()
+            assert len(batch_builder.call_args.kwargs["display_curves"]) == 1
+        finally:
+            plt.close(fig)
 
 
 class TestVectorKeyCoverage:
