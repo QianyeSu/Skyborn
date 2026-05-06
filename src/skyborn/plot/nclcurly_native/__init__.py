@@ -6,6 +6,9 @@ Created: 2026-03-01 14:58:56
 """
 
 from ._ncl_curly_core import (
+    build_filled_arrow_polygons,
+    build_open_arrow_segments,
+    build_open_arrow_vertices,
     compute_display_cell_valid,
     generate_cell_candidates,
     sample_display_grid,
@@ -18,6 +21,9 @@ from ._ncl_curly_core import (
 )
 
 __all__ = [
+    "build_filled_arrow_polygons",
+    "build_open_arrow_segments",
+    "build_open_arrow_vertices",
     "compute_display_cell_valid",
     "generate_cell_candidates",
     "sample_display_grid",
