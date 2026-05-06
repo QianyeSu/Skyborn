@@ -38,15 +38,6 @@ from skyborn.plot._adapters.grid_prepare import (
     _regrid_curvilinear_vectors,
     _wrap_periodic_grid_queries,
 )
-from skyborn.plot._artists.vector_artists import (
-    _build_arrow_polygon,
-    _build_ncl_arrow_artists,
-    _build_open_arrow_segments,
-    _build_open_arrow_segments_batch,
-    _open_arrow_geometry,
-    _trim_curve_for_open_head,
-    _uses_open_arrow_head,
-)
 from skyborn.plot._artists.vector_key_artist import CurlyVectorKey
 from skyborn.plot._core.geometry import (
     _candidate_data_from_display_step,
@@ -127,6 +118,7 @@ from skyborn.plot.scatter import scatter as public_scatter
 from skyborn.plot.vector import (
     _array_curly_vector,
     _build_filled_arrow_polygons_batch,
+    _build_open_arrow_segments_batch,
     _regrid_non_uniform_vectors_to_uniform,
     curly_vector,
 )
@@ -945,274 +937,6 @@ class TestGeometryHelpers:
             )
             is None
         )
-
-
-class TestVectorArtistHelpers:
-    def test_uses_open_arrow_head_normalizes_arrowstyle_text(self):
-        assert _uses_open_arrow_head("->")
-        assert _uses_open_arrow_head(" -> ")
-        assert not _uses_open_arrow_head("-|>")
-
-    def test_open_arrow_geometry_handles_failure_and_width_variants(self):
-        curve = np.array([[0.0, 0.0], [1.0, 0.0]])
-        tip_fn = lambda display_curve, backoff: (
-            display_curve[-1],
-            np.array([1.0, 0.0]),
-        )
-
-        assert (
-            _open_arrow_geometry(
-                curve[:1],
-                Affine2D(),
-                2.0,
-                tip_display_geometry_from_display_curve_fn=tip_fn,
-            )
-            is None
-        )
-        assert (
-            _open_arrow_geometry(
-                curve,
-                _BadTransform(),
-                2.0,
-                tip_display_geometry_from_display_curve_fn=tip_fn,
-            )
-            is None
-        )
-        assert (
-            _open_arrow_geometry(
-                curve,
-                Affine2D(),
-                2.0,
-                display_curve=np.array([[0.0, 0.0], [np.nan, 1.0]]),
-                tip_display_geometry_from_display_curve_fn=tip_fn,
-            )
-            is None
-        )
-        assert (
-            _open_arrow_geometry(
-                curve,
-                Affine2D(),
-                2.0,
-                tip_display_geometry_from_display_curve_fn=lambda display_curve, backoff: None,
-            )
-            is None
-        )
-
-        geometry = _open_arrow_geometry(
-            curve,
-            Affine2D(),
-            2.0,
-            head_width_px=4.0,
-            tip_display_geometry_from_display_curve_fn=tip_fn,
-        )
-        assert "left_display" in geometry
-        assert "right_display" in geometry
-
-    def test_trim_curve_for_open_head_handles_geometry_and_inverse_failures(self):
-        curve = np.array([[0.0, 0.0], [3.0, 0.0]])
-
-        np.testing.assert_allclose(
-            _trim_curve_for_open_head(
-                curve[:1],
-                Affine2D(),
-                2.0,
-                open_arrow_geometry_fn=lambda *args, **kwargs: None,
-                trim_display_curve_from_end_fn=lambda display_curve, distance: display_curve,
-            ),
-            curve[:1],
-        )
-
-        np.testing.assert_allclose(
-            _trim_curve_for_open_head(
-                curve,
-                Affine2D(),
-                2.0,
-                open_arrow_geometry_fn=lambda *args, **kwargs: None,
-                trim_display_curve_from_end_fn=lambda display_curve, distance: display_curve,
-            ),
-            curve,
-        )
-
-        np.testing.assert_allclose(
-            _trim_curve_for_open_head(
-                curve,
-                Affine2D(),
-                2.0,
-                open_arrow_geometry_fn=lambda *args, **kwargs: {
-                    "display_curve": curve.copy(),
-                    "base_center_display": np.array([2.0, 0.0]),
-                },
-                trim_display_curve_from_end_fn=lambda display_curve, distance: np.array(
-                    [[0.0, 0.0]]
-                ),
-            ),
-            curve,
-        )
-
-        bad_inverse = SimpleNamespace(
-            inverted=lambda: SimpleNamespace(
-                transform=lambda values: (_ for _ in ()).throw(RuntimeError("bad"))
-            )
-        )
-        np.testing.assert_allclose(
-            _trim_curve_for_open_head(
-                curve,
-                bad_inverse,
-                2.0,
-                open_arrow_geometry_fn=lambda *args, **kwargs: {
-                    "display_curve": curve.copy(),
-                    "base_center_display": np.array([2.0, 0.0]),
-                },
-                trim_display_curve_from_end_fn=lambda display_curve, distance: display_curve,
-            ),
-            curve,
-        )
-
-    def test_build_open_arrow_segments_and_polygon_cover_success_and_failure_paths(
-        self,
-    ):
-        curve = np.array([[0.0, 0.0], [3.0, 0.0]])
-        geometry = {
-            "display_curve": curve.copy(),
-            "tip_display": np.array([3.0, 0.0]),
-            "left_display": np.array([1.0, 1.0]),
-            "right_display": np.array([1.0, -1.0]),
-        }
-
-        assert (
-            _build_open_arrow_segments(
-                curve,
-                None,
-                Affine2D(),
-                2.0,
-                4.0,
-                open_arrow_geometry_fn=lambda *args, **kwargs: None,
-                display_points_to_data_fn=lambda transform, values, inverse_transform=None: values,
-            )
-            == []
-        )
-        assert (
-            _build_open_arrow_segments(
-                curve,
-                None,
-                Affine2D(),
-                2.0,
-                4.0,
-                open_arrow_geometry_fn=lambda *args, **kwargs: geometry,
-                display_points_to_data_fn=lambda transform, values, inverse_transform=None: None,
-            )
-            == []
-        )
-
-        segments = _build_open_arrow_segments(
-            curve,
-            None,
-            Affine2D(),
-            2.0,
-            4.0,
-            open_arrow_geometry_fn=lambda *args, **kwargs: geometry,
-            display_points_to_data_fn=lambda transform, values, inverse_transform=None: np.asarray(
-                values, dtype=float
-            ),
-        )
-        assert len(segments) == 2
-
-        assert (
-            _build_arrow_polygon(
-                curve,
-                None,
-                Affine2D(),
-                2.0,
-                4.0,
-                facecolor="k",
-                edgecolor="w",
-                linewidth=2.0,
-                alpha=0.5,
-                zorder=3,
-                tip_display_geometry_fn=lambda *args, **kwargs: None,
-                display_points_to_data_fn=lambda *args, **kwargs: None,
-            )
-            is None
-        )
-
-        polygon = _build_arrow_polygon(
-            curve,
-            None,
-            Affine2D(),
-            2.0,
-            4.0,
-            facecolor="k",
-            edgecolor="w",
-            linewidth=0.2,
-            alpha=0.5,
-            zorder=3,
-            tip_display_geometry_fn=lambda *args, **kwargs: (
-                np.array([3.0, 0.0]),
-                np.array([1.0, 0.0]),
-            ),
-            display_points_to_data_fn=lambda transform, values, inverse_transform=None: np.asarray(
-                values, dtype=float
-            ),
-        )
-        assert polygon.get_linewidth() == pytest.approx(0.5)
-
-    def test_trim_curve_for_open_head_returns_trimmed_curve_when_transform_inverts(
-        self,
-    ):
-        curve = np.array([[0.0, 0.0], [3.0, 0.0]], dtype=float)
-        geometry = {
-            "display_curve": curve.copy(),
-            "base_center_display": np.array([2.0, 0.0], dtype=float),
-        }
-
-        trimmed = _trim_curve_for_open_head(
-            curve,
-            Affine2D(),
-            head_length_px=1.0,
-            open_arrow_geometry_fn=lambda *args, **kwargs: geometry,
-            trim_display_curve_from_end_fn=lambda display_curve, distance: display_curve,
-        )
-
-        np.testing.assert_allclose(trimmed[-1], np.array([2.0, 0.0]))
-
-    def test_build_ncl_arrow_artists_dispatches_open_and_filled_heads(self):
-        head_segments, polygon = _build_ncl_arrow_artists(
-            curve=np.array([[0.0, 0.0], [1.0, 0.0]]),
-            grid=None,
-            transform=Affine2D(),
-            arrowstyle="->",
-            head_length_px=2.0,
-            head_width_px=4.0,
-            facecolor="k",
-            edgecolor="w",
-            linewidth=1.0,
-            alpha=0.5,
-            zorder=3,
-            uses_open_arrow_head_fn=lambda arrowstyle: True,
-            build_open_arrow_segments_fn=lambda **kwargs: ["segment"],
-            build_arrow_polygon_fn=lambda **kwargs: "polygon",
-        )
-        assert head_segments == ["segment"]
-        assert polygon is None
-
-        head_segments, polygon = _build_ncl_arrow_artists(
-            curve=np.array([[0.0, 0.0], [1.0, 0.0]]),
-            grid=None,
-            transform=Affine2D(),
-            arrowstyle="-|>",
-            head_length_px=2.0,
-            head_width_px=4.0,
-            facecolor="k",
-            edgecolor="w",
-            linewidth=1.0,
-            alpha=0.5,
-            zorder=3,
-            uses_open_arrow_head_fn=lambda arrowstyle: False,
-            build_open_arrow_segments_fn=lambda **kwargs: ["segment"],
-            build_arrow_polygon_fn=lambda **kwargs: "polygon",
-        )
-        assert head_segments == []
-        assert polygon == "polygon"
 
 
 class TestStyleHelpers:
@@ -2129,7 +1853,14 @@ class TestVectorEngineHelpers:
                 prepare_ncl_native_trace_context_fn=lambda **kwargs: None,
                 select_ncl_centers_fn=lambda **kwargs: [(np.array([0.5, 0.5]), 1.0)],
                 sample_grid_field_fn=lambda grid, field, x, y: None,
-                build_ncl_arrow_artists_fn=lambda **kwargs: ([], None),
+                build_open_arrow_segments_batch_fn=lambda **kwargs: (
+                    np.empty((0, 2, 2), dtype=float),
+                    np.empty(0, dtype=int),
+                ),
+                build_filled_arrow_polygons_batch_fn=lambda **kwargs: (
+                    np.empty((0, 3, 2), dtype=float),
+                    np.empty(0, dtype=int),
+                ),
                 display_points_to_data_fn=lambda *args, **kwargs: None,
                 result_cls=CurlyVectorPlotSet,
             )
@@ -2194,10 +1925,11 @@ class TestVectorEngineHelpers:
                     np.array([[0.25, 0.25], [0.75, 0.75]]),
                 ),
                 sample_grid_field_fn=lambda grid, field, x, y: None,
-                build_ncl_arrow_artists_fn=lambda **kwargs: (_ for _ in ()).throw(
-                    AssertionError("old per-glyph open-arrow path should not run")
-                ),
                 build_open_arrow_segments_batch_fn=batch_builder,
+                build_filled_arrow_polygons_batch_fn=lambda **kwargs: (
+                    np.empty((0, 3, 2), dtype=float),
+                    np.empty(0, dtype=int),
+                ),
                 display_points_to_data_fn=lambda *args, **kwargs: None,
                 result_cls=CurlyVectorPlotSet,
             )
@@ -2625,69 +2357,6 @@ class TestLegacyStreamCoverage:
 
 
 class TestVectorArtistCoverage:
-    def test_vector_artist_helpers_cover_nonfinite_paths(self):
-        curve = np.array([[0.0, 0.0], [1.0, 0.0]])
-
-        class _NonfiniteDisplayTransform:
-            def transform(self, values):
-                del values
-                return np.array([[0.0, 0.0], [np.nan, 1.0]])
-
-        assert (
-            _open_arrow_geometry(
-                curve,
-                _NonfiniteDisplayTransform(),
-                1.0,
-                tip_display_geometry_from_display_curve_fn=lambda display_curve, backoff: (
-                    np.asarray(display_curve[-1], dtype=float),
-                    np.array([1.0, 0.0]),
-                ),
-            )
-            is None
-        )
-
-        class _NonfiniteInverseTransform:
-            def inverted(self):
-                return SimpleNamespace(
-                    transform=lambda values: np.full(np.asarray(values).shape, np.nan)
-                )
-
-        trimmed = _trim_curve_for_open_head(
-            curve,
-            _NonfiniteInverseTransform(),
-            0.5,
-            open_arrow_geometry_fn=lambda *args, **kwargs: {
-                "display_curve": np.array([[0.0, 0.0], [1.0, 0.0]]),
-                "base_center_display": np.array([0.5, 0.0]),
-            },
-            trim_display_curve_from_end_fn=lambda display_curve, distance: np.array(
-                display_curve,
-                dtype=float,
-            ),
-        )
-        np.testing.assert_allclose(trimmed, curve)
-
-        assert (
-            _build_arrow_polygon(
-                curve,
-                None,
-                Affine2D(),
-                1.0,
-                0.5,
-                "k",
-                "k",
-                1.0,
-                1.0,
-                1.0,
-                tip_display_geometry_fn=lambda *args, **kwargs: (
-                    np.array([1.0, 0.0]),
-                    np.array([1.0, 0.0]),
-                ),
-                display_points_to_data_fn=lambda *args, **kwargs: None,
-            )
-            is None
-        )
-
     def test_batched_open_arrow_helpers_match_scalar_geometry(self):
         curve_1 = np.array([[0.0, 0.0], [2.0, 0.0], [3.0, 0.0]], dtype=float)
         curve_2 = np.array([[1.0, 1.0], [2.0, 2.0]], dtype=float)
@@ -2712,14 +2381,6 @@ class TestVectorArtistCoverage:
             display_curves=[curve_1, curve_2],
             head_lengths_px=head_lengths,
             head_widths_px=head_widths,
-            build_open_arrow_segments_batch_fn=lambda points, offsets, lengths, widths: (
-                build_open_arrow_segments(
-                    display_points=points,
-                    curve_offsets=offsets,
-                    head_lengths_px=lengths,
-                    head_widths_px=widths,
-                )
-            ),
         )
 
         assert segments.shape == (4, 2, 2)
@@ -2834,9 +2495,6 @@ class TestVectorArtistCoverage:
                     np.array([[0.25, 0.25], [0.75, 0.75]]),
                 ),
                 sample_grid_field_fn=lambda grid, field, x, y: None,
-                build_ncl_arrow_artists_fn=lambda **kwargs: (_ for _ in ()).throw(
-                    AssertionError("old per-glyph filled-arrow path should not run")
-                ),
                 build_open_arrow_segments_batch_fn=None,
                 build_filled_arrow_polygons_batch_fn=batch_builder,
                 display_points_to_data_fn=lambda *args, **kwargs: None,
