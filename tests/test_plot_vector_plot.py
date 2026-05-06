@@ -1238,6 +1238,26 @@ class TestCurlyVector:
         assert not np.any(sampler.cell_valid[:, 1])
         plt.close(fig)
 
+    def test_select_ncl_centers_native_adapter_accepts_1d_point_input(self):
+        grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0]))
+        magnitude = np.ones(grid.shape)
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.set_xlim(0.0, 2.0)
+        ax.set_ylim(0.0, 1.0)
+        try:
+            selected = _select_ncl_centers_native_adapter(
+                grid=grid,
+                magnitude=magnitude,
+                transform=ax.transData,
+                axes=ax,
+                density=1.0,
+                start_points=np.array([[0.5, 0.5]]),
+                min_distance=0.0,
+            )
+            assert len(selected) == 1
+        finally:
+            plt.close(fig)
+
     def test_candidate_data_from_display_step_uses_local_jacobian_inverse(self):
         """Display-space step inversion should stay consistent with the local transform."""
         fig, ax = plt.subplots(figsize=(6, 4))
