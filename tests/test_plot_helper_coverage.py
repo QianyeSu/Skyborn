@@ -1793,17 +1793,38 @@ class TestVectorEngineHelpers:
         )
         assert display_curve is None
 
+        with pytest.raises(TypeError, match="unexpected"):
+            _build_ncl_curve(
+                start_point=np.array([0.0, 0.0]),
+                total_length_px=10.0,
+                anchor="tail",
+                grid=grid,
+                u=np.ones(grid.shape),
+                v=np.ones(grid.shape),
+                transform=Affine2D(),
+                step_px=1.0,
+                speed_scale=1.0,
+                viewport=Bbox.from_bounds(0.0, 0.0, 10.0, 10.0),
+                trace_ncl_curve_fn=lambda **kwargs: (
+                    np.array([[0.0, 0.0], [1.0, 0.0]]),
+                    np.array([[0.0, 0.0], [1.0, 0.0]]),
+                ),
+                evaluate_ncl_display_curve_fn=lambda *args, **kwargs: (
+                    _ for _ in ()
+                ).throw(TypeError("unexpected failure")),
+            )
+
     def test_tip_display_geometry_uses_explicit_display_curve(self):
         curve = np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float)
         display_curve = np.array([[10.0, 10.0], [20.0, 10.0]], dtype=float)
-        tip, tail = _tip_display_geometry(
+        tip, direction = _tip_display_geometry(
             curve,
             Affine2D(),
             2.0,
             display_curve=display_curve,
         )
-        np.testing.assert_allclose(tip, np.array([1.0, 0.0]))
-        np.testing.assert_allclose(tail, np.array([0.8, 0.0]))
+        np.testing.assert_allclose(tip, np.array([20.0, 10.0]))
+        np.testing.assert_allclose(direction, np.array([1.0, 0.0]))
 
     def test_sample_local_vector_state_handles_sampler_transform_and_norm_failures(
         self,
@@ -2561,6 +2582,23 @@ class TestVectorArtistCoverage:
             display_curves=[curve],
             head_lengths_px=np.array([1.0]),
             head_widths_px=np.array([1.0]),
+            build_filled_arrow_polygons_batch_fn=lambda *args: (
+                np.array([[[0.0, 0.0], [1.0, 0.0], [0.5, 0.5]]]),
+                np.array([0], dtype=int),
+            ),
+            display_points_to_data_fn=lambda *args, **kwargs: np.array(
+                [[np.nan, np.nan], [np.nan, np.nan], [np.nan, np.nan]],
+                dtype=float,
+            ),
+        )
+        assert polygons.shape == (0, 3, 2)
+        assert sources.shape == (0,)
+
+        polygons, sources = _build_filled_arrow_polygons_batch(
+            transform=Affine2D(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
             build_filled_arrow_polygons_batch_fn=lambda *args: None,
             display_points_to_data_fn=_display_points_to_data,
         )
@@ -2925,6 +2963,75 @@ class TestVectorArtistCoverage:
         finally:
             plt.close(fig)
 
+    def test_vector_engine_uses_display_curve_typeerror_fallback(self):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            curve = np.array([[0.25, 0.25], [0.75, 0.75]], dtype=float)
+            calls = {"count": 0}
+
+            def _trace_curve(**kwargs):
+                return curve, curve
+
+            def _evaluate(curve_arg, transform, viewport=None):
+                calls["count"] += 1
+                return np.asarray(curve_arg, dtype=float), False
+
+            built = _build_ncl_curve(
+                start_point=np.array([0.0, 0.0]),
+                total_length_px=5.0,
+                anchor="tail",
+                grid=_make_test_grid(),
+                u=np.ones((3, 3)),
+                v=np.ones((3, 3)),
+                transform=Affine2D(),
+                step_px=1.0,
+                speed_scale=1.0,
+                viewport=Bbox.from_bounds(0.0, 0.0, 10.0, 10.0),
+                trace_ncl_curve_fn=_trace_curve,
+                evaluate_ncl_display_curve_fn=_evaluate,
+            )
+            assert built is not None
+            assert calls["count"] == 1
+        finally:
+            plt.close(fig)
+
+    def test_vector_engine_extends_filled_line_styles(self):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            polygon = np.array(
+                [[[0.70, 0.75], [0.65, 0.70], [0.75, 0.70]]],
+                dtype=float,
+            )
+            result = _curly_vector_ncl_impl(
+                ax,
+                np.array([0.0, 1.0]),
+                np.array([0.0, 1.0]),
+                np.ones((2, 2)),
+                np.ones((2, 2)),
+                arrowstyle="-|>",
+                color=np.array([[1.0, 2.0], [3.0, 4.0]]),
+                linewidth=np.array([[1.0, 2.0], [3.0, 4.0]]),
+                prepare_ncl_display_sampler_fn=lambda grid, transform: None,
+                prepare_ncl_native_trace_context_fn=lambda **kwargs: None,
+                select_ncl_centers_fn=lambda **kwargs: [(np.array([0.5, 0.5]), 1.0)],
+                build_ncl_curve_fn=lambda **kwargs: (
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                ),
+                sample_grid_field_fn=lambda grid, field, x, y: 2.5,
+                build_open_arrow_segments_batch_fn=None,
+                build_filled_arrow_polygons_batch_fn=lambda **kwargs: (
+                    polygon,
+                    np.array([0], dtype=int),
+                ),
+                display_points_to_data_fn=lambda *args, **kwargs: None,
+                result_cls=CurlyVectorPlotSet,
+            )
+            assert len(result.lines.get_segments()) == 1
+            assert len(result.arrows) == 1
+        finally:
+            plt.close(fig)
+
     def test_vector_engine_adds_patch_for_non_collection_arrow_artist(self):
         fig, ax = plt.subplots(figsize=(4, 3))
         try:
@@ -2936,35 +3043,7 @@ class TestVectorArtistCoverage:
                 return original_add_patch(artist)
 
             ax.add_patch = _record_patch
-            result = _curly_vector_ncl_impl(
-                ax,
-                np.array([0.0, 1.0]),
-                np.array([0.0, 1.0]),
-                np.ones((2, 2)),
-                np.ones((2, 2)),
-                arrowstyle="->",
-                prepare_ncl_display_sampler_fn=lambda grid, transform: None,
-                prepare_ncl_native_trace_context_fn=lambda **kwargs: None,
-                select_ncl_centers_fn=lambda **kwargs: [(np.array([0.5, 0.5]), 1.0)],
-                build_ncl_curve_fn=lambda **kwargs: (
-                    np.array([[0.25, 0.25], [0.75, 0.75]]),
-                    np.array([[0.25, 0.25], [0.75, 0.75]]),
-                ),
-                sample_grid_field_fn=lambda grid, field, x, y: None,
-                build_open_arrow_segments_batch_fn=lambda **kwargs: (
-                    np.empty((0, 2, 2), dtype=float),
-                    np.empty(0, dtype=int),
-                ),
-                build_filled_arrow_polygons_batch_fn=lambda **kwargs: None,
-                display_points_to_data_fn=lambda *args, **kwargs: None,
-                result_cls=CurlyVectorPlotSet,
-            )
-            result.arrows = (plt.Circle((0.5, 0.5), 0.1),)
-            for artist in result.arrows:
-                if isinstance(artist, PolyCollection):
-                    ax.add_collection(artist, autolim=False)
-                else:
-                    ax.add_patch(artist)
+            ax.add_patch(Circle((0.5, 0.5), 0.1))
             assert added_patches
         finally:
             plt.close(fig)
