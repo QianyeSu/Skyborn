@@ -8,6 +8,7 @@ Created: 2026-03-01 14:58:56
 from __future__ import annotations
 
 from collections.abc import Hashable
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
@@ -581,6 +582,27 @@ def _curly_vector_ncl(
     allow_non_uniform_grid=False,
     ncl_preset=None,
 ):
+    sample_grid_field_fn = partial(
+        _native_helpers._call_native_sample_grid_field,
+        _sample_grid_field_native,
+    )
+    native_open_builder = partial(
+        _native_helpers._call_native_build_open_arrow_segments,
+        _build_open_arrow_segments_native,
+    )
+    native_filled_builder = partial(
+        _native_helpers._call_native_build_filled_arrow_polygons,
+        _build_filled_arrow_polygons_native,
+    )
+    build_open_arrow_segments_batch_fn = partial(
+        _artist_helpers._build_open_arrow_segments_batch,
+        build_open_arrow_segments_batch_fn=native_open_builder,
+    )
+    build_filled_arrow_polygons_batch_fn = partial(
+        _artist_helpers._build_filled_arrow_polygons_batch,
+        build_filled_arrow_polygons_batch_fn=native_filled_builder,
+        display_points_to_data_fn=_display_points_to_data,
+    )
     return _vector_engine._curly_vector_ncl_impl(
         axes=axes,
         x=x,
@@ -618,9 +640,9 @@ def _curly_vector_ncl(
         prepare_ncl_native_trace_context_fn=_prepare_ncl_native_trace_context,
         select_ncl_centers_fn=_select_ncl_centers,
         build_ncl_curve_fn=_build_ncl_curve,
-        sample_grid_field_fn=_sample_grid_field,
-        build_open_arrow_segments_batch_fn=_build_open_arrow_segments_batch,
-        build_filled_arrow_polygons_batch_fn=_build_filled_arrow_polygons_batch,
+        sample_grid_field_fn=sample_grid_field_fn,
+        build_open_arrow_segments_batch_fn=build_open_arrow_segments_batch_fn,
+        build_filled_arrow_polygons_batch_fn=build_filled_arrow_polygons_batch_fn,
         display_points_to_data_fn=_display_points_to_data,
         result_cls=CurlyVectorPlotSet,
     )
@@ -649,6 +671,28 @@ def _select_ncl_centers(
     display_sampler=None,
     ncl_preset=None,
 ):
+    def sample_grid_field_array(grid, field, points):
+        points = np.asarray(points, dtype=float)
+        if points.ndim == 1:
+            points = points[np.newaxis, :]
+        if len(points) == 0:
+            return np.empty(0, dtype=float)
+        return _native_helpers._call_native_sample_grid_field_array(
+            _sample_grid_field_array_native,
+            grid,
+            field,
+            points,
+            (len(points),),
+        )
+
+    thin_mapped_candidates = partial(
+        _native_helpers._call_native_thin_ncl_mapped_candidates,
+        _thin_ncl_mapped_candidates_native,
+    )
+    thin_display_candidates = partial(
+        _native_helpers._call_native_thin_ncl_display_candidates,
+        _thin_ncl_display_candidates_native,
+    )
     return _vector_engine._select_ncl_centers(
         grid=grid,
         magnitude=magnitude,
@@ -659,26 +703,9 @@ def _select_ncl_centers(
         min_distance=min_distance,
         display_sampler=display_sampler,
         ncl_preset=ncl_preset,
-        sample_grid_field_array=_sample_grid_field_array,
-        thin_ncl_mapped_candidates=_thin_ncl_mapped_candidates,
-        thin_ncl_display_candidates=_thin_ncl_display_candidates,
-    )
-
-
-def _thin_ncl_mapped_candidates(mapped_points, spacing_frac):
-    return _native_helpers._call_native_thin_ncl_mapped_candidates(
-        _thin_ncl_mapped_candidates_native,
-        mapped_points,
-        spacing_frac,
-    )
-
-
-def _thin_ncl_display_candidates(display_points, viewport, spacing_frac):
-    return _native_helpers._call_native_thin_ncl_display_candidates(
-        _thin_ncl_display_candidates_native,
-        display_points,
-        viewport,
-        spacing_frac,
+        sample_grid_field_array=sample_grid_field_array,
+        thin_ncl_mapped_candidates=thin_mapped_candidates,
+        thin_ncl_display_candidates=thin_display_candidates,
     )
 
 
@@ -819,25 +846,6 @@ def _trace_ncl_curve_with_display(
     return curve[::-1], display_curve[::-1]
 
 
-def _trace_ncl_direction_with_display_via_native(
-    start_point,
-    max_length_px,
-    direction_sign,
-    step_px,
-    speed_scale,
-    native_trace_context=None,
-):
-    return _native_helpers._call_native_trace_ncl_direction_with_display(
-        _trace_ncl_direction_native,
-        native_trace_context,
-        start_point,
-        max_length_px,
-        direction_sign,
-        step_px,
-        speed_scale,
-    )
-
-
 def _trace_ncl_direction_with_display(
     start_point,
     max_length_px,
@@ -860,13 +868,14 @@ def _trace_ncl_direction_with_display(
             viewport=viewport,
             display_sampler=display_sampler,
         )
-    return _trace_ncl_direction_with_display_via_native(
-        start_point=start_point,
-        max_length_px=max_length_px,
-        direction_sign=direction_sign,
-        step_px=step_px,
-        speed_scale=speed_scale,
-        native_trace_context=native_trace_context,
+    return _native_helpers._call_native_trace_ncl_direction_with_display(
+        _trace_ncl_direction_native,
+        native_trace_context,
+        start_point,
+        max_length_px,
+        direction_sign,
+        step_px,
+        speed_scale,
     )
 
 
@@ -875,100 +884,6 @@ def _validate_display_curve(display_curve, viewport):
         _validate_display_curve_native,
         display_curve,
         viewport,
-    )
-
-
-def _sample_grid_field(grid, field, xd, yd):
-    return _native_helpers._call_native_sample_grid_field(
-        _sample_grid_field_native,
-        grid,
-        field,
-        xd,
-        yd,
-    )
-
-
-def _sample_grid_field_array(grid, field, points):
-    points = np.asarray(points, dtype=float)
-    if points.ndim == 1:
-        points = points[np.newaxis, :]
-
-    if len(points) == 0:
-        return np.empty(0, dtype=float)
-
-    return _native_helpers._call_native_sample_grid_field_array(
-        _sample_grid_field_array_native,
-        grid,
-        field,
-        points,
-        (len(points),),
-    )
-
-
-def _build_open_arrow_display_segments_batch(
-    display_points,
-    curve_offsets,
-    head_lengths_px,
-    head_widths_px,
-):
-    return _native_helpers._call_native_build_open_arrow_segments(
-        _build_open_arrow_segments_native,
-        display_points,
-        curve_offsets,
-        head_lengths_px,
-        head_widths_px,
-    )
-
-
-def _build_open_arrow_segments_batch(
-    *,
-    transform,
-    display_curves,
-    head_lengths_px,
-    head_widths_px,
-    inverse_transform=None,
-):
-    return _artist_helpers._build_open_arrow_segments_batch(
-        transform=transform,
-        display_curves=display_curves,
-        head_lengths_px=head_lengths_px,
-        head_widths_px=head_widths_px,
-        inverse_transform=inverse_transform,
-        build_open_arrow_segments_batch_fn=_build_open_arrow_display_segments_batch,
-    )
-
-
-def _build_filled_arrow_display_polygons_batch(
-    display_points,
-    curve_offsets,
-    head_lengths_px,
-    head_widths_px,
-):
-    return _native_helpers._call_native_build_filled_arrow_polygons(
-        _build_filled_arrow_polygons_native,
-        display_points,
-        curve_offsets,
-        head_lengths_px,
-        head_widths_px,
-    )
-
-
-def _build_filled_arrow_polygons_batch(
-    *,
-    transform,
-    display_curves,
-    head_lengths_px,
-    head_widths_px,
-    inverse_transform=None,
-):
-    return _artist_helpers._build_filled_arrow_polygons_batch(
-        transform=transform,
-        display_curves=display_curves,
-        head_lengths_px=head_lengths_px,
-        head_widths_px=head_widths_px,
-        inverse_transform=inverse_transform,
-        build_filled_arrow_polygons_batch_fn=_build_filled_arrow_display_polygons_batch,
-        display_points_to_data_fn=_display_points_to_data,
     )
 
 
