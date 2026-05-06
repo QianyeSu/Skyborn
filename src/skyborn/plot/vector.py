@@ -603,6 +603,35 @@ def _curly_vector_ncl(
         build_filled_arrow_polygons_batch_fn=native_filled_builder,
         display_points_to_data_fn=_display_points_to_data,
     )
+
+    def sample_grid_field_array(grid, field, points):
+        points = np.asarray(points, dtype=float)
+        if points.ndim == 1:
+            points = points[np.newaxis, :]
+        if len(points) == 0:
+            return np.empty(0, dtype=float)
+        return _native_helpers._call_native_sample_grid_field_array(
+            _sample_grid_field_array_native,
+            grid,
+            field,
+            points,
+            (len(points),),
+        )
+
+    thin_mapped_candidates = partial(
+        _native_helpers._call_native_thin_ncl_mapped_candidates,
+        _thin_ncl_mapped_candidates_native,
+    )
+    thin_display_candidates = partial(
+        _native_helpers._call_native_thin_ncl_display_candidates,
+        _thin_ncl_display_candidates_native,
+    )
+    select_ncl_centers_fn = partial(
+        _vector_engine._select_ncl_centers,
+        sample_grid_field_array=sample_grid_field_array,
+        thin_ncl_mapped_candidates=thin_mapped_candidates,
+        thin_ncl_display_candidates=thin_display_candidates,
+    )
     return _vector_engine._curly_vector_ncl_impl(
         axes=axes,
         x=x,
@@ -638,7 +667,7 @@ def _curly_vector_ncl(
         grid_cls=Grid,
         prepare_ncl_display_sampler_fn=_prepare_ncl_display_sampler,
         prepare_ncl_native_trace_context_fn=_prepare_ncl_native_trace_context,
-        select_ncl_centers_fn=_select_ncl_centers,
+        select_ncl_centers_fn=select_ncl_centers_fn,
         build_ncl_curve_fn=_build_ncl_curve,
         sample_grid_field_fn=sample_grid_field_fn,
         build_open_arrow_segments_batch_fn=build_open_arrow_segments_batch_fn,
@@ -657,55 +686,6 @@ def _prepare_ncl_native_trace_context(grid, u, v, viewport, display_sampler):
         v=v,
         viewport=viewport,
         display_sampler=display_sampler,
-    )
-
-
-def _select_ncl_centers(
-    grid,
-    magnitude,
-    transform,
-    axes,
-    density,
-    start_points,
-    min_distance,
-    display_sampler=None,
-    ncl_preset=None,
-):
-    def sample_grid_field_array(grid, field, points):
-        points = np.asarray(points, dtype=float)
-        if points.ndim == 1:
-            points = points[np.newaxis, :]
-        if len(points) == 0:
-            return np.empty(0, dtype=float)
-        return _native_helpers._call_native_sample_grid_field_array(
-            _sample_grid_field_array_native,
-            grid,
-            field,
-            points,
-            (len(points),),
-        )
-
-    thin_mapped_candidates = partial(
-        _native_helpers._call_native_thin_ncl_mapped_candidates,
-        _thin_ncl_mapped_candidates_native,
-    )
-    thin_display_candidates = partial(
-        _native_helpers._call_native_thin_ncl_display_candidates,
-        _thin_ncl_display_candidates_native,
-    )
-    return _vector_engine._select_ncl_centers(
-        grid=grid,
-        magnitude=magnitude,
-        transform=transform,
-        axes=axes,
-        density=density,
-        start_points=start_points,
-        min_distance=min_distance,
-        display_sampler=display_sampler,
-        ncl_preset=ncl_preset,
-        sample_grid_field_array=sample_grid_field_array,
-        thin_ncl_mapped_candidates=thin_mapped_candidates,
-        thin_ncl_display_candidates=thin_display_candidates,
     )
 
 
