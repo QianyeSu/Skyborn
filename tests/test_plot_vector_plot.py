@@ -1,5 +1,6 @@
 """Tests for the low-level curly-vector rendering engine."""
 
+from functools import partial
 from unittest.mock import Mock, patch
 
 import matplotlib.pyplot as plt
@@ -11,6 +12,7 @@ from matplotlib.collections import LineCollection, PolyCollection
 from matplotlib.transforms import Bbox
 
 import skyborn.plot.vector as vector_plot_module
+from skyborn.plot._core import native as _native_helpers
 from skyborn.plot._core.geometry import (
     _candidate_data_from_display_step,
     _display_step_to_data,
@@ -52,8 +54,6 @@ from skyborn.plot.vector import (
     _prepare_ncl_display_sampler,
     _prepare_ncl_native_trace_context,
     _resolve_default_ncl_preset,
-    _sample_grid_field,
-    _sample_grid_field_array,
     _select_ncl_centers,
 )
 
@@ -878,7 +878,13 @@ class TestCurlyVector:
             vector_plot_module, "_sample_grid_field_native", lambda **kwargs: 4.25
         )
 
-        value = vector_plot_module._sample_grid_field(grid, field, 0.5, 0.5)
+        value = _native_helpers._call_native_sample_grid_field(
+            vector_plot_module._sample_grid_field_native,
+            grid,
+            field,
+            0.5,
+            0.5,
+        )
 
         assert value == pytest.approx(4.25)
 
@@ -895,7 +901,13 @@ class TestCurlyVector:
             lambda **kwargs: expected.copy(),
         )
 
-        sampled = vector_plot_module._sample_grid_field_array(grid, field, points)
+        sampled = _native_helpers._call_native_sample_grid_field_array(
+            vector_plot_module._sample_grid_field_array_native,
+            grid,
+            field,
+            points,
+            (len(points),),
+        )
 
         np.testing.assert_allclose(sampled, expected)
 
@@ -917,33 +929,15 @@ class TestCurlyVector:
             vector_plot_module, "_sample_grid_field_array_native", lambda **kwargs: None
         )
 
-        sampled = vector_plot_module._sample_grid_field_array(grid, field, points)
+        sampled = _native_helpers._call_native_sample_grid_field_array(
+            vector_plot_module._sample_grid_field_array_native,
+            grid,
+            field,
+            points,
+            (len(points),),
+        )
 
         assert sampled is None
-
-    def test_thin_ncl_mapped_candidates_prefers_native_when_available(
-        self, monkeypatch
-    ):
-        """Mapped thinning should use the native helper when it returns indices."""
-        mapped_points = np.array(
-            [
-                [0.10, 0.10],
-                [0.12, 0.11],
-                [0.55, 0.55],
-            ]
-        )
-
-        monkeypatch.setattr(
-            vector_plot_module,
-            "_thin_ncl_mapped_candidates_native",
-            lambda **kwargs: np.array([1], dtype=int),
-        )
-
-        selected = vector_plot_module._thin_ncl_mapped_candidates(
-            mapped_points, spacing_frac=0.05
-        )
-
-        assert selected == [1]
 
     def test_map_ncl_display_points_to_viewport_normalizes_bbox(self):
         """Mapped thinning coordinates should be normalized to the active viewport."""
@@ -1066,13 +1060,15 @@ class TestCurlyVector:
             return [0, 2]
 
         monkeypatch.setattr(
-            vector_plot_module,
-            "_thin_ncl_display_candidates",
-            _display_thinner,
+            vector_plot_module._native_helpers,
+            "_call_native_thin_ncl_display_candidates",
+            lambda native_thinner, display_points, viewport, spacing_frac: (
+                _display_thinner(display_points, viewport, spacing_frac)
+            ),
         )
         monkeypatch.setattr(
-            vector_plot_module,
-            "_thin_ncl_mapped_candidates",
+            vector_plot_module._native_helpers,
+            "_call_native_thin_ncl_mapped_candidates",
             lambda *args, **kwargs: (_ for _ in ()).throw(
                 AssertionError("mapped thinning should not run")
             ),
@@ -1225,10 +1221,20 @@ class TestCurlyVector:
         )
         points = np.array([[0.5, 0.5], [1.5, 1.5], [3.0, 3.0]])
 
-        sampled = _sample_grid_field_array(grid, field, points)
+        sampled = _native_helpers._call_native_sample_grid_field_array(
+            vector_plot_module._sample_grid_field_array_native,
+            grid,
+            field,
+            points,
+            (len(points),),
+        )
+        sample_scalar = partial(
+            _native_helpers._call_native_sample_grid_field,
+            vector_plot_module._sample_grid_field_native,
+        )
 
-        assert sampled[0] == pytest.approx(_sample_grid_field(grid, field, 0.5, 0.5))
-        assert sampled[1] == pytest.approx(_sample_grid_field(grid, field, 1.5, 1.5))
+        assert sampled[0] == pytest.approx(sample_scalar(grid, field, 0.5, 0.5))
+        assert sampled[1] == pytest.approx(sample_scalar(grid, field, 1.5, 1.5))
         assert np.isnan(sampled[2])
 
     def test_point_at_arc_distance_from_end_tracks_back_along_polyline(self):
@@ -1661,7 +1667,13 @@ class TestInternalHelperFunctions:
         grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0, 2.0]))
         field = np.arange(9.0).reshape(3, 3)
 
-        sampled = _sample_grid_field_array(grid, field, np.empty((0, 2)))
+        sampled = _native_helpers._call_native_sample_grid_field_array(
+            vector_plot_module._sample_grid_field_array_native,
+            grid,
+            field,
+            np.empty((0, 2)),
+            (0,),
+        )
 
         assert sampled.shape == (0,)
 
