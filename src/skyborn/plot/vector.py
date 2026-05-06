@@ -665,17 +665,6 @@ def _select_ncl_centers(
     )
 
 
-def _prepare_ncl_center_candidates(grid, magnitude, density, start_points, ncl_preset):
-    return _vector_engine._prepare_ncl_center_candidates(
-        grid=grid,
-        magnitude=magnitude,
-        density=density,
-        start_points=start_points,
-        ncl_preset=ncl_preset,
-        sample_grid_field_array=_sample_grid_field_array,
-    )
-
-
 def _thin_ncl_mapped_candidates(mapped_points, spacing_frac):
     return _native_helpers._call_native_thin_ncl_mapped_candidates(
         _thin_ncl_mapped_candidates_native,
@@ -970,19 +959,6 @@ def _validate_display_curve(display_curve, viewport):
         _validate_display_curve_native,
         display_curve,
         viewport,
-    )
-
-
-def _sample_local_vector_state(grid, u, v, transform, point, display_sampler=None):
-    return _vector_engine._sample_local_vector_state(
-        grid=grid,
-        u=u,
-        v=v,
-        transform=transform,
-        point=point,
-        display_sampler=display_sampler,
-        sample_grid_field_fn=_sample_grid_field,
-        local_display_jacobian_fn=_local_display_jacobian,
     )
 
 
