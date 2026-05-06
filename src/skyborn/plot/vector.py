@@ -137,6 +137,12 @@ _extract_regular_grid_from_regridded_vectors = (
 )
 _regrid_cartopy_vectors = _cartopy_adapter._regrid_cartopy_vectors
 
+from .nclcurly_native import (
+    build_filled_arrow_polygons as _build_filled_arrow_polygons_native,
+)
+from .nclcurly_native import (
+    build_open_arrow_segments as _build_open_arrow_segments_native,
+)
 from .nclcurly_native import sample_grid_field as _sample_grid_field_native
 from .nclcurly_native import sample_grid_field_array as _sample_grid_field_array_native
 from .nclcurly_native import (
@@ -618,6 +624,8 @@ def _curly_vector_ncl(
         build_ncl_curve_fn=_build_ncl_curve,
         sample_grid_field_fn=_sample_grid_field,
         build_ncl_arrow_artists_fn=_build_ncl_arrow_artists,
+        build_open_arrow_segments_batch_fn=_build_open_arrow_segments_batch,
+        build_filled_arrow_polygons_batch_fn=_build_filled_arrow_polygons_batch,
         display_points_to_data_fn=_display_points_to_data,
         result_cls=CurlyVectorPlotSet,
     )
@@ -1116,6 +1124,73 @@ def _build_open_arrow_segments(
         display_sampler=display_sampler,
         inverse_transform=inverse_transform,
         open_arrow_geometry_fn=_open_arrow_geometry,
+        display_points_to_data_fn=_display_points_to_data,
+    )
+
+
+def _build_open_arrow_display_segments_batch(
+    display_points,
+    curve_offsets,
+    head_lengths_px,
+    head_widths_px,
+):
+    return _native_helpers._call_native_build_open_arrow_segments(
+        _build_open_arrow_segments_native,
+        display_points,
+        curve_offsets,
+        head_lengths_px,
+        head_widths_px,
+    )
+
+
+def _build_open_arrow_segments_batch(
+    *,
+    transform,
+    display_curves,
+    head_lengths_px,
+    head_widths_px,
+    inverse_transform=None,
+):
+    return _artist_helpers._build_open_arrow_segments_batch(
+        transform=transform,
+        display_curves=display_curves,
+        head_lengths_px=head_lengths_px,
+        head_widths_px=head_widths_px,
+        inverse_transform=inverse_transform,
+        build_open_arrow_segments_batch_fn=_build_open_arrow_display_segments_batch,
+    )
+
+
+def _build_filled_arrow_display_polygons_batch(
+    display_points,
+    curve_offsets,
+    head_lengths_px,
+    head_widths_px,
+):
+    return _native_helpers._call_native_build_filled_arrow_polygons(
+        _build_filled_arrow_polygons_native,
+        display_points,
+        curve_offsets,
+        head_lengths_px,
+        head_widths_px,
+    )
+
+
+def _build_filled_arrow_polygons_batch(
+    *,
+    transform,
+    display_curves,
+    head_lengths_px,
+    head_widths_px,
+    inverse_transform=None,
+):
+    return _artist_helpers._build_filled_arrow_polygons_batch(
+        transform=transform,
+        display_curves=display_curves,
+        head_lengths_px=head_lengths_px,
+        head_widths_px=head_widths_px,
+        inverse_transform=inverse_transform,
+        build_filled_arrow_polygons_batch_fn=_build_filled_arrow_display_polygons_batch,
         display_points_to_data_fn=_display_points_to_data,
     )
 
