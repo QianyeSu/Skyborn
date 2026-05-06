@@ -44,6 +44,9 @@ from skyborn.plot._core.vector_engine import (
     _density_xy,
     _ncl_step_length_px,
 )
+from skyborn.plot._core.vector_engine import (
+    _select_ncl_centers as _select_ncl_centers_core,
+)
 from skyborn.plot.vector import CurlyVectorPlotSet, _apply_ncl_preset_defaults
 from skyborn.plot.vector import _array_curly_vector as curly_vector
 from skyborn.plot.vector import (
@@ -54,8 +57,57 @@ from skyborn.plot.vector import (
     _prepare_ncl_display_sampler,
     _prepare_ncl_native_trace_context,
     _resolve_default_ncl_preset,
-    _select_ncl_centers,
 )
+
+
+def _select_ncl_centers_native_adapter(
+    *,
+    grid,
+    magnitude,
+    transform,
+    axes,
+    density,
+    start_points,
+    min_distance,
+    display_sampler=None,
+    ncl_preset=None,
+):
+    def sample_grid_field_array(grid, field, points):
+        points = np.asarray(points, dtype=float)
+        if points.ndim == 1:
+            points = points[np.newaxis, :]
+        if len(points) == 0:
+            return np.empty(0, dtype=float)
+        return _native_helpers._call_native_sample_grid_field_array(
+            vector_plot_module._sample_grid_field_array_native,
+            grid,
+            field,
+            points,
+            (len(points),),
+        )
+
+    thin_mapped_candidates = partial(
+        _native_helpers._call_native_thin_ncl_mapped_candidates,
+        vector_plot_module._thin_ncl_mapped_candidates_native,
+    )
+    thin_display_candidates = partial(
+        _native_helpers._call_native_thin_ncl_display_candidates,
+        vector_plot_module._thin_ncl_display_candidates_native,
+    )
+    return _select_ncl_centers_core(
+        grid=grid,
+        magnitude=magnitude,
+        transform=transform,
+        axes=axes,
+        density=density,
+        start_points=start_points,
+        min_distance=min_distance,
+        display_sampler=display_sampler,
+        ncl_preset=ncl_preset,
+        sample_grid_field_array=sample_grid_field_array,
+        thin_ncl_mapped_candidates=thin_mapped_candidates,
+        thin_ncl_display_candidates=thin_display_candidates,
+    )
 
 
 class TestCurlyVector:
@@ -1020,7 +1072,7 @@ class TestCurlyVector:
             ]
         )
 
-        selected = _select_ncl_centers(
+        selected = _select_ncl_centers_native_adapter(
             grid=grid,
             magnitude=magnitude,
             transform=ax.transData,
@@ -1074,7 +1126,7 @@ class TestCurlyVector:
             ),
         )
 
-        selected = vector_plot_module._select_ncl_centers(
+        selected = _select_ncl_centers_native_adapter(
             grid=grid,
             magnitude=magnitude,
             transform=ax.transData,
@@ -1100,7 +1152,7 @@ class TestCurlyVector:
         grid = Grid(x, y)
         magnitude = np.ones(grid.shape)
 
-        selected = _select_ncl_centers(
+        selected = _select_ncl_centers_native_adapter(
             grid=grid,
             magnitude=magnitude,
             transform=ax.transData,
@@ -1126,7 +1178,7 @@ class TestCurlyVector:
         grid = Grid(x, y)
         magnitude = np.ones(grid.shape)
 
-        sparse = _select_ncl_centers(
+        sparse = _select_ncl_centers_native_adapter(
             grid=grid,
             magnitude=magnitude,
             transform=ax.transData,
@@ -1136,7 +1188,7 @@ class TestCurlyVector:
             min_distance=None,
             ncl_preset="profile",
         )
-        dense = _select_ncl_centers(
+        dense = _select_ncl_centers_native_adapter(
             grid=grid,
             magnitude=magnitude,
             transform=ax.transData,
