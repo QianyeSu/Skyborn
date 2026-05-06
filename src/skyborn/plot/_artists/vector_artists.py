@@ -80,6 +80,94 @@ def _build_open_arrow_segments_batch(
     )
 
 
+def _assemble_open_head_streamlines(
+    *,
+    shafts,
+    shaft_colors,
+    shaft_linewidths,
+    head_segments,
+    source_positions,
+    use_multicolor_lines,
+    use_linewidth_field,
+):
+    """Merge shaft curves and batched open-head segments into line-collection inputs.
+
+    Parameters
+    ----------
+    shafts : sequence of ndarray
+        Data-space shaft polylines, one per glyph.
+    shaft_colors : sequence
+        Per-glyph shaft colors aligned with ``shafts``.
+    shaft_linewidths : sequence of float
+        Per-glyph shaft linewidths aligned with ``shafts``.
+    head_segments : ndarray
+        Batched head segments with shape ``(N, 2, 2)`` in data coordinates.
+    source_positions : array-like of int
+        Source glyph index for each segment.
+    use_multicolor_lines : bool
+        Whether a per-segment color array should be emitted.
+    use_linewidth_field : bool
+        Whether a per-segment linewidth array should be emitted.
+
+    Returns
+    -------
+    tuple
+        ``(streamlines, line_colors, line_widths)`` where ``streamlines`` is a
+        list of line segments/polyline arrays ready for ``LineCollection`` and
+        the style arrays are either lists or ``None`` depending on the flags.
+    """
+
+    shaft_count = len(shafts)
+    head_segments = np.asarray(head_segments, dtype=float)
+    source_positions = np.asarray(source_positions, dtype=int)
+
+    if source_positions.shape != (len(head_segments),):
+        raise ValueError("source_positions must match head_segments")
+
+    if len(source_positions) > 1 and np.any(
+        source_positions[1:] < source_positions[:-1]
+    ):
+        order = np.argsort(source_positions, kind="stable")
+        source_positions = source_positions[order]
+        head_segments = head_segments[order]
+
+    if len(source_positions) == 0:
+        counts = np.zeros(shaft_count, dtype=np.intp)
+    else:
+        counts = np.bincount(source_positions, minlength=shaft_count)
+    offsets = np.zeros(shaft_count + 1, dtype=np.intp)
+    np.cumsum(counts, out=offsets[1:])
+
+    total_streamlines = shaft_count + len(head_segments)
+    streamlines = [None] * total_streamlines
+    line_colors = [None] * total_streamlines if use_multicolor_lines else None
+    line_widths = [None] * total_streamlines if use_linewidth_field else None
+
+    cursor = 0
+    for idx in range(shaft_count):
+        seg_start = int(offsets[idx])
+        seg_end = int(offsets[idx + 1])
+        seg_count = seg_end - seg_start
+
+        streamlines[cursor] = shafts[idx]
+        if seg_count > 0:
+            streamlines[cursor + 1 : cursor + 1 + seg_count] = list(
+                head_segments[seg_start:seg_end]
+            )
+
+        style_span = 1 + seg_count
+        if line_colors is not None:
+            line_colors[cursor : cursor + style_span] = [shaft_colors[idx]] * style_span
+        if line_widths is not None:
+            line_widths[cursor : cursor + style_span] = [
+                shaft_linewidths[idx]
+            ] * style_span
+
+        cursor += style_span
+
+    return streamlines, line_colors, line_widths
+
+
 def _build_filled_arrow_polygons_batch(
     *,
     transform,
@@ -133,4 +221,70 @@ def _build_filled_arrow_polygons_batch(
     return (
         data_polygons[finite_valid],
         np.asarray(source_positions, dtype=int)[finite_valid],
+    )
+
+
+def _assemble_filled_head_artists(
+    *,
+    shafts,
+    shaft_colors,
+    shaft_linewidths,
+    filled_polygons,
+    polygon_sources,
+    facecolors,
+    edgecolors,
+    use_multicolor_lines,
+    use_linewidth_field,
+):
+    """Build shaft and polygon style payloads for filled-arrow batch rendering.
+
+    Parameters
+    ----------
+    shafts : sequence of ndarray
+        Data-space shaft polylines, one per glyph.
+    shaft_colors : sequence
+        Per-glyph shaft colors aligned with ``shafts``.
+    shaft_linewidths : sequence of float
+        Per-glyph shaft linewidths aligned with ``shafts``.
+    filled_polygons : ndarray
+        Batched filled head polygons with shape ``(N, 3, 2)``.
+    polygon_sources : array-like of int
+        Source glyph index for each polygon.
+    facecolors, edgecolors : sequence
+        Per-glyph head colors aligned with ``shafts``.
+    use_multicolor_lines : bool
+        Whether a per-shaft line color list should be emitted.
+    use_linewidth_field : bool
+        Whether a per-shaft line width list should be emitted.
+
+    Returns
+    -------
+    tuple
+        ``(streamlines, line_colors, line_widths, polygon_facecolors,
+        polygon_edgecolors, polygon_linewidths)``.
+    """
+
+    streamlines = list(shafts)
+    line_colors = list(shaft_colors) if use_multicolor_lines else None
+    line_widths = list(shaft_linewidths) if use_linewidth_field else None
+
+    polygon_sources = np.asarray(polygon_sources, dtype=int)
+    if polygon_sources.shape != (len(filled_polygons),):
+        raise ValueError("polygon_sources must match filled_polygons")
+    if len(polygon_sources) == 0:
+        return streamlines, line_colors, line_widths, [], [], []
+
+    polygon_facecolors = [facecolors[int(source_idx)] for source_idx in polygon_sources]
+    polygon_edgecolors = [edgecolors[int(source_idx)] for source_idx in polygon_sources]
+    polygon_linewidths = [
+        max(float(shaft_linewidths[int(source_idx)]) * 0.5, 0.5)
+        for source_idx in polygon_sources
+    ]
+    return (
+        streamlines,
+        line_colors,
+        line_widths,
+        polygon_facecolors,
+        polygon_edgecolors,
+        polygon_linewidths,
     )
