@@ -601,7 +601,7 @@ def _build_ncl_curve(
     current_length_px = float(total_length_px)
 
     for _ in range(4):
-        curve = trace_ncl_curve_fn(
+        traced = trace_ncl_curve_fn(
             start_point=start_point,
             total_length_px=current_length_px,
             anchor=anchor,
@@ -615,12 +615,41 @@ def _build_ncl_curve(
             display_sampler=display_sampler,
             native_trace_context=native_trace_context,
         )
+        if traced is None:
+            current_length_px *= 0.78
+            if current_length_px <= step_px:
+                break
+            continue
+
+        display_curve_hint = None
+        if isinstance(traced, tuple) and len(traced) == 2:
+            curve, display_curve_hint = traced
+        else:
+            curve = traced
+
         if curve is not None and len(curve) >= 2:
-            display_curve, transform_failed = evaluate_ncl_display_curve_fn(
-                curve,
-                transform,
-                viewport=viewport,
-            )
+            if display_curve_hint is None:
+                display_curve, transform_failed = evaluate_ncl_display_curve_fn(
+                    curve,
+                    transform,
+                    viewport=viewport,
+                )
+            else:
+                try:
+                    display_curve, transform_failed = evaluate_ncl_display_curve_fn(
+                        curve,
+                        transform,
+                        viewport=viewport,
+                        display_curve=display_curve_hint,
+                    )
+                except TypeError as err:
+                    if "display_curve" not in str(err):
+                        raise
+                    display_curve, transform_failed = evaluate_ncl_display_curve_fn(
+                        curve,
+                        transform,
+                        viewport=viewport,
+                    )
             if display_curve is not None:
                 return curve, display_curve
             if transform_failed:
