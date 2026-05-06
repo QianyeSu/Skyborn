@@ -632,6 +632,20 @@ def _curly_vector_ncl(
         thin_ncl_mapped_candidates=thin_mapped_candidates,
         thin_ncl_display_candidates=thin_display_candidates,
     )
+    build_ncl_curve_fn = partial(
+        _vector_engine._build_ncl_curve,
+        trace_ncl_curve_fn=_trace_ncl_curve_with_display,
+        evaluate_ncl_display_curve_fn=lambda curve, transform, viewport=None, display_curve=None: (
+            (
+                display_curve,
+                False,
+            )
+            if display_curve is not None
+            and len(curve) >= 2
+            and _validate_display_curve(display_curve, viewport)
+            else (None, False)
+        ),
+    )
     return _vector_engine._curly_vector_ncl_impl(
         axes=axes,
         x=x,
@@ -668,7 +682,7 @@ def _curly_vector_ncl(
         prepare_ncl_display_sampler_fn=_prepare_ncl_display_sampler,
         prepare_ncl_native_trace_context_fn=_prepare_ncl_native_trace_context,
         select_ncl_centers_fn=select_ncl_centers_fn,
-        build_ncl_curve_fn=_build_ncl_curve,
+        build_ncl_curve_fn=build_ncl_curve_fn,
         sample_grid_field_fn=sample_grid_field_fn,
         build_open_arrow_segments_batch_fn=build_open_arrow_segments_batch_fn,
         build_filled_arrow_polygons_batch_fn=build_filled_arrow_polygons_batch_fn,
@@ -687,49 +701,6 @@ def _prepare_ncl_native_trace_context(grid, u, v, viewport, display_sampler):
         viewport=viewport,
         display_sampler=display_sampler,
     )
-
-
-def _build_ncl_curve(
-    start_point,
-    total_length_px,
-    anchor,
-    grid,
-    u,
-    v,
-    transform,
-    step_px,
-    speed_scale,
-    viewport,
-    display_sampler=None,
-    native_trace_context=None,
-):
-    current_length_px = float(total_length_px)
-
-    for _ in range(4):
-        curve_result = _trace_ncl_curve_with_display(
-            start_point=start_point,
-            total_length_px=current_length_px,
-            anchor=anchor,
-            grid=grid,
-            u=u,
-            v=v,
-            transform=transform,
-            step_px=step_px,
-            speed_scale=speed_scale,
-            viewport=viewport,
-            display_sampler=display_sampler,
-            native_trace_context=native_trace_context,
-        )
-        if curve_result is not None:
-            curve, display_curve = curve_result
-            if len(curve) >= 2 and _validate_display_curve(display_curve, viewport):
-                return curve, display_curve
-
-        current_length_px *= 0.78
-        if current_length_px <= step_px:
-            break
-
-    return None
 
 
 def _trace_ncl_curve_with_display(
