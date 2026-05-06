@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 import xarray as xr
 from matplotlib.collections import PolyCollection
+from matplotlib.patches import Circle
 from matplotlib.transforms import Affine2D, Bbox
 
 import skyborn.plot.vector as vector_module
@@ -141,6 +142,16 @@ class _BadTransform:
 
     def inverted(self):
         raise RuntimeError("bad inverse")
+
+
+class _ExplodingInverse:
+    """Transform stub whose inverse transform call fails."""
+
+    def inverted(self):
+        return self
+
+    def transform(self, values):
+        raise RuntimeError("explode inverse transform")
 
 
 def _make_test_grid() -> Grid:
@@ -685,6 +696,66 @@ class TestNativeHelpers:
             1.0,
         )
         np.testing.assert_allclose(curve, np.array([[0.0, 0.0], [1.0, 1.0]]))
+        assert (
+            _call_native_trace_ncl_direction(
+                lambda **kwargs: None,
+                context,
+                np.array([0.0, 0.0]),
+                10.0,
+                1.0,
+                1.0,
+                1.0,
+            )
+            is None
+        )
+
+    def test_call_native_build_arrow_helpers_validate_shapes(self):
+        assert (
+            vector_module._native_helpers._call_native_build_open_arrow_segments(
+                lambda **kwargs: (np.array([[1.0, 2.0]]), np.array([0], dtype=int)),
+                np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float),
+                np.array([0, 2], dtype=np.intp),
+                np.array([1.0]),
+                np.array([1.0]),
+            )
+            is None
+        )
+        assert (
+            vector_module._native_helpers._call_native_build_open_arrow_segments(
+                lambda **kwargs: (
+                    np.array([[[0.0, 0.0], [1.0, 1.0]]], dtype=float),
+                    np.array([0, 1], dtype=int),
+                ),
+                np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float),
+                np.array([0, 2], dtype=np.intp),
+                np.array([1.0]),
+                np.array([1.0]),
+            )
+            is None
+        )
+        assert (
+            vector_module._native_helpers._call_native_build_filled_arrow_polygons(
+                lambda **kwargs: (np.array([[1.0, 2.0]]), np.array([0], dtype=int)),
+                np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float),
+                np.array([0, 2], dtype=np.intp),
+                np.array([1.0]),
+                np.array([1.0]),
+            )
+            is None
+        )
+        assert (
+            vector_module._native_helpers._call_native_build_filled_arrow_polygons(
+                lambda **kwargs: (
+                    np.array([[[0.0, 0.0], [1.0, 1.0], [0.5, 0.5]]], dtype=float),
+                    np.array([0, 1], dtype=int),
+                ),
+                np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float),
+                np.array([0, 2], dtype=np.intp),
+                np.array([1.0]),
+                np.array([1.0]),
+            )
+            is None
+        )
 
     def test_call_native_trace_with_display_validates_context_and_shapes(self):
         context = SimpleNamespace(
@@ -1722,6 +1793,18 @@ class TestVectorEngineHelpers:
         )
         assert display_curve is None
 
+    def test_tip_display_geometry_uses_explicit_display_curve(self):
+        curve = np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float)
+        display_curve = np.array([[10.0, 10.0], [20.0, 10.0]], dtype=float)
+        tip, tail = _tip_display_geometry(
+            curve,
+            Affine2D(),
+            2.0,
+            display_curve=display_curve,
+        )
+        np.testing.assert_allclose(tip, np.array([1.0, 0.0]))
+        np.testing.assert_allclose(tail, np.array([0.8, 0.0]))
+
     def test_sample_local_vector_state_handles_sampler_transform_and_norm_failures(
         self,
     ):
@@ -2362,6 +2445,188 @@ class TestLegacyStreamCoverage:
 
 
 class TestVectorArtistCoverage:
+    def test_batched_open_arrow_helpers_cover_empty_and_failure_paths(self):
+        curve = np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float)
+
+        segments, sources = _build_open_arrow_segments_batch(
+            transform=Affine2D(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
+            build_open_arrow_segments_batch_fn=None,
+        )
+        assert segments.shape == (0, 2, 2)
+        assert sources.shape == (0,)
+
+        segments, sources = _build_open_arrow_segments_batch(
+            transform=Affine2D(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
+            build_open_arrow_segments_batch_fn=lambda *args: None,
+        )
+        assert segments.shape == (0, 2, 2)
+        assert sources.shape == (0,)
+
+        segments, sources = _build_open_arrow_segments_batch(
+            transform=Affine2D(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
+            build_open_arrow_segments_batch_fn=lambda *args: (
+                np.empty((0, 2, 2), dtype=float),
+                np.empty(0, dtype=int),
+            ),
+        )
+        assert segments.shape == (0, 2, 2)
+        assert sources.shape == (0,)
+
+        segments, sources = _build_open_arrow_segments_batch(
+            transform=_ExplodingInverse(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
+            build_open_arrow_segments_batch_fn=lambda *args: (
+                np.array([[[0.0, 0.0], [1.0, 1.0]]], dtype=float),
+                np.array([0], dtype=int),
+            ),
+        )
+        assert segments.shape == (0, 2, 2)
+        assert sources.shape == (0,)
+
+        segments, sources = _build_open_arrow_segments_batch(
+            transform=Affine2D(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
+            build_open_arrow_segments_batch_fn=lambda *args: (
+                np.array([[[np.nan, np.nan], [np.nan, np.nan]]], dtype=float),
+                np.array([0], dtype=int),
+            ),
+        )
+        assert segments.shape == (0, 2, 2)
+        assert sources.shape == (0,)
+
+    def test_batched_filled_arrow_helpers_cover_error_and_empty_paths(self):
+        curve = np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float)
+
+        with pytest.raises(ValueError, match="must match display_curves"):
+            _build_filled_arrow_polygons_batch(
+                transform=Affine2D(),
+                display_curves=[curve],
+                head_lengths_px=np.array([1.0, 2.0]),
+                head_widths_px=np.array([1.0]),
+                build_filled_arrow_polygons_batch_fn=lambda *args: None,
+                display_points_to_data_fn=_display_points_to_data,
+            )
+
+        polygons, sources = _build_filled_arrow_polygons_batch(
+            transform=Affine2D(),
+            display_curves=[],
+            head_lengths_px=np.array([], dtype=float),
+            head_widths_px=np.array([], dtype=float),
+            build_filled_arrow_polygons_batch_fn=lambda *args: None,
+            display_points_to_data_fn=_display_points_to_data,
+        )
+        assert polygons.shape == (0, 3, 2)
+        assert sources.shape == (0,)
+
+        polygons, sources = _build_filled_arrow_polygons_batch(
+            transform=Affine2D(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
+            build_filled_arrow_polygons_batch_fn=None,
+            display_points_to_data_fn=_display_points_to_data,
+        )
+        assert polygons.shape == (0, 3, 2)
+        assert sources.shape == (0,)
+
+        polygons, sources = _build_filled_arrow_polygons_batch(
+            transform=Affine2D(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
+            build_filled_arrow_polygons_batch_fn=lambda *args: (
+                np.array([[[np.nan, np.nan], [np.nan, np.nan], [np.nan, np.nan]]]),
+                np.array([0], dtype=int),
+            ),
+            display_points_to_data_fn=_display_points_to_data,
+        )
+        assert polygons.shape == (0, 3, 2)
+        assert sources.shape == (0,)
+
+        polygons, sources = _build_filled_arrow_polygons_batch(
+            transform=Affine2D(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
+            build_filled_arrow_polygons_batch_fn=lambda *args: None,
+            display_points_to_data_fn=_display_points_to_data,
+        )
+        assert polygons.shape == (0, 3, 2)
+        assert sources.shape == (0,)
+
+        polygons, sources = _build_filled_arrow_polygons_batch(
+            transform=Affine2D(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
+            build_filled_arrow_polygons_batch_fn=lambda *args: (
+                np.array([[[0.0, 0.0], [1.0, 0.0], [0.5, 0.5]]], dtype=float),
+                np.array([0], dtype=int),
+            ),
+            display_points_to_data_fn=lambda *args, **kwargs: None,
+        )
+        assert polygons.shape == (0, 3, 2)
+        assert sources.shape == (0,)
+
+        polygons, sources = _build_filled_arrow_polygons_batch(
+            transform=Affine2D(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
+            build_filled_arrow_polygons_batch_fn=lambda *args: (
+                np.array([[[np.nan, np.nan], [np.nan, np.nan], [np.nan, np.nan]]]),
+                np.array([0], dtype=int),
+            ),
+            display_points_to_data_fn=_display_points_to_data,
+        )
+        assert polygons.shape == (0, 3, 2)
+        assert sources.shape == (0,)
+
+    def test_assemble_filled_head_artists_covers_empty_and_shape_errors(self):
+        with pytest.raises(ValueError, match="polygon_sources must match"):
+            _assemble_filled_head_artists(
+                shafts=[np.array([[0.0, 0.0], [1.0, 0.0]])],
+                shaft_colors=["k"],
+                shaft_linewidths=[1.0],
+                filled_polygons=np.array([[[0.0, 0.0], [1.0, 0.0], [0.5, 0.5]]]),
+                polygon_sources=np.array([0, 1], dtype=int),
+                facecolors=["k"],
+                edgecolors=["k"],
+                use_multicolor_lines=True,
+                use_linewidth_field=True,
+            )
+
+        payload = _assemble_filled_head_artists(
+            shafts=[np.array([[0.0, 0.0], [1.0, 0.0]])],
+            shaft_colors=["k"],
+            shaft_linewidths=[1.0],
+            filled_polygons=np.empty((0, 3, 2), dtype=float),
+            polygon_sources=np.array([], dtype=int),
+            facecolors=["k"],
+            edgecolors=["k"],
+            use_multicolor_lines=False,
+            use_linewidth_field=False,
+        )
+        assert payload[0]
+        assert payload[1] is None
+        assert payload[2] is None
+        assert payload[3] == []
+        assert payload[4] == []
+        assert payload[5] == []
+
     def test_assemble_open_head_streamlines_preserves_source_order(self):
         shafts = [
             np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float),
@@ -2397,6 +2662,18 @@ class TestVectorArtistCoverage:
         np.testing.assert_allclose(streamlines[5], head_segments[2])
         assert colors == ["red", "red", "red", "blue", "blue", "blue"]
         assert widths == [1.5, 1.5, 1.5, 2.0, 2.0, 2.0]
+
+    def test_assemble_open_head_streamlines_rejects_bad_source_shape(self):
+        with pytest.raises(ValueError, match="source_positions must match"):
+            _assemble_open_head_streamlines(
+                shafts=[np.array([[0.0, 0.0], [1.0, 0.0]])],
+                shaft_colors=["k"],
+                shaft_linewidths=[1.0],
+                head_segments=np.array([[[0.0, 0.0], [1.0, 0.0]]], dtype=float),
+                source_positions=np.array([0, 1], dtype=int),
+                use_multicolor_lines=False,
+                use_linewidth_field=False,
+            )
 
     def test_assemble_filled_head_artists_builds_polygon_styles(self):
         shafts = [
@@ -2599,6 +2876,96 @@ class TestVectorArtistCoverage:
             assert isinstance(result.arrows[0], PolyCollection)
             batch_builder.assert_called_once()
             assert len(batch_builder.call_args.kwargs["display_curves"]) == 1
+        finally:
+            plt.close(fig)
+
+    def test_vector_engine_rejects_missing_batch_builders_and_bad_arrowstyle(self):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            common = dict(
+                axes=ax,
+                x=np.array([0.0, 1.0]),
+                y=np.array([0.0, 1.0]),
+                u=np.ones((2, 2)),
+                v=np.ones((2, 2)),
+                prepare_ncl_display_sampler_fn=lambda grid, transform: None,
+                prepare_ncl_native_trace_context_fn=lambda **kwargs: None,
+                select_ncl_centers_fn=lambda **kwargs: [(np.array([0.5, 0.5]), 1.0)],
+                build_ncl_curve_fn=lambda **kwargs: (
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                ),
+                sample_grid_field_fn=lambda grid, field, x, y: None,
+                display_points_to_data_fn=lambda *args, **kwargs: None,
+                result_cls=CurlyVectorPlotSet,
+            )
+            with pytest.raises(RuntimeError, match="Open-arrow rendering requires"):
+                _curly_vector_ncl_impl(
+                    arrowstyle="->",
+                    build_open_arrow_segments_batch_fn=None,
+                    build_filled_arrow_polygons_batch_fn=lambda **kwargs: None,
+                    **common,
+                )
+
+            with pytest.raises(RuntimeError, match="Filled-arrow rendering requires"):
+                _curly_vector_ncl_impl(
+                    arrowstyle="-|>",
+                    build_open_arrow_segments_batch_fn=lambda **kwargs: None,
+                    build_filled_arrow_polygons_batch_fn=None,
+                    **common,
+                )
+
+            with pytest.raises(ValueError, match="Unsupported arrowstyle"):
+                _curly_vector_ncl_impl(
+                    arrowstyle="x",
+                    build_open_arrow_segments_batch_fn=lambda **kwargs: None,
+                    build_filled_arrow_polygons_batch_fn=lambda **kwargs: None,
+                    **common,
+                )
+        finally:
+            plt.close(fig)
+
+    def test_vector_engine_adds_patch_for_non_collection_arrow_artist(self):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            added_patches = []
+            original_add_patch = ax.add_patch
+
+            def _record_patch(artist):
+                added_patches.append(artist)
+                return original_add_patch(artist)
+
+            ax.add_patch = _record_patch
+            result = _curly_vector_ncl_impl(
+                ax,
+                np.array([0.0, 1.0]),
+                np.array([0.0, 1.0]),
+                np.ones((2, 2)),
+                np.ones((2, 2)),
+                arrowstyle="->",
+                prepare_ncl_display_sampler_fn=lambda grid, transform: None,
+                prepare_ncl_native_trace_context_fn=lambda **kwargs: None,
+                select_ncl_centers_fn=lambda **kwargs: [(np.array([0.5, 0.5]), 1.0)],
+                build_ncl_curve_fn=lambda **kwargs: (
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                    np.array([[0.25, 0.25], [0.75, 0.75]]),
+                ),
+                sample_grid_field_fn=lambda grid, field, x, y: None,
+                build_open_arrow_segments_batch_fn=lambda **kwargs: (
+                    np.empty((0, 2, 2), dtype=float),
+                    np.empty(0, dtype=int),
+                ),
+                build_filled_arrow_polygons_batch_fn=lambda **kwargs: None,
+                display_points_to_data_fn=lambda *args, **kwargs: None,
+                result_cls=CurlyVectorPlotSet,
+            )
+            result.arrows = (plt.Circle((0.5, 0.5), 0.1),)
+            for artist in result.arrows:
+                if isinstance(artist, PolyCollection):
+                    ax.add_collection(artist, autolim=False)
+                else:
+                    ax.add_patch(artist)
+            assert added_patches
         finally:
             plt.close(fig)
 
