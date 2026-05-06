@@ -49,14 +49,12 @@ from skyborn.plot.vector import (
     _axis_is_uniform,
     _infer_profile_ncl_ref_magnitude,
     _normalize_ncl_preset,
-    _open_arrow_geometry,
     _prepare_ncl_display_sampler,
     _prepare_ncl_native_trace_context,
     _resolve_default_ncl_preset,
     _sample_grid_field,
     _sample_grid_field_array,
     _select_ncl_centers,
-    _trim_curve_for_open_head,
 )
 
 
@@ -1684,38 +1682,6 @@ class TestInternalHelperFunctions:
         display_curve = np.array([[1.0, 1.0], [1.0, 1.0]])
 
         assert _tip_display_geometry_from_display_curve(display_curve, 2.0) is None
-
-    def test_open_arrow_geometry_rejects_nonfinite_display_curve(self):
-        curve = np.array([[0.0, 0.0], [1.0, 0.0]])
-
-        assert (
-            _open_arrow_geometry(
-                curve,
-                transform=Mock(),
-                head_length_px=5.0,
-                display_curve=np.array([[0.0, 0.0], [np.nan, 1.0]]),
-            )
-            is None
-        )
-
-    def test_trim_curve_for_open_head_returns_original_when_inverse_transform_fails(
-        self, monkeypatch
-    ):
-        curve = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]])
-        transform = Mock()
-        transform.inverted.return_value.transform.side_effect = RuntimeError("boom")
-        monkeypatch.setattr(
-            vector_plot_module,
-            "_open_arrow_geometry",
-            lambda *args, **kwargs: {
-                "display_curve": np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]),
-                "base_center_display": np.array([1.5, 0.0]),
-            },
-        )
-
-        trimmed = _trim_curve_for_open_head(curve, transform, 0.4)
-
-        np.testing.assert_allclose(trimmed, curve)
 
     def test_ncl_display_sampler_invalid_points_and_empty_batches(self):
         grid = Grid(np.array([0.0, 1.0]), np.array([0.0, 1.0]))
