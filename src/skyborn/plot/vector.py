@@ -57,10 +57,6 @@ _local_display_jacobian = _geometry._local_display_jacobian
 _NCLNativeTraceContext = _thinning._NCLNativeTraceContext
 _prepare_ncl_display_sampler = _thinning._prepare_ncl_display_sampler
 Grid = _vector_engine.Grid
-_tip_display_geometry_from_display_curve = (
-    _geometry._tip_display_geometry_from_display_curve
-)
-_trim_display_curve_from_end = _geometry._trim_display_curve_from_end
 
 _ARRAY_CURLY_VECTOR_KWARG_NAMES = (
     "density",
@@ -623,7 +619,6 @@ def _curly_vector_ncl(
         select_ncl_centers_fn=_select_ncl_centers,
         build_ncl_curve_fn=_build_ncl_curve,
         sample_grid_field_fn=_sample_grid_field,
-        build_ncl_arrow_artists_fn=_build_ncl_arrow_artists,
         build_open_arrow_segments_batch_fn=_build_open_arrow_segments_batch,
         build_filled_arrow_polygons_batch_fn=_build_filled_arrow_polygons_batch,
         display_points_to_data_fn=_display_points_to_data,
@@ -1018,116 +1013,6 @@ def _sample_grid_field_array(grid, field, points):
     )
 
 
-def _build_arrow_polygon(
-    curve,
-    grid,
-    transform,
-    head_length_px,
-    head_width_px,
-    facecolor,
-    edgecolor,
-    linewidth,
-    alpha,
-    zorder,
-    display_curve=None,
-    display_sampler=None,
-    inverse_transform=None,
-):
-    return _artist_helpers._build_arrow_polygon(
-        curve=curve,
-        grid=grid,
-        transform=transform,
-        head_length_px=head_length_px,
-        head_width_px=head_width_px,
-        facecolor=facecolor,
-        edgecolor=edgecolor,
-        linewidth=linewidth,
-        alpha=alpha,
-        zorder=zorder,
-        display_curve=display_curve,
-        display_sampler=display_sampler,
-        inverse_transform=inverse_transform,
-        tip_display_geometry_fn=_tip_display_geometry,
-        display_points_to_data_fn=_display_points_to_data,
-    )
-
-
-def _build_ncl_arrow_artists(
-    curve,
-    grid,
-    transform,
-    arrowstyle,
-    head_length_px,
-    head_width_px,
-    facecolor,
-    edgecolor,
-    linewidth,
-    alpha,
-    zorder,
-    display_curve=None,
-    display_sampler=None,
-    inverse_transform=None,
-):
-    return _artist_helpers._build_ncl_arrow_artists(
-        curve=curve,
-        grid=grid,
-        transform=transform,
-        arrowstyle=arrowstyle,
-        head_length_px=head_length_px,
-        head_width_px=head_width_px,
-        facecolor=facecolor,
-        edgecolor=edgecolor,
-        linewidth=linewidth,
-        alpha=alpha,
-        zorder=zorder,
-        display_curve=display_curve,
-        display_sampler=display_sampler,
-        inverse_transform=inverse_transform,
-        uses_open_arrow_head_fn=_uses_open_arrow_head,
-        build_open_arrow_segments_fn=_build_open_arrow_segments,
-        build_arrow_polygon_fn=_build_arrow_polygon,
-    )
-
-
-def _uses_open_arrow_head(arrowstyle):
-    return _artist_helpers._uses_open_arrow_head(arrowstyle)
-
-
-def _trim_curve_for_open_head(curve, transform, head_length_px, display_sampler=None):
-    return _artist_helpers._trim_curve_for_open_head(
-        curve=curve,
-        transform=transform,
-        head_length_px=head_length_px,
-        display_sampler=display_sampler,
-        open_arrow_geometry_fn=_open_arrow_geometry,
-        trim_display_curve_from_end_fn=_trim_display_curve_from_end,
-    )
-
-
-def _build_open_arrow_segments(
-    curve,
-    grid,
-    transform,
-    head_length_px,
-    head_width_px,
-    display_curve=None,
-    display_sampler=None,
-    inverse_transform=None,
-):
-    return _artist_helpers._build_open_arrow_segments(
-        curve=curve,
-        grid=grid,
-        transform=transform,
-        head_length_px=head_length_px,
-        head_width_px=head_width_px,
-        display_curve=display_curve,
-        display_sampler=display_sampler,
-        inverse_transform=inverse_transform,
-        open_arrow_geometry_fn=_open_arrow_geometry,
-        display_points_to_data_fn=_display_points_to_data,
-    )
-
-
 def _build_open_arrow_display_segments_batch(
     display_points,
     curve_offsets,
@@ -1192,41 +1077,6 @@ def _build_filled_arrow_polygons_batch(
         inverse_transform=inverse_transform,
         build_filled_arrow_polygons_batch_fn=_build_filled_arrow_display_polygons_batch,
         display_points_to_data_fn=_display_points_to_data,
-    )
-
-
-def _open_arrow_geometry(
-    curve,
-    transform,
-    head_length_px,
-    head_width_px=None,
-    display_curve=None,
-    display_sampler=None,
-):
-    return _artist_helpers._open_arrow_geometry(
-        curve=curve,
-        transform=transform,
-        head_length_px=head_length_px,
-        head_width_px=head_width_px,
-        display_curve=display_curve,
-        display_sampler=display_sampler,
-        tip_display_geometry_from_display_curve_fn=_tip_display_geometry_from_display_curve,
-    )
-
-
-def _tip_display_geometry(
-    curve,
-    transform,
-    backoff_px,
-    display_curve=None,
-    display_sampler=None,
-):
-    return _geometry._tip_display_geometry(
-        curve=curve,
-        transform=transform,
-        backoff_px=backoff_px,
-        display_curve=display_curve,
-        display_sampler=display_sampler,
     )
 
 
