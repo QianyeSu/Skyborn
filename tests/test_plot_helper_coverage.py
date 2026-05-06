@@ -2592,12 +2592,7 @@ class TestVectorWrapperCoverage:
         display_curve = np.array([[2.0, 2.0], [3.0, 2.0]])
         original_trace_with_display = vector_module._trace_ncl_direction_with_display
 
-        monkeypatch.setattr(
-            vector_module,
-            "_trace_ncl_direction",
-            lambda *args, **kwargs: curve,
-        )
-        wrapped = vector_module._trace_ncl_curve(
+        wrapped = _trace_ncl_curve(
             start_point=np.array([0.0, 0.0]),
             total_length_px=4.0,
             anchor="tail",
@@ -2608,6 +2603,7 @@ class TestVectorWrapperCoverage:
             step_px=1.0,
             speed_scale=1.0,
             viewport=viewport,
+            trace_ncl_direction_fn=lambda *args, **kwargs: curve,
         )
         np.testing.assert_allclose(wrapped, curve)
 
