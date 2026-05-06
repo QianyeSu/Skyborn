@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import xarray as xr
 from matplotlib import colors as mcolors
-from matplotlib.collections import LineCollection
+from matplotlib.collections import LineCollection, PolyCollection
 from matplotlib.transforms import Bbox
 
 import skyborn.plot.vector as vector_plot_module
@@ -363,7 +363,7 @@ class TestCurlyVector:
     def test_curly_vector_filled_arrowstyle_creates_arrow_paths(
         self, sample_vector_field
     ):
-        """Filled arrow styles should return the actual arrow-head patches."""
+        """Filled arrow styles should return actual arrow-head artists."""
         x, y, u, v = sample_vector_field
         fig, ax = plt.subplots(figsize=(6, 4))
 
@@ -380,7 +380,8 @@ class TestCurlyVector:
         assert isinstance(result, CurlyVectorPlotSet)
         assert len(result.lines.get_segments()) > 0
         assert len(result.arrows) > 0
-        assert all(patch in ax.patches for patch in result.arrows)
+        assert all(isinstance(artist, PolyCollection) for artist in result.arrows)
+        assert all(artist in ax.collections for artist in result.arrows)
 
         plt.close(fig)
 
@@ -407,11 +408,17 @@ class TestCurlyVector:
 
         assert result.lines.get_alpha() == pytest.approx(0.25)
         assert len(result.arrows) > 0
-        assert result.arrows[0].get_facecolor() == pytest.approx(
-            mcolors.to_rgba("yellow", alpha=0.25)
+        facecolors = np.asarray(result.arrows[0].get_facecolor())
+        edgecolors = np.asarray(result.arrows[0].get_edgecolor())
+        assert facecolors.shape[0] > 0
+        assert edgecolors.shape[0] > 0
+        np.testing.assert_allclose(
+            facecolors[0],
+            mcolors.to_rgba("yellow", alpha=0.25),
         )
-        assert result.arrows[0].get_edgecolor() == pytest.approx(
-            mcolors.to_rgba("red", alpha=0.25)
+        np.testing.assert_allclose(
+            edgecolors[0],
+            mcolors.to_rgba("red", alpha=0.25),
         )
 
         plt.close(fig)
@@ -437,7 +444,7 @@ class TestCurlyVector:
         assert result.rasterized is True
         assert result.lines.get_rasterized() is True
         assert len(result.arrows) > 0
-        assert all(patch.get_rasterized() is True for patch in result.arrows)
+        assert all(artist.get_rasterized() is True for artist in result.arrows)
 
         plt.close(fig)
 
@@ -1462,8 +1469,14 @@ class TestCurlyVector:
             arrowstyle="-|>",
         )
 
-        assert ax.patches
-        assert all(patch.get_transform() is ax.transData for patch in ax.patches)
+        filled_collections = [
+            artist for artist in ax.collections if isinstance(artist, PolyCollection)
+        ]
+        assert filled_collections
+        assert all(
+            collection.get_transform() is ax.transData
+            for collection in filled_collections
+        )
         plt.close(fig)
 
     def test_curly_vector_integration_directions(self, sample_vector_field):
