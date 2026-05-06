@@ -15,6 +15,7 @@ import statistics
 import sys
 import time
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import cartopy.crs as ccrs
@@ -33,6 +34,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from skyborn.plot import curly_vector
 from skyborn.plot import vector as vector_module
+from skyborn.plot._artists import vector_artists as _artist_helpers
+from skyborn.plot._core import native as _native_helpers
 from skyborn.plot._core.vector_engine import (
     _curve_length_from_magnitude,
     _resolve_curly_anchor,
@@ -46,6 +49,48 @@ from tests.plot_reference_geometry import (
 )
 
 DATA_PATH = r"M:\CESM2LE\model\model_1011_001\Month\model_1011_001_Month_1850.nc"
+
+_OPEN_NATIVE_BUILDER = _native_helpers._call_native_build_open_arrow_segments
+_FILLED_NATIVE_BUILDER = _native_helpers._call_native_build_filled_arrow_polygons
+
+
+def _build_open_arrow_segments_batch(
+    transform,
+    display_curves,
+    head_lengths_px,
+    head_widths_px,
+):
+    native_builder = partial(
+        _OPEN_NATIVE_BUILDER,
+        vector_module._build_open_arrow_segments_native,
+    )
+    return _artist_helpers._build_open_arrow_segments_batch(
+        transform=transform,
+        display_curves=display_curves,
+        head_lengths_px=head_lengths_px,
+        head_widths_px=head_widths_px,
+        build_open_arrow_segments_batch_fn=native_builder,
+    )
+
+
+def _build_filled_arrow_polygons_batch(
+    transform,
+    display_curves,
+    head_lengths_px,
+    head_widths_px,
+):
+    native_builder = partial(
+        _FILLED_NATIVE_BUILDER,
+        vector_module._build_filled_arrow_polygons_native,
+    )
+    return _artist_helpers._build_filled_arrow_polygons_batch(
+        transform=transform,
+        display_curves=display_curves,
+        head_lengths_px=head_lengths_px,
+        head_widths_px=head_widths_px,
+        build_filled_arrow_polygons_batch_fn=native_builder,
+        display_points_to_data_fn=vector_module._display_points_to_data,
+    )
 
 
 @dataclass
@@ -282,13 +327,11 @@ def main() -> None:
                 "unexpected None geometry during baseline accuracy check"
             )
 
-        native_segments, native_sources = (
-            vector_module._build_open_arrow_segments_batch(
-                transform=helper_transform,
-                display_curves=[sample.display_curve],
-                head_lengths_px=np.asarray([sample.head_length_px], dtype=float),
-                head_widths_px=np.asarray([sample.head_width_px], dtype=float),
-            )
+        native_segments, native_sources = _build_open_arrow_segments_batch(
+            transform=helper_transform,
+            display_curves=[sample.display_curve],
+            head_lengths_px=np.asarray([sample.head_length_px], dtype=float),
+            head_widths_px=np.asarray([sample.head_width_px], dtype=float),
         )
         np.testing.assert_array_equal(native_sources, np.array([0, 0], dtype=int))
         ref_segments = np.asarray(
@@ -309,13 +352,11 @@ def main() -> None:
             max_display_abs_diff = max(max_display_abs_diff, float(diff))
             max_segment_abs_diff = max(max_segment_abs_diff, float(diff))
 
-        native_polygons, polygon_sources = (
-            vector_module._build_filled_arrow_polygons_batch(
-                transform=helper_transform,
-                display_curves=[sample.display_curve],
-                head_lengths_px=np.asarray([sample.head_length_px], dtype=float),
-                head_widths_px=np.asarray([sample.head_width_px], dtype=float),
-            )
+        native_polygons, polygon_sources = _build_filled_arrow_polygons_batch(
+            transform=helper_transform,
+            display_curves=[sample.display_curve],
+            head_lengths_px=np.asarray([sample.head_length_px], dtype=float),
+            head_widths_px=np.asarray([sample.head_width_px], dtype=float),
         )
         ref_filled = filled_arrow_geometry_reference(
             sample.display_curve,
@@ -341,7 +382,7 @@ def main() -> None:
         max_filled_abs_diff = max(max_filled_abs_diff, float(diff))
 
     def _run_open_arrow_segments_native_batch() -> None:
-        vector_module._build_open_arrow_segments_batch(
+        _build_open_arrow_segments_batch(
             transform=helper_transform,
             display_curves=[sample.display_curve for sample in samples],
             head_lengths_px=np.asarray(
@@ -353,7 +394,7 @@ def main() -> None:
         )
 
     def _run_filled_arrow_polygons_native_batch() -> None:
-        vector_module._build_filled_arrow_polygons_batch(
+        _build_filled_arrow_polygons_batch(
             transform=helper_transform,
             display_curves=[sample.display_curve for sample in samples],
             head_lengths_px=np.asarray(
