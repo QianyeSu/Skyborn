@@ -16,10 +16,6 @@ from matplotlib.collections import PolyCollection
 from matplotlib.transforms import Affine2D, Bbox
 
 import skyborn.plot.vector as vector_module
-from plot_reference_geometry import (
-    filled_arrow_geometry_reference,
-    open_arrow_geometry_reference,
-)
 from skyborn.plot._adapters.cartopy_vector import (
     _build_projection_target_grid,
     _extract_regular_grid_from_regridded_vectors,
@@ -133,6 +129,10 @@ from skyborn.plot.vector import (
     _build_filled_arrow_polygons_batch,
     _regrid_non_uniform_vectors_to_uniform,
     curly_vector,
+)
+from tests.plot_reference_geometry import (
+    filled_arrow_geometry_reference,
+    open_arrow_geometry_reference,
 )
 
 
