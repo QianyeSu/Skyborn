@@ -126,7 +126,6 @@ from skyborn.plot._shared.style import (
 from skyborn.plot.nclcurly_native import (
     build_filled_arrow_polygons,
     build_open_arrow_segments,
-    build_open_arrow_vertices,
 )
 from skyborn.plot.scatter import scatter as public_scatter
 from skyborn.plot.vector import (
@@ -2697,16 +2696,6 @@ class TestVectorArtistCoverage:
 
         display_points = np.vstack([curve_1, curve_2])
         curve_offsets = np.array([0, len(curve_1), len(curve_1) + len(curve_2)])
-        vertices, valid = build_open_arrow_vertices(
-            display_points=display_points,
-            curve_offsets=curve_offsets,
-            head_lengths_px=head_lengths,
-            head_widths_px=head_widths,
-        )
-
-        assert vertices.shape == (2, 3, 2)
-        np.testing.assert_array_equal(valid, np.array([True, True]))
-
         expected_1 = open_arrow_geometry_reference(
             curve_1,
             head_lengths[0],
@@ -2717,12 +2706,6 @@ class TestVectorArtistCoverage:
             head_lengths[1],
             head_widths[1],
         )
-        np.testing.assert_allclose(vertices[0, 0], expected_1["left_display"])
-        np.testing.assert_allclose(vertices[0, 1], expected_1["tip_display"])
-        np.testing.assert_allclose(vertices[0, 2], expected_1["right_display"])
-        np.testing.assert_allclose(vertices[1, 0], expected_2["left_display"])
-        np.testing.assert_allclose(vertices[1, 1], expected_2["tip_display"])
-        np.testing.assert_allclose(vertices[1, 2], expected_2["right_display"])
 
         segments, source_positions = _build_open_arrow_segments_batch(
             transform=Affine2D(),
@@ -2742,16 +2725,20 @@ class TestVectorArtistCoverage:
         assert segments.shape == (4, 2, 2)
         np.testing.assert_array_equal(source_positions, np.array([0, 0, 1, 1]))
         np.testing.assert_allclose(
-            segments[0], np.vstack([vertices[0, 0], vertices[0, 1]])
+            segments[0],
+            np.vstack([expected_1["left_display"], expected_1["tip_display"]]),
         )
         np.testing.assert_allclose(
-            segments[1], np.vstack([vertices[0, 2], vertices[0, 1]])
+            segments[1],
+            np.vstack([expected_1["right_display"], expected_1["tip_display"]]),
         )
         np.testing.assert_allclose(
-            segments[2], np.vstack([vertices[1, 0], vertices[1, 1]])
+            segments[2],
+            np.vstack([expected_2["left_display"], expected_2["tip_display"]]),
         )
         np.testing.assert_allclose(
-            segments[3], np.vstack([vertices[1, 2], vertices[1, 1]])
+            segments[3],
+            np.vstack([expected_2["right_display"], expected_2["tip_display"]]),
         )
 
         native_segments = build_open_arrow_segments(
