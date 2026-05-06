@@ -92,6 +92,196 @@ static int compare_double_values(const void *left, const void *right)
 }
 
 /*
+ * Walk backward along one display-space curve and recover the tip direction.
+ *
+ * Both the open-line head and the filled triangular head reuse the same tip
+ * tangent estimation logic. backoff_px controls how far from the tip the
+ * tangent probe starts, which mirrors the Python helpers:
+ *
+ * - open head  : head_length_px * 1.35
+ * - filled head: head_length_px * 1.25
+ */
+static int resolve_curve_tip_direction(
+    const double *curve,
+    npy_intp n_points,
+    double backoff_px,
+    double *tip_x,
+    double *tip_y,
+    double *unit_x,
+    double *unit_y)
+{
+    npy_intp idx;
+    double remaining;
+    double tail_x;
+    double tail_y;
+    double dir_x;
+    double dir_y;
+    double dir_norm;
+
+    if (n_points < 2 || !isfinite(backoff_px))
+    {
+        return 0;
+    }
+
+    for (idx = 0; idx < n_points * 2; ++idx)
+    {
+        if (!isfinite(curve[idx]))
+        {
+            return 0;
+        }
+    }
+
+    *tip_x = curve[(n_points - 1) * 2];
+    *tip_y = curve[(n_points - 1) * 2 + 1];
+    tail_x = curve[0];
+    tail_y = curve[1];
+    remaining = fmax(backoff_px, 0.0);
+
+    for (idx = n_points - 1; idx > 0; --idx)
+    {
+        double right_x = curve[idx * 2];
+        double right_y = curve[idx * 2 + 1];
+        double left_x = curve[(idx - 1) * 2];
+        double left_y = curve[(idx - 1) * 2 + 1];
+        double seg_x = right_x - left_x;
+        double seg_y = right_y - left_y;
+        double seg_length = hypot(seg_x, seg_y);
+
+        if (seg_length <= 1e-12)
+        {
+            continue;
+        }
+        if (remaining <= seg_length)
+        {
+            double fraction = remaining / seg_length;
+            tail_x = right_x - seg_x * fraction;
+            tail_y = right_y - seg_y * fraction;
+            break;
+        }
+        remaining -= seg_length;
+    }
+
+    dir_x = *tip_x - tail_x;
+    dir_y = *tip_y - tail_y;
+    dir_norm = hypot(dir_x, dir_y);
+    if (!(isfinite(dir_norm)) || dir_norm <= 1e-12)
+    {
+        return 0;
+    }
+
+    *unit_x = dir_x / dir_norm;
+    *unit_y = dir_y / dir_norm;
+    return 1;
+}
+
+/*
+ * Build one open-arrow head directly in display space.
+ *
+ * curve points are already projected into the final display coordinate system.
+ * The helper walks backward along the polyline to estimate the tip tangent,
+ * then emits left/tip/right display vertices for the open arrow head.
+ */
+static int build_open_arrow_vertices_for_curve(
+    const double *curve,
+    npy_intp n_points,
+    double head_length_px,
+    double head_width_px,
+    double *out_vertices)
+{
+    double tip_x;
+    double tip_y;
+    double unit_x;
+    double unit_y;
+    double base_x;
+    double base_y;
+    double normal_x;
+    double normal_y;
+
+    if (!isfinite(head_length_px) || !isfinite(head_width_px))
+    {
+        return 0;
+    }
+
+    if (!resolve_curve_tip_direction(
+            curve,
+            n_points,
+            head_length_px * 1.35,
+            &tip_x,
+            &tip_y,
+            &unit_x,
+            &unit_y))
+    {
+        return 0;
+    }
+
+    base_x = tip_x - unit_x * head_length_px;
+    base_y = tip_y - unit_y * head_length_px;
+    normal_x = -unit_y;
+    normal_y = unit_x;
+
+    out_vertices[0] = base_x + normal_x * head_width_px * 0.5;
+    out_vertices[1] = base_y + normal_y * head_width_px * 0.5;
+    out_vertices[2] = tip_x;
+    out_vertices[3] = tip_y;
+    out_vertices[4] = base_x - normal_x * head_width_px * 0.5;
+    out_vertices[5] = base_y - normal_y * head_width_px * 0.5;
+    return 1;
+}
+
+/*
+ * Build one filled triangular arrow head directly in display space.
+ *
+ * The returned vertex order matches the Python polygon helper:
+ * tip -> left base corner -> right base corner.
+ */
+static int build_filled_arrow_vertices_for_curve(
+    const double *curve,
+    npy_intp n_points,
+    double head_length_px,
+    double head_width_px,
+    double *out_vertices)
+{
+    double tip_x;
+    double tip_y;
+    double unit_x;
+    double unit_y;
+    double base_x;
+    double base_y;
+    double normal_x;
+    double normal_y;
+
+    if (!isfinite(head_length_px) || !isfinite(head_width_px))
+    {
+        return 0;
+    }
+
+    if (!resolve_curve_tip_direction(
+            curve,
+            n_points,
+            head_length_px * 1.25,
+            &tip_x,
+            &tip_y,
+            &unit_x,
+            &unit_y))
+    {
+        return 0;
+    }
+
+    normal_x = -unit_y;
+    normal_y = unit_x;
+    base_x = tip_x - unit_x * head_length_px;
+    base_y = tip_y - unit_y * head_length_px;
+
+    out_vertices[0] = tip_x;
+    out_vertices[1] = tip_y;
+    out_vertices[2] = base_x + normal_x * head_width_px * 0.5;
+    out_vertices[3] = base_y + normal_y * head_width_px * 0.5;
+    out_vertices[4] = base_x - normal_x * head_width_px * 0.5;
+    out_vertices[5] = base_y - normal_y * head_width_px * 0.5;
+    return 1;
+}
+
+/*
  * Sample one vector state on the regular data grid.
  *
  * This performs bilinear interpolation of u/v in data space, then uses the
@@ -2511,6 +2701,372 @@ static PyObject *validate_display_curve(PyObject *self, PyObject *args, PyObject
     Py_RETURN_TRUE;
 }
 
+/*
+ * Build compact open-arrow display segments directly in native code.
+ *
+ * Output layout:
+ * - segments: (K, 2, 2), where each valid curve contributes two segments
+ * - source_positions: (K,), repeating the source curve index for both segments
+ */
+static PyObject *build_open_arrow_segments(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    PyObject *display_points_obj;
+    PyObject *curve_offsets_obj;
+    PyObject *head_lengths_obj;
+    PyObject *head_widths_obj;
+    PyArrayObject *display_points_arr = NULL;
+    PyArrayObject *curve_offsets_arr = NULL;
+    PyArrayObject *head_lengths_arr = NULL;
+    PyArrayObject *head_widths_arr = NULL;
+    PyArrayObject *segments_arr = NULL;
+    PyArrayObject *source_positions_arr = NULL;
+    PyObject *result = NULL;
+    npy_intp n_curves;
+    npy_intp n_points;
+    npy_intp valid_curves = 0;
+    npy_intp output_dims_segments[3];
+    npy_intp output_dims_positions[1];
+    const double *display_points;
+    const npy_intp *curve_offsets;
+    const double *head_lengths;
+    const double *head_widths;
+    double *segments;
+    npy_intp *source_positions;
+    static char *kwlist[] = {
+        "display_points",
+        "curve_offsets",
+        "head_lengths_px",
+        "head_widths_px",
+        NULL,
+    };
+    (void)self;
+
+    if (!PyArg_ParseTupleAndKeywords(
+            args,
+            kwargs,
+            "OOOO:build_open_arrow_segments",
+            kwlist,
+            &display_points_obj,
+            &curve_offsets_obj,
+            &head_lengths_obj,
+            &head_widths_obj))
+    {
+        return NULL;
+    }
+
+    display_points_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        display_points_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    curve_offsets_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        curve_offsets_obj, NPY_INTP, NPY_ARRAY_IN_ARRAY);
+    head_lengths_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        head_lengths_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    head_widths_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        head_widths_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    if (display_points_arr == NULL || curve_offsets_arr == NULL ||
+        head_lengths_arr == NULL || head_widths_arr == NULL)
+    {
+        goto cleanup;
+    }
+
+    if (PyArray_NDIM(display_points_arr) != 2 || PyArray_DIM(display_points_arr, 1) != 2)
+    {
+        PyErr_SetString(PyExc_ValueError, "display_points must have shape (M, 2)");
+        goto cleanup;
+    }
+    if (PyArray_NDIM(curve_offsets_arr) != 1)
+    {
+        PyErr_SetString(PyExc_ValueError, "curve_offsets must be a 1D array");
+        goto cleanup;
+    }
+    if (PyArray_NDIM(head_lengths_arr) != 1 || PyArray_NDIM(head_widths_arr) != 1)
+    {
+        PyErr_SetString(PyExc_ValueError, "head_lengths_px and head_widths_px must be 1D arrays");
+        goto cleanup;
+    }
+
+    n_curves = PyArray_DIM(head_lengths_arr, 0);
+    if (PyArray_DIM(head_widths_arr, 0) != n_curves)
+    {
+        PyErr_SetString(PyExc_ValueError, "head_lengths_px and head_widths_px must have the same length");
+        goto cleanup;
+    }
+    if (PyArray_DIM(curve_offsets_arr, 0) != n_curves + 1)
+    {
+        PyErr_SetString(PyExc_ValueError, "curve_offsets must have length len(head_lengths_px) + 1");
+        goto cleanup;
+    }
+
+    display_points = (const double *)PyArray_DATA(display_points_arr);
+    curve_offsets = (const npy_intp *)PyArray_DATA(curve_offsets_arr);
+    head_lengths = (const double *)PyArray_DATA(head_lengths_arr);
+    head_widths = (const double *)PyArray_DATA(head_widths_arr);
+    n_points = PyArray_DIM(display_points_arr, 0);
+
+    for (npy_intp idx = 0; idx < n_curves; ++idx)
+    {
+        if (curve_offsets[idx] < 0 || curve_offsets[idx] > curve_offsets[idx + 1] ||
+            curve_offsets[idx + 1] > n_points)
+        {
+            PyErr_SetString(PyExc_ValueError, "curve_offsets must be monotonic and stay within display_points");
+            goto cleanup;
+        }
+    }
+
+    for (npy_intp curve_idx = 0; curve_idx < n_curves; ++curve_idx)
+    {
+        npy_intp start = curve_offsets[curve_idx];
+        npy_intp end = curve_offsets[curve_idx + 1];
+        double vertices[6];
+        if (build_open_arrow_vertices_for_curve(
+                display_points + start * 2,
+                end - start,
+                head_lengths[curve_idx],
+                head_widths[curve_idx],
+                vertices))
+        {
+            valid_curves += 1;
+        }
+    }
+
+    output_dims_segments[0] = valid_curves * 2;
+    output_dims_segments[1] = 2;
+    output_dims_segments[2] = 2;
+    output_dims_positions[0] = valid_curves * 2;
+    segments_arr = (PyArrayObject *)PyArray_SimpleNew(3, output_dims_segments, NPY_DOUBLE);
+    source_positions_arr = (PyArrayObject *)PyArray_SimpleNew(1, output_dims_positions, NPY_INTP);
+    if (segments_arr == NULL || source_positions_arr == NULL)
+    {
+        goto cleanup;
+    }
+
+    segments = (double *)PyArray_DATA(segments_arr);
+    source_positions = (npy_intp *)PyArray_DATA(source_positions_arr);
+
+    {
+        npy_intp out_idx = 0;
+        for (npy_intp curve_idx = 0; curve_idx < n_curves; ++curve_idx)
+        {
+            npy_intp start = curve_offsets[curve_idx];
+            npy_intp end = curve_offsets[curve_idx + 1];
+            double vertices[6];
+            if (!build_open_arrow_vertices_for_curve(
+                    display_points + start * 2,
+                    end - start,
+                    head_lengths[curve_idx],
+                    head_widths[curve_idx],
+                    vertices))
+            {
+                continue;
+            }
+
+            segments[out_idx * 4 + 0] = vertices[0];
+            segments[out_idx * 4 + 1] = vertices[1];
+            segments[out_idx * 4 + 2] = vertices[2];
+            segments[out_idx * 4 + 3] = vertices[3];
+            source_positions[out_idx] = curve_idx;
+            out_idx += 1;
+
+            segments[out_idx * 4 + 0] = vertices[4];
+            segments[out_idx * 4 + 1] = vertices[5];
+            segments[out_idx * 4 + 2] = vertices[2];
+            segments[out_idx * 4 + 3] = vertices[3];
+            source_positions[out_idx] = curve_idx;
+            out_idx += 1;
+        }
+    }
+
+    result = Py_BuildValue("NN", (PyObject *)segments_arr, (PyObject *)source_positions_arr);
+    segments_arr = NULL;
+    source_positions_arr = NULL;
+
+cleanup:
+    Py_XDECREF(display_points_arr);
+    Py_XDECREF(curve_offsets_arr);
+    Py_XDECREF(head_lengths_arr);
+    Py_XDECREF(head_widths_arr);
+    Py_XDECREF(segments_arr);
+    Py_XDECREF(source_positions_arr);
+    return result;
+}
+
+/*
+ * Build compact filled-arrow polygon vertices directly in native code.
+ *
+ * Output layout:
+ * - polygons: (K, 3, 2), one triangle per valid curve
+ * - source_positions: (K,), one source curve index per polygon
+ */
+static PyObject *build_filled_arrow_polygons(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    PyObject *display_points_obj;
+    PyObject *curve_offsets_obj;
+    PyObject *head_lengths_obj;
+    PyObject *head_widths_obj;
+    PyArrayObject *display_points_arr = NULL;
+    PyArrayObject *curve_offsets_arr = NULL;
+    PyArrayObject *head_lengths_arr = NULL;
+    PyArrayObject *head_widths_arr = NULL;
+    PyArrayObject *polygons_arr = NULL;
+    PyArrayObject *source_positions_arr = NULL;
+    PyObject *result = NULL;
+    npy_intp n_curves;
+    npy_intp n_points;
+    npy_intp valid_curves = 0;
+    npy_intp output_dims_polygons[3];
+    npy_intp output_dims_positions[1];
+    const double *display_points;
+    const npy_intp *curve_offsets;
+    const double *head_lengths;
+    const double *head_widths;
+    double *polygons;
+    npy_intp *source_positions;
+    static char *kwlist[] = {
+        "display_points",
+        "curve_offsets",
+        "head_lengths_px",
+        "head_widths_px",
+        NULL,
+    };
+    (void)self;
+
+    if (!PyArg_ParseTupleAndKeywords(
+            args,
+            kwargs,
+            "OOOO:build_filled_arrow_polygons",
+            kwlist,
+            &display_points_obj,
+            &curve_offsets_obj,
+            &head_lengths_obj,
+            &head_widths_obj))
+    {
+        return NULL;
+    }
+
+    display_points_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        display_points_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    curve_offsets_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        curve_offsets_obj, NPY_INTP, NPY_ARRAY_IN_ARRAY);
+    head_lengths_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        head_lengths_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    head_widths_arr = (PyArrayObject *)PyArray_FROM_OTF(
+        head_widths_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    if (display_points_arr == NULL || curve_offsets_arr == NULL ||
+        head_lengths_arr == NULL || head_widths_arr == NULL)
+    {
+        goto cleanup;
+    }
+
+    if (PyArray_NDIM(display_points_arr) != 2 || PyArray_DIM(display_points_arr, 1) != 2)
+    {
+        PyErr_SetString(PyExc_ValueError, "display_points must have shape (M, 2)");
+        goto cleanup;
+    }
+    if (PyArray_NDIM(curve_offsets_arr) != 1)
+    {
+        PyErr_SetString(PyExc_ValueError, "curve_offsets must be a 1D array");
+        goto cleanup;
+    }
+    if (PyArray_NDIM(head_lengths_arr) != 1 || PyArray_NDIM(head_widths_arr) != 1)
+    {
+        PyErr_SetString(PyExc_ValueError, "head_lengths_px and head_widths_px must be 1D arrays");
+        goto cleanup;
+    }
+
+    n_curves = PyArray_DIM(head_lengths_arr, 0);
+    if (PyArray_DIM(head_widths_arr, 0) != n_curves)
+    {
+        PyErr_SetString(PyExc_ValueError, "head_lengths_px and head_widths_px must have the same length");
+        goto cleanup;
+    }
+    if (PyArray_DIM(curve_offsets_arr, 0) != n_curves + 1)
+    {
+        PyErr_SetString(PyExc_ValueError, "curve_offsets must have length len(head_lengths_px) + 1");
+        goto cleanup;
+    }
+
+    display_points = (const double *)PyArray_DATA(display_points_arr);
+    curve_offsets = (const npy_intp *)PyArray_DATA(curve_offsets_arr);
+    head_lengths = (const double *)PyArray_DATA(head_lengths_arr);
+    head_widths = (const double *)PyArray_DATA(head_widths_arr);
+    n_points = PyArray_DIM(display_points_arr, 0);
+
+    for (npy_intp idx = 0; idx < n_curves; ++idx)
+    {
+        if (curve_offsets[idx] < 0 || curve_offsets[idx] > curve_offsets[idx + 1] ||
+            curve_offsets[idx + 1] > n_points)
+        {
+            PyErr_SetString(PyExc_ValueError, "curve_offsets must be monotonic and stay within display_points");
+            goto cleanup;
+        }
+    }
+
+    for (npy_intp curve_idx = 0; curve_idx < n_curves; ++curve_idx)
+    {
+        npy_intp start = curve_offsets[curve_idx];
+        npy_intp end = curve_offsets[curve_idx + 1];
+        double vertices[6];
+        if (build_filled_arrow_vertices_for_curve(
+                display_points + start * 2,
+                end - start,
+                head_lengths[curve_idx],
+                head_widths[curve_idx],
+                vertices))
+        {
+            valid_curves += 1;
+        }
+    }
+
+    output_dims_polygons[0] = valid_curves;
+    output_dims_polygons[1] = 3;
+    output_dims_polygons[2] = 2;
+    output_dims_positions[0] = valid_curves;
+    polygons_arr = (PyArrayObject *)PyArray_SimpleNew(3, output_dims_polygons, NPY_DOUBLE);
+    source_positions_arr = (PyArrayObject *)PyArray_SimpleNew(1, output_dims_positions, NPY_INTP);
+    if (polygons_arr == NULL || source_positions_arr == NULL)
+    {
+        goto cleanup;
+    }
+
+    polygons = (double *)PyArray_DATA(polygons_arr);
+    source_positions = (npy_intp *)PyArray_DATA(source_positions_arr);
+
+    {
+        npy_intp out_idx = 0;
+        for (npy_intp curve_idx = 0; curve_idx < n_curves; ++curve_idx)
+        {
+            npy_intp start = curve_offsets[curve_idx];
+            npy_intp end = curve_offsets[curve_idx + 1];
+            double vertices[6];
+            if (!build_filled_arrow_vertices_for_curve(
+                    display_points + start * 2,
+                    end - start,
+                    head_lengths[curve_idx],
+                    head_widths[curve_idx],
+                    vertices))
+            {
+                continue;
+            }
+
+            memcpy(polygons + out_idx * 6, vertices, 6 * sizeof(double));
+            source_positions[out_idx] = curve_idx;
+            out_idx += 1;
+        }
+    }
+
+    result = Py_BuildValue("NN", (PyObject *)polygons_arr, (PyObject *)source_positions_arr);
+    polygons_arr = NULL;
+    source_positions_arr = NULL;
+
+cleanup:
+    Py_XDECREF(display_points_arr);
+    Py_XDECREF(curve_offsets_arr);
+    Py_XDECREF(head_lengths_arr);
+    Py_XDECREF(head_widths_arr);
+    Py_XDECREF(polygons_arr);
+    Py_XDECREF(source_positions_arr);
+    return result;
+}
+
 /* Native methods exported to Python. */
 static PyMethodDef module_methods[] = {
     {
@@ -2566,6 +3122,18 @@ static PyMethodDef module_methods[] = {
         (PyCFunction)validate_display_curve,
         METH_VARARGS | METH_KEYWORDS,
         PyDoc_STR("Validate display-space curly-vector geometry."),
+    },
+    {
+        "build_open_arrow_segments",
+        (PyCFunction)build_open_arrow_segments,
+        METH_VARARGS | METH_KEYWORDS,
+        PyDoc_STR("Build batched display-space open-arrow head line segments."),
+    },
+    {
+        "build_filled_arrow_polygons",
+        (PyCFunction)build_filled_arrow_polygons,
+        METH_VARARGS | METH_KEYWORDS,
+        PyDoc_STR("Build batched display-space filled-arrow triangle polygons."),
     },
     {NULL, NULL, 0, NULL},
 };
