@@ -38,6 +38,10 @@ from skyborn.plot._adapters.grid_prepare import (
     _regrid_curvilinear_vectors,
     _wrap_periodic_grid_queries,
 )
+from skyborn.plot._artists.vector_artists import (
+    _assemble_filled_head_artists,
+    _assemble_open_head_streamlines,
+)
 from skyborn.plot._artists.vector_key_artist import CurlyVectorKey
 from skyborn.plot._core.geometry import (
     _candidate_data_from_display_step,
@@ -2357,6 +2361,83 @@ class TestLegacyStreamCoverage:
 
 
 class TestVectorArtistCoverage:
+    def test_assemble_open_head_streamlines_preserves_source_order(self):
+        shafts = [
+            np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float),
+            np.array([[2.0, 0.0], [3.0, 0.0]], dtype=float),
+        ]
+        head_segments = np.array(
+            [
+                [[0.9, 0.1], [1.0, 0.0]],
+                [[0.9, -0.1], [1.0, 0.0]],
+                [[2.9, 0.1], [3.0, 0.0]],
+                [[2.9, -0.1], [3.0, 0.0]],
+            ],
+            dtype=float,
+        )
+        source_positions = np.array([1, 0, 1, 0], dtype=int)
+
+        streamlines, colors, widths = _assemble_open_head_streamlines(
+            shafts=shafts,
+            shaft_colors=["red", "blue"],
+            shaft_linewidths=[1.5, 2.0],
+            head_segments=head_segments,
+            source_positions=source_positions,
+            use_multicolor_lines=True,
+            use_linewidth_field=True,
+        )
+
+        assert len(streamlines) == 6
+        np.testing.assert_allclose(streamlines[0], shafts[0])
+        np.testing.assert_allclose(streamlines[1], head_segments[1])
+        np.testing.assert_allclose(streamlines[2], head_segments[3])
+        np.testing.assert_allclose(streamlines[3], shafts[1])
+        np.testing.assert_allclose(streamlines[4], head_segments[0])
+        np.testing.assert_allclose(streamlines[5], head_segments[2])
+        assert colors == ["red", "red", "red", "blue", "blue", "blue"]
+        assert widths == [1.5, 1.5, 1.5, 2.0, 2.0, 2.0]
+
+    def test_assemble_filled_head_artists_builds_polygon_styles(self):
+        shafts = [
+            np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float),
+            np.array([[2.0, 0.0], [3.0, 0.0]], dtype=float),
+        ]
+        polygons = np.array(
+            [
+                [[1.0, 0.0], [0.9, 0.1], [0.9, -0.1]],
+                [[3.0, 0.0], [2.9, 0.1], [2.9, -0.1]],
+            ],
+            dtype=float,
+        )
+
+        (
+            streamlines,
+            line_colors,
+            line_widths,
+            polygon_facecolors,
+            polygon_edgecolors,
+            polygon_linewidths,
+        ) = _assemble_filled_head_artists(
+            shafts=shafts,
+            shaft_colors=["red", "blue"],
+            shaft_linewidths=[1.0, 3.0],
+            filled_polygons=polygons,
+            polygon_sources=np.array([1, 0], dtype=int),
+            facecolors=["pink", "cyan"],
+            edgecolors=["darkred", "darkblue"],
+            use_multicolor_lines=True,
+            use_linewidth_field=True,
+        )
+
+        assert len(streamlines) == 2
+        np.testing.assert_allclose(streamlines[0], shafts[0])
+        np.testing.assert_allclose(streamlines[1], shafts[1])
+        assert line_colors == ["red", "blue"]
+        assert line_widths == [1.0, 3.0]
+        assert polygon_facecolors == ["cyan", "pink"]
+        assert polygon_edgecolors == ["darkblue", "darkred"]
+        assert polygon_linewidths == [1.5, 0.5]
+
     def test_batched_open_arrow_helpers_match_scalar_geometry(self):
         curve_1 = np.array([[0.0, 0.0], [2.0, 0.0], [3.0, 0.0]], dtype=float)
         curve_2 = np.array([[1.0, 1.0], [2.0, 2.0]], dtype=float)
