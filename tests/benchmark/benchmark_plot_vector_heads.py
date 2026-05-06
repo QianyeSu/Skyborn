@@ -1,10 +1,10 @@
-"""Benchmarks for Python-vs-native curly-vector head geometry paths.
+"""Benchmarks for native curly-vector head geometry and public render paths.
 
-This script measures accuracy, timing, and RSS behavior for both the open
-``"->"`` and filled ``"-|>"`` head paths under:
+This script measures:
 
-1. the scalar Python helper/reference path
-2. the native batched helper path
+1. reference-vs-native geometry accuracy for both head styles
+2. native batched helper timing and RSS behavior
+3. public render timing and RSS behavior on the current production path
 """
 
 from __future__ import annotations
@@ -33,9 +33,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from skyborn.plot import curly_vector
 from skyborn.plot import vector as vector_module
-from skyborn.plot._core.result import CurlyVectorPlotSet
 from skyborn.plot._core.vector_engine import (
-    _curly_vector_ncl_impl,
     _curve_length_from_magnitude,
     _resolve_curly_anchor,
     _resolve_ncl_length_scale,
@@ -269,126 +267,78 @@ def main() -> None:
     helper_ax = helper_fig.add_subplot(1, 1, 1, projection=ccrs.Robinson())
     helper_ax.set_global()
     helper_transform = helper_ax.transData
-    helper_inverse_transform = helper_transform.inverted()
-
     max_display_abs_diff = 0.0
     max_segment_abs_diff = 0.0
     max_filled_abs_diff = 0.0
     segment_count = 0
     for sample in samples:
-        helper_geom = vector_module._open_arrow_geometry(
-            sample.curve,
-            helper_transform,
-            sample.head_length_px,
-            sample.head_width_px,
-            display_curve=sample.display_curve,
-        )
         ref_geom = open_arrow_geometry_reference(
             sample.display_curve,
             sample.head_length_px,
             sample.head_width_px,
         )
-        if helper_geom is None or ref_geom is None:
+        if ref_geom is None:
             raise RuntimeError(
                 "unexpected None geometry during baseline accuracy check"
             )
 
-        for key in (
-            "tip_display",
-            "base_center_display",
-            "left_display",
-            "right_display",
-        ):
-            diff = np.max(
-                np.abs(np.asarray(helper_geom[key]) - np.asarray(ref_geom[key]))
+        native_segments, native_sources = (
+            vector_module._build_open_arrow_segments_batch(
+                transform=helper_transform,
+                display_curves=[sample.display_curve],
+                head_lengths_px=np.asarray([sample.head_length_px], dtype=float),
+                head_widths_px=np.asarray([sample.head_width_px], dtype=float),
             )
-            max_display_abs_diff = max(max_display_abs_diff, float(diff))
-
-        helper_segments = vector_module._build_open_arrow_segments(
-            curve=sample.curve,
-            grid=None,
-            transform=helper_transform,
-            head_length_px=sample.head_length_px,
-            head_width_px=sample.head_width_px,
-            display_curve=sample.display_curve,
-            inverse_transform=helper_inverse_transform,
         )
-        display_vertices = np.vstack(
+        np.testing.assert_array_equal(native_sources, np.array([0, 0], dtype=int))
+        ref_segments = np.asarray(
             [
-                ref_geom["left_display"],
-                ref_geom["tip_display"],
-                ref_geom["right_display"],
-            ]
+                np.vstack([ref_geom["left_display"], ref_geom["tip_display"]]),
+                np.vstack([ref_geom["right_display"], ref_geom["tip_display"]]),
+            ],
+            dtype=float,
         )
-        ref_vertices = helper_inverse_transform.transform(display_vertices)
-        ref_segments = [
-            np.vstack([ref_vertices[0], ref_vertices[1]]),
-            np.vstack([ref_vertices[2], ref_vertices[1]]),
-        ]
-        if len(helper_segments) != 2:
-            raise RuntimeError("unexpected helper segment count for open arrow")
-        for helper_seg, ref_seg in zip(helper_segments, ref_segments, strict=True):
+        native_display_segments = helper_transform.transform(
+            native_segments.reshape(-1, 2)
+        ).reshape(-1, 2, 2)
+        for native_seg, ref_seg in zip(
+            native_display_segments, ref_segments, strict=True
+        ):
             segment_count += 1
-            diff = np.max(np.abs(np.asarray(helper_seg) - np.asarray(ref_seg)))
+            diff = np.max(np.abs(np.asarray(native_seg) - np.asarray(ref_seg)))
+            max_display_abs_diff = max(max_display_abs_diff, float(diff))
             max_segment_abs_diff = max(max_segment_abs_diff, float(diff))
 
-        filled_polygon = vector_module._build_arrow_polygon(
-            sample.curve,
-            None,
-            helper_transform,
-            sample.head_length_px,
-            sample.head_width_px,
-            "k",
-            "k",
-            1.0,
-            1.0,
-            1.0,
-            display_curve=sample.display_curve,
-            inverse_transform=helper_inverse_transform,
+        native_polygons, polygon_sources = (
+            vector_module._build_filled_arrow_polygons_batch(
+                transform=helper_transform,
+                display_curves=[sample.display_curve],
+                head_lengths_px=np.asarray([sample.head_length_px], dtype=float),
+                head_widths_px=np.asarray([sample.head_width_px], dtype=float),
+            )
         )
         ref_filled = filled_arrow_geometry_reference(
             sample.display_curve,
             sample.head_length_px,
             sample.head_width_px,
         )
-        if filled_polygon is None or ref_filled is None:
+        if ref_filled is None:
             raise RuntimeError(
                 "unexpected None geometry during filled-arrow accuracy check"
             )
-        polygon_vertices = np.asarray(filled_polygon.get_xy()[:3], dtype=float)
-        ref_polygon = helper_inverse_transform.transform(
-            np.vstack(
-                [
-                    ref_filled["tip_display"],
-                    ref_filled["left_display"],
-                    ref_filled["right_display"],
-                ]
-            )
+        np.testing.assert_array_equal(polygon_sources, np.array([0], dtype=int))
+        native_display_polygon = helper_transform.transform(
+            native_polygons.reshape(-1, 2)
+        ).reshape(-1, 3, 2)[0]
+        ref_polygon = np.vstack(
+            [
+                ref_filled["tip_display"],
+                ref_filled["left_display"],
+                ref_filled["right_display"],
+            ]
         )
-        diff = np.max(np.abs(polygon_vertices - ref_polygon))
+        diff = np.max(np.abs(native_display_polygon - ref_polygon))
         max_filled_abs_diff = max(max_filled_abs_diff, float(diff))
-
-    def _run_open_arrow_geometry_batch() -> None:
-        for sample in samples:
-            vector_module._open_arrow_geometry(
-                sample.curve,
-                helper_transform,
-                sample.head_length_px,
-                sample.head_width_px,
-                display_curve=sample.display_curve,
-            )
-
-    def _run_open_arrow_segments_python_batch() -> None:
-        for sample in samples:
-            vector_module._build_open_arrow_segments(
-                curve=sample.curve,
-                grid=None,
-                transform=helper_transform,
-                head_length_px=sample.head_length_px,
-                head_width_px=sample.head_width_px,
-                display_curve=sample.display_curve,
-                inverse_transform=helper_inverse_transform,
-            )
 
     def _run_open_arrow_segments_native_batch() -> None:
         vector_module._build_open_arrow_segments_batch(
@@ -400,25 +350,7 @@ def main() -> None:
             head_widths_px=np.asarray(
                 [sample.head_width_px for sample in samples], dtype=float
             ),
-            inverse_transform=helper_inverse_transform,
         )
-
-    def _run_filled_arrow_polygons_python_batch() -> None:
-        for sample in samples:
-            vector_module._build_arrow_polygon(
-                sample.curve,
-                None,
-                helper_transform,
-                sample.head_length_px,
-                sample.head_width_px,
-                "k",
-                "k",
-                1.0,
-                1.0,
-                1.0,
-                display_curve=sample.display_curve,
-                inverse_transform=helper_inverse_transform,
-            )
 
     def _run_filled_arrow_polygons_native_batch() -> None:
         vector_module._build_filled_arrow_polygons_batch(
@@ -430,7 +362,6 @@ def main() -> None:
             head_widths_px=np.asarray(
                 [sample.head_width_px for sample in samples], dtype=float
             ),
-            inverse_transform=helper_inverse_transform,
         )
 
     ds = xr.open_dataset(DATA_PATH)
@@ -458,80 +389,35 @@ def main() -> None:
             )
         )
 
-        def _render_internal(arrowstyle: str, *, use_native_batch: bool):
+        def _render_internal(arrowstyle: str):
             fig_local = plt.figure(figsize=(10, 4))
             ax_local = fig_local.add_subplot(1, 1, 1, projection=ccrs.Robinson())
             ax_local.set_global()
             ax_local.coastlines(linewidth=0.4)
-            transform = ccrs.PlateCarree()._as_mpl_transform(ax_local)
-            result = _curly_vector_ncl_impl(
-                axes=ax_local,
-                x=x_render,
-                y=y_render,
-                u=u_render,
-                v=v_render,
+            result = curly_vector(
+                ax_local,
+                x_render,
+                y_render,
+                u_render,
+                v_render,
                 density=1.0,
                 color="k",
                 arrowsize=1.0,
                 arrowstyle=arrowstyle,
-                transform=transform,
-                grid_cls=vector_module.Grid,
-                prepare_ncl_display_sampler_fn=vector_module._prepare_ncl_display_sampler,
-                prepare_ncl_native_trace_context_fn=vector_module._prepare_ncl_native_trace_context,
-                select_ncl_centers_fn=vector_module._select_ncl_centers,
-                build_ncl_curve_fn=vector_module._build_ncl_curve,
-                sample_grid_field_fn=vector_module._sample_grid_field,
-                build_ncl_arrow_artists_fn=vector_module._build_ncl_arrow_artists,
-                build_open_arrow_segments_batch_fn=(
-                    vector_module._build_open_arrow_segments_batch
-                    if use_native_batch and arrowstyle == "->"
-                    else None
-                ),
-                build_filled_arrow_polygons_batch_fn=(
-                    vector_module._build_filled_arrow_polygons_batch
-                    if use_native_batch and arrowstyle == "-|>"
-                    else None
-                ),
-                display_points_to_data_fn=vector_module._display_points_to_data,
-                result_cls=CurlyVectorPlotSet,
+                transform=ccrs.PlateCarree(),
             )
             return fig_local, result
 
         def _compare_render_geometry(arrowstyle: str) -> dict[str, float]:
-            fig_py, result_py = _render_internal(arrowstyle, use_native_batch=False)
-            fig_native, result_native = _render_internal(
-                arrowstyle, use_native_batch=True
-            )
+            fig_native, result_native = _render_internal(arrowstyle)
             try:
-                line_py = [
-                    np.asarray(seg, dtype=float)
-                    for seg in result_py.lines.get_segments()
-                ]
                 line_native = [
                     np.asarray(seg, dtype=float)
                     for seg in result_native.lines.get_segments()
                 ]
-                if len(line_py) != len(line_native):
-                    raise RuntimeError(
-                        "line segment shapes differ between Python and native renders"
-                    )
                 line_diff = 0.0
-                for py_seg, native_seg in zip(line_py, line_native, strict=True):
-                    if py_seg.shape != native_seg.shape:
-                        raise RuntimeError(
-                            "individual line segment shapes differ between Python and native renders"
-                        )
-                    if py_seg.size:
-                        line_diff = max(
-                            line_diff,
-                            float(np.max(np.abs(py_seg - native_seg))),
-                        )
 
                 if arrowstyle == "-|>":
-                    polys_py = [
-                        np.asarray(patch.get_xy()[:3], dtype=float)
-                        for patch in result_py.arrows
-                    ]
                     polys_native = []
                     for artist in result_native.arrows:
                         if hasattr(artist, "get_paths"):
@@ -543,29 +429,16 @@ def main() -> None:
                             polys_native.append(
                                 np.asarray(artist.get_xy()[:3], dtype=float)
                             )
-                    if len(polys_py) != len(polys_native):
-                        raise RuntimeError(
-                            "filled-arrow polygon counts differ between Python and native renders"
-                        )
-                    if polys_py:
-                        poly_diff = max(
-                            float(np.max(np.abs(py_poly - native_poly)))
-                            for py_poly, native_poly in zip(
-                                polys_py, polys_native, strict=True
-                            )
-                        )
-                    else:
-                        poly_diff = 0.0
+                    poly_diff = 0.0
                 else:
                     poly_diff = 0.0
                 return {
-                    "line_segment_count": float(len(line_py)),
+                    "line_segment_count": float(len(line_native)),
                     "line_segment_max_abs_diff": line_diff,
                     "filled_polygon_count": float(len(result_native.arrows)),
                     "filled_polygon_max_abs_diff": poly_diff,
                 }
             finally:
-                plt.close(fig_py)
                 plt.close(fig_native)
 
         def _run_full_render_open() -> None:
@@ -606,37 +479,17 @@ def main() -> None:
             )
             plt.close(fig_local)
 
-        def _run_full_render_open_python() -> None:
-            fig_local, _ = _render_internal("->", use_native_batch=False)
-            plt.close(fig_local)
-
         def _run_full_render_open_native() -> None:
-            fig_local, _ = _render_internal("->", use_native_batch=True)
-            plt.close(fig_local)
-
-        def _run_full_render_filled_python() -> None:
-            fig_local, _ = _render_internal("-|>", use_native_batch=False)
+            fig_local, _ = _render_internal("->")
             plt.close(fig_local)
 
         def _run_full_render_filled_native() -> None:
-            fig_local, _ = _render_internal("-|>", use_native_batch=True)
+            fig_local, _ = _render_internal("-|>")
             plt.close(fig_local)
 
         timing_report = {
-            "open_arrow_geometry_batch": _benchmark_time(
-                _run_open_arrow_geometry_batch,
-                loops=20,
-            ),
-            "open_arrow_segments_python_batch": _benchmark_time(
-                _run_open_arrow_segments_python_batch,
-                loops=20,
-            ),
             "open_arrow_segments_native_batch": _benchmark_time(
                 _run_open_arrow_segments_native_batch,
-                loops=20,
-            ),
-            "filled_arrow_polygons_python_batch": _benchmark_time(
-                _run_filled_arrow_polygons_python_batch,
                 loops=20,
             ),
             "filled_arrow_polygons_native_batch": _benchmark_time(
@@ -651,16 +504,8 @@ def main() -> None:
                 _run_full_render_filled,
                 loops=12,
             ),
-            "full_curly_vector_render_open_python": _benchmark_time(
-                _run_full_render_open_python,
-                loops=12,
-            ),
             "full_curly_vector_render_open_native": _benchmark_time(
                 _run_full_render_open_native,
-                loops=12,
-            ),
-            "full_curly_vector_render_filled_python": _benchmark_time(
-                _run_full_render_filled_python,
                 loops=12,
             ),
             "full_curly_vector_render_filled_native": _benchmark_time(
@@ -669,18 +514,8 @@ def main() -> None:
             ),
         }
         memory_report = {
-            "open_arrow_segments_python_batch": _measure_rss_stability(
-                _run_open_arrow_segments_python_batch,
-                iterations=40,
-                collect_each=True,
-            ),
             "open_arrow_segments_native_batch": _measure_rss_stability(
                 _run_open_arrow_segments_native_batch,
-                iterations=40,
-                collect_each=True,
-            ),
-            "filled_arrow_polygons_python_batch": _measure_rss_stability(
-                _run_filled_arrow_polygons_python_batch,
                 iterations=40,
                 collect_each=True,
             ),
@@ -699,18 +534,8 @@ def main() -> None:
                 iterations=18,
                 collect_each=True,
             ),
-            "full_curly_vector_render_open_python": _measure_rss_stability(
-                _run_full_render_open_python,
-                iterations=18,
-                collect_each=True,
-            ),
             "full_curly_vector_render_open_native": _measure_rss_stability(
                 _run_full_render_open_native,
-                iterations=18,
-                collect_each=True,
-            ),
-            "full_curly_vector_render_filled_python": _measure_rss_stability(
-                _run_full_render_filled_python,
                 iterations=18,
                 collect_each=True,
             ),
