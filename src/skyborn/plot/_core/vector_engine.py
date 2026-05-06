@@ -1072,10 +1072,7 @@ def _curly_vector_ncl_impl(
     for artist in arrows:
         if rasterized is not None:
             artist.set_rasterized(bool(rasterized))
-        if isinstance(artist, mcollections.Collection):
-            axes.add_collection(artist, autolim=False)
-        else:
-            axes.add_patch(artist)
+        axes.add_collection(artist, autolim=False)
 
     axes.autoscale_view()
     return result_cls(
