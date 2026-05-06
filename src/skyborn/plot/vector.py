@@ -819,25 +819,6 @@ def _trace_ncl_curve_with_display(
     return curve[::-1], display_curve[::-1]
 
 
-def _trace_ncl_direction_via_native(
-    start_point,
-    max_length_px,
-    direction_sign,
-    step_px,
-    speed_scale,
-    native_trace_context=None,
-):
-    return _native_helpers._call_native_trace_ncl_direction(
-        _trace_ncl_direction_native,
-        native_trace_context,
-        start_point,
-        max_length_px,
-        direction_sign,
-        step_px,
-        speed_scale,
-    )
-
-
 def _trace_ncl_direction_with_display_via_native(
     start_point,
     max_length_px,
@@ -887,40 +868,6 @@ def _trace_ncl_direction_with_display(
         speed_scale=speed_scale,
         native_trace_context=native_trace_context,
     )
-
-
-def _trace_ncl_direction(
-    start_point,
-    max_length_px,
-    direction_sign,
-    grid,
-    u,
-    v,
-    transform,
-    step_px,
-    speed_scale,
-    viewport,
-    display_sampler=None,
-    native_trace_context=None,
-):
-    start_point = np.asarray(start_point, dtype=float)
-    if native_trace_context is None and display_sampler is not None:
-        native_trace_context = _prepare_ncl_native_trace_context(
-            grid=grid,
-            u=u,
-            v=v,
-            viewport=viewport,
-            display_sampler=display_sampler,
-        )
-    native_curve = _trace_ncl_direction_via_native(
-        start_point=start_point,
-        max_length_px=max_length_px,
-        direction_sign=direction_sign,
-        step_px=step_px,
-        speed_scale=speed_scale,
-        native_trace_context=native_trace_context,
-    )
-    return native_curve
 
 
 def _validate_display_curve(display_curve, viewport):
