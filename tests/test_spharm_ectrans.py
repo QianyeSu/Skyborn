@@ -312,6 +312,29 @@ def test_reduced_gaussian_native_scalar_analysis_stub_returns_success():
     backend.close()
 
 
+def test_reduced_gaussian_native_scalar_analysis_matches_prototype_on_nontrivial_field():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    lat_offsets = backend._get_lat_offsets()
+    field = np.zeros((backend.ngptot,), dtype=np.float64)
+
+    for ilat, nlon in enumerate(backend.nloen):
+        offset = int(lat_offsets[ilat])
+        lon = 2.0 * np.pi * np.arange(int(nlon), dtype=np.float64) / float(nlon)
+        field[offset : offset + int(nlon)] = (
+            (ilat + 1) * 0.1 + 0.7 * np.cos(lon) - 0.2 * np.sin(2.0 * lon)
+        )
+
+    _, normalized, extra_shape = backend._validate_packed_grid_data(
+        field,
+        "native prototype compare",
+    )
+    prototype = backend._grdtospec_prototype(normalized, 2, extra_shape)
+    native = backend.grdtospec(field, ntrunc=2)
+
+    np.testing.assert_allclose(native, prototype, rtol=0.0, atol=1e-8)
+    backend.close()
+
+
 def test_reduced_gaussian_grdtospec_constant_field_prototype():
     backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
     grid = np.ones((116,), dtype=np.float64)
@@ -411,4 +434,36 @@ def test_reduced_gaussian_psichi_and_smoothing_match_bridge_reference():
     smoothed_actual = backend.specsmooth(packed_scalar, smooth)
     np.testing.assert_allclose(smoothed_actual, smoothed_expected, rtol=0.0, atol=5e-8)
 
+    backend.close()
+
+
+def test_reduced_gaussian_local_lap_and_invlap_match_bridge_reference():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    bridge = backend._get_bridge_spharmt()
+
+    spec = np.zeros((6, 2), dtype=np.complex128)
+    spec[1, 0] = 0.25 - 0.1j
+    spec[2, 0] = -0.2 + 0.05j
+    spec[4, 0] = 0.15 + 0.12j
+    spec[0, 1] = 0.5 + 0.0j
+    spec[3, 1] = -0.08 + 0.03j
+    spec[5, 1] = 0.04 - 0.02j
+
+    lap_actual = backend._lapspec(spec, "test_lap")
+    invlap_actual = backend._invlapspec(spec, "test_invlap")
+    lap_expected = bridge._restore_spectral_shape(
+        bridge._call_spherepack_safely(
+            __import__(
+                "skyborn.spharm.spherical_harmonics", fromlist=["_spherepack"]
+            )._spherepack.lap,
+            bridge._validate_spectral_data(spec, "test_lap")[2],
+            bridge.rsphere,
+            operation_name="bridge lap",
+        ),
+        (2,),
+    )
+    invlap_expected = bridge._invlapspec(spec, "test_invlap")
+
+    np.testing.assert_allclose(lap_actual, lap_expected, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(invlap_actual, invlap_expected, rtol=0.0, atol=1e-12)
     backend.close()
