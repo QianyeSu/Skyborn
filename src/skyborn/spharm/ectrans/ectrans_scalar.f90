@@ -7,6 +7,7 @@ module scalar_backend
   public :: scalar_synthesis_stub
   public :: scalar_fourier_stub
   public :: scalar_block_solve_stub
+  public :: weighted_block_solve_stub
 
   integer(c_int), save :: basis_cache_ready = 0_c_int
   integer(c_int), save :: cache_ndgl = 0_c_int
@@ -114,6 +115,85 @@ contains
     deallocate(gram, rhs, basis_row, observed_row)
     ierror = 0_c_int
   end subroutine scalar_block_solve_stub
+
+  subroutine weighted_block_solve_stub( &
+    nrow, nblock, nt, weights, basis_real, basis_imag, observed_real, observed_imag, &
+    solution_real, solution_imag, ierror) bind(C)
+    integer(c_int), value, intent(in) :: nrow, nblock, nt
+    real(c_double), intent(in) :: weights(nrow)
+    real(c_double), intent(in) :: basis_real(nrow * nblock)
+    real(c_double), intent(in) :: basis_imag(nrow * nblock)
+    real(c_double), intent(in) :: observed_real(nrow * nt)
+    real(c_double), intent(in) :: observed_imag(nrow * nt)
+    real(c_double), intent(out) :: solution_real(nblock * nt)
+    real(c_double), intent(out) :: solution_imag(nblock * nt)
+    integer(c_int), intent(out) :: ierror
+
+    integer(c_int) :: irow, iblock, jblock, it, info
+    integer(c_int) :: basis_idx, obs_idx, sol_idx
+    complex(c_double_complex), allocatable :: gram(:,:), rhs(:,:), basis_row(:), observed_row(:)
+    complex(c_double_complex) :: coeff_i
+    real(c_double) :: weight
+
+    if (nrow < 1_c_int .or. nblock < 1_c_int .or. nt < 1_c_int) then
+      solution_real = 0.0_c_double
+      solution_imag = 0.0_c_double
+      ierror = 1_c_int
+      return
+    end if
+
+    allocate(gram(nblock, nblock))
+    allocate(rhs(nblock, nt))
+    allocate(basis_row(nblock))
+    allocate(observed_row(nt))
+
+    gram = cmplx(0.0_c_double, 0.0_c_double, kind=c_double_complex)
+    rhs = cmplx(0.0_c_double, 0.0_c_double, kind=c_double_complex)
+
+    do irow = 1_c_int, nrow
+      weight = weights(irow)
+
+      do iblock = 1_c_int, nblock
+        basis_idx = (irow - 1_c_int) * nblock + iblock
+        basis_row(iblock) = cmplx(basis_real(basis_idx), basis_imag(basis_idx), kind=c_double_complex)
+      end do
+
+      do it = 1_c_int, nt
+        obs_idx = (irow - 1_c_int) * nt + it
+        observed_row(it) = cmplx(observed_real(obs_idx), observed_imag(obs_idx), kind=c_double_complex)
+      end do
+
+      do iblock = 1_c_int, nblock
+        coeff_i = conjg(basis_row(iblock))
+        do jblock = 1_c_int, nblock
+          gram(iblock, jblock) = gram(iblock, jblock) + weight * coeff_i * basis_row(jblock)
+        end do
+        do it = 1_c_int, nt
+          rhs(iblock, it) = rhs(iblock, it) + weight * coeff_i * observed_row(it)
+        end do
+      end do
+    end do
+
+    call solve_complex_system(gram, rhs, nblock, nt, info)
+    if (info /= 0_c_int) then
+      solution_real = 0.0_c_double
+      solution_imag = 0.0_c_double
+      ierror = info
+      deallocate(gram, rhs, basis_row, observed_row)
+      return
+    end if
+
+    do iblock = 1_c_int, nblock
+      do it = 1_c_int, nt
+        sol_idx = (iblock - 1_c_int) * nt + it
+        solution_real(sol_idx) = real(rhs(iblock, it), c_double)
+        solution_imag(sol_idx) = aimag(rhs(iblock, it))
+      end do
+    end do
+
+    deallocate(gram, rhs, basis_row, observed_row)
+    ierror = 0_c_int
+  end subroutine weighted_block_solve_stub
 
   subroutine scalar_fourier_stub( &
     ndgl, nloen, ngptot, mmax, nt, datagrid, fourier_real, fourier_imag, ierror) bind(C)
