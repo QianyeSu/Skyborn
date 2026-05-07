@@ -4,6 +4,7 @@
 #include <Python.h>
 #include <numpy/arrayobject.h>
 #include <complex.h>
+#include <limits.h>
 #include <math.h>
 
 #define SKYBORN_ECTRANS_SETUP_CAPSULE "skyborn.spharm._ectrans_setup"
@@ -144,6 +145,48 @@ void gradient_synthesis_stub(
     const double *chispec_i,
     double *ugrad,
     double *vgrad,
+    int *ierror
+);
+
+void vordiv_to_uv(
+    int ntrunc,
+    int nt,
+    double rsphere,
+    const double *vrtspec_r,
+    const double *vrtspec_i,
+    const double *divspec_r,
+    const double *divspec_i,
+    double *uspec_r,
+    double *uspec_i,
+    double *vspec_r,
+    double *vspec_i,
+    int *ierror
+);
+
+void uv_to_vordiv(
+    int ntrunc,
+    int nt,
+    double rsphere,
+    const double *uspec_r,
+    const double *uspec_i,
+    const double *vspec_r,
+    const double *vspec_i,
+    double *vrtspec_r,
+    double *vrtspec_i,
+    double *divspec_r,
+    double *divspec_i,
+    int *ierror
+);
+
+void ldfou2_uv_scaling(
+    int ntrunc,
+    int km,
+    int kf_uv,
+    double rsphere,
+    const double *paia_in,
+    const double *psia_in,
+    double *paia_out,
+    double *psia_out,
     int *ierror
 );
 
@@ -1489,6 +1532,389 @@ fail:
     return NULL;
 }
 
+static PyObject *backend_vordiv_to_uv(PyObject *self, PyObject *args) {
+    PyObject *vrt_obj = NULL;
+    PyObject *div_obj = NULL;
+    PyArrayObject *vrt_arr = NULL;
+    PyArrayObject *div_arr = NULL;
+    PyArrayObject *vrt_real_arr = NULL;
+    PyArrayObject *vrt_imag_arr = NULL;
+    PyArrayObject *div_real_arr = NULL;
+    PyArrayObject *div_imag_arr = NULL;
+    PyArrayObject *u_real_arr = NULL;
+    PyArrayObject *u_imag_arr = NULL;
+    PyArrayObject *v_real_arr = NULL;
+    PyArrayObject *v_imag_arr = NULL;
+    PyArrayObject *u_out_arr = NULL;
+    PyArrayObject *v_out_arr = NULL;
+    double rsphere = 0.0;
+    int nt = 0, spec_rank = 0, ierror = 0, ntrunc = -1, div_ntrunc = -1;
+    npy_intp *spec_dims = NULL;
+    npy_intp idx;
+    npy_complex128 *vrt_data = NULL;
+    npy_complex128 *div_data = NULL;
+    npy_complex128 *u_out_data = NULL;
+    npy_complex128 *v_out_data = NULL;
+    double *vrt_real_data = NULL;
+    double *vrt_imag_data = NULL;
+    double *div_real_data = NULL;
+    double *div_imag_data = NULL;
+    double *u_real_data = NULL;
+    double *u_imag_data = NULL;
+    double *v_real_data = NULL;
+    double *v_imag_data = NULL;
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "OOd", &vrt_obj, &div_obj, &rsphere)) {
+        return NULL;
+    }
+
+    vrt_arr = require_array(vrt_obj, NPY_COMPLEX128);
+    div_arr = require_array(div_obj, NPY_COMPLEX128);
+    if (vrt_arr == NULL || div_arr == NULL) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(vrt_arr, INT_MAX, &ntrunc, &nt, &spec_rank, &spec_dims)) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(div_arr, INT_MAX, &div_ntrunc, &nt, &spec_rank, &spec_dims)) {
+        goto fail;
+    }
+    if (PyArray_NDIM(vrt_arr) != PyArray_NDIM(div_arr)) {
+      PyErr_SetString(PyExc_ValueError, "vrtspec and divspec must have the same rank");
+      goto fail;
+    }
+    if (!PyArray_CompareLists(
+            PyArray_DIMS(vrt_arr), PyArray_DIMS(div_arr), PyArray_NDIM(vrt_arr))) {
+      PyErr_SetString(PyExc_ValueError, "vrtspec and divspec must have the same shape");
+      goto fail;
+    }
+    if (ntrunc != div_ntrunc) {
+      PyErr_SetString(PyExc_ValueError, "vrtspec and divspec must use the same ntrunc");
+      goto fail;
+    }
+
+    vrt_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    vrt_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    div_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    div_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    u_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    u_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    v_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    v_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    u_out_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_COMPLEX128, 0);
+    v_out_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_COMPLEX128, 0);
+    if (
+        vrt_real_arr == NULL || vrt_imag_arr == NULL ||
+        div_real_arr == NULL || div_imag_arr == NULL ||
+        u_real_arr == NULL || u_imag_arr == NULL ||
+        v_real_arr == NULL || v_imag_arr == NULL ||
+        u_out_arr == NULL || v_out_arr == NULL
+    ) {
+        goto fail;
+    }
+
+    vrt_data = (npy_complex128 *) PyArray_DATA(vrt_arr);
+    div_data = (npy_complex128 *) PyArray_DATA(div_arr);
+    vrt_real_data = (double *) PyArray_DATA(vrt_real_arr);
+    vrt_imag_data = (double *) PyArray_DATA(vrt_imag_arr);
+    div_real_data = (double *) PyArray_DATA(div_real_arr);
+    div_imag_data = (double *) PyArray_DATA(div_imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(vrt_arr); ++idx) {
+        vrt_real_data[idx] = creal(vrt_data[idx]);
+        vrt_imag_data[idx] = cimag(vrt_data[idx]);
+        div_real_data[idx] = creal(div_data[idx]);
+        div_imag_data[idx] = cimag(div_data[idx]);
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    vordiv_to_uv(
+        ntrunc,
+        nt,
+        rsphere,
+        (const double *) PyArray_DATA(vrt_real_arr),
+        (const double *) PyArray_DATA(vrt_imag_arr),
+        (const double *) PyArray_DATA(div_real_arr),
+        (const double *) PyArray_DATA(div_imag_arr),
+        (double *) PyArray_DATA(u_real_arr),
+        (double *) PyArray_DATA(u_imag_arr),
+        (double *) PyArray_DATA(v_real_arr),
+        (double *) PyArray_DATA(v_imag_arr),
+        &ierror
+    );
+    Py_END_ALLOW_THREADS
+
+    u_out_data = (npy_complex128 *) PyArray_DATA(u_out_arr);
+    v_out_data = (npy_complex128 *) PyArray_DATA(v_out_arr);
+    u_real_data = (double *) PyArray_DATA(u_real_arr);
+    u_imag_data = (double *) PyArray_DATA(u_imag_arr);
+    v_real_data = (double *) PyArray_DATA(v_real_arr);
+    v_imag_data = (double *) PyArray_DATA(v_imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(u_out_arr); ++idx) {
+        u_out_data[idx] = u_real_data[idx] + u_imag_data[idx] * I;
+        v_out_data[idx] = v_real_data[idx] + v_imag_data[idx] * I;
+    }
+
+    Py_DECREF(vrt_arr);
+    Py_DECREF(div_arr);
+    Py_DECREF(vrt_real_arr);
+    Py_DECREF(vrt_imag_arr);
+    Py_DECREF(div_real_arr);
+    Py_DECREF(div_imag_arr);
+    Py_DECREF(u_real_arr);
+    Py_DECREF(u_imag_arr);
+    Py_DECREF(v_real_arr);
+    Py_DECREF(v_imag_arr);
+    return Py_BuildValue("(NNi)", u_out_arr, v_out_arr, ierror);
+
+fail:
+    Py_XDECREF(vrt_arr);
+    Py_XDECREF(div_arr);
+    Py_XDECREF(vrt_real_arr);
+    Py_XDECREF(vrt_imag_arr);
+    Py_XDECREF(div_real_arr);
+    Py_XDECREF(div_imag_arr);
+    Py_XDECREF(u_real_arr);
+    Py_XDECREF(u_imag_arr);
+    Py_XDECREF(v_real_arr);
+    Py_XDECREF(v_imag_arr);
+    Py_XDECREF(u_out_arr);
+    Py_XDECREF(v_out_arr);
+    return NULL;
+}
+
+static PyObject *backend_uv_to_vordiv(PyObject *self, PyObject *args) {
+    PyObject *u_obj = NULL;
+    PyObject *v_obj = NULL;
+    PyArrayObject *u_arr = NULL;
+    PyArrayObject *v_arr = NULL;
+    PyArrayObject *u_real_arr = NULL;
+    PyArrayObject *u_imag_arr = NULL;
+    PyArrayObject *v_real_arr = NULL;
+    PyArrayObject *v_imag_arr = NULL;
+    PyArrayObject *vrt_real_arr = NULL;
+    PyArrayObject *vrt_imag_arr = NULL;
+    PyArrayObject *div_real_arr = NULL;
+    PyArrayObject *div_imag_arr = NULL;
+    PyArrayObject *vrt_out_arr = NULL;
+    PyArrayObject *div_out_arr = NULL;
+    double rsphere = 0.0;
+    int nt = 0, spec_rank = 0, ierror = 0, ntrunc = -1, v_ntrunc = -1;
+    npy_intp *spec_dims = NULL;
+    npy_intp idx;
+    npy_complex128 *u_data = NULL;
+    npy_complex128 *v_data = NULL;
+    npy_complex128 *vrt_out_data = NULL;
+    npy_complex128 *div_out_data = NULL;
+    double *u_real_data = NULL;
+    double *u_imag_data = NULL;
+    double *v_real_data = NULL;
+    double *v_imag_data = NULL;
+    double *vrt_real_data = NULL;
+    double *vrt_imag_data = NULL;
+    double *div_real_data = NULL;
+    double *div_imag_data = NULL;
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "OOd", &u_obj, &v_obj, &rsphere)) {
+        return NULL;
+    }
+
+    u_arr = require_array(u_obj, NPY_COMPLEX128);
+    v_arr = require_array(v_obj, NPY_COMPLEX128);
+    if (u_arr == NULL || v_arr == NULL) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(u_arr, INT_MAX, &ntrunc, &nt, &spec_rank, &spec_dims)) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(v_arr, INT_MAX, &v_ntrunc, &nt, &spec_rank, &spec_dims)) {
+        goto fail;
+    }
+    if (PyArray_NDIM(u_arr) != PyArray_NDIM(v_arr)) {
+      PyErr_SetString(PyExc_ValueError, "uspec and vspec must have the same rank");
+      goto fail;
+    }
+    if (!PyArray_CompareLists(
+            PyArray_DIMS(u_arr), PyArray_DIMS(v_arr), PyArray_NDIM(u_arr))) {
+      PyErr_SetString(PyExc_ValueError, "uspec and vspec must have the same shape");
+      goto fail;
+    }
+    if (ntrunc != v_ntrunc) {
+      PyErr_SetString(PyExc_ValueError, "uspec and vspec must use the same ntrunc");
+      goto fail;
+    }
+
+    u_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    u_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    v_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    v_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    vrt_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    vrt_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    div_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    div_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    vrt_out_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_COMPLEX128, 0);
+    div_out_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_COMPLEX128, 0);
+    if (
+        u_real_arr == NULL || u_imag_arr == NULL ||
+        v_real_arr == NULL || v_imag_arr == NULL ||
+        vrt_real_arr == NULL || vrt_imag_arr == NULL ||
+        div_real_arr == NULL || div_imag_arr == NULL ||
+        vrt_out_arr == NULL || div_out_arr == NULL
+    ) {
+        goto fail;
+    }
+
+    u_data = (npy_complex128 *) PyArray_DATA(u_arr);
+    v_data = (npy_complex128 *) PyArray_DATA(v_arr);
+    u_real_data = (double *) PyArray_DATA(u_real_arr);
+    u_imag_data = (double *) PyArray_DATA(u_imag_arr);
+    v_real_data = (double *) PyArray_DATA(v_real_arr);
+    v_imag_data = (double *) PyArray_DATA(v_imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(u_arr); ++idx) {
+        u_real_data[idx] = creal(u_data[idx]);
+        u_imag_data[idx] = cimag(u_data[idx]);
+        v_real_data[idx] = creal(v_data[idx]);
+        v_imag_data[idx] = cimag(v_data[idx]);
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    uv_to_vordiv(
+        ntrunc,
+        nt,
+        rsphere,
+        (const double *) PyArray_DATA(u_real_arr),
+        (const double *) PyArray_DATA(u_imag_arr),
+        (const double *) PyArray_DATA(v_real_arr),
+        (const double *) PyArray_DATA(v_imag_arr),
+        (double *) PyArray_DATA(vrt_real_arr),
+        (double *) PyArray_DATA(vrt_imag_arr),
+        (double *) PyArray_DATA(div_real_arr),
+        (double *) PyArray_DATA(div_imag_arr),
+        &ierror
+    );
+    Py_END_ALLOW_THREADS
+
+    vrt_out_data = (npy_complex128 *) PyArray_DATA(vrt_out_arr);
+    div_out_data = (npy_complex128 *) PyArray_DATA(div_out_arr);
+    vrt_real_data = (double *) PyArray_DATA(vrt_real_arr);
+    vrt_imag_data = (double *) PyArray_DATA(vrt_imag_arr);
+    div_real_data = (double *) PyArray_DATA(div_real_arr);
+    div_imag_data = (double *) PyArray_DATA(div_imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(vrt_out_arr); ++idx) {
+        vrt_out_data[idx] = vrt_real_data[idx] + vrt_imag_data[idx] * I;
+        div_out_data[idx] = div_real_data[idx] + div_imag_data[idx] * I;
+    }
+
+    Py_DECREF(u_arr);
+    Py_DECREF(v_arr);
+    Py_DECREF(u_real_arr);
+    Py_DECREF(u_imag_arr);
+    Py_DECREF(v_real_arr);
+    Py_DECREF(v_imag_arr);
+    Py_DECREF(vrt_real_arr);
+    Py_DECREF(vrt_imag_arr);
+    Py_DECREF(div_real_arr);
+    Py_DECREF(div_imag_arr);
+    return Py_BuildValue("(NNi)", vrt_out_arr, div_out_arr, ierror);
+
+fail:
+    Py_XDECREF(u_arr);
+    Py_XDECREF(v_arr);
+    Py_XDECREF(u_real_arr);
+    Py_XDECREF(u_imag_arr);
+    Py_XDECREF(v_real_arr);
+    Py_XDECREF(v_imag_arr);
+    Py_XDECREF(vrt_real_arr);
+    Py_XDECREF(vrt_imag_arr);
+    Py_XDECREF(div_real_arr);
+    Py_XDECREF(div_imag_arr);
+    Py_XDECREF(vrt_out_arr);
+    Py_XDECREF(div_out_arr);
+    return NULL;
+}
+
+static PyObject *backend_ldfou2_uv_scaling(PyObject *self, PyObject *args) {
+    PyObject *paia_obj = NULL;
+    PyObject *psia_obj = NULL;
+    PyArrayObject *paia_arr = NULL;
+    PyArrayObject *psia_arr = NULL;
+    PyArrayObject *paia_out_arr = NULL;
+    PyArrayObject *psia_out_arr = NULL;
+    double rsphere = 0.0;
+    int ntrunc = -1, km = -1, kf_uv = -1, ierror = 0;
+    npy_intp dims[2];
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "iiOdO", &ntrunc, &km, &paia_obj, &rsphere, &psia_obj)) {
+        return NULL;
+    }
+
+    paia_arr = require_array(paia_obj, NPY_FLOAT64);
+    psia_arr = require_array(psia_obj, NPY_FLOAT64);
+    if (paia_arr == NULL || psia_arr == NULL) {
+        goto fail;
+    }
+    if (PyArray_NDIM(paia_arr) != 2 || PyArray_NDIM(psia_arr) != 2) {
+        PyErr_SetString(PyExc_ValueError, "paia and psia must be rank-2 float64 arrays");
+        goto fail;
+    }
+    if (!PyArray_CompareLists(PyArray_DIMS(paia_arr), PyArray_DIMS(psia_arr), 2)) {
+        PyErr_SetString(PyExc_ValueError, "paia and psia must have the same shape");
+        goto fail;
+    }
+    if (ntrunc < 0 || km < 0 || km > ntrunc) {
+        PyErr_SetString(PyExc_ValueError, "require 0 <= km <= ntrunc");
+        goto fail;
+    }
+
+    dims[0] = PyArray_DIM(paia_arr, 0);
+    dims[1] = PyArray_DIM(paia_arr, 1);
+    if (dims[0] % 4 != 0) {
+        PyErr_SetString(PyExc_ValueError, "paia/psia first dimension must be divisible by 4");
+        goto fail;
+    }
+    kf_uv = (int) (dims[0] / 4);
+    if (dims[1] != (npy_intp) ((ntrunc + 2) / 2)) {
+        PyErr_SetString(PyExc_ValueError, "second dimension must equal (ntrunc + 2) // 2");
+        goto fail;
+    }
+
+    paia_out_arr = (PyArrayObject *) PyArray_ZEROS(2, dims, NPY_FLOAT64, 0);
+    psia_out_arr = (PyArrayObject *) PyArray_ZEROS(2, dims, NPY_FLOAT64, 0);
+    if (paia_out_arr == NULL || psia_out_arr == NULL) {
+        goto fail;
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    ldfou2_uv_scaling(
+        ntrunc,
+        km,
+        kf_uv,
+        rsphere,
+        (const double *) PyArray_DATA(paia_arr),
+        (const double *) PyArray_DATA(psia_arr),
+        (double *) PyArray_DATA(paia_out_arr),
+        (double *) PyArray_DATA(psia_out_arr),
+        &ierror
+    );
+    Py_END_ALLOW_THREADS
+
+    Py_DECREF(paia_arr);
+    Py_DECREF(psia_arr);
+    return Py_BuildValue("(NNi)", paia_out_arr, psia_out_arr, ierror);
+
+fail:
+    Py_XDECREF(paia_arr);
+    Py_XDECREF(psia_arr);
+    Py_XDECREF(paia_out_arr);
+    Py_XDECREF(psia_out_arr);
+    return NULL;
+}
+
 static PyMethodDef module_methods[] = {
     {"validate_nloen", backend_validate_nloen, METH_VARARGS, "Validate reduced-grid longitude counts."},
     {"create_setup", backend_create_setup, METH_VARARGS, "Create an experimental ectrans setup handle."},
@@ -1502,6 +1928,9 @@ static PyMethodDef module_methods[] = {
     {"vrtdiv_analysis_stub", backend_vrtdiv_analysis, METH_VARARGS, "Call the native vector-analysis stub."},
     {"uv_synthesis_stub", backend_uv_synthesis, METH_VARARGS, "Call the native wind-synthesis stub."},
     {"gradient_synthesis_stub", backend_gradient_synthesis, METH_VARARGS, "Call the native gradient-synthesis stub."},
+    {"vordiv_to_uv", backend_vordiv_to_uv, METH_VARARGS, "Call the experimental ectrans vordiv-to-uv spectral helper."},
+    {"uv_to_vordiv", backend_uv_to_vordiv, METH_VARARGS, "Call the experimental ectrans uv-to-vordiv spectral helper."},
+    {"ldfou2_uv_scaling", backend_ldfou2_uv_scaling, METH_VARARGS, "Apply the experimental ectrans LDFOU2 uv scaling helper."},
     {NULL, NULL, 0, NULL}
 };
 
