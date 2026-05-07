@@ -13,7 +13,7 @@ openmp_dep = dependency('openmp', required: false)
 
 # Install Python module files
 py.install_sources(
-    ['__init__.py', 'spherical_harmonics.py'],
+    ['__init__.py', 'spherical_harmonics.py', 'reduced_gaussian.py', 'ectrans_backend_api.py'],
     subdir: 'skyborn/spharm',
 )
 
