@@ -13,6 +13,7 @@ import skyborn.spharm as spharm_pkg  # noqa: E402
 from skyborn.spharm import _spherepack  # noqa: E402
 from skyborn.spharm.ectrans_backend_api import (  # noqa: E402
     ldfou2_uv_scaling,
+    ledir_dgemm,
     scalar_analysis_stub,
     scalar_block_solve_stub,
     scalar_fourier_stub,
@@ -406,6 +407,68 @@ def test_ldfou2_uv_scaling_matches_analytic_gaussian_factor():
     np.testing.assert_allclose(
         psia_out, np.broadcast_to(expected, psia_out.shape), rtol=0.0, atol=2e-12
     )
+
+
+def test_ledir_dgemm_matches_manual_small_matrix_case():
+    ntrunc = 4
+    km = 1
+    kfc = 2
+    kdglu = 3
+    ila = (ntrunc - km + 2) // 2
+    ils = (ntrunc - km + 3) // 2
+    nlei1 = ntrunc + 4 + ((ntrunc + 5) % 2)
+
+    paia = np.array(
+        [
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0],
+        ],
+        dtype=np.float64,
+    )
+    psia = np.array(
+        [
+            [0.5, 1.0, 1.5],
+            [2.0, 2.5, 3.0],
+        ],
+        dtype=np.float64,
+    )
+    rpnma = np.array(
+        [
+            [1.0, 0.1],
+            [0.2, 1.5],
+            [0.3, 0.4],
+        ],
+        dtype=np.float64,
+    )
+    rpnms = np.array(
+        [
+            [0.6, 0.0, 0.2],
+            [0.1, 0.7, 0.4],
+            [0.2, 0.3, 0.5],
+        ],
+        dtype=np.float64,
+    )
+    pw = np.array([1.0, 2.0, 0.5], dtype=np.float64)
+
+    actual, ierror = ledir_dgemm(ntrunc, km, paia, psia, rpnma, rpnms, pw)
+
+    assert ierror == 0
+    assert actual.shape == (nlei1, kfc)
+
+    expected = np.zeros((nlei1, kfc), dtype=np.float64)
+    ia = 1 + ((ntrunc - km + 2) % 2)
+    is_ = 1 + ((ntrunc - km + 1) % 2)
+    for jk in range(kfc):
+        weighted_a = paia[jk] * pw
+        weighted_s = psia[jk] * pw
+        zca = rpnma.T @ weighted_a
+        zcs = rpnms.T @ weighted_s
+        for j in range(ila):
+            expected[ia - 1 + 2 * j, jk] = zca[j]
+        for j in range(ils):
+            expected[is_ - 1 + 2 * j, jk] = zcs[j]
+
+    np.testing.assert_allclose(actual, expected, rtol=0.0, atol=1e-12)
 
 
 def test_reduced_gaussian_spharmt_vector_shape_validation():
