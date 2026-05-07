@@ -9,7 +9,12 @@ REPO_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(REPO_SRC) not in sys.path:
     sys.path.insert(0, str(REPO_SRC))
 
-from skyborn.spharm.ectrans_backend_api import scalar_synthesis_stub  # noqa: E402
+from skyborn.spharm.ectrans_backend_api import (  # noqa: E402
+    scalar_analysis_stub,
+    scalar_block_solve_stub,
+    scalar_fourier_stub,
+    scalar_synthesis_stub,
+)
 from skyborn.spharm.reduced_gaussian import (  # noqa: E402
     ReducedGaussianGrid,
     ReducedGaussianSpharmt,
@@ -212,6 +217,98 @@ def test_reduced_gaussian_native_scalar_synthesis_stub_returns_success():
     assert ierror == 0
     assert datagrid.shape == (116,)
     np.testing.assert_allclose(datagrid, 1.0, rtol=0.0, atol=1e-6)
+    backend.close()
+
+
+def test_reduced_gaussian_native_scalar_fourier_stub_matches_expected_modes():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    lat_offsets = backend._get_lat_offsets()
+    grid = np.zeros((backend.ngptot, 2), dtype=np.float64)
+
+    for ilat, nlon in enumerate(backend.nloen):
+        offset = int(lat_offsets[ilat])
+        lon = 2.0 * np.pi * np.arange(int(nlon), dtype=np.float64) / float(nlon)
+        grid[offset : offset + int(nlon), 0] = 1.0
+        grid[offset : offset + int(nlon), 1] = np.cos(lon)
+
+    fourier, ierror = scalar_fourier_stub(
+        backend._require_setup_handle(),
+        grid,
+        2,
+    )
+
+    assert ierror == 0
+    assert fourier.shape == (backend.ndgl, 3, 2)
+    np.testing.assert_allclose(fourier[:, 0, 0], 1.0, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(fourier[:, 1:, 0], 0.0, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(fourier[:, 0, 1], 0.0, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(fourier[:, 1, 1], 0.5, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(fourier[:, 2, 1], 0.0, rtol=0.0, atol=1e-12)
+    backend.close()
+
+
+def test_reduced_gaussian_native_scalar_block_solver_matches_numpy_lstsq():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    _, weights, _ = backend._get_gaussian_metadata()
+    sqrt_weights = np.sqrt(weights)[:, None]
+
+    basis_block = np.array(
+        [
+            [1.0 + 0.0j, 0.2 - 0.1j],
+            [0.8 + 0.1j, -0.3 + 0.2j],
+            [0.5 - 0.2j, 0.4 + 0.3j],
+            [0.2 + 0.3j, 0.6 - 0.2j],
+            [0.1 - 0.1j, 0.7 + 0.1j],
+        ],
+        dtype=np.complex128,
+    )
+    observed = np.array(
+        [
+            [0.5 + 0.2j, -0.2 + 0.1j],
+            [0.3 - 0.1j, 0.1 + 0.2j],
+            [-0.2 + 0.4j, 0.3 - 0.3j],
+            [0.1 + 0.3j, 0.2 + 0.0j],
+            [0.4 - 0.2j, -0.1 + 0.5j],
+        ],
+        dtype=np.complex128,
+    )
+
+    native_solution, ierror = scalar_block_solve_stub(
+        backend._require_setup_handle(),
+        basis_block,
+        observed,
+    )
+    weighted_basis = sqrt_weights * basis_block
+    weighted_observed = sqrt_weights * observed
+    numpy_solution, _, _, _ = np.linalg.lstsq(
+        weighted_basis,
+        weighted_observed,
+        rcond=None,
+    )
+
+    assert ierror == 0
+    np.testing.assert_allclose(native_solution, numpy_solution, rtol=0.0, atol=1e-12)
+    backend.close()
+
+
+def test_reduced_gaussian_native_scalar_analysis_stub_returns_success():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    grid = np.ones((backend.ngptot,), dtype=np.float64)
+
+    dataspec_packed, ierror = scalar_analysis_stub(
+        backend._require_setup_handle(),
+        grid,
+        2,
+    )
+    spec = backend._unpack_scalar_spectrum_from_ectrans(
+        dataspec_packed,
+        "native scalar analysis test",
+    )
+
+    assert ierror == 0
+    assert dataspec_packed.shape == (12,)
+    np.testing.assert_allclose(spec[0], np.sqrt(2.0), rtol=0.0, atol=1e-6)
+    np.testing.assert_allclose(spec[1:], 0.0, rtol=0.0, atol=1e-6)
     backend.close()
 
 
