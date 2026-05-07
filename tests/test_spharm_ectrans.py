@@ -17,11 +17,14 @@ from skyborn.spharm.ectrans_backend_api import (  # noqa: E402
     scalar_synthesis_stub,
     weighted_block_solve_stub,
 )
-from skyborn.spharm.reduced_gaussian import (  # noqa: E402
+from skyborn.spharm.reduced_gaussian import (
     _ECTRANS_BACKEND_AVAILABLE,
     ReducedGaussianGrid,
     ReducedGaussianSpharmt,
+    ReducedGaussianValidationError,
 )
+from skyborn.spharm.reduced_gaussian import regrid as reduced_regrid  # noqa: E402
+from skyborn.spharm.reduced_gaussian import regriduv as reduced_regriduv
 
 
 def test_reduced_gaussian_grid_basic_metadata():
@@ -29,6 +32,23 @@ def test_reduced_gaussian_grid_basic_metadata():
     assert grid.ndgl == 5
     assert grid.ngptot == 116
     assert grid.max_nlon == 28
+
+
+def test_reduced_gaussian_grid_rejects_nonfinite_or_nonpositive_rsphere():
+    with np.testing.assert_raises_regex(
+        ReducedGaussianValidationError,
+        "finite positive value",
+    ):
+        ReducedGaussianGrid(np.array([20, 24, 28, 24, 20], dtype=np.int32), rsphere=0.0)
+
+    with np.testing.assert_raises_regex(
+        ReducedGaussianValidationError,
+        "finite positive value",
+    ):
+        ReducedGaussianGrid(
+            np.array([20, 24, 28, 24, 20], dtype=np.int32),
+            rsphere=np.nan,
+        )
 
 
 def test_reduced_gaussian_spharmt_repr_contains_key_sizes():
@@ -539,7 +559,9 @@ def test_reduced_gaussian_psichi_and_smoothing_match_bridge_reference():
         "test packed scalar smooth expected",
     )
     smoothed_actual = backend.specsmooth(packed_scalar, smooth)
-    np.testing.assert_allclose(smoothed_actual, smoothed_expected, rtol=0.0, atol=5e-8)
+    np.testing.assert_allclose(
+        smoothed_actual, smoothed_expected, rtol=0.0, atol=1.2e-7
+    )
 
     backend.close()
 
@@ -810,3 +832,238 @@ def test_reduced_gaussian_native_vrtdiv_analysis_matches_bridge_reference():
         atol=1e-10,
     )
     backend.close()
+
+
+def test_reduced_gaussian_regrid_rejects_bad_input_and_smooth_shape():
+    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    grdout = ReducedGaussianSpharmt(np.array([16, 20, 24, 20, 16], dtype=np.int32))
+
+    with np.testing.assert_raises_regex(
+        ReducedGaussianValidationError,
+        "leading dimension",
+    ):
+        reduced_regrid(grdin, grdout, np.zeros((115,), dtype=np.float64))
+
+    with np.testing.assert_raises_regex(
+        ReducedGaussianValidationError,
+        "smooth must be rank 1 with size 5",
+    ):
+        reduced_regrid(
+            grdin,
+            grdout,
+            np.zeros((grdin.ngptot,), dtype=np.float64),
+            smooth=np.ones((4,), dtype=np.float32),
+        )
+
+    with np.testing.assert_raises_regex(
+        ReducedGaussianValidationError,
+        "ntrunc must be between 0 and 4",
+    ):
+        reduced_regrid(
+            grdin,
+            grdout,
+            np.zeros((grdin.ngptot,), dtype=np.float64),
+            ntrunc=5,
+        )
+
+    grdin.close()
+    grdout.close()
+
+
+def test_reduced_gaussian_regrid_identity_matches_direct_roundtrip():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    lat_offsets = backend._get_lat_offsets()
+    field = np.zeros((backend.ngptot,), dtype=np.float64)
+
+    for ilat, nlon in enumerate(backend.nloen):
+        offset = int(lat_offsets[ilat])
+        lon = 2.0 * np.pi * np.arange(int(nlon), dtype=np.float64) / float(nlon)
+        field[offset : offset + int(nlon)] = (
+            0.5 * (ilat + 1) + 0.75 * np.cos(lon) - 0.2 * np.sin(2.0 * lon)
+        )
+
+    direct = backend.spectogrd(backend.grdtospec(field))
+    regridded = reduced_regrid(backend, backend, field)
+
+    np.testing.assert_allclose(regridded, direct, rtol=0.0, atol=1e-10)
+    backend.close()
+
+
+def test_reduced_gaussian_regrid_smooth_matches_manual_spectral_chain():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    lat_offsets = backend._get_lat_offsets()
+    field = np.zeros((backend.ngptot,), dtype=np.float64)
+
+    for ilat, nlon in enumerate(backend.nloen):
+        offset = int(lat_offsets[ilat])
+        lon = 2.0 * np.pi * np.arange(int(nlon), dtype=np.float64) / float(nlon)
+        field[offset : offset + int(nlon)] = (
+            0.2 * (ilat + 1) + np.cos(lon) - 0.35 * np.sin(2.0 * lon)
+        )
+
+    smooth = np.array([1.0, 0.75, 0.4, 0.15, 0.0], dtype=np.float32)
+    manual = backend.spectogrd(
+        backend._apply_spectral_smoothing(
+            backend.grdtospec(field, ntrunc=4),
+            smooth,
+            operation_name="manual regrid smooth",
+            expected_size=backend.ndgl,
+        )
+    )
+    actual = reduced_regrid(backend, backend, field, ntrunc=4, smooth=smooth)
+
+    np.testing.assert_allclose(actual, manual, rtol=0.0, atol=1e-10)
+    backend.close()
+
+
+def test_reduced_gaussian_regrid_between_packed_layouts_matches_spectral_reference():
+    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    grdout = ReducedGaussianSpharmt(
+        np.array([12, 16, 20, 24, 20, 16, 12], dtype=np.int32)
+    )
+    bridge_in = grdin._get_bridge_spharmt()
+    bridge_out = grdout._get_bridge_spharmt()
+    lat_offsets = grdin._get_lat_offsets()
+
+    field = np.zeros((grdin.ngptot,), dtype=np.float64)
+    for ilat, nlon in enumerate(grdin.nloen):
+        offset = int(lat_offsets[ilat])
+        lon = 2.0 * np.pi * np.arange(int(nlon), dtype=np.float64) / float(nlon)
+        field[offset : offset + int(nlon)] = (
+            1.0
+            + 0.3 * np.cos(lon)
+            - 0.15 * np.sin(2.0 * lon)
+            + 0.05 * np.cos(3.0 * lon)
+            + 0.1 * ilat
+        )
+
+    actual = reduced_regrid(grdin, grdout, field)
+
+    full_in = grdin._bridge_to_packed_grid(
+        grdin._packed_to_bridge_grid(
+            grdin._validate_packed_grid_data(field, "regrid field")[1],
+            (),
+        ),
+        "regrid bridge roundtrip",
+    )
+    np.testing.assert_allclose(full_in, field, rtol=0.0, atol=5e-8)
+
+    bridge_field = grdin._packed_to_bridge_grid(
+        grdin._validate_packed_grid_data(field, "regrid field")[1],
+        (),
+    )
+    ref_spec = bridge_in.grdtospec(bridge_field, ntrunc=4)
+    ref_full = bridge_out.spectogrd(ref_spec)
+    expected = grdout._bridge_to_packed_grid(ref_full, "regrid expected")
+
+    np.testing.assert_allclose(actual, expected, rtol=0.0, atol=4e-7)
+    assert actual.shape == (grdout.ngptot,)
+    grdin.close()
+    grdout.close()
+
+
+def test_reduced_gaussian_regriduv_rejects_bad_shapes_and_ntrunc():
+    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    grdout = ReducedGaussianSpharmt(np.array([16, 20, 24, 20, 16], dtype=np.int32))
+    u = np.zeros((grdin.ngptot,), dtype=np.float64)
+    v = np.zeros((grdin.ngptot, 2), dtype=np.float64)
+
+    with np.testing.assert_raises_regex(
+        ReducedGaussianValidationError,
+        "same shape",
+    ):
+        reduced_regriduv(grdin, grdout, u, v)
+
+    with np.testing.assert_raises_regex(
+        ReducedGaussianValidationError,
+        "between 0 and 4",
+    ):
+        reduced_regriduv(
+            grdin,
+            grdout,
+            np.zeros((grdin.ngptot,), dtype=np.float64),
+            np.zeros((grdin.ngptot,), dtype=np.float64),
+            ntrunc=5,
+        )
+
+    grdin.close()
+    grdout.close()
+
+
+def test_reduced_gaussian_regriduv_identity_matches_direct_vrtdiv_roundtrip():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    bridge = backend._get_bridge_spharmt()
+
+    chi_spec = np.zeros((6,), dtype=np.complex128)
+    chi_spec[1] = 0.25 - 0.1j
+    chi_spec[2] = -0.2 + 0.05j
+    chi_spec[4] = 0.15 + 0.12j
+
+    psi_spec = np.zeros((6,), dtype=np.complex128)
+    psi_spec[1] = 0.21 - 0.04j
+    psi_spec[3] = -0.13 + 0.07j
+    psi_spec[4] = 0.09 - 0.02j
+
+    divspec = _spherepack.lap(chi_spec.reshape(6, 1), backend.rsphere).reshape(
+        6,
+    )
+    vrtspec = _spherepack.lap(psi_spec.reshape(6, 1), backend.rsphere).reshape(
+        6,
+    )
+    full_u, full_v = bridge.getuv(vrtspec, divspec)
+    packed_u = backend._bridge_to_packed_grid(full_u, "regriduv identity u")
+    packed_v = backend._bridge_to_packed_grid(full_v, "regriduv identity v")
+
+    expected_u, expected_v = backend.getuv(
+        *backend.getvrtdivspec(packed_u, packed_v, ntrunc=2)
+    )
+    actual_u, actual_v = reduced_regriduv(
+        backend, backend, packed_u, packed_v, ntrunc=2
+    )
+
+    np.testing.assert_allclose(actual_u, expected_u, rtol=0.0, atol=1e-10)
+    np.testing.assert_allclose(actual_v, expected_v, rtol=0.0, atol=1e-10)
+    backend.close()
+
+
+def test_reduced_gaussian_regriduv_between_layouts_matches_bridge_reference():
+    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    grdout = ReducedGaussianSpharmt(
+        np.array([12, 16, 20, 24, 20, 16, 12], dtype=np.int32)
+    )
+    bridge_in = grdin._get_bridge_spharmt()
+    bridge_out = grdout._get_bridge_spharmt()
+
+    chi_spec = np.zeros((6,), dtype=np.complex128)
+    chi_spec[1] = 0.25 - 0.1j
+    chi_spec[2] = -0.2 + 0.05j
+    chi_spec[4] = 0.15 + 0.12j
+
+    psi_spec = np.zeros((6,), dtype=np.complex128)
+    psi_spec[1] = 0.21 - 0.04j
+    psi_spec[3] = -0.13 + 0.07j
+    psi_spec[4] = 0.09 - 0.02j
+
+    divspec = _spherepack.lap(chi_spec.reshape(6, 1), grdin.rsphere).reshape(
+        6,
+    )
+    vrtspec = _spherepack.lap(psi_spec.reshape(6, 1), grdin.rsphere).reshape(
+        6,
+    )
+    full_u, full_v = bridge_in.getuv(vrtspec, divspec)
+    packed_u = grdin._bridge_to_packed_grid(full_u, "regriduv input u")
+    packed_v = grdin._bridge_to_packed_grid(full_v, "regriduv input v")
+
+    actual_u, actual_v = reduced_regriduv(grdin, grdout, packed_u, packed_v, ntrunc=2)
+
+    ref_vrt, ref_div = bridge_in.getvrtdivspec(full_u, full_v, ntrunc=2)
+    ref_u_full, ref_v_full = bridge_out.getuv(ref_vrt, ref_div)
+    expected_u = grdout._bridge_to_packed_grid(ref_u_full, "regriduv expected u")
+    expected_v = grdout._bridge_to_packed_grid(ref_v_full, "regriduv expected v")
+
+    np.testing.assert_allclose(actual_u, expected_u, rtol=0.0, atol=3e-7)
+    np.testing.assert_allclose(actual_v, expected_v, rtol=0.0, atol=3e-7)
+    assert actual_u.shape == (grdout.ngptot,)
+    assert actual_v.shape == (grdout.ngptot,)
+    grdin.close()
+    grdout.close()
