@@ -129,6 +129,7 @@ __all__ = [
     "SpheremackError",
     "ValidationError",
     "regrid",
+    "regriduv",
     "gaussian_lats_wts",
     "getspecindx",
     "getgeodesicpts",
@@ -1641,6 +1642,53 @@ def regrid(
         )
 
     return grdout.spectogrd(dataspec)
+
+
+def regriduv(
+    grdin: Spharmt,
+    grdout: Spharmt,
+    ugrid: FloatArray,
+    vgrid: FloatArray,
+    ntrunc: Optional[int] = None,
+) -> Tuple[FloatArray, FloatArray]:
+    """
+    Regrid wind components using vorticity/divergence spectra.
+
+    Args:
+        grdin: Input grid Spharmt instance
+        grdout: Output grid Spharmt instance
+        ugrid: Zonal wind on input grid
+        vgrid: Meridional wind on input grid
+        ntrunc: Optional spectral truncation limit
+
+    Returns:
+        Tuple of interpolated ``(u, v)`` winds on the output grid
+
+    Raises:
+        ValidationError: If input parameters are invalid
+    """
+    ugrid = np.asarray(ugrid)
+    vgrid = np.asarray(vgrid)
+
+    if ugrid.shape != vgrid.shape:
+        raise ValidationError("regriduv needs ugrid and vgrid with the same shape")
+
+    if ugrid.ndim < 2:
+        raise ValidationError(
+            f"regriduv needs at least a rank 2 array, got rank {ugrid.ndim}"
+        )
+
+    if ugrid.shape[0] != grdin.nlat or ugrid.shape[1] != grdin.nlon:
+        raise ValidationError(
+            f"regriduv needs input arrays of size {grdin.nlat} by {grdin.nlon}, "
+            f"got {ugrid.shape[0]} by {ugrid.shape[1]}"
+        )
+
+    if ntrunc is None:
+        ntrunc = min(grdout.nlat - 1, grdin.nlat - 1)
+
+    vrtspec, divspec = grdin.getvrtdivspec(ugrid, vgrid, ntrunc)
+    return grdout.getuv(vrtspec, divspec)
 
 
 def gaussian_lats_wts(nlat: int) -> Tuple[FloatArray, FloatArray]:
