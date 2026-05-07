@@ -25,6 +25,7 @@ from skyborn.interp.interpolation import (
     geopotential_height_at_hybrid_levels,
     interp_hybrid_to_pressure,
     interp_multidim,
+    interp_pressure_1d,
     interp_sigma_to_hybrid,
     pressure_at_hybrid_levels,
 )
@@ -2087,6 +2088,391 @@ class TestInterpolationHelperCoverage:
         assert return_calls["count"] == 2
         assert_array_equal(out_return, np.full((3, 2), 34.0))
 
+    def test_pressure_at_hybrid_levels_flat_reraises_non_compatibility_error(
+        self, monkeypatch
+    ):
+        """Private helper should re-raise unexpected backend errors unchanged."""
+
+        def boom_into(*args, **kwargs):
+            raise TypeError("something else")
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dpressure_at_hybrid_levels_pa_into",
+            boom_into,
+        )
+        monkeypatch.setattr(
+            interpolation_mod, "_dpressure_at_hybrid_levels_pa", object()
+        )
+
+        with pytest.raises(TypeError, match="something else"):
+            interpolation_mod._pressure_at_hybrid_levels_flat(
+                np.array([100000.0], dtype=np.float64),
+                np.array([0.0, 0.2], dtype=np.float64),
+                np.array([1.0, 0.0], dtype=np.float64),
+                100000.0,
+            )
+
+    def test_delta_pressure_hybrid_flat_reraises_non_compatibility_error(
+        self, monkeypatch
+    ):
+        """Delta-pressure helper should re-raise unexpected backend errors unchanged."""
+
+        def boom_into(*args, **kwargs):
+            raise TypeError("something else")
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_ddelta_pressure_hybrid_pa_into",
+            boom_into,
+        )
+        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa", object())
+
+        with pytest.raises(TypeError, match="something else"):
+            interpolation_mod._delta_pressure_hybrid_flat(
+                np.array([100000.0], dtype=np.float64),
+                np.array([0.0, 0.2], dtype=np.float64),
+                np.array([1.0, 0.0], dtype=np.float64),
+                100000.0,
+            )
+
+    def test_interp_pressure_1d_legacy_keywords_and_dataarray_output(self, monkeypatch):
+        """Pressure interpolation should accept legacy keywords and preserve xarray metadata."""
+
+        def fake_interp(p_in, values, p_out, linlog, miss):
+            assert linlog == 2
+            return np.array([15.0, 35.0], dtype=np.float64), 0
+
+        monkeypatch.setattr(interpolation_mod, "_dinterp_pressure_1d", fake_interp)
+
+        data = xr.DataArray(
+            np.array([10.0, 20.0, 30.0], dtype=np.float64),
+            dims=["lev"],
+            coords={"lev": [100000.0, 80000.0, 60000.0]},
+            name="T",
+            attrs={"units": "K"},
+        )
+        source = xr.DataArray(
+            np.array([100000.0, 80000.0, 60000.0], dtype=np.float64),
+            dims=["lev"],
+            coords={"lev": [0, 1, 2]},
+        )
+        target = xr.DataArray(
+            np.array([90000.0, np.nan, 70000.0], dtype=np.float64),
+            dims=["plev"],
+            attrs={"units": "Pa"},
+        )
+
+        out = interp_pressure_1d(
+            values=data,
+            p_in=source,
+            p_out=target,
+            method="log",
+        )
+
+        assert out.dims == ("plev",)
+        assert out.name == "T"
+        assert out.attrs["units"] == "K"
+        assert np.isnan(out.values[1])
+        assert_allclose(out.values[[0, 2]], np.array([15.0, 35.0]))
+
+    def test_interp_pressure_1d_validation_and_error_paths(self, monkeypatch):
+        """Pressure interpolation should validate arguments and backend status codes."""
+
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0]),
+                source_pressure=np.array([1000.0, 900.0]),
+                target_pressure=np.array([950.0]),
+                nope=1,
+            )
+
+        with pytest.raises(TypeError, match="missing required argument"):
+            interp_pressure_1d(data=np.array([1.0]))
+
+        with pytest.raises(TypeError, match="received both `data` and legacy `values`"):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0]),
+                values=np.array([1.0, 2.0]),
+                source_pressure=np.array([1000.0, 900.0]),
+                target_pressure=np.array([950.0]),
+            )
+
+        with pytest.raises(
+            TypeError, match="received both `source_pressure` and legacy `p_in`"
+        ):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0]),
+                source_pressure=np.array([1000.0, 900.0]),
+                p_in=np.array([1000.0, 900.0]),
+                target_pressure=np.array([950.0]),
+            )
+
+        with pytest.raises(
+            TypeError, match="received both `target_pressure` and legacy `p_out`"
+        ):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0]),
+                source_pressure=np.array([1000.0, 900.0]),
+                target_pressure=np.array([950.0]),
+                p_out=np.array([950.0]),
+            )
+
+        with pytest.raises(ValueError, match="must each be one-dimensional"):
+            interp_pressure_1d(
+                data=np.ones((2, 1)),
+                source_pressure=np.array([1000.0, 900.0]),
+                target_pressure=np.array([950.0]),
+            )
+
+        with pytest.raises(ValueError, match="same length"):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0]),
+                source_pressure=np.array([1000.0]),
+                target_pressure=np.array([950.0]),
+            )
+
+        with pytest.raises(ValueError, match="must be either 'linear' or 'log'"):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0]),
+                source_pressure=np.array([1000.0, 900.0]),
+                target_pressure=np.array([950.0]),
+                method="bad",
+            )
+
+        with pytest.raises(ValueError, match="at least two valid input levels"):
+            interp_pressure_1d(
+                data=np.array([np.nan, 2.0]),
+                source_pressure=np.array([1000.0, np.nan]),
+                target_pressure=np.array([950.0]),
+            )
+
+        with pytest.raises(ValueError, match="strictly monotonic"):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0, 3.0]),
+                source_pressure=np.array([1000.0, 900.0, 950.0]),
+                target_pressure=np.array([925.0]),
+            )
+
+        with pytest.raises(ValueError, match="strictly monotonic"):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0, 3.0]),
+                source_pressure=np.array([1000.0, 900.0, 800.0]),
+                target_pressure=np.array([850.0, 870.0, 860.0]),
+            )
+
+        with pytest.raises(ValueError, match="strictly positive pressures"):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0]),
+                source_pressure=np.array([1000.0, 900.0]),
+                target_pressure=np.array([0.0]),
+                method="log",
+            )
+
+        with pytest.raises(TypeError, match="missing required argument\\(s\\): `data`"):
+            interp_pressure_1d(
+                source_pressure=np.array([1000.0, 900.0]),
+                target_pressure=np.array([950.0]),
+            )
+
+        out = interp_pressure_1d(
+            data=np.array([1.0, 2.0]),
+            source_pressure=np.array([1000.0, 900.0]),
+            target_pressure=np.array([np.nan]),
+            method="linear",
+            missing_value=-999.0,
+        )
+        assert_array_equal(out, np.array([-999.0]))
+
+        def fake_interp(p_in, values, p_out, linlog, miss):
+            return np.array([1.0], dtype=np.float64), 7
+
+        monkeypatch.setattr(interpolation_mod, "_dinterp_pressure_1d", fake_interp)
+
+        with pytest.raises(RuntimeError, match="returned ier=7"):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0]),
+                source_pressure=np.array([1000.0, 900.0]),
+                target_pressure=np.array([950.0]),
+                method="linear",
+            )
+
+    def test_interp_pressure_1d_additional_branch_coverage(self, monkeypatch):
+        """Exercise remaining pressure-interpolation helper branches."""
+
+        recorded = {}
+
+        def fake_interp(p_in, values, p_out, linlog, miss):
+            recorded["p_in"] = p_in.copy()
+            recorded["values"] = values.copy()
+            recorded["p_out"] = p_out.copy()
+            recorded["linlog"] = linlog
+            recorded["miss"] = miss
+            return np.array([11.0], dtype=np.float64), 0
+
+        monkeypatch.setattr(interpolation_mod, "_dinterp_pressure_1d", fake_interp)
+
+        data = xr.DataArray(
+            np.array([1.0, -9999.0, 3.0], dtype=np.float64),
+            dims=["lev"],
+            name="sample",
+            attrs={"units": "arb"},
+        )
+        out = interp_pressure_1d(
+            data=data,
+            source_pressure=np.array([1000.0, 900.0, 800.0]),
+            target_pressure=np.array([950.0, -9999.0, -9999.0]),
+            method="linear",
+            extrapolate=True,
+            missing_value=-9999.0,
+        )
+
+        assert recorded["linlog"] == -1
+        assert recorded["values"][1] == interpolation_mod._PRESSURE_INTERP_SPVL
+        assert recorded["p_out"].shape == (1,)
+        assert out.dims == ("lev",)
+        assert out.name == "sample"
+        assert out.attrs["units"] == "arb"
+        assert_array_equal(out.values, np.array([11.0, -9999.0, -9999.0]))
+        assert_array_equal(
+            out.coords["lev"].values, np.array([950.0, -9999.0, -9999.0])
+        )
+
+        empty = interp_pressure_1d(
+            data=data,
+            source_pressure=np.array([1000.0, 900.0, 800.0]),
+            target_pressure=np.array([], dtype=np.float64),
+            missing_value=None,
+        )
+        assert isinstance(empty, xr.DataArray)
+        assert empty.shape == (0,)
+        assert empty.dims == ("lev",)
+
+        all_missing = interp_pressure_1d(
+            data=np.array([1.0, 2.0], dtype=np.float64),
+            source_pressure=np.array([1000.0, 900.0], dtype=np.float64),
+            target_pressure=np.array([-9999.0], dtype=np.float64),
+            missing_value=-9999.0,
+        )
+        assert_array_equal(all_missing, np.array([-9999.0]))
+
+        with pytest.raises(ValueError, match="strictly positive pressures"):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0], dtype=np.float64),
+                source_pressure=np.array([1000.0, 0.0], dtype=np.float64),
+                target_pressure=np.array([900.0], dtype=np.float64),
+                method="log",
+            )
+
+        with pytest.raises(ValueError, match="strictly monotonic"):
+            interp_pressure_1d(
+                data=np.array([1.0, 2.0], dtype=np.float64),
+                source_pressure=np.array([1000.0, 900.0], dtype=np.float64),
+                target_pressure=np.array([950.0, 950.0], dtype=np.float64),
+                missing_value=None,
+            )
+
+    def test_dimension_coord_or_default_builds_integer_index_without_coord(self):
+        """Missing coordinates should fall back to a stable integer index."""
+
+        class DummyArray:
+            coords = {}
+            sizes = {"lev": 3}
+
+        array = DummyArray()
+
+        coord = interpolation_mod._dimension_coord_or_default(
+            array,
+            "lev",
+            output_dim="model_level",
+        )
+
+        assert coord.dims == ("model_level",)
+        assert_array_equal(coord.values, np.array([0, 1, 2]))
+
+    def test_interp_pressure_1d_accepts_floatable_non_nan_missing_sentinel(
+        self, monkeypatch
+    ):
+        """A non-NaN sentinel with a float representation should still mark missing values."""
+
+        class FloatableMissing:
+            def __float__(self):
+                return -9999.0
+
+        def fake_interp(p_in, values, p_out, linlog, miss):
+            return np.array([42.0], dtype=np.float64), 0
+
+        monkeypatch.setattr(interpolation_mod, "_dinterp_pressure_1d", fake_interp)
+
+        out = interp_pressure_1d(
+            data=np.array([1.0, -9999.0, 3.0], dtype=np.float64),
+            source_pressure=np.array([1000.0, 900.0, 800.0], dtype=np.float64),
+            target_pressure=np.array([950.0, -9999.0], dtype=np.float64),
+            missing_value=FloatableMissing(),
+        )
+
+        assert_array_equal(out, np.array([42.0, -9999.0]))
+
+    def test_pressure_at_hybrid_levels_flat_requires_backend(self, monkeypatch):
+        """Private pressure helper should fail clearly when no backend exists."""
+
+        monkeypatch.setattr(interpolation_mod, "_dpressure_at_hybrid_levels_pa", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_dpressure_at_hybrid_levels_pa_into", None
+        )
+
+        with pytest.raises(RuntimeError, match="backend is not available"):
+            interpolation_mod._pressure_at_hybrid_levels_flat(
+                np.array([100000.0], dtype=np.float64),
+                np.array([0.0, 0.2], dtype=np.float64),
+                np.array([1.0, 0.0], dtype=np.float64),
+                100000.0,
+            )
+
+    def test_pressure_at_hybrid_levels_flat_reraises_return_wrapper_error(
+        self, monkeypatch
+    ):
+        """Return-allocating helper should re-raise unrelated backend errors."""
+
+        def boom_return(*args, **kwargs):
+            raise TypeError("something else")
+
+        monkeypatch.setattr(
+            interpolation_mod, "_dpressure_at_hybrid_levels_pa_into", None
+        )
+        monkeypatch.setattr(
+            interpolation_mod, "_dpressure_at_hybrid_levels_pa", boom_return
+        )
+
+        with pytest.raises(TypeError, match="something else"):
+            interpolation_mod._pressure_at_hybrid_levels_flat(
+                np.array([100000.0], dtype=np.float64),
+                np.array([0.0, 0.2], dtype=np.float64),
+                np.array([1.0, 0.0], dtype=np.float64),
+                100000.0,
+            )
+
+    def test_delta_pressure_hybrid_flat_reraises_return_wrapper_error(
+        self, monkeypatch
+    ):
+        """Return-allocating delta-pressure helper should re-raise unrelated errors."""
+
+        def boom_return(*args, **kwargs):
+            raise TypeError("something else")
+
+        monkeypatch.setattr(interpolation_mod, "_ddelta_pressure_hybrid_pa_into", None)
+        monkeypatch.setattr(
+            interpolation_mod, "_ddelta_pressure_hybrid_pa", boom_return
+        )
+
+        with pytest.raises(TypeError, match="something else"):
+            interpolation_mod._delta_pressure_hybrid_flat(
+                np.array([100000.0], dtype=np.float64),
+                np.array([0.0, 0.2], dtype=np.float64),
+                np.array([1.0, 0.0], dtype=np.float64),
+                100000.0,
+            )
+
     def test_delta_pressure_hybrid_rejects_invalid_inputs(self):
         """Layer-thickness helper should validate input types, shapes, and dimensions."""
         with pytest.raises(
@@ -2786,6 +3172,130 @@ class TestInterpolationHelperCoverage:
         hyai = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
         hybi = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"])
         hyam = xr.DataArray([0.1, 0.2], dims=["lev"])
+
+        assert (
+            _geopotential_height_hybrid_corder(
+                temperature=temperature,
+                q=q,
+                ps=ps,
+                phis=phis,
+                hyai=hyai,
+                hybi=hybi,
+                hyam=hyam,
+                p0=100000.0,
+                lev_dim="lev",
+                output_dims=("time", "lev", "x"),
+            )
+            is None
+        )
+
+    def test_geopotential_height_hybrid_corder_returns_none_on_broadcast_size_mismatch(
+        self, monkeypatch
+    ):
+        """C-order helper should return None when broadcasted surface sizes are inconsistent."""
+
+        temperature = xr.DataArray(
+            np.ones((2, 3, 4), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((2, 3, 4), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(
+            np.ones((2, 4), dtype=np.float64) * 100000.0,
+            dims=["time", "x"],
+        )
+        phis = xr.DataArray(
+            np.zeros((2, 4), dtype=np.float64),
+            dims=["time", "x"],
+        )
+        hyai = xr.DataArray([0.0, 0.3, 0.6, 1.0], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.7, 0.3, 0.0], dims=["ilev"])
+        hyam = xr.DataArray([0.1, 0.2, 0.3], dims=["lev"])
+
+        def fake_broadcast_flat(array, template):
+            if array is phis:
+                return np.zeros(3, dtype=np.float64)
+            return interpolation_mod._compiled_float64_flat(
+                array.broadcast_like(template).data
+            )
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dgeopotential_height_hybrid_corder_pa_into",
+            lambda *args, **kwargs: None,
+        )
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_as_c_contiguous_compiled_flat",
+            lambda *args, **kwargs: None,
+        )
+        monkeypatch.setattr(
+            interpolation_mod, "_as_broadcast_float64_flat", fake_broadcast_flat
+        )
+
+        assert (
+            _geopotential_height_hybrid_corder(
+                temperature=temperature,
+                q=q,
+                ps=ps,
+                phis=phis,
+                hyai=hyai,
+                hybi=hybi,
+                hyam=hyam,
+                p0=100000.0,
+                lev_dim="lev",
+                output_dims=("time", "lev", "x"),
+            )
+            is None
+        )
+
+    def test_geopotential_height_hybrid_corder_returns_none_when_broadcast_helper_fails(
+        self, monkeypatch
+    ):
+        """C-order helper should return None when broadcast fallback cannot produce a flat buffer."""
+
+        temperature = xr.DataArray(
+            np.ones((1, 2, 2), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 2), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(
+            np.ones((1, 2), dtype=np.float64) * 100000.0,
+            dims=["time", "x"],
+        )
+        phis = xr.DataArray(
+            np.zeros((1, 2), dtype=np.float64),
+            dims=["time", "x"],
+        )
+        hyai = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"])
+        hyam = xr.DataArray([0.1, 0.2], dims=["lev"])
+
+        def fake_broadcast_flat(array, template):
+            if array is phis:
+                return None
+            return interpolation_mod._compiled_float64_flat(
+                array.broadcast_like(template).data
+            )
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dgeopotential_height_hybrid_corder_pa_into",
+            lambda *args, **kwargs: None,
+        )
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_as_c_contiguous_compiled_flat",
+            lambda *args, **kwargs: None,
+        )
+        monkeypatch.setattr(
+            interpolation_mod, "_as_broadcast_float64_flat", fake_broadcast_flat
+        )
 
         assert (
             _geopotential_height_hybrid_corder(
