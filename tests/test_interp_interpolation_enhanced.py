@@ -17,6 +17,7 @@ import skyborn.interp.interpolation as interpolation_mod
 from skyborn.interp.interpolation import (
     __pres_lev_mandatory__,
     _align_hybrid_level_dimension,
+    _geopotential_height_hybrid_corder,
     _pressure_from_hybrid,
     _rename_colliding_coeff_dim,
     _sigma_from_hybrid,
@@ -2423,6 +2424,204 @@ class TestInterpolationHelperCoverage:
             geopotential_height_at_hybrid_levels(
                 temperature, q, ps, phis, hyai, hybi, hyam, hybm
             )
+
+    def test_geopotential_height_at_hybrid_levels_rejects_non_dataarray_inputs(self):
+        """Public geopotential helper should require xarray DataArray inputs."""
+
+        arr3 = xr.DataArray(
+            np.ones((1, 2, 1), dtype=np.float64), dims=["time", "lev", "x"]
+        )
+        arr2 = xr.DataArray(np.ones((1, 1), dtype=np.float64), dims=["time", "x"])
+        coeff_full = xr.DataArray([0.1, 0.2], dims=["lev"])
+        coeff_half = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
+
+        with pytest.raises(TypeError, match="must be xarray DataArray objects"):
+            geopotential_height_at_hybrid_levels(
+                arr3.values,
+                arr3,
+                arr2,
+                arr2,
+                coeff_half,
+                coeff_half,
+                coeff_full,
+                coeff_full,
+            )
+
+    def test_geopotential_height_at_hybrid_levels_rejects_non_numeric_p0(self):
+        """Public geopotential helper should require scalar numeric p0."""
+
+        arr3 = xr.DataArray(
+            np.ones((1, 2, 1), dtype=np.float64), dims=["time", "lev", "x"]
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 1), dtype=np.float64), dims=["time", "lev", "x"]
+        )
+        arr2 = xr.DataArray(np.ones((1, 1), dtype=np.float64), dims=["time", "x"])
+        coeff_full = xr.DataArray([0.1, 0.2], dims=["lev"])
+        coeff_half = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
+
+        with pytest.raises(TypeError, match="p0 must be a scalar numeric value"):
+            geopotential_height_at_hybrid_levels(
+                arr3,
+                q,
+                arr2,
+                arr2,
+                coeff_half,
+                coeff_half,
+                coeff_full,
+                coeff_full,
+                p0="100000",
+            )
+
+    def test_geopotential_height_at_hybrid_levels_warns_on_interface_dim_name_mismatch(
+        self,
+    ):
+        """Interface coeff dim-name mismatch should warn and still compute."""
+
+        temperature = xr.DataArray(
+            np.ones((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(
+            np.ones((1, 1), dtype=np.float64) * 100000.0, dims=["time", "x"]
+        )
+        phis = xr.DataArray(np.zeros((1, 1), dtype=np.float64), dims=["time", "x"])
+        hyam = xr.DataArray([0.1, 0.2], dims=["lev"])
+        hybm = xr.DataArray([0.9, 0.8], dims=["lev"])
+        hyai = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.5, 0.0], dims=["half"])
+
+        with pytest.warns(UserWarning, match="different dimension names"):
+            out = geopotential_height_at_hybrid_levels(
+                temperature,
+                q,
+                ps,
+                phis,
+                hyai,
+                hybi,
+                hyam,
+                hybm,
+            )
+
+        assert out.shape == (1, 2, 1)
+
+    def test_geopotential_height_at_hybrid_levels_rejects_q_shape_mismatch(self):
+        """Specific humidity must match temperature dims and shape."""
+
+        temperature = xr.DataArray(
+            np.ones((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2), dtype=np.float64),
+            dims=["time", "lev"],
+        )
+        ps = xr.DataArray(
+            np.ones((1, 1), dtype=np.float64) * 100000.0, dims=["time", "x"]
+        )
+        phis = xr.DataArray(np.zeros((1, 1), dtype=np.float64), dims=["time", "x"])
+        hyam = xr.DataArray([0.1, 0.2], dims=["lev"])
+        hybm = xr.DataArray([0.9, 0.8], dims=["lev"])
+        hyai = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"])
+
+        with pytest.raises(ValueError, match="same dims and shape as `temperature`"):
+            geopotential_height_at_hybrid_levels(
+                temperature,
+                q,
+                ps,
+                phis,
+                hyai,
+                hybi,
+                hyam,
+                hybm,
+            )
+
+    def test_geopotential_height_hybrid_corder_supports_broadcast_and_non_float64_inputs(
+        self,
+    ):
+        """C-order helper should handle scalar-broadcast surface fields and cast floats."""
+
+        temperature = xr.DataArray(
+            np.arange(6, dtype=np.float32).reshape(1, 2, 3),
+            dims=["time", "lev", "x"],
+            coords={"time": [0], "lev": [1, 2], "x": [0, 1, 2]},
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 3), dtype=np.float32),
+            dims=["time", "lev", "x"],
+            coords=temperature.coords,
+        )
+        ps = xr.DataArray(100000.0)
+        phis = xr.DataArray(0.0)
+        hyai = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"])
+        hyam = xr.DataArray([0.15, 0.45], dims=["lev"], coords={"lev": [1, 2]})
+
+        out = _geopotential_height_hybrid_corder(
+            temperature=temperature,
+            q=q,
+            ps=ps,
+            phis=phis,
+            hyai=hyai,
+            hybi=hybi,
+            hyam=hyam,
+            p0=100000.0,
+            lev_dim="lev",
+            output_dims=("time", "lev", "x"),
+        )
+
+        assert out is not None
+        assert out.dtype == np.float32
+        assert out.dims == ("time", "lev", "x")
+        assert out.shape == (1, 2, 3)
+
+    def test_geopotential_height_hybrid_corder_returns_none_without_backend(
+        self, monkeypatch
+    ):
+        """C-order helper should return None if the compiled backend is unavailable."""
+
+        monkeypatch.setattr(
+            interpolation_mod,
+            "_dgeopotential_height_hybrid_corder_pa_into",
+            None,
+        )
+
+        temperature = xr.DataArray(
+            np.ones((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(
+            np.ones((1, 1), dtype=np.float64) * 100000.0, dims=["time", "x"]
+        )
+        phis = xr.DataArray(np.zeros((1, 1), dtype=np.float64), dims=["time", "x"])
+        hyai = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"])
+        hyam = xr.DataArray([0.1, 0.2], dims=["lev"])
+
+        assert (
+            _geopotential_height_hybrid_corder(
+                temperature=temperature,
+                q=q,
+                ps=ps,
+                phis=phis,
+                hyai=hyai,
+                hybi=hybi,
+                hyam=hyam,
+                p0=100000.0,
+                lev_dim="lev",
+                output_dims=("time", "lev", "x"),
+            )
+            is None
+        )
 
     def test_sigma_from_hybrid_warns_on_coeff_dim_name_mismatch(self):
         """Sigma helper should also warn and rename mismatched coeff dims."""
