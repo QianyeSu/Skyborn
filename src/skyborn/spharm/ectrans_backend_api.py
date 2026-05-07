@@ -521,7 +521,12 @@ def uv_to_vordiv_linear_pilot(
             vspec_arr.imag,
         ]
     )
-    solution = np.linalg.solve(operator, rhs)
+    col_norms = np.linalg.norm(operator, axis=0)
+    active = col_norms > 1e-18
+    reduced_operator = operator[:, active]
+    reduced_solution, _, _, _ = np.linalg.lstsq(reduced_operator, rhs, rcond=None)
+    solution = np.zeros((4 * ncoeff,), dtype=np.float64)
+    solution[active] = reduced_solution
     vrt = solution[:ncoeff] + 1j * solution[ncoeff : 2 * ncoeff]
     div = solution[2 * ncoeff : 3 * ncoeff] + 1j * solution[3 * ncoeff :]
     return vrt, div
