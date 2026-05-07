@@ -53,6 +53,7 @@ ectrans_ext = py.extension_module(
     'PRFI1B_MOD.F90',
     'LDFOU2_MOD.F90',
     'ledir_dgemm.f90',
+    'poa1_to_vordiv.f90',
     'UPDSPB_MOD.F90',
     'VDTUV_MOD.F90',
     'UVTVD_MOD.F90',
