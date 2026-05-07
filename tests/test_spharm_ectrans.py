@@ -12,7 +12,10 @@ if str(REPO_SRC) not in sys.path:
 import skyborn.spharm as spharm_pkg  # noqa: E402
 from skyborn.spharm import _spherepack  # noqa: E402
 from skyborn.spharm.ectrans_backend_api import (  # noqa: E402
+    UvToVordivBlockSolver,
     build_ledir_blocks_from_scalar_bridge,
+    create_uv_to_vordiv_block_setup,
+    destroy_uv_to_vordiv_block_setup,
     direct_vordiv_pilot_from_uv_blocks,
     direct_vordiv_pilot_sweep_from_uv_blocks,
     ldfou2_uv_scaling,
@@ -23,6 +26,9 @@ from skyborn.spharm.ectrans_backend_api import (  # noqa: E402
     scalar_fourier_stub,
     scalar_synthesis_stub,
     uv_to_vordiv,
+    uv_to_vordiv_block_linear_pilot,
+    uv_to_vordiv_block_native_pilot,
+    uv_to_vordiv_block_native_with_setup,
     uv_to_vordiv_linear_pilot,
     vordiv_to_uv,
     weighted_block_solve_stub,
@@ -827,6 +833,244 @@ def test_uv_to_vordiv_linear_pilot_reconstructs_direct_sweep_uv_spectra():
     np.testing.assert_allclose(vspec_back, vspec, rtol=1e-13, atol=2e-8)
     assert np.abs(vrt_back[0]) < 1e-12
     assert np.abs(div_back[0]) < 1e-12
+
+
+def test_uv_to_vordiv_block_linear_pilot_matches_dense_linear_reference():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260512)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    div = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    vrt_dense, div_dense = uv_to_vordiv_linear_pilot(uspec, vspec, rsphere)
+    vrt_block, div_block = uv_to_vordiv_block_linear_pilot(uspec, vspec, rsphere)
+
+    np.testing.assert_allclose(vrt_block, vrt_dense, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(div_block, div_dense, rtol=1e-13, atol=2e-8)
+
+
+def test_uv_to_vordiv_block_linear_pilot_reconstructs_random_uv_spectra():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260513)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    div = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    vrt_back, div_back = uv_to_vordiv_block_linear_pilot(uspec, vspec, rsphere)
+    uspec_back, vspec_back, ierr = vordiv_to_uv(vrt_back, div_back, rsphere)
+    assert ierr == 0
+
+    np.testing.assert_allclose(uspec_back, uspec, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(vspec_back, vspec, rtol=1e-13, atol=2e-8)
+    assert np.abs(vrt_back[0]) < 1e-12
+    assert np.abs(div_back[0]) < 1e-12
+
+
+def test_uv_to_vordiv_native_still_differs_from_block_linear_reference():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260514)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    div = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    vrt_ref, div_ref = uv_to_vordiv_block_linear_pilot(uspec, vspec, rsphere)
+    vrt_native, div_native, ierr = uv_to_vordiv(uspec, vspec, rsphere)
+    assert ierr == 0
+
+    assert np.max(np.abs(vrt_native - vrt_ref)) > 1e-3
+    assert np.max(np.abs(div_native - div_ref)) > 1e-3
+
+
+def test_uv_to_vordiv_block_native_pilot_matches_block_linear_reference():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260515)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    div = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    vrt_ref, div_ref = uv_to_vordiv_block_linear_pilot(uspec, vspec, rsphere)
+    vrt_native, div_native = uv_to_vordiv_block_native_pilot(uspec, vspec, rsphere)
+
+    np.testing.assert_allclose(vrt_native, vrt_ref, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(div_native, div_ref, rtol=1e-13, atol=2e-8)
+
+
+def test_uv_to_vordiv_block_native_pilot_reconstructs_random_uv_spectra():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260516)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    div = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    vrt_back, div_back = uv_to_vordiv_block_native_pilot(uspec, vspec, rsphere)
+    uspec_back, vspec_back, ierr = vordiv_to_uv(vrt_back, div_back, rsphere)
+    assert ierr == 0
+
+    np.testing.assert_allclose(uspec_back, uspec, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(vspec_back, vspec, rtol=1e-13, atol=2e-8)
+    assert np.abs(vrt_back[0]) < 1e-12
+    assert np.abs(div_back[0]) < 1e-12
+
+
+def test_uv_to_vordiv_block_native_with_setup_matches_block_linear_reference():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260517)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    div = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    handle = create_uv_to_vordiv_block_setup(uspec, vspec, rsphere)
+    try:
+        vrt_cached, div_cached = uv_to_vordiv_block_native_with_setup(
+            handle, uspec, vspec
+        )
+    finally:
+        destroy_uv_to_vordiv_block_setup(handle)
+
+    vrt_ref, div_ref = uv_to_vordiv_block_linear_pilot(uspec, vspec, rsphere)
+    np.testing.assert_allclose(vrt_cached, vrt_ref, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(div_cached, div_ref, rtol=1e-13, atol=2e-8)
+
+
+def test_uv_to_vordiv_block_native_with_setup_reuses_handle_and_destroy_closes_it():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260518)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    div = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    handle = create_uv_to_vordiv_block_setup(uspec, vspec, rsphere)
+    vrt_first, div_first = uv_to_vordiv_block_native_with_setup(handle, uspec, vspec)
+    vrt_second, div_second = uv_to_vordiv_block_native_with_setup(handle, uspec, vspec)
+
+    np.testing.assert_allclose(vrt_second, vrt_first, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(div_second, div_first, rtol=0.0, atol=0.0)
+
+    destroy_uv_to_vordiv_block_setup(handle)
+
+    with np.testing.assert_raises_regex(RuntimeError, "setup handle is closed"):
+        uv_to_vordiv_block_native_with_setup(handle, uspec, vspec)
+
+
+def test_uv_to_vordiv_block_solver_reuses_cached_handle():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260521)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    div = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    solver = UvToVordivBlockSolver(uspec, vspec, rsphere)
+    try:
+        vrt_first, div_first = solver.solve(uspec, vspec)
+        vrt_second, div_second = solver.solve(uspec, vspec)
+    finally:
+        solver.close()
+
+    np.testing.assert_allclose(vrt_second, vrt_first, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(div_second, div_first, rtol=0.0, atol=0.0)
+    assert solver.closed
+
+
+def test_uv_to_vordiv_block_solver_context_manager_closes_and_matches_reference():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260522)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    div = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+    vrt_ref, div_ref = uv_to_vordiv_block_linear_pilot(uspec, vspec, rsphere)
+
+    with UvToVordivBlockSolver(uspec, vspec, rsphere) as solver:
+        assert not solver.closed
+        assert solver.rsphere == rsphere
+        vrt_actual, div_actual = solver.solve(uspec, vspec)
+
+    assert solver.closed
+    np.testing.assert_allclose(vrt_actual, vrt_ref, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(div_actual, div_ref, rtol=1e-13, atol=2e-8)
+
+    with np.testing.assert_raises_regex(RuntimeError, "solver is closed"):
+        solver.solve(uspec, vspec)
 
 
 def test_reduced_gaussian_spharmt_vector_shape_validation():
