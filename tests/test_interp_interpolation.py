@@ -18,6 +18,7 @@ from skyborn.interp.interpolation import (
     _pressure_from_hybrid,
     _sigma_from_hybrid,
     delta_pressure_hybrid,
+    geopotential_height_at_hybrid_levels,
     interp_hybrid_to_pressure,
     interp_multidim,
     interp_sigma_to_hybrid,
@@ -91,6 +92,266 @@ class TestInterpolationHelpers:
             np.abs(pressure.values[1:] - pressure.values[:-1]),
             rtol=0.0,
             atol=1e-10,
+        )
+
+    def test_geopotential_height_at_hybrid_levels_basic(self, monkeypatch):
+        """Model-level geopotential-height helper should preserve xarray layout."""
+
+        captured = {}
+
+        def fake_corder(
+            temp_flat,
+            q_flat,
+            z3_flat,
+            psfc,
+            phis,
+            hyai,
+            hybi,
+            p0,
+            nouter,
+            nlev,
+            ninner,
+        ):
+            captured["temp_len"] = len(temp_flat)
+            captured["q_len"] = len(q_flat)
+            captured["z3_len"] = len(z3_flat)
+            captured["psfc_len"] = len(psfc)
+            captured["phis_len"] = len(phis)
+            captured["nouter"] = nouter
+            captured["nlev"] = nlev
+            captured["ninner"] = ninner
+            z3_flat[:] = np.arange(len(z3_flat), dtype=np.float64) + 50.0
+
+        monkeypatch.setattr(
+            interpolation_module,
+            "_dgeopotential_height_hybrid_corder_pa_into",
+            fake_corder,
+        )
+
+        temperature = xr.DataArray(
+            np.array([[[250.0, 255.0], [260.0, 265.0], [270.0, 275.0]]]),
+            dims=["time", "lev", "x"],
+            coords={"time": [0], "lev": [1, 2, 3], "x": [10, 20]},
+            name="T",
+        )
+        q = xr.DataArray(
+            np.array([[[0.001, 0.002], [0.003, 0.004], [0.005, 0.006]]]),
+            dims=["time", "lev", "x"],
+            coords={"time": [0], "lev": [1, 2, 3], "x": [10, 20]},
+            name="Q",
+        )
+        ps = xr.DataArray(
+            np.array([[100000.0, 98000.0]]),
+            dims=["time", "x"],
+            coords={"time": [0], "x": [10, 20]},
+        )
+        phis = xr.DataArray(
+            np.array([[100.0, 200.0]]),
+            dims=["time", "x"],
+            coords={"time": [0], "x": [10, 20]},
+        )
+        hyam = xr.DataArray([0.1, 0.3, 0.6], dims=["lev"], coords={"lev": [1, 2, 3]})
+        hybm = xr.DataArray([0.9, 0.6, 0.2], dims=["lev"], coords={"lev": [1, 2, 3]})
+        hyai = xr.DataArray(
+            [0.0, 0.2, 0.4, 0.8], dims=["ilev"], coords={"ilev": [1, 2, 3, 4]}
+        )
+        hybi = xr.DataArray(
+            [1.0, 0.8, 0.4, 0.0], dims=["ilev"], coords={"ilev": [1, 2, 3, 4]}
+        )
+
+        result = geopotential_height_at_hybrid_levels(
+            temperature, q, ps, phis, hyai, hybi, hyam, hybm, p0=100000.0, lev_dim="lev"
+        )
+
+        assert captured["temp_len"] == 6
+        assert captured["q_len"] == 6
+        assert captured["z3_len"] == 6
+        assert captured["psfc_len"] == 2
+        assert captured["phis_len"] == 2
+        assert captured["nouter"] == 1
+        assert captured["nlev"] == 3
+        assert captured["ninner"] == 2
+        assert result.dims == ("time", "lev", "x")
+        assert result.shape == (1, 3, 2)
+        assert_array_equal(result.lev.values, np.array([1, 2, 3]))
+        assert result.name == "z3"
+        assert result.attrs["units"] == "m"
+
+    def test_geopotential_height_at_hybrid_levels_prefers_corder_fast_path(
+        self, monkeypatch
+    ):
+        """C-order inputs should use the flat-buffer geopotential kernel when available."""
+
+        captured = {}
+
+        def fake_corder(
+            temp_flat,
+            q_flat,
+            z3_flat,
+            psfc,
+            phis,
+            hyai,
+            hybi,
+            p0,
+            nouter,
+            nlev,
+            ninner,
+        ):
+            captured["temp_len"] = len(temp_flat)
+            captured["q_len"] = len(q_flat)
+            captured["z3_len"] = len(z3_flat)
+            captured["ps_len"] = len(psfc)
+            captured["phis_len"] = len(phis)
+            captured["nouter"] = nouter
+            captured["nlev"] = nlev
+            captured["ninner"] = ninner
+            z3_flat[:] = np.arange(len(z3_flat), dtype=np.float64) + 5.0
+
+        monkeypatch.setattr(
+            interpolation_module,
+            "_dgeopotential_height_hybrid_corder_pa_into",
+            fake_corder,
+        )
+
+        temperature = xr.DataArray(
+            np.arange(12, dtype=np.float64).reshape(1, 3, 4),
+            dims=["time", "lev", "x"],
+            coords={"time": [0], "lev": [1, 2, 3], "x": [10, 20, 30, 40]},
+        )
+        q = xr.DataArray(
+            np.arange(12, dtype=np.float64).reshape(1, 3, 4) * 0.0,
+            dims=["time", "lev", "x"],
+            coords=temperature.coords,
+        )
+        ps = xr.DataArray(
+            np.full((1, 4), 100000.0, dtype=np.float64),
+            dims=["time", "x"],
+            coords={"time": [0], "x": [10, 20, 30, 40]},
+        )
+        phis = xr.DataArray(
+            np.full((1, 4), 100.0, dtype=np.float64),
+            dims=["time", "x"],
+            coords={"time": [0], "x": [10, 20, 30, 40]},
+        )
+        hyam = xr.DataArray([0.1, 0.3, 0.6], dims=["lev"], coords={"lev": [1, 2, 3]})
+        hybm = xr.DataArray([0.9, 0.6, 0.2], dims=["lev"], coords={"lev": [1, 2, 3]})
+        hyai = xr.DataArray([0.0, 0.2, 0.4, 0.8], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.8, 0.4, 0.0], dims=["ilev"])
+
+        result = geopotential_height_at_hybrid_levels(
+            temperature,
+            q,
+            ps,
+            phis,
+            hyai,
+            hybi,
+            hyam,
+            hybm,
+            p0=100000.0,
+            lev_dim="lev",
+        )
+
+        assert captured["temp_len"] == 12
+        assert captured["q_len"] == 12
+        assert captured["z3_len"] == 12
+        assert captured["ps_len"] == 4
+        assert captured["phis_len"] == 4
+        assert captured["nouter"] == 1
+        assert captured["nlev"] == 3
+        assert captured["ninner"] == 4
+        assert result.dims == ("time", "lev", "x")
+        assert result.shape == (1, 3, 4)
+
+    def test_geopotential_height_at_hybrid_levels_matches_general_top_layer_formula(
+        self,
+    ):
+        """Nonzero top interfaces should use the general hypsometric formula."""
+
+        temperature = xr.DataArray(
+            np.array([[[250.0], [260.0]]], dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.array([[[0.001], [0.002]]], dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(np.array([[90000.0]], dtype=np.float64), dims=["time", "x"])
+        phis = xr.DataArray(np.array([[100.0]], dtype=np.float64), dims=["time", "x"])
+        hyam = xr.DataArray([0.003, 0.010], dims=["lev"])
+        hybm = xr.DataArray([0.0, 0.0], dims=["lev"])
+        hyai = xr.DataArray([0.002, 0.005, 0.015], dims=["ilev"])
+        hybi = xr.DataArray([0.0, 0.0, 0.0], dims=["ilev"])
+
+        result = geopotential_height_at_hybrid_levels(
+            temperature,
+            q,
+            ps,
+            phis,
+            hyai,
+            hybi,
+            hyam,
+            hybm,
+            p0=100000.0,
+            lev_dim="lev",
+        )
+
+        rd = 287.06
+        g = 9.80665
+        tv_top = 250.0 * (1.0 + 0.609133 * 0.001)
+        tv_bottom = 260.0 * (1.0 + 0.609133 * 0.002)
+        p_upper = 0.002 * 100000.0
+        p_lower = 0.005 * 100000.0
+        p_upper_bottom = 0.005 * 100000.0
+        p_lower_bottom = 0.015 * 100000.0
+        dlog_p = np.log(p_lower / p_upper)
+        alpha = 1.0 - (p_upper / (p_lower - p_upper)) * dlog_p
+        dlog_bottom = np.log(p_lower_bottom / p_upper_bottom)
+        expected_top = (100.0 + rd * tv_bottom * dlog_bottom + rd * tv_top * alpha) / g
+
+        assert_allclose(
+            result.isel(time=0, lev=0, x=0), expected_top, rtol=0.0, atol=1e-10
+        )
+
+    def test_geopotential_height_at_hybrid_levels_keeps_zero_top_interface_shortcut(
+        self,
+    ):
+        """Zero-pressure top interfaces should retain the ECMWF/IFS shortcut."""
+
+        temperature = xr.DataArray(
+            np.array([[[240.0], [260.0]]], dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(np.array([[100000.0]], dtype=np.float64), dims=["time", "x"])
+        phis = xr.DataArray(np.array([[0.0]], dtype=np.float64), dims=["time", "x"])
+        hyam = xr.DataArray([0.0, 0.3], dims=["lev"])
+        hybm = xr.DataArray([0.0, 0.0], dims=["lev"])
+        hyai = xr.DataArray([0.0, 0.2, 0.4], dims=["ilev"])
+        hybi = xr.DataArray([0.0, 0.0, 0.0], dims=["ilev"])
+
+        result = geopotential_height_at_hybrid_levels(
+            temperature,
+            q,
+            ps,
+            phis,
+            hyai,
+            hybi,
+            hyam,
+            hybm,
+            p0=100000.0,
+            lev_dim="lev",
+        )
+
+        rd = 287.06
+        g = 9.80665
+        dlog_bottom = np.log(40000.0 / 20000.0)
+        expected_top = (rd * 260.0 * dlog_bottom + rd * 240.0 * np.log(2.0)) / g
+
+        assert_allclose(
+            result.isel(time=0, lev=0, x=0), expected_top, rtol=0.0, atol=1e-10
         )
 
 
