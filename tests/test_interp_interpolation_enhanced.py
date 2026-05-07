@@ -21,6 +21,7 @@ from skyborn.interp.interpolation import (
     _rename_colliding_coeff_dim,
     _sigma_from_hybrid,
     delta_pressure_hybrid,
+    geopotential_height_at_hybrid_levels,
     interp_hybrid_to_pressure,
     interp_multidim,
     interp_sigma_to_hybrid,
@@ -2396,6 +2397,31 @@ class TestInterpolationHelperCoverage:
                 np.array([0.0, 0.2, 0.5]),
                 np.array([1.0, 0.5, 0.0]),
                 lev_dim="model_level",
+            )
+
+    def test_geopotential_height_at_hybrid_levels_validates_interface_lengths(self):
+        """Model-level geopotential helper should require half levels = full levels + 1."""
+
+        temperature = xr.DataArray(
+            np.ones((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(
+            np.ones((1, 1), dtype=np.float64) * 100000.0, dims=["time", "x"]
+        )
+        phis = xr.DataArray(np.zeros((1, 1), dtype=np.float64), dims=["time", "x"])
+        hyam = xr.DataArray([0.1, 0.2], dims=["lev"])
+        hybm = xr.DataArray([0.9, 0.8], dims=["lev"])
+        hyai = xr.DataArray([0.0, 0.3], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.5], dims=["ilev"])
+
+        with pytest.raises(ValueError, match="exactly one element longer"):
+            geopotential_height_at_hybrid_levels(
+                temperature, q, ps, phis, hyai, hybi, hyam, hybm
             )
 
     def test_sigma_from_hybrid_warns_on_coeff_dim_name_mismatch(self):
