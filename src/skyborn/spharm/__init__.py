@@ -5,12 +5,12 @@ This package exposes the main rectangular-grid `Spharmt` interface together
 with the experimental packed reduced-Gaussian backend.
 """
 
+from ._dispatch import regrid, regriduv
 from .reduced_gaussian import (
     ReducedGaussianBackendError,
     ReducedGaussianGrid,
     ReducedGaussianSpharmt,
     ReducedGaussianValidationError,
-    regriduv,
 )
 from .spherical_harmonics import *
 
