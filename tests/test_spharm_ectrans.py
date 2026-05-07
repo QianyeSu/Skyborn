@@ -206,6 +206,61 @@ def _python_vordiv_to_uv_reference(
     return uspec[:, 0], vspec[:, 0]
 
 
+def _spectral_index(ntrunc: int, m: int, n: int) -> int:
+    """Return the public triangular coefficient index for one (m, n)."""
+    idx = 0
+    for mm in range(ntrunc + 1):
+        for nn in range(mm, ntrunc + 1):
+            if mm == m and nn == n:
+                return idx
+            idx += 1
+    raise ValueError(f"invalid (m, n)=({m}, {n}) for ntrunc={ntrunc}")
+
+
+def _build_ledir_blocks_from_scalar_bridge(
+    nlon: int,
+    nlat: int,
+    km: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Build DGEMM-only LEDIR blocks from scalar synthesis/FFT on a Gaussian bridge."""
+    ntrunc = nlat - 1
+    ndgnh = (nlat + 1) // 2
+    ia = 1 + ((ntrunc - km + 2) % 2)
+    is_ = 1 + ((ntrunc - km + 1) % 2)
+    ila = (ntrunc - km + 2) // 2
+    ils = (ntrunc - km + 3) // 2
+    sht = spharm_pkg.Spharmt(
+        nlon=nlon, nlat=nlat, gridtype="gaussian", legfunc="stored"
+    )
+    _, weights = spharm_pkg.gaussian_lats_wts(nlat)
+
+    rpnma = np.zeros((ndgnh, ila), dtype=np.float64)
+    rpnms = np.zeros((ndgnh, ils), dtype=np.float64)
+    pw = np.asarray(weights[:ndgnh], dtype=np.float64)
+
+    for j in range(ila):
+        row = ia + 2 * j
+        n = ntrunc + 2 - row
+        if km <= n <= ntrunc:
+            spec = np.zeros((nlat * (nlat + 1)) // 2, dtype=np.complex128)
+            spec[_spectral_index(ntrunc, km, n)] = 1.0 + 0.0j
+            grid = sht.spectogrd(spec)
+            amp = np.fft.rfft(grid, axis=1) / float(nlon)
+            rpnma[:, j] = amp[:ndgnh, km].real
+
+    for j in range(ils):
+        row = is_ + 2 * j
+        n = ntrunc + 2 - row
+        if km <= n <= ntrunc:
+            spec = np.zeros((nlat * (nlat + 1)) // 2, dtype=np.complex128)
+            spec[_spectral_index(ntrunc, km, n)] = 1.0 + 0.0j
+            grid = sht.spectogrd(spec)
+            amp = np.fft.rfft(grid, axis=1) / float(nlon)
+            rpnms[:, j] = amp[:ndgnh, km].real
+
+    return rpnma, rpnms, pw
+
+
 def test_reduced_gaussian_grid_basic_metadata():
     grid = ReducedGaussianGrid(np.array([20, 24, 28, 24, 20], dtype=np.int32))
     assert grid.ndgl == 5
@@ -469,6 +524,41 @@ def test_ledir_dgemm_matches_manual_small_matrix_case():
             expected[is_ - 1 + 2 * j, jk] = zcs[j]
 
     np.testing.assert_allclose(actual, expected, rtol=0.0, atol=1e-12)
+
+
+def test_ledir_dgemm_reproduces_gaussian_bridge_scalar_mode_rows():
+    nlat = 17
+    nlon = 32
+    ntrunc = nlat - 1
+    km = 2
+    ndgnh = (nlat + 1) // 2
+    ila = (ntrunc - km + 2) // 2
+    ils = (ntrunc - km + 3) // 2
+    ia = 1 + ((ntrunc - km + 2) % 2)
+    is_ = 1 + ((ntrunc - km + 1) % 2)
+    nlei1 = ntrunc + 4 + ((ntrunc + 5) % 2)
+
+    rpnma, rpnms, pw = _build_ledir_blocks_from_scalar_bridge(nlon, nlat, km)
+
+    for n in range(km, ntrunc + 1):
+        row = ntrunc + 2 - n
+        if row % 2 == ia % 2:
+            paia = np.zeros((1, ndgnh), dtype=np.float64)
+            psia = np.zeros((1, ndgnh), dtype=np.float64)
+            col = (row - ia) // 2
+            paia[0, :] = rpnma[:, col] / pw
+            actual, ierror = ledir_dgemm(ntrunc, km, paia, psia, rpnma, rpnms, pw)
+        else:
+            paia = np.zeros((1, ndgnh), dtype=np.float64)
+            psia = np.zeros((1, ndgnh), dtype=np.float64)
+            col = (row - is_) // 2
+            psia[0, :] = rpnms[:, col] / pw
+            actual, ierror = ledir_dgemm(ntrunc, km, paia, psia, rpnma, rpnms, pw)
+
+        assert ierror == 0
+        assert actual.shape == (nlei1, 1)
+        peak_row = int(np.argmax(np.abs(actual[:, 0])))
+        assert peak_row == row - 1
 
 
 def test_reduced_gaussian_spharmt_vector_shape_validation():
