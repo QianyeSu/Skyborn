@@ -13,6 +13,9 @@ import skyborn.spharm as spharm_pkg  # noqa: E402
 from skyborn.spharm import _spherepack  # noqa: E402
 from skyborn.spharm.ectrans_backend_api import (  # noqa: E402
     UvToVordivBlockSolver,
+    UvToVordivBlockSolverCache,
+    _clear_uv_to_vordiv_block_native_pilot_cache,
+    _get_uv_to_vordiv_block_native_pilot_cache,
     build_ledir_blocks_from_scalar_bridge,
     create_uv_to_vordiv_block_setup,
     destroy_uv_to_vordiv_block_setup,
@@ -1110,6 +1113,47 @@ def test_uv_to_vordiv_block_native_batch_matches_cached_batch_and_reconstructs_u
     np.testing.assert_allclose(vspec_cached, vspec, rtol=1e-13, atol=2e-8)
 
 
+def test_uv_to_vordiv_block_native_pilot_populates_module_cache_and_reuses_across_nt():
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260602)
+
+    _clear_uv_to_vordiv_block_native_pilot_cache()
+    cache = _get_uv_to_vordiv_block_native_pilot_cache()
+    assert cache.size == 0
+
+    nlat = 9
+    ncoeff = (nlat * (nlat + 1)) // 2
+    vrt1 = rng.standard_normal((ncoeff, 2)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 2)).astype(np.float64)
+    div1 = rng.standard_normal((ncoeff, 2)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 2)).astype(np.float64)
+    vrt2 = rng.standard_normal((ncoeff, 4)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 4)).astype(np.float64)
+    div2 = rng.standard_normal((ncoeff, 4)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 4)).astype(np.float64)
+
+    uspec1, vspec1, ierr = vordiv_to_uv(vrt1, div1, rsphere)
+    assert ierr == 0
+    uspec2, vspec2, ierr = vordiv_to_uv(vrt2, div2, rsphere)
+    assert ierr == 0
+
+    uv_to_vordiv_block_native_pilot(uspec1, vspec1, rsphere)
+    assert cache.size == 1
+    solver_first = cache.get_solver(uspec1, vspec1, rsphere)
+
+    uv_to_vordiv_block_native_pilot(uspec2, vspec2, rsphere)
+    assert cache.size == 1
+    solver_second = cache.get_solver(uspec2, vspec2, rsphere)
+    assert solver_first is solver_second
+
+    _clear_uv_to_vordiv_block_native_pilot_cache()
+    assert cache.size == 0
+
+
 def test_uv_to_vordiv_block_solver_batch_reuses_handle():
     nlat = 9
     rsphere = 6.3712e6
@@ -1137,6 +1181,138 @@ def test_uv_to_vordiv_block_solver_batch_reuses_handle():
     np.testing.assert_allclose(vrt_second, vrt_first, rtol=0.0, atol=0.0)
     np.testing.assert_allclose(div_second, div_first, rtol=0.0, atol=0.0)
     assert solver.closed
+
+
+def test_uv_to_vordiv_block_solver_cache_reuses_solver_for_same_shape():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260529)
+    ncoeff = (nlat * (nlat + 1)) // 2
+    nt = 3
+
+    vrt = rng.standard_normal((ncoeff, nt)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, nt)).astype(np.float64)
+    div = rng.standard_normal((ncoeff, nt)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, nt)).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    cache = UvToVordivBlockSolverCache()
+    try:
+        solver1 = cache.get_solver(uspec, vspec, rsphere)
+        solver2 = cache.get_solver(uspec, vspec, rsphere)
+        vrt1, div1 = cache.solve(uspec, vspec, rsphere)
+        vrt2, div2 = cache.solve(uspec, vspec, rsphere)
+    finally:
+        cache.close()
+
+    assert solver1 is solver2
+    assert cache.closed
+    np.testing.assert_allclose(vrt2, vrt1, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(div2, div1, rtol=0.0, atol=0.0)
+
+
+def test_uv_to_vordiv_block_solver_cache_separates_distinct_shapes_and_clear_reopens():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260530)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt1 = rng.standard_normal((ncoeff, 2)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 2)).astype(np.float64)
+    div1 = rng.standard_normal((ncoeff, 2)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 2)).astype(np.float64)
+    vrt2 = rng.standard_normal((ncoeff, 3)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 3)).astype(np.float64)
+    div2 = rng.standard_normal((ncoeff, 3)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 3)).astype(np.float64)
+
+    uspec1, vspec1, ierr = vordiv_to_uv(vrt1, div1, rsphere)
+    assert ierr == 0
+    uspec2, vspec2, ierr = vordiv_to_uv(vrt2, div2, rsphere)
+    assert ierr == 0
+
+    cache = UvToVordivBlockSolverCache()
+    solver1 = cache.get_solver(uspec1, vspec1, rsphere)
+    solver2 = cache.get_solver(uspec2, vspec2, rsphere)
+    assert solver1 is solver2
+    assert cache.size == 1
+
+    cache.clear()
+    assert not cache.closed
+    assert cache.size == 0
+    assert solver1.closed
+    assert solver2.closed
+
+    solver3 = cache.get_solver(uspec1, vspec1, rsphere)
+    assert not solver3.closed
+    assert cache.size == 1
+    cache.close()
+
+
+def test_uv_to_vordiv_block_solver_cache_close_blocks_future_use():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260531)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    div = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    cache = UvToVordivBlockSolverCache()
+    cache.get_solver(uspec, vspec, rsphere)
+    cache.close()
+
+    with np.testing.assert_raises_regex(RuntimeError, "cache is closed"):
+        cache.get_solver(uspec, vspec, rsphere)
+
+
+def test_uv_to_vordiv_block_solver_rejects_geometry_mismatch():
+    nlat = 9
+    other_nlat = 8
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260601)
+    ncoeff = (nlat * (nlat + 1)) // 2
+    other_ncoeff = (other_nlat * (other_nlat + 1)) // 2
+
+    vrt1 = rng.standard_normal((ncoeff, 2)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 2)).astype(np.float64)
+    div1 = rng.standard_normal((ncoeff, 2)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 2)).astype(np.float64)
+    vrt2 = rng.standard_normal((other_ncoeff, 2)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((other_ncoeff, 2)).astype(np.float64)
+    div2 = rng.standard_normal((other_ncoeff, 2)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((other_ncoeff, 2)).astype(np.float64)
+
+    uspec1, vspec1, ierr = vordiv_to_uv(vrt1, div1, rsphere)
+    assert ierr == 0
+    uspec2, vspec2, ierr = vordiv_to_uv(vrt2, div2, rsphere)
+    assert ierr == 0
+
+    solver = UvToVordivBlockSolver(uspec1, vspec1, rsphere)
+    try:
+        with np.testing.assert_raises_regex(ValueError, "geometry mismatch"):
+            solver.solve(uspec2, vspec2)
+    finally:
+        solver.close()
 
 
 def test_reduced_gaussian_spharmt_vector_shape_validation():
