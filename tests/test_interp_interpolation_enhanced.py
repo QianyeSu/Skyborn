@@ -2632,6 +2632,60 @@ class TestInterpolationHelperCoverage:
                 lev_dim=None,
             )
 
+    def test_geopotential_height_at_hybrid_levels_autodetects_vertical_dim_via_cf(
+        self, monkeypatch
+    ):
+        """lev_dim=None should succeed when a CF-style vertical accessor is available."""
+
+        class _FakeCFDescriptor:
+            def __get__(self, obj, objtype=None):
+                class _FakeCF:
+                    def __init__(self, arr):
+                        self.arr = arr
+
+                    def guess_coord_axis(self):
+                        return self.arr
+
+                    def __getitem__(self, key):
+                        if key != "vertical":
+                            raise KeyError(key)
+                        return type("_Coord", (), {"name": "lev"})()
+
+                return _FakeCF(obj)
+
+        monkeypatch.setattr(xr.DataArray, "cf", _FakeCFDescriptor(), raising=False)
+
+        temperature = xr.DataArray(
+            np.ones((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(
+            np.ones((1, 1), dtype=np.float64) * 100000.0, dims=["time", "x"]
+        )
+        phis = xr.DataArray(np.zeros((1, 1), dtype=np.float64), dims=["time", "x"])
+        hyam = xr.DataArray([0.1, 0.2], dims=["lev"], coords={"lev": [1, 2]})
+        hybm = xr.DataArray([0.9, 0.8], dims=["lev"], coords={"lev": [1, 2]})
+        hyai = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"])
+
+        out = geopotential_height_at_hybrid_levels(
+            temperature,
+            q,
+            ps,
+            phis,
+            hyai,
+            hybi,
+            hyam,
+            hybm,
+            lev_dim=None,
+        )
+
+        assert out.dims == ("time", "lev", "x")
+
     def test_geopotential_height_hybrid_corder_supports_broadcast_and_non_float64_inputs(
         self,
     ):
