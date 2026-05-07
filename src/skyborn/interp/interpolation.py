@@ -897,6 +897,8 @@ def _geopotential_height_hybrid_corder(
         phis_flat = _as_broadcast_float64_flat(phis, base_template)
     if ps_flat is None or phis_flat is None:
         return None
+    if ps_flat.size != nouter * ninner or phis_flat.size != nouter * ninner:
+        return None
 
     hyai_values = _compiled_float64_vector(hyai.data)
     hybi_values = _compiled_float64_vector(hybi.data)
