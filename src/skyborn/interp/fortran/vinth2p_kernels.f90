@@ -25,6 +25,8 @@ module vinth2p_kernels_core
     public :: build_input_pressures
     public :: build_double_log_levels
     public :: compute_delta_pressure_columns
+    public :: compute_geopotential_height_columns
+    public :: compute_geopotential_height_flat_column
     public :: compute_pressure_at_hybrid_levels_columns
     public :: convert_levels_to_mb
     public :: extrapolate_geopotential
@@ -102,6 +104,112 @@ contains
             pressure(:, col) = scaled_a + hbcofb * psfc(col)
         end do
     end subroutine compute_pressure_at_hybrid_levels_columns
+
+
+    ! Compute geopotential height on full model levels from virtual temperature,
+    ! hybrid coefficients, surface pressure, and surface geopotential.
+    !
+    ! This implementation follows the ECMWF ERA5 model-level geopotential
+    ! recipe for:
+    !   - virtual temperature: Tv = T * (1 + 0.609133 * q)
+    !   - bottom-up integration from surface geopotential
+    !   - the special top-layer shortcut only when the top interface pressure
+    !     is exactly zero, as in the ERA5 half-level definition
+    !
+    ! Reference:
+    !   ERA5: compute pressure and geopotential on model levels,
+    !   geopotential height and geometric height
+    !   https://confluence.ecmwf.int/display/CKB/ERA5%3A+compute+pressure+and+geopotential+on+model+levels%2C+geopotential+height+and+geometric+height
+    !
+    ! Use the general hypsometric full-layer integral whenever the top
+    ! interface pressure is finite. Keep the legacy ECMWF/IFS top-layer
+    ! shortcut only for coordinate systems whose top interface is exactly
+    ! zero-pressure.
+    pure subroutine compute_geopotential_height_columns( &
+        temp, q, psfc, phis, hyai, hybi, hyam, hybm, p0, z3)
+        real(real64), intent(in) :: temp(:, :), q(:, :)
+        real(real64), intent(in) :: psfc(:), phis(:), hyai(:), hybi(:), hyam(:), hybm(:), p0
+        real(real64), intent(out) :: z3(size(hyam), size(psfc))
+
+        integer :: col, k, nlev, nlevi
+        real(real64), parameter :: rd = 287.06_real64
+        real(real64), parameter :: g = 9.80665_real64
+        real(real64) :: p_half(size(hyai))
+        real(real64) :: p_upper, p_lower, dlog_p, alpha_full
+        real(real64) :: phi_half, tv_level, phi_full
+
+        nlev = size(hyam)
+        nlevi = size(hyai)
+        do col = 1, size(psfc)
+            do k = 1, nlevi
+                p_half(k) = hyai(k) * p0 + hybi(k) * psfc(col)
+            end do
+
+            phi_half = phis(col)
+            do k = nlev, 1, -1
+                p_upper = p_half(k)
+                p_lower = p_half(k + 1)
+
+                if (k == 1 .and. p_upper <= 0.0_real64) then
+                    dlog_p = log(p_lower / 0.1_real64)
+                    alpha_full = log(2.0_real64)
+                else
+                    dlog_p = log(p_lower / p_upper)
+                    alpha_full = 1.0_real64 - (p_upper / (p_lower - p_upper)) * dlog_p
+                end if
+
+                tv_level = rd * temp(k, col) * (1.0_real64 + 0.609133_real64 * q(k, col))
+                phi_full = phi_half + tv_level * alpha_full
+                z3(k, col) = phi_full / g
+                phi_half = phi_half + tv_level * dlog_p
+            end do
+        end do
+    end subroutine compute_geopotential_height_columns
+
+
+    ! Compute one flat C-order column of geopotential height in place.
+    pure subroutine compute_geopotential_height_flat_column( &
+        temp_flat, q_flat, z3_flat, psfc, phis, hyai, hybi, p0, &
+        base_in, base_out, inner, ninner, nlev)
+        real(real64), intent(in) :: temp_flat(:), q_flat(:)
+        real(real64), intent(inout) :: z3_flat(:)
+        real(real64), intent(in) :: psfc, phis, hyai(:), hybi(:), p0
+        integer, intent(in) :: base_in, base_out, inner, ninner, nlev
+
+        integer :: idx_in, idx_out, k
+        real(real64), parameter :: rd = 287.06_real64
+        real(real64), parameter :: g = 9.80665_real64
+        real(real64) :: p_half(size(hyai))
+        real(real64) :: p_upper, p_lower, dlog_p, alpha_full
+        real(real64) :: phi_half, tv_level, phi_full
+
+        do k = 1, size(hyai)
+            p_half(k) = hyai(k) * p0 + hybi(k) * psfc
+        end do
+
+        phi_half = phis
+        idx_in = base_in + inner + (nlev - 1) * ninner
+        idx_out = base_out + inner + (nlev - 1) * ninner
+        do k = nlev, 1, -1
+            p_upper = p_half(k)
+            p_lower = p_half(k + 1)
+
+            if (k == 1 .and. p_upper <= 0.0_real64) then
+                dlog_p = log(p_lower / 0.1_real64)
+                alpha_full = log(2.0_real64)
+            else
+                dlog_p = log(p_lower / p_upper)
+                alpha_full = 1.0_real64 - (p_upper / (p_lower - p_upper)) * dlog_p
+            end if
+
+            tv_level = rd * temp_flat(idx_in) * (1.0_real64 + 0.609133_real64 * q_flat(idx_in))
+            phi_full = phi_half + tv_level * alpha_full
+            z3_flat(idx_out) = phi_full / g
+            phi_half = phi_half + tv_level * dlog_p
+            idx_in = idx_in - ninner
+            idx_out = idx_out - ninner
+        end do
+    end subroutine compute_geopotential_height_flat_column
 
 
     ! Build the flat-buffer input offsets for one physical column so the hot
@@ -1747,6 +1855,41 @@ subroutine dpressure_at_hybrid_levels_pa_into(psfc, pressure, hbcofa, hbcofb, p0
 
     call dpressure_at_hybrid_levels_pa(psfc, pressure, hbcofa, hbcofb, p0, ncol, nlev)
 end subroutine dpressure_at_hybrid_levels_pa_into
+
+
+! QUICK REFERENCE
+! PURPOSE
+!    FAST C-ORDER ENTRY POINT FOR HYBRID-LEVEL GEOPOTENTIAL HEIGHT.
+!    INPUT AND OUTPUT ARRAYS STAY IN FLAT NUMPY C-ORDER BUFFERS SO PYTHON
+!    DOES NOT NEED TO PACK THEM INTO COLUMN-MAJOR STORAGE.
+subroutine dgeopotential_height_hybrid_corder_pa_into( &
+    temp_flat, q_flat, z3_flat, psfc, phis, hyai, hybi, p0, &
+    nouter, nlev, ninner)
+    use vinth2p_kernels_core, only : real64, compute_geopotential_height_flat_column
+    implicit none
+
+    integer, intent(in) :: nouter, nlev, ninner
+    real(real64), intent(in) :: temp_flat(nouter * nlev * ninner)
+    real(real64), intent(in) :: q_flat(nouter * nlev * ninner)
+    real(real64), intent(inout) :: z3_flat(nouter * nlev * ninner)
+    real(real64), intent(in) :: psfc(nouter * ninner), phis(nouter * ninner)
+    real(real64), intent(in) :: hyai(nlev + 1), hybi(nlev + 1)
+    real(real64), intent(in) :: p0
+
+    integer :: base_in, base_out, col_idx, inner, outer
+
+    do outer = 0, nouter - 1
+        base_in = outer * nlev * ninner
+        base_out = outer * nlev * ninner
+        do inner = 1, ninner
+            col_idx = outer * ninner + inner
+            call compute_geopotential_height_flat_column( &
+                temp_flat, q_flat, z3_flat, psfc(col_idx), phis(col_idx), hyai, hybi, p0, &
+                base_in, base_out, inner, ninner, nlev &
+            )
+        end do
+    end do
+end subroutine dgeopotential_height_hybrid_corder_pa_into
 
 
 ! QUICK REFERENCE
