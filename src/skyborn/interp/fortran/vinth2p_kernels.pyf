@@ -192,6 +192,19 @@ python module vinth2p_kernels ! in
             double precision dimension(nlev), intent(in) :: hbcofb
             double precision intent(in) :: p0
         end subroutine dpressure_at_hybrid_levels_pa_into
+        subroutine dgeopotential_height_hybrid_corder_pa_into(temp_flat,q_flat,z3_flat,psfc,phis,hyai,hybi,p0,nouter,nlev,ninner) ! in :vinth2p_kernels:vinth2p_kernels.f90
+            integer intent(in) :: nouter
+            integer intent(in) :: nlev
+            integer intent(in) :: ninner
+            double precision dimension(nouter*nlev*ninner), depend(nouter,nlev,ninner), intent(in) :: temp_flat
+            double precision dimension(nouter*nlev*ninner), depend(nouter,nlev,ninner), intent(in) :: q_flat
+            double precision dimension(nouter*nlev*ninner), check(len(z3_flat)>=nouter*nlev*ninner), depend(nouter,nlev,ninner), intent(in,out) :: z3_flat
+            double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: psfc
+            double precision dimension(nouter*ninner), depend(nouter,ninner), intent(in) :: phis
+            double precision dimension(nlev+1), depend(nlev), intent(in) :: hyai
+            double precision dimension(nlev+1), depend(nlev), intent(in) :: hybi
+            double precision intent(in) :: p0
+        end subroutine dgeopotential_height_hybrid_corder_pa_into
     end interface
 end python module vinth2p_kernels
 
