@@ -204,6 +204,19 @@ void ledir_dgemm(
     int *ierror
 );
 
+void poa1_to_vordiv(
+    int ntrunc,
+    int km,
+    int kf_uv,
+    double rsphere,
+    const double *poa1_in,
+    double *vrtspec_r,
+    double *vrtspec_i,
+    double *divspec_r,
+    double *divspec_i,
+    int *ierror
+);
+
 static int infer_ntrunc_from_ncoeff(npy_intp ncoeff) {
     long long value = (long long) ncoeff;
     int ntrunc = (int) (-1.5 + 0.5 * sqrt(1.0 + 8.0 * (double) value));
@@ -2050,6 +2063,114 @@ fail:
     return NULL;
 }
 
+static PyObject *backend_poa1_to_vordiv(PyObject *self, PyObject *args) {
+    PyObject *poa1_obj = NULL;
+    PyArrayObject *poa1_arr = NULL;
+    PyArrayObject *vrt_real_arr = NULL;
+    PyArrayObject *vrt_imag_arr = NULL;
+    PyArrayObject *div_real_arr = NULL;
+    PyArrayObject *div_imag_arr = NULL;
+    PyArrayObject *vrt_out_arr = NULL;
+    PyArrayObject *div_out_arr = NULL;
+    double rsphere = 0.0;
+    int ntrunc = -1, km = -1, ierror = 0, kf_uv = -1, ncoeff = -1, nlei1 = -1;
+    npy_intp spec_dims[1];
+    npy_intp idx;
+    npy_complex128 *vrt_out_data = NULL;
+    npy_complex128 *div_out_data = NULL;
+    double *vrt_real_data = NULL;
+    double *vrt_imag_data = NULL;
+    double *div_real_data = NULL;
+    double *div_imag_data = NULL;
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "iiOd", &ntrunc, &km, &poa1_obj, &rsphere)) {
+        return NULL;
+    }
+
+    poa1_arr = require_array(poa1_obj, NPY_FLOAT64);
+    if (poa1_arr == NULL) {
+        goto fail;
+    }
+    if (ntrunc < 0 || km < 0 || km > ntrunc) {
+        PyErr_SetString(PyExc_ValueError, "require 0 <= km <= ntrunc");
+        goto fail;
+    }
+    if (PyArray_NDIM(poa1_arr) != 2) {
+        PyErr_SetString(PyExc_ValueError, "poa1 must be rank-2 float64 array");
+        goto fail;
+    }
+
+    nlei1 = ntrunc + 4 + ((ntrunc + 5) % 2);
+    if ((int) PyArray_DIM(poa1_arr, 0) != nlei1) {
+        PyErr_SetString(PyExc_ValueError, "poa1 first dimension must equal ntrunc + 4 + ((ntrunc + 5) % 2)");
+        goto fail;
+    }
+    if (((int) PyArray_DIM(poa1_arr, 1)) % 4 != 0) {
+        PyErr_SetString(PyExc_ValueError, "poa1 second dimension must be divisible by 4");
+        goto fail;
+    }
+    kf_uv = (int) PyArray_DIM(poa1_arr, 1) / 4;
+
+    ncoeff = ((ntrunc + 1) * (ntrunc + 2)) / 2;
+    spec_dims[0] = ncoeff;
+    vrt_real_arr = (PyArrayObject *) PyArray_ZEROS(1, spec_dims, NPY_FLOAT64, 0);
+    vrt_imag_arr = (PyArrayObject *) PyArray_ZEROS(1, spec_dims, NPY_FLOAT64, 0);
+    div_real_arr = (PyArrayObject *) PyArray_ZEROS(1, spec_dims, NPY_FLOAT64, 0);
+    div_imag_arr = (PyArrayObject *) PyArray_ZEROS(1, spec_dims, NPY_FLOAT64, 0);
+    vrt_out_arr = (PyArrayObject *) PyArray_ZEROS(1, spec_dims, NPY_COMPLEX128, 0);
+    div_out_arr = (PyArrayObject *) PyArray_ZEROS(1, spec_dims, NPY_COMPLEX128, 0);
+    if (vrt_real_arr == NULL || vrt_imag_arr == NULL ||
+        div_real_arr == NULL || div_imag_arr == NULL ||
+        vrt_out_arr == NULL || div_out_arr == NULL) {
+        goto fail;
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    poa1_to_vordiv(
+        ntrunc,
+        km,
+        kf_uv,
+        rsphere,
+        (const double *) PyArray_DATA(poa1_arr),
+        (double *) PyArray_DATA(vrt_real_arr),
+        (double *) PyArray_DATA(vrt_imag_arr),
+        (double *) PyArray_DATA(div_real_arr),
+        (double *) PyArray_DATA(div_imag_arr),
+        &ierror
+    );
+    Py_END_ALLOW_THREADS
+
+    vrt_out_data = (npy_complex128 *) PyArray_DATA(vrt_out_arr);
+    div_out_data = (npy_complex128 *) PyArray_DATA(div_out_arr);
+    vrt_real_data = (double *) PyArray_DATA(vrt_real_arr);
+    vrt_imag_data = (double *) PyArray_DATA(vrt_imag_arr);
+    div_real_data = (double *) PyArray_DATA(div_real_arr);
+    div_imag_data = (double *) PyArray_DATA(div_imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(vrt_out_arr); ++idx) {
+        vrt_out_data[idx] = vrt_real_data[idx] + vrt_imag_data[idx] * I;
+        div_out_data[idx] = div_real_data[idx] + div_imag_data[idx] * I;
+    }
+
+    Py_DECREF(poa1_arr);
+    Py_DECREF(vrt_real_arr);
+    Py_DECREF(vrt_imag_arr);
+    Py_DECREF(div_real_arr);
+    Py_DECREF(div_imag_arr);
+    return Py_BuildValue("(NNi)", vrt_out_arr, div_out_arr, ierror);
+
+fail:
+    Py_XDECREF(poa1_arr);
+    Py_XDECREF(vrt_real_arr);
+    Py_XDECREF(vrt_imag_arr);
+    Py_XDECREF(div_real_arr);
+    Py_XDECREF(div_imag_arr);
+    Py_XDECREF(vrt_out_arr);
+    Py_XDECREF(div_out_arr);
+    return NULL;
+}
+
 static PyMethodDef module_methods[] = {
     {"validate_nloen", backend_validate_nloen, METH_VARARGS, "Validate reduced-grid longitude counts."},
     {"create_setup", backend_create_setup, METH_VARARGS, "Create an experimental ectrans setup handle."},
@@ -2067,6 +2188,7 @@ static PyMethodDef module_methods[] = {
     {"uv_to_vordiv", backend_uv_to_vordiv, METH_VARARGS, "Call the experimental ectrans uv-to-vordiv spectral helper."},
     {"ldfou2_uv_scaling", backend_ldfou2_uv_scaling, METH_VARARGS, "Apply the experimental ectrans LDFOU2 uv scaling helper."},
     {"ledir_dgemm", backend_ledir_dgemm, METH_VARARGS, "Apply the experimental DGEMM-only OpenIFS LEDIR kernel."},
+    {"poa1_to_vordiv", backend_poa1_to_vordiv, METH_VARARGS, "Apply the experimental OpenIFS UVTVD+UPDSPB stage to POA1."},
     {NULL, NULL, 0, NULL}
 };
 
