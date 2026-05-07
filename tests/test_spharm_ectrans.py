@@ -9,13 +9,16 @@ REPO_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(REPO_SRC) not in sys.path:
     sys.path.insert(0, str(REPO_SRC))
 
+from skyborn.spharm import _spherepack  # noqa: E402
 from skyborn.spharm.ectrans_backend_api import (  # noqa: E402
     scalar_analysis_stub,
     scalar_block_solve_stub,
     scalar_fourier_stub,
     scalar_synthesis_stub,
+    weighted_block_solve_stub,
 )
 from skyborn.spharm.reduced_gaussian import (  # noqa: E402
+    _ECTRANS_BACKEND_AVAILABLE,
     ReducedGaussianGrid,
     ReducedGaussianSpharmt,
 )
@@ -46,6 +49,9 @@ def test_reduced_gaussian_spharmt_scalar_prototype_returns_result():
 
 def test_reduced_gaussian_vector_prototype_matches_bridge_reference():
     backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    backend._native_uv_synthesis_available = False
+    backend._native_vrtdiv_analysis_available = False
+    backend._native_gradient_synthesis_available = False
     bridge = backend._get_bridge_spharmt()
 
     spec = np.zeros((6,), dtype=np.complex128)
@@ -77,6 +83,63 @@ def test_reduced_gaussian_vector_prototype_matches_bridge_reference():
     grad_u_actual, grad_v_actual = backend.getgrad(spec)
     np.testing.assert_allclose(grad_u_actual, packed_u, rtol=0.0, atol=1e-10)
     np.testing.assert_allclose(grad_v_actual, packed_v, rtol=0.0, atol=1e-10)
+
+    backend.close()
+
+
+def test_reduced_gaussian_default_native_vector_capabilities_follow_backend():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+
+    assert backend._supports_native_uv_synthesis() is _ECTRANS_BACKEND_AVAILABLE
+    assert backend._supports_native_vrtdiv_analysis() is _ECTRANS_BACKEND_AVAILABLE
+    assert backend._supports_native_gradient_synthesis() is _ECTRANS_BACKEND_AVAILABLE
+    backend.close()
+
+
+def test_reduced_gaussian_native_vector_pipeline_recovers_full_grid_reference():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    bridge = backend._get_bridge_spharmt()
+
+    chi_spec = np.zeros((6,), dtype=np.complex128)
+    chi_spec[1] = 0.25 - 0.1j
+    chi_spec[2] = -0.2 + 0.05j
+    chi_spec[4] = 0.15 + 0.12j
+
+    psi_spec = np.zeros((6,), dtype=np.complex128)
+    psi_spec[1] = 0.21 - 0.04j
+    psi_spec[3] = -0.13 + 0.07j
+    psi_spec[4] = 0.09 - 0.02j
+
+    full_u_div, full_v_div = bridge.getgrad(chi_spec)
+    packed_u_div = backend._bridge_to_packed_grid(full_u_div, "native div u")
+    packed_v_div = backend._bridge_to_packed_grid(full_v_div, "native div v")
+    psi_ref_div = bridge.getpsispec(full_u_div, full_v_div, ntrunc=2)
+    chi_ref_div = bridge.getchispec(full_u_div, full_v_div, ntrunc=2)
+
+    vrt_spec = _spherepack.lap(psi_spec.reshape(6, 1), backend.rsphere).reshape(
+        6,
+    )
+    full_u_vrt, full_v_vrt = bridge.getuv(vrt_spec, np.zeros_like(vrt_spec))
+    packed_u_vrt = backend._bridge_to_packed_grid(full_u_vrt, "native vrt u")
+    packed_v_vrt = backend._bridge_to_packed_grid(full_v_vrt, "native vrt v")
+    psi_ref_vrt = bridge.getpsispec(full_u_vrt, full_v_vrt, ntrunc=2)
+    chi_ref_vrt = bridge.getchispec(full_u_vrt, full_v_vrt, ntrunc=2)
+
+    backend._native_uv_synthesis_available = True
+    backend._native_vrtdiv_analysis_available = True
+    backend._native_gradient_synthesis_available = True
+
+    backend._vector_analysis_basis_cache.clear()
+    psi_div = backend.getpsispec(packed_u_div, packed_v_div, ntrunc=2)
+    chi_div = backend.getchispec(packed_u_div, packed_v_div, ntrunc=2)
+    np.testing.assert_allclose(psi_div, psi_ref_div, rtol=0.0, atol=2e-8)
+    np.testing.assert_allclose(chi_div, chi_ref_div, rtol=0.0, atol=3e-8)
+
+    backend._vector_analysis_basis_cache.clear()
+    psi_vrt = backend.getpsispec(packed_u_vrt, packed_v_vrt, ntrunc=2)
+    chi_vrt = backend.getchispec(packed_u_vrt, packed_v_vrt, ntrunc=2)
+    np.testing.assert_allclose(psi_vrt, psi_ref_vrt, rtol=0.0, atol=3e-8)
+    np.testing.assert_allclose(chi_vrt, chi_ref_vrt, rtol=0.0, atol=1e-8)
 
     backend.close()
 
@@ -291,6 +354,50 @@ def test_reduced_gaussian_native_scalar_block_solver_matches_numpy_lstsq():
     backend.close()
 
 
+def test_reduced_gaussian_native_weighted_block_solver_matches_numpy_lstsq():
+    weights = np.array([0.2, 0.4, 0.3, 0.7, 0.5, 0.6], dtype=np.float64)
+    sqrt_weights = np.sqrt(weights)[:, None]
+
+    basis_block = np.array(
+        [
+            [1.0 + 0.0j, 0.2 - 0.1j, -0.1 + 0.3j],
+            [0.8 + 0.1j, -0.3 + 0.2j, 0.5 - 0.2j],
+            [0.5 - 0.2j, 0.4 + 0.3j, -0.2 + 0.1j],
+            [0.2 + 0.3j, 0.6 - 0.2j, 0.1 + 0.4j],
+            [0.1 - 0.1j, 0.7 + 0.1j, -0.3 + 0.2j],
+            [0.4 + 0.2j, -0.5 + 0.2j, 0.6 - 0.1j],
+        ],
+        dtype=np.complex128,
+    )
+    observed = np.array(
+        [
+            [0.5 + 0.2j, -0.2 + 0.1j],
+            [0.3 - 0.1j, 0.1 + 0.2j],
+            [-0.2 + 0.4j, 0.3 - 0.3j],
+            [0.1 + 0.3j, 0.2 + 0.0j],
+            [0.4 - 0.2j, -0.1 + 0.5j],
+            [-0.3 + 0.1j, 0.6 - 0.4j],
+        ],
+        dtype=np.complex128,
+    )
+
+    native_solution, ierror = weighted_block_solve_stub(
+        weights,
+        basis_block,
+        observed,
+    )
+    weighted_basis = sqrt_weights * basis_block
+    weighted_observed = sqrt_weights * observed
+    numpy_solution, _, _, _ = np.linalg.lstsq(
+        weighted_basis,
+        weighted_observed,
+        rcond=None,
+    )
+
+    assert ierror == 0
+    np.testing.assert_allclose(native_solution, numpy_solution, rtol=0.0, atol=1e-12)
+
+
 def test_reduced_gaussian_native_scalar_analysis_stub_returns_success():
     backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
     grid = np.ones((backend.ngptot,), dtype=np.float64)
@@ -466,4 +573,240 @@ def test_reduced_gaussian_local_lap_and_invlap_match_bridge_reference():
 
     np.testing.assert_allclose(lap_actual, lap_expected, rtol=0.0, atol=1e-12)
     np.testing.assert_allclose(invlap_actual, invlap_expected, rtol=0.0, atol=1e-12)
+    backend.close()
+
+
+def test_reduced_gaussian_psichi_pair_paths_only_analyze_once(monkeypatch):
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    calls = {"getvrtdivspec": 0}
+
+    vrtspec = np.zeros((6,), dtype=np.complex128)
+    divspec = np.zeros((6,), dtype=np.complex128)
+    vrtspec[1] = 0.3 - 0.1j
+    divspec[2] = -0.2 + 0.05j
+
+    def fake_getvrtdivspec(ugrid, vgrid, ntrunc=None):
+        calls["getvrtdivspec"] += 1
+        return vrtspec, divspec
+
+    monkeypatch.setattr(backend, "getvrtdivspec", fake_getvrtdivspec)
+
+    psi_spec, chi_spec = backend.getpsichispec(
+        np.zeros((backend.ngptot,), dtype=np.float64),
+        np.zeros((backend.ngptot,), dtype=np.float64),
+        ntrunc=2,
+    )
+    assert calls["getvrtdivspec"] == 1
+
+    psi_grid, chi_grid = backend.getpsichi(
+        np.zeros((backend.ngptot,), dtype=np.float64),
+        np.zeros((backend.ngptot,), dtype=np.float64),
+        ntrunc=2,
+    )
+    assert calls["getvrtdivspec"] == 2
+    np.testing.assert_allclose(psi_spec, backend._invlapspec(vrtspec, "test psi spec"))
+    np.testing.assert_allclose(chi_spec, backend._invlapspec(divspec, "test chi spec"))
+    assert psi_grid.shape == (backend.ngptot,)
+    assert chi_grid.shape == (backend.ngptot,)
+    backend.close()
+
+
+def test_reduced_gaussian_pair_bridge_helpers_match_separate_paths():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    bridge = backend._get_bridge_spharmt()
+    lat_offsets = backend._get_lat_offsets()
+
+    packed_a = np.zeros((backend.ngptot,), dtype=np.float64)
+    packed_b = np.zeros((backend.ngptot,), dtype=np.float64)
+    for ilat, nlon in enumerate(backend.nloen):
+        offset = int(lat_offsets[ilat])
+        lon = 2.0 * np.pi * np.arange(int(nlon), dtype=np.float64) / float(nlon)
+        packed_a[offset : offset + int(nlon)] = 0.5 * (ilat + 1) + np.cos(lon)
+        packed_b[offset : offset + int(nlon)] = -0.25 * (ilat + 1) + np.sin(2.0 * lon)
+
+    _, normalized_a, extra_shape = backend._validate_packed_grid_data(
+        packed_a,
+        "pair bridge a",
+    )
+    _, normalized_b, _ = backend._validate_packed_grid_data(packed_b, "pair bridge b")
+
+    full_a_expected = backend._packed_to_bridge_grid(normalized_a, extra_shape)
+    full_b_expected = backend._packed_to_bridge_grid(normalized_b, extra_shape)
+    full_a_actual, full_b_actual = backend._packed_pair_to_bridge_grids(
+        normalized_a,
+        normalized_b,
+        extra_shape,
+    )
+    np.testing.assert_allclose(full_a_actual, full_a_expected, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(full_b_actual, full_b_expected, rtol=0.0, atol=1e-12)
+
+    packed_a_expected = backend._bridge_to_packed_grid(
+        full_a_expected, "pair bridge out"
+    )
+    packed_b_expected = backend._bridge_to_packed_grid(
+        full_b_expected, "pair bridge out"
+    )
+    packed_a_actual, packed_b_actual = backend._bridge_pair_to_packed_grids(
+        full_a_expected,
+        full_b_expected,
+        "pair bridge out",
+    )
+    np.testing.assert_allclose(packed_a_actual, packed_a_expected, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(packed_b_actual, packed_b_expected, rtol=0.0, atol=1e-12)
+    assert (
+        full_a_actual.shape
+        == bridge.spectogrd(np.zeros((6,), dtype=np.complex128)).shape
+    )
+    backend.close()
+
+
+def test_reduced_gaussian_vector_paths_skip_unimplemented_native_stubs(monkeypatch):
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    backend._native_uv_synthesis_available = False
+    backend._native_vrtdiv_analysis_available = False
+    backend._native_gradient_synthesis_available = False
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("native vector stub should not be called when disabled")
+
+    monkeypatch.setattr(
+        "skyborn.spharm.reduced_gaussian.uv_synthesis_stub",
+        fail_if_called,
+    )
+    monkeypatch.setattr(
+        "skyborn.spharm.reduced_gaussian.vrtdiv_analysis_stub",
+        fail_if_called,
+    )
+    monkeypatch.setattr(
+        "skyborn.spharm.reduced_gaussian.gradient_synthesis_stub",
+        fail_if_called,
+    )
+
+    bridge = backend._get_bridge_spharmt()
+    spec = np.zeros((6,), dtype=np.complex128)
+    spec[1] = 0.25 - 0.1j
+    spec[2] = -0.2 + 0.05j
+    spec[4] = 0.15 + 0.12j
+    full_u, full_v = bridge.getgrad(spec)
+    packed_u = backend._bridge_to_packed_grid(full_u, "skip native u")
+    packed_v = backend._bridge_to_packed_grid(full_v, "skip native v")
+    vrt, div = bridge.getvrtdivspec(full_u, full_v, ntrunc=2)
+
+    u_actual, v_actual = backend.getuv(vrt, div)
+    gu_actual, gv_actual = backend.getgrad(spec)
+    vrt_actual, div_actual = backend.getvrtdivspec(packed_u, packed_v, ntrunc=2)
+
+    np.testing.assert_allclose(u_actual, packed_u, rtol=0.0, atol=1e-10)
+    np.testing.assert_allclose(v_actual, packed_v, rtol=0.0, atol=1e-10)
+    np.testing.assert_allclose(gu_actual, packed_u, rtol=0.0, atol=1e-10)
+    np.testing.assert_allclose(gv_actual, packed_v, rtol=0.0, atol=1e-10)
+    np.testing.assert_allclose(vrt_actual, vrt, rtol=0.0, atol=1e-10)
+    np.testing.assert_allclose(div_actual, div, rtol=0.0, atol=1e-10)
+    backend.close()
+
+
+def test_reduced_gaussian_native_uv_synthesis_matches_bridge_reference():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    backend._native_uv_synthesis_available = True
+    backend._native_vrtdiv_analysis_available = False
+    backend._native_gradient_synthesis_available = False
+    bridge = backend._get_bridge_spharmt()
+
+    spec = np.zeros((6,), dtype=np.complex128)
+    spec[1] = 0.25 - 0.1j
+    spec[2] = -0.2 + 0.05j
+    spec[4] = 0.15 + 0.12j
+
+    full_u, full_v = bridge.getgrad(spec)
+    vrtspec, divspec = bridge.getvrtdivspec(full_u, full_v, ntrunc=2)
+    packed_u_expected = backend._bridge_to_packed_grid(full_u, "native uv expected u")
+    packed_v_expected = backend._bridge_to_packed_grid(full_v, "native uv expected v")
+
+    packed_u_actual, packed_v_actual = backend.getuv(vrtspec, divspec)
+
+    np.testing.assert_allclose(
+        packed_u_actual,
+        packed_u_expected,
+        rtol=0.0,
+        atol=2.5e-7,
+    )
+    np.testing.assert_allclose(
+        packed_v_actual,
+        packed_v_expected,
+        rtol=0.0,
+        atol=2.5e-7,
+    )
+    backend.close()
+
+
+def test_reduced_gaussian_native_gradient_synthesis_matches_bridge_reference():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    backend._native_uv_synthesis_available = True
+    backend._native_vrtdiv_analysis_available = False
+    backend._native_gradient_synthesis_available = True
+    bridge = backend._get_bridge_spharmt()
+
+    spec = np.zeros((6,), dtype=np.complex128)
+    spec[1] = 0.25 - 0.1j
+    spec[2] = -0.2 + 0.05j
+    spec[4] = 0.15 + 0.12j
+
+    full_u_expected, full_v_expected = bridge.getgrad(spec)
+    packed_u_expected = backend._bridge_to_packed_grid(
+        full_u_expected,
+        "native grad expected u",
+    )
+    packed_v_expected = backend._bridge_to_packed_grid(
+        full_v_expected,
+        "native grad expected v",
+    )
+
+    packed_u_actual, packed_v_actual = backend.getgrad(spec)
+
+    np.testing.assert_allclose(
+        packed_u_actual,
+        packed_u_expected,
+        rtol=0.0,
+        atol=2.5e-7,
+    )
+    np.testing.assert_allclose(
+        packed_v_actual,
+        packed_v_expected,
+        rtol=0.0,
+        atol=2.5e-7,
+    )
+    backend.close()
+
+
+def test_reduced_gaussian_native_vrtdiv_analysis_matches_bridge_reference():
+    backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    backend._native_uv_synthesis_available = True
+    backend._native_vrtdiv_analysis_available = True
+    backend._native_gradient_synthesis_available = True
+    bridge = backend._get_bridge_spharmt()
+
+    spec = np.zeros((6,), dtype=np.complex128)
+    spec[1] = 0.25 - 0.1j
+    spec[2] = -0.2 + 0.05j
+    spec[4] = 0.15 + 0.12j
+
+    full_u, full_v = bridge.getgrad(spec)
+    packed_u = backend._bridge_to_packed_grid(full_u, "native vrtdiv input u")
+    packed_v = backend._bridge_to_packed_grid(full_v, "native vrtdiv input v")
+    vrt_expected, div_expected = bridge.getvrtdivspec(full_u, full_v, ntrunc=2)
+
+    vrt_actual, div_actual = backend.getvrtdivspec(packed_u, packed_v, ntrunc=2)
+
+    np.testing.assert_allclose(
+        vrt_actual,
+        vrt_expected,
+        rtol=0.0,
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        div_actual,
+        div_expected,
+        rtol=0.0,
+        atol=1e-10,
+    )
     backend.close()
