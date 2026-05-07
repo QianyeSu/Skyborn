@@ -1073,6 +1073,72 @@ def test_uv_to_vordiv_block_solver_context_manager_closes_and_matches_reference(
         solver.solve(uspec, vspec)
 
 
+def test_uv_to_vordiv_block_native_batch_matches_cached_batch_and_reconstructs_uv():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260526)
+    ncoeff = (nlat * (nlat + 1)) // 2
+    nt = 3
+
+    vrt = rng.standard_normal((ncoeff, nt)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, nt)).astype(np.float64)
+    div = rng.standard_normal((ncoeff, nt)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, nt)).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    vrt_uncached, div_uncached = uv_to_vordiv_block_native_pilot(uspec, vspec, rsphere)
+    with UvToVordivBlockSolver(uspec, vspec, rsphere) as solver:
+        vrt_cached, div_cached = solver.solve(uspec, vspec)
+
+    np.testing.assert_allclose(vrt_cached, vrt_uncached, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(div_cached, div_uncached, rtol=1e-13, atol=2e-8)
+
+    uspec_uncached, vspec_uncached, ierr = vordiv_to_uv(
+        vrt_uncached, div_uncached, rsphere
+    )
+    assert ierr == 0
+    uspec_cached, vspec_cached, ierr = vordiv_to_uv(vrt_cached, div_cached, rsphere)
+    assert ierr == 0
+
+    np.testing.assert_allclose(uspec_uncached, uspec, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(vspec_uncached, vspec, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(uspec_cached, uspec, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(vspec_cached, vspec, rtol=1e-13, atol=2e-8)
+
+
+def test_uv_to_vordiv_block_solver_batch_reuses_handle():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260527)
+    ncoeff = (nlat * (nlat + 1)) // 2
+    nt = 2
+
+    vrt = rng.standard_normal((ncoeff, nt)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, nt)).astype(np.float64)
+    div = rng.standard_normal((ncoeff, nt)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, nt)).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+
+    solver = UvToVordivBlockSolver(uspec, vspec, rsphere)
+    try:
+        vrt_first, div_first = solver.solve(uspec, vspec)
+        vrt_second, div_second = solver.solve(uspec, vspec)
+    finally:
+        solver.close()
+
+    np.testing.assert_allclose(vrt_second, vrt_first, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(div_second, div_first, rtol=0.0, atol=0.0)
+    assert solver.closed
+
+
 def test_reduced_gaussian_spharmt_vector_shape_validation():
     backend = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
     u = np.zeros((116,), dtype=np.float64)
