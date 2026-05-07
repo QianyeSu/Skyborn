@@ -9,6 +9,61 @@ import numpy as np
 _backend = importlib.import_module("skyborn.spharm._ectrans_backend")
 
 
+class UvToVordivBlockSolver:
+    """Thin handle-owning wrapper around the cached native block solver."""
+
+    def __init__(
+        self,
+        uspec: np.ndarray,
+        vspec: np.ndarray,
+        rsphere: float,
+    ) -> None:
+        self._rsphere = float(rsphere)
+        self._handle = create_uv_to_vordiv_block_setup(uspec, vspec, self._rsphere)
+        self._closed = False
+
+    @property
+    def rsphere(self) -> float:
+        """Return the sphere radius used to build the cached solver."""
+        return self._rsphere
+
+    @property
+    def closed(self) -> bool:
+        """Whether the native setup handle has been closed."""
+        return self._closed
+
+    def solve(
+        self,
+        uspec: np.ndarray,
+        vspec: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Apply the cached native block solver to one public ``u/v`` spectrum pair."""
+        if self._closed:
+            raise RuntimeError("uv_to_vordiv block solver is closed")
+        return uv_to_vordiv_block_native_with_setup(self._handle, uspec, vspec)
+
+    def close(self) -> None:
+        """Close the native setup handle."""
+        if not self._closed:
+            destroy_uv_to_vordiv_block_setup(self._handle)
+            self._closed = True
+            self._handle = None
+
+    def __enter__(self) -> "UvToVordivBlockSolver":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+
+def _infer_ntrunc_from_ncoeff(ncoeff: int) -> int:
+    """Infer triangular truncation from the public spectral coefficient count."""
+    ntrunc = int(-1.5 + 0.5 * np.sqrt(1.0 + 8.0 * ncoeff))
+    if ((ntrunc + 1) * (ntrunc + 2)) // 2 != ncoeff:
+        raise ValueError(f"invalid triangular coefficient count: {ncoeff}")
+    return ntrunc
+
+
 def _public_spectral_index(ntrunc: int, m: int, n: int) -> int:
     """Return the public triangular coefficient index for one ``(m, n)``."""
     idx = 0
@@ -18,6 +73,18 @@ def _public_spectral_index(ntrunc: int, m: int, n: int) -> int:
                 return idx
             idx += 1
     raise ValueError(f"invalid (m, n)=({m}, {n}) for ntrunc={ntrunc}")
+
+
+def _public_indices_for_zonal_wavenumber(ntrunc: int, m: int) -> np.ndarray:
+    """Return the public triangular coefficient indices for one zonal wavenumber."""
+    indices: list[int] = []
+    idx = 0
+    for mm in range(ntrunc + 1):
+        for _ in range(mm, ntrunc + 1):
+            if mm == m:
+                indices.append(idx)
+            idx += 1
+    return np.asarray(indices, dtype=np.intp)
 
 
 def build_ledir_blocks_from_scalar_bridge(
@@ -244,6 +311,42 @@ def uv_to_vordiv(
     )
 
 
+def create_uv_to_vordiv_block_setup(
+    uspec: np.ndarray,
+    vspec: np.ndarray,
+    rsphere: float,
+):
+    """Create a cached native blockwise ``uv -> vrt/div`` setup handle."""
+    return _backend.create_uv_to_vordiv_block_setup(
+        np.ascontiguousarray(uspec, dtype=np.complex128),
+        np.ascontiguousarray(vspec, dtype=np.complex128),
+        float(rsphere),
+    )
+
+
+def destroy_uv_to_vordiv_block_setup(handle) -> None:
+    """Destroy a cached native blockwise ``uv -> vrt/div`` setup handle."""
+    _backend.destroy_uv_to_vordiv_block_setup(handle)
+
+
+def uv_to_vordiv_block_native_with_setup(
+    handle,
+    uspec: np.ndarray,
+    vspec: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Recover ``vrt/div`` with a prebuilt native blockwise setup handle."""
+    vrt, div, ierror = _backend.uv_to_vordiv_block_native_with_setup(
+        handle,
+        np.ascontiguousarray(uspec, dtype=np.complex128),
+        np.ascontiguousarray(vspec, dtype=np.complex128),
+    )
+    if ierror != 0:
+        raise RuntimeError(
+            f"uv_to_vordiv_block_native_with_setup backend failed with ierror={ierror}"
+        )
+    return vrt, div
+
+
 def ldfou2_uv_scaling(
     ntrunc: int,
     km: int,
@@ -462,6 +565,7 @@ def uv_to_vordiv_linear_pilot(
         raise ValueError("uv_to_vordiv_linear_pilot currently expects rank-1 spectra")
 
     ncoeff = int(uspec_arr.shape[0])
+    _infer_ntrunc_from_ncoeff(ncoeff)
     operator = np.zeros((4 * ncoeff, 4 * ncoeff), dtype=np.float64)
 
     for idx in range(ncoeff):
@@ -529,4 +633,167 @@ def uv_to_vordiv_linear_pilot(
     solution[active] = reduced_solution
     vrt = solution[:ncoeff] + 1j * solution[ncoeff : 2 * ncoeff]
     div = solution[2 * ncoeff : 3 * ncoeff] + 1j * solution[3 * ncoeff :]
+    return vrt, div
+
+
+def uv_to_vordiv_block_linear_pilot(
+    uspec: np.ndarray,
+    vspec: np.ndarray,
+    rsphere: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Recover ``vrt/div`` by solving one independent zonal-wavenumber block at a time.
+
+    This helper keeps the same trusted forward operator as
+    :func:`uv_to_vordiv_linear_pilot`, but respects the native ectrans structure
+    more closely by solving one public ``m`` block at a time instead of building
+    one full dense operator for the whole triangular spectrum.
+    """
+    uspec_arr = np.ascontiguousarray(uspec, dtype=np.complex128)
+    vspec_arr = np.ascontiguousarray(vspec, dtype=np.complex128)
+
+    if uspec_arr.shape != vspec_arr.shape:
+        raise ValueError(
+            f"uspec and vspec must have the same shape, got {uspec_arr.shape} and {vspec_arr.shape}"
+        )
+    if uspec_arr.ndim != 1:
+        raise ValueError(
+            "uv_to_vordiv_block_linear_pilot currently expects rank-1 spectra"
+        )
+
+    ncoeff = int(uspec_arr.shape[0])
+    ntrunc = _infer_ntrunc_from_ncoeff(ncoeff)
+    vrt = np.zeros((ncoeff,), dtype=np.complex128)
+    div = np.zeros((ncoeff,), dtype=np.complex128)
+
+    for m in range(ntrunc + 1):
+        block_indices = _public_indices_for_zonal_wavenumber(ntrunc, m)
+        block_size = int(block_indices.size)
+        operator = np.zeros((4 * block_size, 4 * block_size), dtype=np.float64)
+
+        for local_idx, global_idx in enumerate(block_indices):
+            basis_vrt = np.zeros((ncoeff,), dtype=np.complex128)
+            basis_div = np.zeros((ncoeff,), dtype=np.complex128)
+
+            basis_vrt[global_idx] = 1.0 + 0.0j
+            u, v, ierr = vordiv_to_uv(basis_vrt, basis_div, rsphere)
+            if ierr != 0:
+                raise RuntimeError(
+                    f"vordiv_to_uv failed while building m={m} vrt-real basis "
+                    f"at global index {global_idx}"
+                )
+            operator[:block_size, local_idx] = u[block_indices].real
+            operator[block_size : 2 * block_size, local_idx] = u[block_indices].imag
+            operator[2 * block_size : 3 * block_size, local_idx] = v[block_indices].real
+            operator[3 * block_size :, local_idx] = v[block_indices].imag
+
+            basis_vrt[global_idx] = 0.0 + 1.0j
+            u, v, ierr = vordiv_to_uv(basis_vrt, basis_div, rsphere)
+            if ierr != 0:
+                raise RuntimeError(
+                    f"vordiv_to_uv failed while building m={m} vrt-imag basis "
+                    f"at global index {global_idx}"
+                )
+            operator[:block_size, block_size + local_idx] = u[block_indices].real
+            operator[block_size : 2 * block_size, block_size + local_idx] = u[
+                block_indices
+            ].imag
+            operator[2 * block_size : 3 * block_size, block_size + local_idx] = v[
+                block_indices
+            ].real
+            operator[3 * block_size :, block_size + local_idx] = v[block_indices].imag
+
+            basis_vrt[global_idx] = 0.0 + 0.0j
+            basis_div[global_idx] = 1.0 + 0.0j
+            u, v, ierr = vordiv_to_uv(basis_vrt, basis_div, rsphere)
+            if ierr != 0:
+                raise RuntimeError(
+                    f"vordiv_to_uv failed while building m={m} div-real basis "
+                    f"at global index {global_idx}"
+                )
+            operator[:block_size, 2 * block_size + local_idx] = u[block_indices].real
+            operator[block_size : 2 * block_size, 2 * block_size + local_idx] = u[
+                block_indices
+            ].imag
+            operator[2 * block_size : 3 * block_size, 2 * block_size + local_idx] = v[
+                block_indices
+            ].real
+            operator[3 * block_size :, 2 * block_size + local_idx] = v[
+                block_indices
+            ].imag
+
+            basis_div[global_idx] = 0.0 + 1.0j
+            u, v, ierr = vordiv_to_uv(basis_vrt, basis_div, rsphere)
+            if ierr != 0:
+                raise RuntimeError(
+                    f"vordiv_to_uv failed while building m={m} div-imag basis "
+                    f"at global index {global_idx}"
+                )
+            operator[:block_size, 3 * block_size + local_idx] = u[block_indices].real
+            operator[block_size : 2 * block_size, 3 * block_size + local_idx] = u[
+                block_indices
+            ].imag
+            operator[2 * block_size : 3 * block_size, 3 * block_size + local_idx] = v[
+                block_indices
+            ].real
+            operator[3 * block_size :, 3 * block_size + local_idx] = v[
+                block_indices
+            ].imag
+
+        rhs = np.concatenate(
+            [
+                uspec_arr[block_indices].real,
+                uspec_arr[block_indices].imag,
+                vspec_arr[block_indices].real,
+                vspec_arr[block_indices].imag,
+            ]
+        )
+        col_norms = np.linalg.norm(operator, axis=0)
+        active = col_norms > 1e-18
+        reduced_operator = operator[:, active]
+        reduced_solution, _, _, _ = np.linalg.lstsq(reduced_operator, rhs, rcond=None)
+        solution = np.zeros((4 * block_size,), dtype=np.float64)
+        solution[active] = reduced_solution
+
+        vrt[block_indices] = (
+            solution[:block_size] + 1j * solution[block_size : 2 * block_size]
+        )
+        div[block_indices] = solution[2 * block_size : 3 * block_size] + 1j * (
+            solution[3 * block_size :]
+        )
+
+    return vrt, div
+
+
+def uv_to_vordiv_block_native_pilot(
+    uspec: np.ndarray,
+    vspec: np.ndarray,
+    rsphere: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Recover ``vrt/div`` with the native weighted block solver per zonal block.
+
+    This stays on the same block structure as
+    :func:`uv_to_vordiv_block_linear_pilot`, but replaces the NumPy least-squares
+    solve with the existing native complex block solver already used elsewhere in
+    the experimental reduced-grid backend.
+    """
+    uspec_arr = np.ascontiguousarray(uspec, dtype=np.complex128)
+    vspec_arr = np.ascontiguousarray(vspec, dtype=np.complex128)
+    if uspec_arr.shape != vspec_arr.shape:
+        raise ValueError(
+            f"uspec and vspec must have the same shape, got {uspec_arr.shape} and {vspec_arr.shape}"
+        )
+    if uspec_arr.ndim != 1:
+        raise ValueError(
+            "uv_to_vordiv_block_native_pilot currently expects rank-1 spectra"
+        )
+
+    vrt, div, ierror = _backend.uv_to_vordiv_block_native(
+        uspec_arr,
+        vspec_arr,
+        float(rsphere),
+    )
+    if ierror != 0:
+        raise RuntimeError(
+            f"uv_to_vordiv_block_native backend failed with ierror={ierror}"
+        )
     return vrt, div
