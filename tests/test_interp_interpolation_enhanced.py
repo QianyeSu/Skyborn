@@ -2425,6 +2425,60 @@ class TestInterpolationHelperCoverage:
                 temperature, q, ps, phis, hyai, hybi, hyam, hybm
             )
 
+    def test_geopotential_height_at_hybrid_levels_validates_interface_shape_match(
+        self,
+    ):
+        """Interface A/B coefficient arrays must have matching lengths."""
+
+        temperature = xr.DataArray(
+            np.ones((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(
+            np.ones((1, 1), dtype=np.float64) * 100000.0, dims=["time", "x"]
+        )
+        phis = xr.DataArray(np.zeros((1, 1), dtype=np.float64), dims=["time", "x"])
+        hyam = xr.DataArray([0.1, 0.2], dims=["lev"])
+        hybm = xr.DataArray([0.9, 0.8], dims=["lev"])
+        hyai = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.5], dims=["ilev"])
+
+        with pytest.raises(
+            ValueError, match="dimension mismatch between `hyai` and `hybi`"
+        ):
+            geopotential_height_at_hybrid_levels(
+                temperature, q, ps, phis, hyai, hybi, hyam, hybm
+            )
+
+    def test_geopotential_height_at_hybrid_levels_validates_interface_rank(self):
+        """Interface A/B coefficients must be one-dimensional."""
+
+        temperature = xr.DataArray(
+            np.ones((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(
+            np.ones((1, 1), dtype=np.float64) * 100000.0, dims=["time", "x"]
+        )
+        phis = xr.DataArray(np.zeros((1, 1), dtype=np.float64), dims=["time", "x"])
+        hyam = xr.DataArray([0.1, 0.2], dims=["lev"])
+        hybm = xr.DataArray([0.9, 0.8], dims=["lev"])
+        hyai = xr.DataArray([[0.0, 0.3, 0.6]], dims=["a", "b"])
+        hybi = xr.DataArray([[1.0, 0.5, 0.0]], dims=["a", "b"])
+
+        with pytest.raises(ValueError, match="must be one-dimensional arrays"):
+            geopotential_height_at_hybrid_levels(
+                temperature, q, ps, phis, hyai, hybi, hyam, hybm
+            )
+
     def test_geopotential_height_at_hybrid_levels_rejects_non_dataarray_inputs(self):
         """Public geopotential helper should require xarray DataArray inputs."""
 
@@ -2541,6 +2595,43 @@ class TestInterpolationHelperCoverage:
                 hybm,
             )
 
+    def test_geopotential_height_at_hybrid_levels_raises_when_lev_dim_guess_fails(
+        self,
+    ):
+        """lev_dim=None should raise if CF-based vertical detection is unavailable."""
+
+        temperature = xr.DataArray(
+            np.ones((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(
+            np.ones((1, 1), dtype=np.float64) * 100000.0, dims=["time", "x"]
+        )
+        phis = xr.DataArray(np.zeros((1, 1), dtype=np.float64), dims=["time", "x"])
+        hyam = xr.DataArray([0.1, 0.2], dims=["lev"])
+        hybm = xr.DataArray([0.9, 0.8], dims=["lev"])
+        hyai = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"])
+
+        with pytest.raises(
+            ValueError, match="Unable to determine vertical dimension name"
+        ):
+            geopotential_height_at_hybrid_levels(
+                temperature,
+                q,
+                ps,
+                phis,
+                hyai,
+                hybi,
+                hyam,
+                hybm,
+                lev_dim=None,
+            )
+
     def test_geopotential_height_hybrid_corder_supports_broadcast_and_non_float64_inputs(
         self,
     ):
@@ -2603,6 +2694,41 @@ class TestInterpolationHelperCoverage:
             np.ones((1, 1), dtype=np.float64) * 100000.0, dims=["time", "x"]
         )
         phis = xr.DataArray(np.zeros((1, 1), dtype=np.float64), dims=["time", "x"])
+        hyai = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
+        hybi = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"])
+        hyam = xr.DataArray([0.1, 0.2], dims=["lev"])
+
+        assert (
+            _geopotential_height_hybrid_corder(
+                temperature=temperature,
+                q=q,
+                ps=ps,
+                phis=phis,
+                hyai=hyai,
+                hybi=hybi,
+                hyam=hyam,
+                p0=100000.0,
+                lev_dim="lev",
+                output_dims=("time", "lev", "x"),
+            )
+            is None
+        )
+
+    def test_geopotential_height_hybrid_corder_returns_none_when_surface_fields_cannot_align(
+        self,
+    ):
+        """C-order helper should return None if ps and phis cannot align or broadcast."""
+
+        temperature = xr.DataArray(
+            np.ones((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        q = xr.DataArray(
+            np.zeros((1, 2, 1), dtype=np.float64),
+            dims=["time", "lev", "x"],
+        )
+        ps = xr.DataArray(np.ones((2,), dtype=np.float64), dims=["bad"])
+        phis = xr.DataArray(np.ones((2,), dtype=np.float64), dims=["bad"])
         hyai = xr.DataArray([0.0, 0.3, 0.6], dims=["ilev"])
         hybi = xr.DataArray([1.0, 0.5, 0.0], dims=["ilev"])
         hyam = xr.DataArray([0.1, 0.2], dims=["lev"])
