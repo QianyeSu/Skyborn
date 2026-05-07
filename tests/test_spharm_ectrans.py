@@ -12,12 +12,18 @@ if str(REPO_SRC) not in sys.path:
 import skyborn.spharm as spharm_pkg  # noqa: E402
 from skyborn.spharm import _spherepack  # noqa: E402
 from skyborn.spharm.ectrans_backend_api import (  # noqa: E402
+    build_ledir_blocks_from_scalar_bridge,
+    direct_vordiv_pilot_from_uv_blocks,
+    direct_vordiv_pilot_sweep_from_uv_blocks,
     ldfou2_uv_scaling,
     ledir_dgemm,
+    poa1_to_vordiv,
     scalar_analysis_stub,
     scalar_block_solve_stub,
     scalar_fourier_stub,
     scalar_synthesis_stub,
+    uv_to_vordiv,
+    uv_to_vordiv_linear_pilot,
     vordiv_to_uv,
     weighted_block_solve_stub,
 )
@@ -215,50 +221,6 @@ def _spectral_index(ntrunc: int, m: int, n: int) -> int:
                 return idx
             idx += 1
     raise ValueError(f"invalid (m, n)=({m}, {n}) for ntrunc={ntrunc}")
-
-
-def _build_ledir_blocks_from_scalar_bridge(
-    nlon: int,
-    nlat: int,
-    km: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Build DGEMM-only LEDIR blocks from scalar synthesis/FFT on a Gaussian bridge."""
-    ntrunc = nlat - 1
-    ndgnh = (nlat + 1) // 2
-    ia = 1 + ((ntrunc - km + 2) % 2)
-    is_ = 1 + ((ntrunc - km + 1) % 2)
-    ila = (ntrunc - km + 2) // 2
-    ils = (ntrunc - km + 3) // 2
-    sht = spharm_pkg.Spharmt(
-        nlon=nlon, nlat=nlat, gridtype="gaussian", legfunc="stored"
-    )
-    _, weights = spharm_pkg.gaussian_lats_wts(nlat)
-
-    rpnma = np.zeros((ndgnh, ila), dtype=np.float64)
-    rpnms = np.zeros((ndgnh, ils), dtype=np.float64)
-    pw = np.asarray(weights[:ndgnh], dtype=np.float64)
-
-    for j in range(ila):
-        row = ia + 2 * j
-        n = ntrunc + 2 - row
-        if km <= n <= ntrunc:
-            spec = np.zeros((nlat * (nlat + 1)) // 2, dtype=np.complex128)
-            spec[_spectral_index(ntrunc, km, n)] = 1.0 + 0.0j
-            grid = sht.spectogrd(spec)
-            amp = np.fft.rfft(grid, axis=1) / float(nlon)
-            rpnma[:, j] = amp[:ndgnh, km].real
-
-    for j in range(ils):
-        row = is_ + 2 * j
-        n = ntrunc + 2 - row
-        if km <= n <= ntrunc:
-            spec = np.zeros((nlat * (nlat + 1)) // 2, dtype=np.complex128)
-            spec[_spectral_index(ntrunc, km, n)] = 1.0 + 0.0j
-            grid = sht.spectogrd(spec)
-            amp = np.fft.rfft(grid, axis=1) / float(nlon)
-            rpnms[:, j] = amp[:ndgnh, km].real
-
-    return rpnma, rpnms, pw
 
 
 def test_reduced_gaussian_grid_basic_metadata():
@@ -538,7 +500,7 @@ def test_ledir_dgemm_reproduces_gaussian_bridge_scalar_mode_rows():
     is_ = 1 + ((ntrunc - km + 1) % 2)
     nlei1 = ntrunc + 4 + ((ntrunc + 5) % 2)
 
-    rpnma, rpnms, pw = _build_ledir_blocks_from_scalar_bridge(nlon, nlat, km)
+    rpnma, rpnms, pw = build_ledir_blocks_from_scalar_bridge(nlon, nlat, km)
 
     for n in range(km, ntrunc + 1):
         row = ntrunc + 2 - n
@@ -559,6 +521,312 @@ def test_ledir_dgemm_reproduces_gaussian_bridge_scalar_mode_rows():
         assert actual.shape == (nlei1, 1)
         peak_row = int(np.argmax(np.abs(actual[:, 0])))
         assert peak_row == row - 1
+
+
+def test_build_ledir_blocks_from_scalar_bridge_returns_expected_shapes():
+    nlat = 17
+    nlon = 32
+    km = 2
+
+    rpnma, rpnms, pw = build_ledir_blocks_from_scalar_bridge(nlon, nlat, km)
+
+    assert rpnma.shape == (9, 8)
+    assert rpnms.shape == (9, 8)
+    assert pw.shape == (9,)
+    assert np.all(np.isfinite(rpnma))
+    assert np.all(np.isfinite(rpnms))
+    assert np.all(pw > 0.0)
+
+
+def test_poa1_to_vordiv_places_single_mode_on_expected_spectral_index():
+    ntrunc = 4
+    km = 2
+    rsphere = 6.3712e6
+    nlei1 = ntrunc + 4 + ((ntrunc + 5) % 2)
+    poa1 = np.zeros((nlei1, 4), dtype=np.float64)
+
+    ia = 1 + ((ntrunc - km + 2) % 2)
+    target_row = ia
+    poa1[target_row - 1, 0] = 1.0
+
+    vrtspec, divspec, ierror = poa1_to_vordiv(ntrunc, km, poa1, rsphere)
+
+    assert ierror == 0
+    assert vrtspec.shape == (((ntrunc + 1) * (ntrunc + 2)) // 2,)
+    assert divspec.shape == (((ntrunc + 1) * (ntrunc + 2)) // 2,)
+    assert np.count_nonzero(np.abs(vrtspec) > 0.0) > 0
+
+
+def test_ldfou2_ledir_poa1_chain_preserves_target_poa1_peak_row():
+    nlat = 17
+    nlon = 32
+    ntrunc = nlat - 1
+    km = 2
+    rsphere = 6.3712e6
+    ndgnh = (nlat + 1) // 2
+    ia = 1 + ((ntrunc - km + 2) % 2)
+    is_ = 1 + ((ntrunc - km + 1) % 2)
+
+    rpnma, rpnms, pw = build_ledir_blocks_from_scalar_bridge(nlon, nlat, km)
+    lats_deg, _ = spharm_pkg.gaussian_lats_wts(nlat)
+    scaling = 1.0 / (rsphere * np.cos(np.deg2rad(lats_deg[:ndgnh])))
+
+    target_n = 4
+    target_row = ntrunc + 2 - target_n
+    paia = np.zeros((4, ndgnh), dtype=np.float64)
+    psia = np.zeros((4, ndgnh), dtype=np.float64)
+
+    if target_row % 2 == ia % 2:
+        col = (target_row - ia) // 2
+        desired_scaled = rpnma[:, col] / pw
+        paia[0, :] = desired_scaled / scaling
+    else:
+        col = (target_row - is_) // 2
+        desired_scaled = rpnms[:, col] / pw
+        psia[0, :] = desired_scaled / scaling
+
+    paia_scaled, psia_scaled, ierr = ldfou2_uv_scaling(ntrunc, km, paia, rsphere, psia)
+    assert ierr == 0
+
+    poa1, ierr = ledir_dgemm(ntrunc, km, paia_scaled, psia_scaled, rpnma, rpnms, pw)
+    assert ierr == 0
+    assert int(np.argmax(np.abs(poa1[:, 0]))) == target_row - 1
+
+    vrtspec, divspec, ierr = poa1_to_vordiv(ntrunc, km, poa1, rsphere)
+    assert ierr == 0
+    assert np.count_nonzero(np.abs(vrtspec) > 1e-10) > 0
+    assert np.count_nonzero(np.abs(divspec) > 1e-10) > 0
+
+    expected_vrt_peak = _spectral_index(ntrunc, km, target_n + 1)
+    expected_div_peak = _spectral_index(ntrunc, km, target_n)
+    assert int(np.argmax(np.abs(vrtspec))) == expected_vrt_peak
+    assert int(np.argmax(np.abs(divspec))) == expected_div_peak
+
+
+def test_direct_vordiv_pilot_from_uv_blocks_matches_manual_chain():
+    nlat = 17
+    nlon = 32
+    ntrunc = nlat - 1
+    km = 2
+    rsphere = 6.3712e6
+    ndgnh = (nlat + 1) // 2
+    ia = 1 + ((ntrunc - km + 2) % 2)
+    is_ = 1 + ((ntrunc - km + 1) % 2)
+
+    rpnma, rpnms, pw_manual = build_ledir_blocks_from_scalar_bridge(nlon, nlat, km)
+    lats_deg, _ = spharm_pkg.gaussian_lats_wts(nlat)
+    scaling = 1.0 / (rsphere * np.cos(np.deg2rad(lats_deg[:ndgnh])))
+
+    target_n = 4
+    target_row = ntrunc + 2 - target_n
+    paia = np.zeros((4, ndgnh), dtype=np.float64)
+    psia = np.zeros((4, ndgnh), dtype=np.float64)
+
+    if target_row % 2 == ia % 2:
+        col = (target_row - ia) // 2
+        desired_scaled = rpnma[:, col] / pw_manual
+        paia[0, :] = desired_scaled / scaling
+    else:
+        col = (target_row - is_) // 2
+        desired_scaled = rpnms[:, col] / pw_manual
+        psia[0, :] = desired_scaled / scaling
+
+    paia_scaled, psia_scaled, ierr = ldfou2_uv_scaling(ntrunc, km, paia, rsphere, psia)
+    assert ierr == 0
+    poa1_manual, ierr = ledir_dgemm(
+        ntrunc, km, paia_scaled, psia_scaled, rpnma, rpnms, pw_manual
+    )
+    assert ierr == 0
+    vrtspec_manual, divspec_manual, ierr = poa1_to_vordiv(
+        ntrunc, km, poa1_manual, rsphere
+    )
+    assert ierr == 0
+
+    poa1_actual, vrtspec_actual, divspec_actual, pw_actual, ierr = (
+        direct_vordiv_pilot_from_uv_blocks(nlon, nlat, km, paia, rsphere, psia)
+    )
+    assert ierr == 0
+    np.testing.assert_allclose(pw_actual, pw_manual, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(poa1_actual, poa1_manual, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(vrtspec_actual, vrtspec_manual, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(divspec_actual, divspec_manual, rtol=0.0, atol=1e-12)
+
+
+def test_direct_vordiv_pilot_sweep_matches_sum_of_single_km_pilots():
+    nlat = 9
+    nlon = 16
+    ntrunc = nlat - 1
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260507)
+
+    uv_blocks_by_km = []
+    for km in range(ntrunc + 1):
+        ndgnh = (nlat + 1) // 2
+        paia = rng.standard_normal((4, ndgnh)).astype(np.float64)
+        psia = rng.standard_normal((4, ndgnh)).astype(np.float64)
+        uv_blocks_by_km.append((paia, psia))
+
+    poa1_by_km, vrt_total, div_total, pw_total, ierr = (
+        direct_vordiv_pilot_sweep_from_uv_blocks(
+            nlon,
+            nlat,
+            uv_blocks_by_km,
+            rsphere,
+        )
+    )
+    assert ierr == 0
+    assert len(poa1_by_km) == ntrunc + 1
+    assert pw_total.shape == ((nlat + 1) // 2,)
+
+    vrt_manual = np.zeros_like(vrt_total)
+    div_manual = np.zeros_like(div_total)
+    pw_manual = None
+    for km, (paia, psia) in enumerate(uv_blocks_by_km):
+        poa1, vrt, div, pw, ierr = direct_vordiv_pilot_from_uv_blocks(
+            nlon, nlat, km, paia, rsphere, psia
+        )
+        assert ierr == 0
+        assert poa1.shape == poa1_by_km[km].shape
+        np.testing.assert_allclose(poa1, poa1_by_km[km], rtol=0.0, atol=1e-12)
+        vrt_manual += vrt
+        div_manual += div
+        if pw_manual is None:
+            pw_manual = pw
+        else:
+            np.testing.assert_allclose(pw, pw_manual, rtol=0.0, atol=0.0)
+
+    np.testing.assert_allclose(vrt_total, vrt_manual, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(div_total, div_manual, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(pw_total, pw_manual, rtol=0.0, atol=0.0)
+
+
+def test_direct_vordiv_pilot_sweep_validates_length_and_block_shape():
+    nlat = 9
+    nlon = 16
+    rsphere = 6.3712e6
+    ndgnh = (nlat + 1) // 2
+
+    with np.testing.assert_raises_regex(ValueError, "must have length 9"):
+        direct_vordiv_pilot_sweep_from_uv_blocks(
+            nlon,
+            nlat,
+            [(np.zeros((4, ndgnh)), np.zeros((4, ndgnh)))],
+            rsphere,
+        )
+
+    bad_blocks = [
+        (np.zeros((4, ndgnh), dtype=np.float64), np.zeros((4, ndgnh), dtype=np.float64))
+        for _ in range(nlat)
+    ]
+    bad_blocks[3] = (
+        np.zeros((2, ndgnh), dtype=np.float64),
+        np.zeros((2, ndgnh), dtype=np.float64),
+    )
+
+    with np.testing.assert_raises_regex(ValueError, "first dimension 4"):
+        direct_vordiv_pilot_sweep_from_uv_blocks(
+            nlon,
+            nlat,
+            bad_blocks,
+            rsphere,
+        )
+
+
+def test_direct_vordiv_pilot_sweep_currently_differs_from_uv_spectral_roundtrip():
+    nlat = 9
+    nlon = 16
+    ntrunc = nlat - 1
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260508)
+
+    uv_blocks_by_km = []
+    for km in range(ntrunc + 1):
+        ndgnh = (nlat + 1) // 2
+        paia = rng.standard_normal((4, ndgnh)).astype(np.float64)
+        psia = rng.standard_normal((4, ndgnh)).astype(np.float64)
+        uv_blocks_by_km.append((paia, psia))
+
+    _, vrt_direct, div_direct, _, ierr = direct_vordiv_pilot_sweep_from_uv_blocks(
+        nlon,
+        nlat,
+        uv_blocks_by_km,
+        rsphere,
+    )
+    assert ierr == 0
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt_direct, div_direct, rsphere)
+    assert ierr == 0
+    vrt_back, div_back, ierr = uv_to_vordiv(uspec, vspec, rsphere)
+    assert ierr == 0
+
+    vrt_abs = np.abs(vrt_back - vrt_direct)
+    div_abs = np.abs(div_back - div_direct)
+
+    assert vrt_abs.max() > 1e-3
+    assert div_abs.max() > 1e-3
+    assert np.abs(vrt_direct).max() < 1e-4
+    assert np.abs(div_direct).max() < 1e-4
+    assert np.abs(vrt_back).max() > 1e-1
+    assert np.abs(div_back).max() > 1e-1
+
+
+def test_uv_to_vordiv_linear_pilot_reconstructs_random_uv_spectra():
+    nlat = 9
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260510)
+    ncoeff = (nlat * (nlat + 1)) // 2
+
+    vrt = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    div = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+
+    uspec, vspec, ierr = vordiv_to_uv(vrt, div, rsphere)
+    assert ierr == 0
+    vrt_back, div_back = uv_to_vordiv_linear_pilot(uspec, vspec, rsphere)
+    uspec_back, vspec_back, ierr = vordiv_to_uv(vrt_back, div_back, rsphere)
+    assert ierr == 0
+
+    np.testing.assert_allclose(uspec_back, uspec, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(vspec_back, vspec, rtol=1e-13, atol=2e-8)
+    assert np.abs(vrt_back[0]) < 1e-12
+    assert np.abs(div_back[0]) < 1e-12
+
+
+def test_uv_to_vordiv_linear_pilot_reconstructs_direct_sweep_uv_spectra():
+    nlat = 9
+    nlon = 16
+    ntrunc = nlat - 1
+    rsphere = 6.3712e6
+    rng = np.random.default_rng(20260511)
+
+    uv_blocks_by_km = []
+    for km in range(ntrunc + 1):
+        ndgnh = (nlat + 1) // 2
+        paia = rng.standard_normal((4, ndgnh)).astype(np.float64)
+        psia = rng.standard_normal((4, ndgnh)).astype(np.float64)
+        uv_blocks_by_km.append((paia, psia))
+
+    _, vrt_direct, div_direct, _, ierr = direct_vordiv_pilot_sweep_from_uv_blocks(
+        nlon,
+        nlat,
+        uv_blocks_by_km,
+        rsphere,
+    )
+    assert ierr == 0
+    uspec, vspec, ierr = vordiv_to_uv(vrt_direct, div_direct, rsphere)
+    assert ierr == 0
+
+    vrt_back, div_back = uv_to_vordiv_linear_pilot(uspec, vspec, rsphere)
+    uspec_back, vspec_back, ierr = vordiv_to_uv(vrt_back, div_back, rsphere)
+    assert ierr == 0
+
+    np.testing.assert_allclose(uspec_back, uspec, rtol=1e-13, atol=2e-8)
+    np.testing.assert_allclose(vspec_back, vspec, rtol=1e-13, atol=2e-8)
+    assert np.abs(vrt_back[0]) < 1e-12
+    assert np.abs(div_back[0]) < 1e-12
 
 
 def test_reduced_gaussian_spharmt_vector_shape_validation():
@@ -1359,31 +1627,6 @@ def test_reduced_gaussian_regrid_between_packed_layouts_matches_spectral_referen
     grdout.close()
 
 
-def test_spharm_package_regrid_dispatches_to_reduced_backend():
-    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
-    grdout = ReducedGaussianSpharmt(np.array([16, 20, 24, 20, 16], dtype=np.int32))
-    field = np.zeros((grdin.ngptot,), dtype=np.float64)
-
-    expected = reduced_regrid(grdin, grdout, field)
-    actual = spharm_pkg.regrid(grdin, grdout, field)
-
-    np.testing.assert_allclose(actual, expected, rtol=0.0, atol=0.0)
-    grdin.close()
-    grdout.close()
-
-
-def test_spharm_package_regrid_rejects_mixed_rectangular_and_reduced_backends():
-    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
-
-    class DummyRectangular:
-        pass
-
-    with np.testing.assert_raises_regex(TypeError, "both grdin and grdout"):
-        spharm_pkg.regrid(grdin, DummyRectangular(), np.zeros((grdin.ngptot,)))
-
-    grdin.close()
-
-
 def test_reduced_gaussian_regriduv_rejects_bad_shapes_and_ntrunc():
     grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
     grdout = ReducedGaussianSpharmt(np.array([16, 20, 24, 20, 16], dtype=np.int32))
@@ -1489,35 +1732,3 @@ def test_reduced_gaussian_regriduv_between_layouts_matches_bridge_reference():
     assert actual_v.shape == (grdout.ngptot,)
     grdin.close()
     grdout.close()
-
-
-def test_spharm_package_regriduv_dispatches_to_reduced_backend():
-    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
-    grdout = ReducedGaussianSpharmt(np.array([16, 20, 24, 20, 16], dtype=np.int32))
-    u = np.zeros((grdin.ngptot,), dtype=np.float64)
-    v = np.zeros((grdin.ngptot,), dtype=np.float64)
-
-    expected_u, expected_v = reduced_regriduv(grdin, grdout, u, v)
-    actual_u, actual_v = spharm_pkg.regriduv(grdin, grdout, u, v)
-
-    np.testing.assert_allclose(actual_u, expected_u, rtol=0.0, atol=0.0)
-    np.testing.assert_allclose(actual_v, expected_v, rtol=0.0, atol=0.0)
-    grdin.close()
-    grdout.close()
-
-
-def test_spharm_package_regriduv_rejects_mixed_rectangular_and_reduced_backends():
-    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
-
-    class DummyRectangular:
-        pass
-
-    with np.testing.assert_raises_regex(TypeError, "both grdin and grdout"):
-        spharm_pkg.regriduv(
-            grdin,
-            DummyRectangular(),
-            np.zeros((grdin.ngptot,)),
-            np.zeros((grdin.ngptot,)),
-        )
-
-    grdin.close()

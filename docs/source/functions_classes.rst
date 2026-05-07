@@ -314,10 +314,16 @@ Spherical Harmonics Functions
      - Description
    * - :func:`skyborn.spharm.Spharmt`
      - Main class for spherical harmonic transforms with grid-spectral conversions
+   * - :func:`skyborn.spharm.ReducedGaussianSpharmt`
+     - Experimental packed reduced-Gaussian spherical harmonic transform interface
+   * - :func:`skyborn.spharm.ReducedGaussianGrid`
+     - Metadata container describing one packed reduced-Gaussian grid layout
    * - :func:`skyborn.spharm.gaussian_lats_wts`
      - Compute gaussian latitudes (in degrees) and quadrature weights for spherical grids
    * - :func:`skyborn.spharm.regrid`
      - Spectral re-gridding with optional smoothing and/or truncation for data interpolation
+   * - :func:`skyborn.spharm.regriduv`
+     - Spectral re-gridding for packed reduced-Gaussian vector wind fields
    * - :func:`skyborn.spharm.getspecindx`
      - Compute indices of zonal wavenumber and degree for complex spherical harmonic coefficients
    * - :func:`skyborn.spharm.getgeodesicpts`

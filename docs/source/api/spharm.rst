@@ -56,6 +56,7 @@ Key Features
 - **Grid Support**: Both regular and Gaussian grids with flexible resolution
 - **Optimized Performance**: Modern Fortran kernels with OpenMP parallelization
 - **Type Safety**: Comprehensive input validation and error handling
+- **Reduced Gaussian Backend**: Experimental packed reduced-Gaussian transforms and regridding without first forcing data onto a rectangular full-Gaussian user workflow
 
 Installation Requirements
 --------------------------
@@ -229,6 +230,36 @@ Spharmt
    - :meth:`getgrad`: Compute gradient from scalar spectral coefficients
    - :meth:`specsmooth`: Apply spectral smoothing to grid data
 
+ReducedGaussianSpharmt
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: skyborn.spharm.ReducedGaussianSpharmt
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+   Experimental transform interface for packed reduced-Gaussian grids.
+
+   Unlike :class:`skyborn.spharm.Spharmt`, this backend works on packed arrays
+   with leading dimension ``ngptot`` instead of rectangular
+   ``(nlat, nlon, ...)`` arrays.
+
+   **Constructor Parameters:**
+
+   - ``nloen`` (array-like): number of longitude points for each Gaussian latitude circle, ordered north-to-south
+   - ``rsphere`` (float): sphere radius in meters
+   - ``backend`` (str): currently ``"ectrans"``
+
+ReducedGaussianGrid
+~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: skyborn.spharm.ReducedGaussianGrid
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+   Lightweight metadata container for one packed reduced-Gaussian grid layout.
+
 Functions
 ---------
 
@@ -252,6 +283,180 @@ Data Processing
 ~~~~~~~~~~~~~~~
 
 .. autofunction:: skyborn.spharm.regrid
+
+.. autofunction:: skyborn.spharm.regriduv
+
+Unified Workflow Examples
+-------------------------
+
+Rectangular-grid Example
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The top-level workflow helpers can now be used directly with the standard
+rectangular-grid :class:`skyborn.spharm.Spharmt` interface.
+
+.. code-block:: python
+
+    import numpy as np
+    from skyborn.spharm import Spharmt, regrid, regriduv
+
+    src = Spharmt(72, 37, gridtype="gaussian")
+    dst = Spharmt(36, 19, gridtype="gaussian")
+
+    scalar_in = np.random.randn(src.nlat, src.nlon)
+    scalar_out = regrid(src, dst, scalar_in, ntrunc=18)
+
+    u_in = np.random.randn(src.nlat, src.nlon)
+    v_in = np.random.randn(src.nlat, src.nlon)
+    u_out, v_out = regriduv(src, dst, u_in, v_in, ntrunc=18)
+
+Reduced-grid Workflow
+---------------------
+
+Skyborn now also provides an experimental reduced-Gaussian backend for cases
+where the source data already lives on a packed reduced Gaussian grid and the
+workflow should stay on that native layout as long as possible.
+
+Packed Reduced-grid Convention
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For :class:`skyborn.spharm.ReducedGaussianSpharmt`, gridpoint data is packed as
+``(ngptot,)`` or ``(ngptot, *extra_dims)`` where:
+
+- ``nloen[i]`` is the longitude count on latitude circle ``i``
+- latitude circles are ordered north-to-south
+- each latitude circle is stored as one contiguous longitude block
+- the total packed size is ``ngptot = sum(nloen)``
+
+Minimal Example
+~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    import numpy as np
+    from skyborn.spharm import ReducedGaussianSpharmt, regrid, regriduv
+
+    src = ReducedGaussianSpharmt(
+        np.array([20, 24, 28, 24, 20], dtype=np.int32)
+    )
+    dst = ReducedGaussianSpharmt(
+        np.array([12, 16, 20, 24, 20, 16, 12], dtype=np.int32)
+    )
+
+    scalar_field = np.zeros(src.ngptot, dtype=np.float64)
+    scalar_out = regrid(src, dst, scalar_field, ntrunc=4)
+
+    u = np.zeros(src.ngptot, dtype=np.float64)
+    v = np.zeros(src.ngptot, dtype=np.float64)
+    u_out, v_out = regriduv(src, dst, u, v, ntrunc=4)
+
+The same top-level function names are used for both rectangular-grid and
+reduced-grid workflows. The backend is selected from the transform objects
+passed as ``grdin`` and ``grdout``.
+
+Current Scope
+~~~~~~~~~~~~~
+
+The reduced-grid backend currently covers the core packed-grid transform and
+diagnostic workflow:
+
+- scalar analysis/synthesis
+- vorticity/divergence spectra from ``u``/``v``
+- wind synthesis from ``vrt/div`` spectra
+- scalar gradient synthesis
+- streamfunction / velocity-potential diagnostics
+- packed-grid ``regrid(...)`` and ``regriduv(...)``
+
+It is still narrower in scope than the main rectangular-grid
+:class:`skyborn.spharm.Spharmt` interface:
+
+- it is reduced-Gaussian-only
+- it is still marked experimental
+- it is not yet a full replacement for all rectangular-grid ``spharm`` workflows
+
+ECTRANS Status
+--------------
+
+The current reduced-grid backend should be understood as:
+
+- a **Skyborn-native** reduced-Gaussian backend
+- shaped by ECMWF/OpenIFS-style reduced-grid goals
+- **not** yet a direct vendoring of the real OpenIFS ``trans`` runtime
+
+Feature Status Matrix
+~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 18 48
+
+   * - Capability
+     - Status
+     - Notes
+   * - ``grdtospec(...)``
+     - Implemented
+     - Native reduced-grid scalar analysis path is wired
+   * - ``spectogrd(...)``
+     - Implemented
+     - Native reduced-grid scalar synthesis path is wired
+   * - ``getvrtdivspec(...)``
+     - Implemented
+     - Native reduced-grid vector analysis path is wired
+   * - ``getvrtspec(...)`` / ``getdivspec(...)``
+     - Implemented
+     - Derived from the native ``getvrtdivspec(...)`` path
+   * - ``getuv(...)``
+     - Implemented
+     - Native reduced-grid wind synthesis path is wired
+   * - ``getgrad(...)``
+     - Implemented
+     - Native reduced-grid scalar-gradient synthesis path is wired
+   * - ``getpsispec(...)`` / ``getchispec(...)``
+     - Implemented
+     - Uses local reduced-grid ``vrt/div`` spectra plus inverse-Laplacian path
+   * - ``getpsichispec(...)``
+     - Implemented
+     - Native reduced-grid main path
+   * - ``getpsi(...)`` / ``getchi(...)`` / ``getpsichi(...)``
+     - Implemented
+     - Built from native reduced-grid spectra plus reduced-grid synthesis
+   * - ``specsmooth(...)``
+     - Implemented
+     - Runs through the local reduced-grid spectral chain
+   * - ``regrid(...)``
+     - Implemented
+     - Packed reduced-grid scalar regridding through spectral space
+   * - ``regriduv(...)``
+     - Implemented
+     - Packed reduced-grid vector-wind regridding through ``vrt/div`` spectra
+   * - Regular lat-lon backend
+     - Not implemented
+     - ``ectrans`` currently targets reduced Gaussian only
+   * - Full-Gaussian rectangular backend
+     - Not implemented
+     - Main rectangular-grid workflows still belong to ``Spharmt``
+   * - FULLPOS-style change-resolution workflow
+     - Not implemented
+     - Only the first reduced-grid regrid helpers are present so far
+   * - Full public utility surface parity
+     - Partial
+     - The backend does not yet mirror every ``spharm``-side utility as a reduced-grid-native public workflow
+
+OpenIFS Down-sinking
+~~~~~~~~~~~~~~~~~~~~
+
+The current backend does **not** directly vendor the real OpenIFS
+``trans`` / ``transi`` runtime. These areas are still outside the current
+implementation:
+
+- most of the real OpenIFS ``ifs-source/trans`` runtime sources
+- FULLPOS / FIELDS business workflows
+- OpenIFS handle/setup/cache runtime model
+- MPI / distributed transform infrastructure
+- full OpenIFS change-resolution and spectral interpolation workflow
+
+So the present state is better described as a Skyborn-native reduced-grid
+backend with OpenIFS-style direction, not as a completed OpenIFS runtime import.
 
 Data Conventions
 ----------------
