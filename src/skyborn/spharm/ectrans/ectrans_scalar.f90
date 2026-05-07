@@ -466,10 +466,10 @@ contains
     integer(c_int), intent(in) :: ngptot, ntrunc
     integer(c_int), intent(out) :: ierror
 
-    integer(c_int) :: ncoeff, nspec2, m, nblock, start_idx
-    integer(c_int) :: icol, ilat, coeff_index, ierr_local
-    real(c_double), allocatable :: packed_spec(:), basis_grid(:)
-    real(c_double), allocatable :: fourier_real(:), fourier_imag(:)
+    integer(c_int) :: ncoeff, m, nblock, start_idx
+    integer(c_int) :: icol, ilat, coeff_index
+    real(c_double) :: lat_deg
+    real, allocatable :: legfunc_all(:,:)
 
     if (scalar_basis_cache_matches(ndgl, nloen, mu, ngptot, ntrunc)) then
       ierror = 0_c_int
@@ -479,7 +479,6 @@ contains
     call reset_scalar_basis_cache()
 
     ncoeff = (ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int
-    nspec2 = 2_c_int * ncoeff
 
     allocate(cache_nloen(ndgl))
     allocate(cache_mu(ndgl))
@@ -490,51 +489,28 @@ contains
     cache_basis_real = 0.0_c_double
     cache_basis_imag = 0.0_c_double
 
+    allocate(legfunc_all(ncoeff, ndgl))
+    do ilat = 1_c_int, ndgl
+      lat_deg = mu_to_lat(mu(ilat))
+      call getlegfunc(legfunc_all(:, ilat), real(lat_deg, kind=kind(1.0)), ntrunc)
+    end do
+
     start_idx = 1_c_int
     do m = 0_c_int, ntrunc
       nblock = ntrunc - m + 1_c_int
-      allocate(packed_spec(nspec2 * nblock))
-      allocate(basis_grid(ngptot * nblock))
-      allocate(fourier_real(ndgl * (m + 1_c_int) * nblock))
-      allocate(fourier_imag(ndgl * (m + 1_c_int) * nblock))
-
-      packed_spec = 0.0_c_double
-      do icol = 1_c_int, nblock
-        coeff_index = start_idx + icol - 1_c_int
-        packed_spec((2_c_int * coeff_index - 2_c_int) * nblock + icol) = 1.0_c_double
-      end do
-
-      call scalar_synthesis_stub( &
-        ndgl, nloen, mu, ngptot, ntrunc, nblock, packed_spec, basis_grid, ierr_local)
-      if (ierr_local /= 0_c_int) then
-        ierror = ierr_local
-        deallocate(packed_spec, basis_grid, fourier_real, fourier_imag)
-        call reset_scalar_basis_cache()
-        return
-      end if
-
-      call scalar_fourier_stub( &
-        ndgl, nloen, ngptot, m, nblock, basis_grid, fourier_real, fourier_imag, ierr_local)
-      if (ierr_local /= 0_c_int) then
-        ierror = ierr_local
-        deallocate(packed_spec, basis_grid, fourier_real, fourier_imag)
-        call reset_scalar_basis_cache()
-        return
-      end if
-
       do ilat = 1_c_int, ndgl
         do icol = 1_c_int, nblock
           coeff_index = start_idx + icol - 1_c_int
           cache_basis_real((ilat - 1_c_int) * ncoeff + coeff_index) = &
-            fourier_real(((ilat - 1_c_int) * (m + 1_c_int) + m) * nblock + icol)
-          cache_basis_imag((ilat - 1_c_int) * ncoeff + coeff_index) = &
-            fourier_imag(((ilat - 1_c_int) * (m + 1_c_int) + m) * nblock + icol)
+            real(legfunc_all(coeff_index, ilat), c_double)
+          cache_basis_imag((ilat - 1_c_int) * ncoeff + coeff_index) = 0.0_c_double
         end do
       end do
 
-      deallocate(packed_spec, basis_grid, fourier_real, fourier_imag)
       start_idx = start_idx + nblock
     end do
+
+    deallocate(legfunc_all)
 
     basis_cache_ready = 1_c_int
     cache_ndgl = ndgl
