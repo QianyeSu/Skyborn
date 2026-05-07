@@ -48,11 +48,24 @@ void scalar_analysis_stub(
 void scalar_synthesis_stub(
     int ndgl,
     const int *nloen,
+    const double *mu,
     int ngptot,
     int ntrunc,
     int nt,
     const double *dataspec_packed,
     double *datagrid,
+    int *ierror
+);
+
+void scalar_fourier_stub(
+    int ndgl,
+    const int *nloen,
+    int ngptot,
+    int mmax,
+    int nt,
+    const double *datagrid,
+    double *fourier_real,
+    double *fourier_imag,
     int *ierror
 );
 
@@ -661,6 +674,7 @@ static PyObject *backend_scalar_synthesis(PyObject *self, PyObject *args) {
     scalar_synthesis_stub(
         setup->ndgl,
         (const int *) setup->nloen,
+        (const double *) setup->mu,
         setup->ngptot,
         ntrunc,
         nt,
@@ -680,6 +694,104 @@ fail:
     }
     Py_XDECREF(spec_arr);
     Py_XDECREF(grid_arr);
+    return NULL;
+}
+
+static PyObject *backend_scalar_fourier(PyObject *self, PyObject *args) {
+    PyObject *handle_obj = NULL;
+    PyObject *grid_obj = NULL;
+    int mmax = -1;
+    EctransSetup *setup = NULL;
+    PyArrayObject *grid_arr = NULL;
+    PyArrayObject *real_arr = NULL;
+    PyArrayObject *imag_arr = NULL;
+    PyArrayObject *out_arr = NULL;
+    int nt = 0, grid_rank = 0, ierror = 0;
+    npy_intp *grid_dims = NULL;
+    npy_intp *out_dims = NULL;
+    npy_intp idx;
+    npy_complex128 *out_data = NULL;
+    double *real_data = NULL;
+    double *imag_data = NULL;
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "OOi", &handle_obj, &grid_obj, &mmax)) {
+        return NULL;
+    }
+
+    if (!get_setup_from_capsule(handle_obj, &setup)) {
+        return NULL;
+    }
+    grid_arr = require_array(grid_obj, NPY_FLOAT64);
+    if (grid_arr == NULL) {
+        goto fail;
+    }
+    if (!flatten_grid_array(grid_arr, setup->ngptot, &nt, &grid_rank, &grid_dims)) {
+        goto fail;
+    }
+    if (mmax < 0 || mmax > setup->max_nlon - 1) {
+        PyErr_Format(
+            PyExc_ValueError,
+            "mmax must be between 0 and %d",
+            setup->max_nlon - 1
+        );
+        goto fail;
+    }
+
+    out_dims = PyMem_Malloc((size_t) (grid_rank + 1) * sizeof(npy_intp));
+    if (out_dims == NULL) {
+        PyErr_NoMemory();
+        goto fail;
+    }
+    out_dims[0] = setup->ndgl;
+    out_dims[1] = (npy_intp) mmax + 1;
+    for (idx = 1; idx < grid_rank; ++idx) {
+        out_dims[idx + 1] = grid_dims[idx];
+    }
+
+    real_arr = (PyArrayObject *) PyArray_ZEROS(grid_rank + 1, out_dims, NPY_FLOAT64, 0);
+    imag_arr = (PyArrayObject *) PyArray_ZEROS(grid_rank + 1, out_dims, NPY_FLOAT64, 0);
+    out_arr = (PyArrayObject *) PyArray_ZEROS(grid_rank + 1, out_dims, NPY_COMPLEX128, 0);
+    if (real_arr == NULL || imag_arr == NULL || out_arr == NULL) {
+        goto fail;
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    scalar_fourier_stub(
+        setup->ndgl,
+        (const int *) setup->nloen,
+        setup->ngptot,
+        mmax,
+        nt,
+        (const double *) PyArray_DATA(grid_arr),
+        (double *) PyArray_DATA(real_arr),
+        (double *) PyArray_DATA(imag_arr),
+        &ierror
+    );
+    Py_END_ALLOW_THREADS
+
+    out_data = (npy_complex128 *) PyArray_DATA(out_arr);
+    real_data = (double *) PyArray_DATA(real_arr);
+    imag_data = (double *) PyArray_DATA(imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(out_arr); ++idx) {
+        out_data[idx] = real_data[idx] + imag_data[idx] * I;
+    }
+
+    PyMem_Free(out_dims);
+    Py_DECREF(grid_arr);
+    Py_DECREF(real_arr);
+    Py_DECREF(imag_arr);
+    return Py_BuildValue("(Ni)", out_arr, ierror);
+
+fail:
+    if (out_dims != NULL) {
+        PyMem_Free(out_dims);
+    }
+    Py_XDECREF(grid_arr);
+    Py_XDECREF(real_arr);
+    Py_XDECREF(imag_arr);
+    Py_XDECREF(out_arr);
     return NULL;
 }
 
@@ -1060,6 +1172,7 @@ static PyMethodDef module_methods[] = {
     {"destroy_setup", backend_destroy_setup, METH_VARARGS, "Destroy an experimental ectrans setup handle."},
     {"scalar_analysis_stub", backend_scalar_analysis, METH_VARARGS, "Call the native scalar-analysis stub."},
     {"scalar_synthesis_stub", backend_scalar_synthesis, METH_VARARGS, "Call the native scalar-synthesis stub."},
+    {"scalar_fourier_stub", backend_scalar_fourier, METH_VARARGS, "Call the native reduced-grid Fourier helper."},
     {"vrtdiv_analysis_stub", backend_vrtdiv_analysis, METH_VARARGS, "Call the native vector-analysis stub."},
     {"uv_synthesis_stub", backend_uv_synthesis, METH_VARARGS, "Call the native wind-synthesis stub."},
     {"gradient_synthesis_stub", backend_gradient_synthesis, METH_VARARGS, "Call the native gradient-synthesis stub."},
