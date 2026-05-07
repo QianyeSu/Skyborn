@@ -752,8 +752,8 @@ static PyObject *backend_create_uv_to_vordiv_block_setup(PyObject *self, PyObjec
     UvToVordivBlockSetup *setup = NULL;
     PyObject *capsule = NULL;
     double rsphere = 0.0;
-    int nt = 0, spec_rank = 0, ntrunc = -1, v_ntrunc = -1, ierror = 0;
-    npy_intp *spec_dims = NULL;
+    int ignored_nt = 0, ignored_rank = 0, ntrunc = -1, v_ntrunc = -1, ierror = 0;
+    npy_intp *ignored_dims = NULL;
     size_t ncoeff = 0, total_dense_entries = 0, total_active_columns = 0;
     size_t cache_bytes = 0, running_basis_offset = 0, running_active_offset = 0;
     double *basis_vrt_real = NULL, *basis_vrt_imag = NULL;
@@ -775,10 +775,10 @@ static PyObject *backend_create_uv_to_vordiv_block_setup(PyObject *self, PyObjec
     if (u_arr == NULL || v_arr == NULL) {
         goto fail;
     }
-    if (!flatten_spectral_array(u_arr, INT_MAX, &ntrunc, &nt, &spec_rank, &spec_dims)) {
+    if (!flatten_spectral_array(u_arr, INT_MAX, &ntrunc, &ignored_nt, &ignored_rank, &ignored_dims)) {
         goto fail;
     }
-    if (!flatten_spectral_array(v_arr, INT_MAX, &v_ntrunc, &nt, &spec_rank, &spec_dims)) {
+    if (!flatten_spectral_array(v_arr, INT_MAX, &v_ntrunc, &ignored_nt, &ignored_rank, &ignored_dims)) {
         goto fail;
     }
     if (PyArray_NDIM(u_arr) != PyArray_NDIM(v_arr)) {
@@ -794,14 +794,6 @@ static PyObject *backend_create_uv_to_vordiv_block_setup(PyObject *self, PyObjec
         PyErr_SetString(PyExc_ValueError, "uspec and vspec must use the same ntrunc");
         goto fail;
     }
-    if (spec_rank != 1 || nt != 1) {
-        PyErr_SetString(
-            PyExc_ValueError,
-            "uv_to_vordiv block setup currently expects rank-1 spectra"
-        );
-        goto fail;
-    }
-
     ncoeff = (size_t) PyArray_DIM(u_arr, 0);
     for (m = 0; m <= ntrunc; ++m) {
         size_t block_size = (size_t) (ntrunc - m + 1);
@@ -2622,14 +2614,6 @@ static PyObject *backend_uv_to_vordiv_block_native_with_setup(PyObject *self, Py
         PyErr_SetString(PyExc_ValueError, "uspec/vspec ntrunc must match the setup handle");
         goto fail;
     }
-    if (spec_rank != 1 || nt != 1) {
-        PyErr_SetString(
-            PyExc_ValueError,
-            "uv_to_vordiv block setup solve currently expects rank-1 spectra"
-        );
-        goto fail;
-    }
-
     vrt_out_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_COMPLEX128, 0);
     div_out_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_COMPLEX128, 0);
     if (vrt_out_arr == NULL || div_out_arr == NULL) {
@@ -2643,12 +2627,12 @@ static PyObject *backend_uv_to_vordiv_block_native_with_setup(PyObject *self, Py
     weights = (double *) PyMem_Malloc(max_nrow * sizeof(double));
     reduced_basis_real = (double *) PyMem_Calloc(max_nrow * max_nrow, sizeof(double));
     reduced_basis_imag = (double *) PyMem_Calloc(max_nrow * max_nrow, sizeof(double));
-    observed_real = (double *) PyMem_Calloc(max_nrow, sizeof(double));
-    observed_imag = (double *) PyMem_Calloc(max_nrow, sizeof(double));
-    solution_real = (double *) PyMem_Calloc(max_nrow, sizeof(double));
-    solution_imag = (double *) PyMem_Calloc(max_nrow, sizeof(double));
-    reduced_solution_real = (double *) PyMem_Calloc(max_nrow, sizeof(double));
-    reduced_solution_imag = (double *) PyMem_Calloc(max_nrow, sizeof(double));
+    observed_real = (double *) PyMem_Calloc(max_nrow * (size_t) nt, sizeof(double));
+    observed_imag = (double *) PyMem_Calloc(max_nrow * (size_t) nt, sizeof(double));
+    solution_real = (double *) PyMem_Calloc(max_nrow * (size_t) nt, sizeof(double));
+    solution_imag = (double *) PyMem_Calloc(max_nrow * (size_t) nt, sizeof(double));
+    reduced_solution_real = (double *) PyMem_Calloc(max_nrow * (size_t) nt, sizeof(double));
+    reduced_solution_imag = (double *) PyMem_Calloc(max_nrow * (size_t) nt, sizeof(double));
     active_columns = (int *) PyMem_Malloc(max_nrow * sizeof(int));
     if (
         weights == NULL || reduced_basis_real == NULL || reduced_basis_imag == NULL ||
@@ -2670,15 +2654,16 @@ static PyObject *backend_uv_to_vordiv_block_native_with_setup(PyObject *self, Py
         int it = 0;
         size_t basis_offset = setup->basis_offsets[m];
         size_t active_offset = setup->active_offsets[m];
+        size_t rhs_bytes = (size_t) nrow * (size_t) nt * sizeof(double);
 
         memset(reduced_basis_real, 0, (size_t) nrow * (size_t) nrow * sizeof(double));
         memset(reduced_basis_imag, 0, (size_t) nrow * (size_t) nrow * sizeof(double));
-        memset(observed_real, 0, (size_t) nrow * sizeof(double));
-        memset(observed_imag, 0, (size_t) nrow * sizeof(double));
-        memset(solution_real, 0, (size_t) nrow * sizeof(double));
-        memset(solution_imag, 0, (size_t) nrow * sizeof(double));
-        memset(reduced_solution_real, 0, (size_t) nrow * sizeof(double));
-        memset(reduced_solution_imag, 0, (size_t) nrow * sizeof(double));
+        memset(observed_real, 0, rhs_bytes);
+        memset(observed_imag, 0, rhs_bytes);
+        memset(solution_real, 0, rhs_bytes);
+        memset(solution_imag, 0, rhs_bytes);
+        memset(reduced_solution_real, 0, rhs_bytes);
+        memset(reduced_solution_imag, 0, rhs_bytes);
 
         for (local_idx = 0; local_idx < nrow; ++local_idx) {
             weights[local_idx] = 1.0;
@@ -2731,17 +2716,24 @@ static PyObject *backend_uv_to_vordiv_block_native_with_setup(PyObject *self, Py
 
             for (local_idx = 0; local_idx < active_count; ++local_idx) {
                 int col = active_columns[local_idx];
-                solution_real[col] = reduced_solution_real[local_idx];
-                solution_imag[col] = reduced_solution_imag[local_idx];
+                for (it = 0; it < nt; ++it) {
+                    size_t source_idx = (size_t) local_idx * (size_t) nt + (size_t) it;
+                    size_t target_idx = (size_t) col * (size_t) nt + (size_t) it;
+                    solution_real[target_idx] = reduced_solution_real[source_idx];
+                    solution_imag[target_idx] = reduced_solution_imag[source_idx];
+                }
             }
         }
 
         for (local_idx = 0; local_idx < block_size; ++local_idx) {
             size_t global_idx = start_idx + (size_t) local_idx;
-            size_t vrt_idx = (size_t) local_idx * (size_t) nt;
-            size_t div_idx = (size_t) (block_size + local_idx) * (size_t) nt;
-            vrt_out_data[global_idx] = solution_real[vrt_idx] + solution_imag[vrt_idx] * I;
-            div_out_data[global_idx] = solution_real[div_idx] + solution_imag[div_idx] * I;
+            for (it = 0; it < nt; ++it) {
+                size_t output_idx = global_idx * (size_t) nt + (size_t) it;
+                size_t vrt_idx = (size_t) local_idx * (size_t) nt + (size_t) it;
+                size_t div_idx = (size_t) (block_size + local_idx) * (size_t) nt + (size_t) it;
+                vrt_out_data[output_idx] = solution_real[vrt_idx] + solution_imag[vrt_idx] * I;
+                div_out_data[output_idx] = solution_real[div_idx] + solution_imag[div_idx] * I;
+            }
         }
 
         start_idx += (size_t) block_size;
