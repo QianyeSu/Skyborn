@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from collections import OrderedDict
 
 import numpy as np
 
@@ -18,6 +19,9 @@ class UvToVordivBlockSolver:
         vspec: np.ndarray,
         rsphere: float,
     ) -> None:
+        ntrunc, ncoeff, _ = _uv_to_vordiv_geometry(uspec, vspec, rsphere)
+        self._ntrunc = ntrunc
+        self._ncoeff = ncoeff
         self._rsphere = float(rsphere)
         self._handle = create_uv_to_vordiv_block_setup(uspec, vspec, self._rsphere)
         self._closed = False
@@ -26,6 +30,16 @@ class UvToVordivBlockSolver:
     def rsphere(self) -> float:
         """Return the sphere radius used to build the cached solver."""
         return self._rsphere
+
+    @property
+    def ntrunc(self) -> int:
+        """Return the spectral truncation this solver was built for."""
+        return self._ntrunc
+
+    @property
+    def ncoeff(self) -> int:
+        """Return the public triangular coefficient count this solver was built for."""
+        return self._ncoeff
 
     @property
     def closed(self) -> bool:
@@ -40,6 +54,13 @@ class UvToVordivBlockSolver:
         """Apply the cached native block solver to one public ``u/v`` spectrum pair."""
         if self._closed:
             raise RuntimeError("uv_to_vordiv block solver is closed")
+        ntrunc, ncoeff, _ = _uv_to_vordiv_geometry(uspec, vspec, self._rsphere)
+        if ntrunc != self._ntrunc or ncoeff != self._ncoeff:
+            raise ValueError(
+                "uv_to_vordiv block solver geometry mismatch: "
+                f"expected ntrunc={self._ntrunc}, ncoeff={self._ncoeff}; "
+                f"got ntrunc={ntrunc}, ncoeff={ncoeff}"
+            )
         return uv_to_vordiv_block_native_with_setup(self._handle, uspec, vspec)
 
     def close(self) -> None:
@@ -56,12 +77,138 @@ class UvToVordivBlockSolver:
         self.close()
 
 
+class UvToVordivBlockSolverCache:
+    """Small internal cache for reusing block solvers by spectral geometry."""
+
+    def __init__(self, max_entries: int | None = None) -> None:
+        if max_entries is not None and max_entries < 1:
+            raise ValueError(f"max_entries must be positive or None, got {max_entries}")
+        self._solvers: OrderedDict[tuple[int, float], UvToVordivBlockSolver] = (
+            OrderedDict()
+        )
+        self._max_entries = max_entries
+        self._closed = False
+
+    @property
+    def closed(self) -> bool:
+        """Whether this cache has been closed."""
+        return self._closed
+
+    @property
+    def size(self) -> int:
+        """Return the number of live cached solver entries."""
+        return len(self._solvers)
+
+    @property
+    def max_entries(self) -> int | None:
+        """Return the configured cache entry limit."""
+        return self._max_entries
+
+    @staticmethod
+    def _cache_key(
+        uspec: np.ndarray, vspec: np.ndarray, rsphere: float
+    ) -> tuple[int, float]:
+        ntrunc, _, normalized_rsphere = _uv_to_vordiv_geometry(uspec, vspec, rsphere)
+        return (ntrunc, normalized_rsphere)
+
+    def get_solver(
+        self,
+        uspec: np.ndarray,
+        vspec: np.ndarray,
+        rsphere: float,
+    ) -> UvToVordivBlockSolver:
+        """Return a cached solver for one spectral geometry, creating it if needed."""
+        if self._closed:
+            raise RuntimeError("uv_to_vordiv block solver cache is closed")
+        key = self._cache_key(uspec, vspec, rsphere)
+        solver = self._solvers.get(key)
+        if solver is None or solver.closed:
+            if solver is not None and solver.closed:
+                self._solvers.pop(key, None)
+            solver = UvToVordivBlockSolver(uspec, vspec, rsphere)
+            self._solvers[key] = solver
+            if self._max_entries is not None and len(self._solvers) > self._max_entries:
+                evict_key, evict_solver = self._solvers.popitem(last=False)
+                if evict_key != key:
+                    evict_solver.close()
+                else:
+                    self._solvers[key] = solver
+        else:
+            self._solvers.move_to_end(key)
+        return solver
+
+    def solve(
+        self,
+        uspec: np.ndarray,
+        vspec: np.ndarray,
+        rsphere: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Solve through a cached solver keyed by spectral shape and ``rsphere``."""
+        solver = self.get_solver(uspec, vspec, rsphere)
+        return solver.solve(uspec, vspec)
+
+    def clear(self) -> None:
+        """Close and drop all cached solver entries while keeping the cache reusable."""
+        for solver in self._solvers.values():
+            solver.close()
+        self._solvers.clear()
+
+    def close(self) -> None:
+        """Close the cache and all cached solver entries."""
+        if not self._closed:
+            self.clear()
+            self._closed = True
+
+    def __enter__(self) -> "UvToVordivBlockSolverCache":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+
+_UV_TO_VORDIV_BLOCK_NATIVE_PILOT_CACHE = UvToVordivBlockSolverCache(max_entries=4)
+
+
+def _get_uv_to_vordiv_block_native_pilot_cache() -> UvToVordivBlockSolverCache:
+    """Return the module-level pilot cache, recreating it if it was closed."""
+    global _UV_TO_VORDIV_BLOCK_NATIVE_PILOT_CACHE
+    if _UV_TO_VORDIV_BLOCK_NATIVE_PILOT_CACHE.closed:
+        _UV_TO_VORDIV_BLOCK_NATIVE_PILOT_CACHE = UvToVordivBlockSolverCache(
+            max_entries=4
+        )
+    return _UV_TO_VORDIV_BLOCK_NATIVE_PILOT_CACHE
+
+
+def _clear_uv_to_vordiv_block_native_pilot_cache() -> None:
+    """Clear the module-level pilot cache without closing the cache object."""
+    _get_uv_to_vordiv_block_native_pilot_cache().clear()
+
+
 def _infer_ntrunc_from_ncoeff(ncoeff: int) -> int:
     """Infer triangular truncation from the public spectral coefficient count."""
     ntrunc = int(-1.5 + 0.5 * np.sqrt(1.0 + 8.0 * ncoeff))
     if ((ntrunc + 1) * (ntrunc + 2)) // 2 != ncoeff:
         raise ValueError(f"invalid triangular coefficient count: {ncoeff}")
     return ntrunc
+
+
+def _uv_to_vordiv_geometry(
+    uspec: np.ndarray,
+    vspec: np.ndarray,
+    rsphere: float,
+) -> tuple[int, int, float]:
+    """Validate one public ``u/v`` spectral pair and return its geometry key."""
+    uspec_arr = np.asarray(uspec)
+    vspec_arr = np.asarray(vspec)
+    if uspec_arr.ndim < 1 or vspec_arr.ndim < 1:
+        raise ValueError("uspec and vspec must be at least rank-1 arrays")
+    if uspec_arr.shape != vspec_arr.shape:
+        raise ValueError(
+            f"uspec and vspec must have the same shape, got {uspec_arr.shape} and {vspec_arr.shape}"
+        )
+    ncoeff = int(uspec_arr.shape[0])
+    ntrunc = _infer_ntrunc_from_ncoeff(ncoeff)
+    return ntrunc, ncoeff, float(rsphere)
 
 
 def _public_spectral_index(ntrunc: int, m: int, n: int) -> int:
@@ -316,7 +463,12 @@ def create_uv_to_vordiv_block_setup(
     vspec: np.ndarray,
     rsphere: float,
 ):
-    """Create a cached native blockwise ``uv -> vrt/div`` setup handle."""
+    """Create a cached native blockwise ``uv -> vrt/div`` setup handle.
+
+    The cached basis depends on spectral geometry and ``rsphere`` only.
+    Trailing batch dimensions on the input sample are accepted and ignored for
+    the setup itself.
+    """
     return _backend.create_uv_to_vordiv_block_setup(
         np.ascontiguousarray(uspec, dtype=np.complex128),
         np.ascontiguousarray(vspec, dtype=np.complex128),
@@ -782,18 +934,5 @@ def uv_to_vordiv_block_native_pilot(
         raise ValueError(
             f"uspec and vspec must have the same shape, got {uspec_arr.shape} and {vspec_arr.shape}"
         )
-    if uspec_arr.ndim != 1:
-        raise ValueError(
-            "uv_to_vordiv_block_native_pilot currently expects rank-1 spectra"
-        )
-
-    vrt, div, ierror = _backend.uv_to_vordiv_block_native(
-        uspec_arr,
-        vspec_arr,
-        float(rsphere),
-    )
-    if ierror != 0:
-        raise RuntimeError(
-            f"uv_to_vordiv_block_native backend failed with ierror={ierror}"
-        )
-    return vrt, div
+    cache = _get_uv_to_vordiv_block_native_pilot_cache()
+    return cache.solve(uspec_arr, vspec_arr, float(rsphere))
