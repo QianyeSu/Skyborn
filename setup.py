@@ -40,6 +40,12 @@ def _env_flag_enabled(name: str, default: str = "1") -> bool:
     return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
+def _active_python_prefix() -> Path:
+    """Return the active interpreter environment prefix."""
+
+    return Path(sys.prefix).resolve()
+
+
 def configure_compiler_environment():
     """Configure local compiler defaults without overriding conda-build."""
     if DOCS_BUILD_MODE:
@@ -108,6 +114,30 @@ else:
 
 class MesonBuildExt(build_ext):
     """Custom build extension to handle meson builds for Fortran modules"""
+
+    @staticmethod
+    def _meson_command(*args):
+        """Run Meson through the active interpreter to keep Python ABI aligned."""
+
+        return [sys.executable, "-m", "mesonbuild.mesonmain", *args]
+
+    @staticmethod
+    def _ninja_command(*args):
+        """Run Ninja through the active interpreter environment."""
+
+        return [sys.executable, "-m", "ninja", *args]
+
+    @staticmethod
+    def _write_meson_native_file(build_dir: Path) -> Path:
+        """Pin Meson to the active interpreter for python-module discovery."""
+
+        native_file = build_dir / "meson-python-native.ini"
+        python_executable = Path(sys.executable).resolve().as_posix()
+        native_file.write_text(
+            "[binaries]\n" f"python = '{python_executable}'\n",
+            encoding="utf-8",
+        )
+        return native_file
 
     def run(self):
         """Run the build process"""
@@ -188,7 +218,10 @@ class MesonBuildExt(build_ext):
         try:
             # Check meson
             result = subprocess.run(
-                ["meson", "--version"], capture_output=True, text=True, timeout=10
+                self._meson_command("--version"),
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if result.returncode != 0:
                 return False, "meson not found"
@@ -198,7 +231,10 @@ class MesonBuildExt(build_ext):
 
             # Check ninja
             result = subprocess.run(
-                ["ninja", "--version"], capture_output=True, text=True, timeout=10
+                self._ninja_command("--version"),
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if result.returncode != 0:
                 return False, "ninja not found"
@@ -244,17 +280,19 @@ class MesonBuildExt(build_ext):
 
             # Setup build directory
             build_dir.mkdir(parents=True, exist_ok=True)
+            native_file = self._write_meson_native_file(build_dir)
 
             # Configure meson build with custom install directory for wheel builds
             print(f"Configuring meson build in {build_dir} (cwd={module_path})")
 
-            setup_cmd = [
-                "meson",
+            setup_cmd = self._meson_command(
                 "setup",
                 "build",  # build directory inside module_path
                 ".",  # source is current directory (module_path)
                 "--buildtype=release",
-            ]
+                "--native-file",
+                str(native_file),
+            )
 
             # Conda-forge toolchains already provide aggressive release flags.
             # Leaving Meson LTO enabled has caused two packaging-specific
@@ -288,23 +326,47 @@ class MesonBuildExt(build_ext):
             env = os.environ.copy()
             import platform
 
-            conda_prefix = env.get("CONDA_PREFIX", "")
+            active_prefix = _active_python_prefix()
+            inherited_conda_prefix = env.get("CONDA_PREFIX", "")
+            conda_prefix = str(active_prefix) if active_prefix.exists() else ""
+            if conda_prefix:
+                env["CONDA_PREFIX"] = conda_prefix
+                if inherited_conda_prefix:
+                    inherited_path = Path(inherited_conda_prefix).resolve()
+                    if inherited_path != active_prefix:
+                        print(
+                            "DEBUG: Overriding inherited CONDA_PREFIX "
+                            f"{inherited_path} with active interpreter prefix {active_prefix}"
+                        )
             if conda_prefix:
                 system = platform.system()
                 current_path = env.get("PATH", "")
 
                 if system == "Windows":
                     # Windows conda environment setup
+                    conda_root = conda_prefix
+                    conda_scripts = os.path.join(conda_prefix, "Scripts")
                     conda_bin = os.path.join(conda_prefix, "bin")
                     conda_library_bin = os.path.join(conda_prefix, "Library", "bin")
                     mingw_bin = os.path.join(
                         conda_prefix, "Library", "mingw-w64", "bin"
                     )
                     usr_bin = os.path.join(conda_prefix, "Library", "usr", "bin")
-                    path_entries = [conda_bin, conda_library_bin, mingw_bin, usr_bin]
+                    path_entries = [
+                        conda_root,
+                        conda_scripts,
+                        conda_bin,
+                        conda_library_bin,
+                        mingw_bin,
+                        usr_bin,
+                    ]
+                    path_entries = [
+                        entry for entry in path_entries if os.path.isdir(entry)
+                    ]
                     env["PATH"] = ";".join(path_entries + [current_path])
                     print(
-                        f"Enhanced PATH for Windows conda environment: {conda_prefix}"
+                        "Enhanced PATH for Windows active interpreter environment: "
+                        f"{conda_prefix}"
                     )
 
                     if CONDA_BUILD_MODE:
@@ -348,7 +410,10 @@ class MesonBuildExt(build_ext):
                     # Linux and macOS conda environment setup
                     conda_bin = os.path.join(conda_prefix, "bin")
                     # On Unix-like systems, use colon separator and prepend to PATH
-                    env["PATH"] = f"{conda_bin}:{current_path}"
+                    path_entries = [
+                        entry for entry in [conda_bin] if os.path.isdir(entry)
+                    ]
+                    env["PATH"] = ":".join(path_entries + [current_path])
 
                     # Add lib directory to LD_LIBRARY_PATH (Linux) or DYLD_LIBRARY_PATH (macOS)
                     conda_lib = os.path.join(conda_prefix, "lib")
@@ -526,9 +591,9 @@ class MesonBuildExt(build_ext):
 
             subprocess.run(setup_cmd, cwd=str(module_path), check=True, env=env)
 
-            # Build with ninja (run relative to module_path, target 'build')
-            print(f"Building with ninja in {build_dir} (cwd={module_path})")
-            build_cmd = ["ninja", "-C", "build"]
+            # Build through Meson so the active interpreter stays authoritative.
+            print(f"Building via meson compile in {build_dir} (cwd={module_path})")
+            build_cmd = self._meson_command("compile", "-C", "build")
 
             print(f"Running: {' '.join(build_cmd)} (cwd={module_path})")
             result = subprocess.run(
@@ -537,6 +602,7 @@ class MesonBuildExt(build_ext):
                 check=True,
                 capture_output=True,
                 text=True,
+                env=env,
             )
 
             if result.stdout:
@@ -547,7 +613,9 @@ class MesonBuildExt(build_ext):
             # Install using meson (this will handle the path configuration we set up)
             if not self.inplace and hasattr(self, "build_lib") and self.build_lib:
                 print(f"Installing meson build outputs to {self.build_lib}")
-                install_cmd = ["meson", "install", "-C", "build", "--only-changed"]
+                install_cmd = self._meson_command(
+                    "install", "-C", "build", "--only-changed"
+                )
                 print(f"Running: {' '.join(install_cmd)} (cwd={module_path})")
 
                 try:
@@ -660,9 +728,7 @@ class CustomInstallLib(install_lib):
         Path("spharm") / "src",
         Path("gridfill") / "tests",
     }
-    _PRUNE_RELATIVE_FILES = {
-        Path("spharm") / "fix_f2py_symbols.py",
-    }
+    _PRUNE_RELATIVE_FILES = set()
 
     def run(self):
         super().run()
