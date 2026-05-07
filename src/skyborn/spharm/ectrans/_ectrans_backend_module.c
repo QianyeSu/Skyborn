@@ -37,6 +37,8 @@ void build_grid_layout(
 void scalar_analysis_stub(
     int ndgl,
     const int *nloen,
+    const double *mu,
+    const double *weights,
     int ngptot,
     int ntrunc,
     int nt,
@@ -66,6 +68,20 @@ void scalar_fourier_stub(
     const double *datagrid,
     double *fourier_real,
     double *fourier_imag,
+    int *ierror
+);
+
+void scalar_block_solve_stub(
+    int ndgl,
+    int nblock,
+    int nt,
+    const double *weights,
+    const double *basis_real,
+    const double *basis_imag,
+    const double *observed_real,
+    const double *observed_imag,
+    double *solution_real,
+    double *solution_imag,
     int *ierror
 );
 
@@ -592,6 +608,8 @@ static PyObject *backend_scalar_analysis(PyObject *self, PyObject *args) {
     scalar_analysis_stub(
         setup->ndgl,
         (const int *) setup->nloen,
+        (const double *) setup->mu,
+        (const double *) setup->weights,
         setup->ngptot,
         ntrunc,
         nt,
@@ -792,6 +810,146 @@ fail:
     Py_XDECREF(real_arr);
     Py_XDECREF(imag_arr);
     Py_XDECREF(out_arr);
+    return NULL;
+}
+
+static PyObject *backend_scalar_block_solve(PyObject *self, PyObject *args) {
+    PyObject *handle_obj = NULL;
+    PyObject *basis_obj = NULL;
+    PyObject *observed_obj = NULL;
+    EctransSetup *setup = NULL;
+    PyArrayObject *basis_arr = NULL;
+    PyArrayObject *observed_arr = NULL;
+    PyArrayObject *basis_real_arr = NULL;
+    PyArrayObject *basis_imag_arr = NULL;
+    PyArrayObject *observed_real_arr = NULL;
+    PyArrayObject *observed_imag_arr = NULL;
+    PyArrayObject *solution_real_arr = NULL;
+    PyArrayObject *solution_imag_arr = NULL;
+    PyArrayObject *solution_out_arr = NULL;
+    int nblock = 0, nt = 0, ierror = 0;
+    npy_intp out_dims[2];
+    npy_intp idx;
+    npy_complex128 *basis_data = NULL;
+    npy_complex128 *observed_data = NULL;
+    npy_complex128 *solution_out_data = NULL;
+    double *basis_real_data = NULL;
+    double *basis_imag_data = NULL;
+    double *observed_real_data = NULL;
+    double *observed_imag_data = NULL;
+    double *solution_real_data = NULL;
+    double *solution_imag_data = NULL;
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "OOO", &handle_obj, &basis_obj, &observed_obj)) {
+        return NULL;
+    }
+    if (!get_setup_from_capsule(handle_obj, &setup)) {
+        return NULL;
+    }
+
+    basis_arr = require_array(basis_obj, NPY_COMPLEX128);
+    observed_arr = require_array(observed_obj, NPY_COMPLEX128);
+    if (basis_arr == NULL || observed_arr == NULL) {
+        goto fail;
+    }
+    if (PyArray_NDIM(basis_arr) != 2) {
+        PyErr_SetString(PyExc_ValueError, "basis must be a rank-2 complex128 array");
+        goto fail;
+    }
+    if (PyArray_NDIM(observed_arr) != 2) {
+        PyErr_SetString(PyExc_ValueError, "observed must be a rank-2 complex128 array");
+        goto fail;
+    }
+    if (PyArray_DIM(basis_arr, 0) != (npy_intp) setup->ndgl) {
+        PyErr_Format(PyExc_ValueError, "basis leading dimension must be %d", setup->ndgl);
+        goto fail;
+    }
+    if (PyArray_DIM(observed_arr, 0) != (npy_intp) setup->ndgl) {
+        PyErr_Format(PyExc_ValueError, "observed leading dimension must be %d", setup->ndgl);
+        goto fail;
+    }
+
+    nblock = (int) PyArray_DIM(basis_arr, 1);
+    nt = (int) PyArray_DIM(observed_arr, 1);
+    out_dims[0] = (npy_intp) nblock;
+    out_dims[1] = (npy_intp) nt;
+
+    basis_real_arr = (PyArrayObject *) PyArray_ZEROS(2, PyArray_DIMS(basis_arr), NPY_FLOAT64, 0);
+    basis_imag_arr = (PyArrayObject *) PyArray_ZEROS(2, PyArray_DIMS(basis_arr), NPY_FLOAT64, 0);
+    observed_real_arr = (PyArrayObject *) PyArray_ZEROS(2, PyArray_DIMS(observed_arr), NPY_FLOAT64, 0);
+    observed_imag_arr = (PyArrayObject *) PyArray_ZEROS(2, PyArray_DIMS(observed_arr), NPY_FLOAT64, 0);
+    solution_real_arr = (PyArrayObject *) PyArray_ZEROS(2, out_dims, NPY_FLOAT64, 0);
+    solution_imag_arr = (PyArrayObject *) PyArray_ZEROS(2, out_dims, NPY_FLOAT64, 0);
+    solution_out_arr = (PyArrayObject *) PyArray_ZEROS(2, out_dims, NPY_COMPLEX128, 0);
+    if (
+        basis_real_arr == NULL || basis_imag_arr == NULL ||
+        observed_real_arr == NULL || observed_imag_arr == NULL ||
+        solution_real_arr == NULL || solution_imag_arr == NULL ||
+        solution_out_arr == NULL
+    ) {
+        goto fail;
+    }
+
+    basis_data = (npy_complex128 *) PyArray_DATA(basis_arr);
+    observed_data = (npy_complex128 *) PyArray_DATA(observed_arr);
+    basis_real_data = (double *) PyArray_DATA(basis_real_arr);
+    basis_imag_data = (double *) PyArray_DATA(basis_imag_arr);
+    observed_real_data = (double *) PyArray_DATA(observed_real_arr);
+    observed_imag_data = (double *) PyArray_DATA(observed_imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(basis_arr); ++idx) {
+        basis_real_data[idx] = creal(basis_data[idx]);
+        basis_imag_data[idx] = cimag(basis_data[idx]);
+    }
+    for (idx = 0; idx < PyArray_SIZE(observed_arr); ++idx) {
+        observed_real_data[idx] = creal(observed_data[idx]);
+        observed_imag_data[idx] = cimag(observed_data[idx]);
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    scalar_block_solve_stub(
+        setup->ndgl,
+        nblock,
+        nt,
+        (const double *) setup->weights,
+        (const double *) PyArray_DATA(basis_real_arr),
+        (const double *) PyArray_DATA(basis_imag_arr),
+        (const double *) PyArray_DATA(observed_real_arr),
+        (const double *) PyArray_DATA(observed_imag_arr),
+        (double *) PyArray_DATA(solution_real_arr),
+        (double *) PyArray_DATA(solution_imag_arr),
+        &ierror
+    );
+    Py_END_ALLOW_THREADS
+
+    solution_out_data = (npy_complex128 *) PyArray_DATA(solution_out_arr);
+    solution_real_data = (double *) PyArray_DATA(solution_real_arr);
+    solution_imag_data = (double *) PyArray_DATA(solution_imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(solution_out_arr); ++idx) {
+        solution_out_data[idx] = solution_real_data[idx] + solution_imag_data[idx] * I;
+    }
+
+    Py_DECREF(basis_arr);
+    Py_DECREF(observed_arr);
+    Py_DECREF(basis_real_arr);
+    Py_DECREF(basis_imag_arr);
+    Py_DECREF(observed_real_arr);
+    Py_DECREF(observed_imag_arr);
+    Py_DECREF(solution_real_arr);
+    Py_DECREF(solution_imag_arr);
+    return Py_BuildValue("(Ni)", solution_out_arr, ierror);
+
+fail:
+    Py_XDECREF(basis_arr);
+    Py_XDECREF(observed_arr);
+    Py_XDECREF(basis_real_arr);
+    Py_XDECREF(basis_imag_arr);
+    Py_XDECREF(observed_real_arr);
+    Py_XDECREF(observed_imag_arr);
+    Py_XDECREF(solution_real_arr);
+    Py_XDECREF(solution_imag_arr);
+    Py_XDECREF(solution_out_arr);
     return NULL;
 }
 
@@ -1173,6 +1331,7 @@ static PyMethodDef module_methods[] = {
     {"scalar_analysis_stub", backend_scalar_analysis, METH_VARARGS, "Call the native scalar-analysis stub."},
     {"scalar_synthesis_stub", backend_scalar_synthesis, METH_VARARGS, "Call the native scalar-synthesis stub."},
     {"scalar_fourier_stub", backend_scalar_fourier, METH_VARARGS, "Call the native reduced-grid Fourier helper."},
+    {"scalar_block_solve_stub", backend_scalar_block_solve, METH_VARARGS, "Call the native reduced-grid weighted block solver."},
     {"vrtdiv_analysis_stub", backend_vrtdiv_analysis, METH_VARARGS, "Call the native vector-analysis stub."},
     {"uv_synthesis_stub", backend_uv_synthesis, METH_VARARGS, "Call the native wind-synthesis stub."},
     {"gradient_synthesis_stub", backend_gradient_synthesis, METH_VARARGS, "Call the native gradient-synthesis stub."},
