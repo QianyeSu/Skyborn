@@ -190,6 +190,20 @@ void ldfou2_uv_scaling(
     int *ierror
 );
 
+void ledir_dgemm(
+    int ntrunc,
+    int km,
+    int kfc,
+    int kdglu,
+    const double *paia,
+    const double *psia,
+    const double *rpnma,
+    const double *rpnms,
+    const double *pw,
+    double *poa1,
+    int *ierror
+);
+
 static int infer_ntrunc_from_ncoeff(npy_intp ncoeff) {
     long long value = (long long) ncoeff;
     int ntrunc = (int) (-1.5 + 0.5 * sqrt(1.0 + 8.0 * (double) value));
@@ -1915,6 +1929,127 @@ fail:
     return NULL;
 }
 
+static PyObject *backend_ledir_dgemm(PyObject *self, PyObject *args) {
+    PyObject *paia_obj = NULL;
+    PyObject *psia_obj = NULL;
+    PyObject *rpnma_obj = NULL;
+    PyObject *rpnms_obj = NULL;
+    PyObject *pw_obj = NULL;
+    PyArrayObject *paia_arr = NULL;
+    PyArrayObject *psia_arr = NULL;
+    PyArrayObject *rpnma_arr = NULL;
+    PyArrayObject *rpnms_arr = NULL;
+    PyArrayObject *pw_arr = NULL;
+    PyArrayObject *poa1_arr = NULL;
+    int ntrunc = -1, km = -1, ierror = 0;
+    int kfc = -1, kdglu = -1, ila = -1, ils = -1, nlei1 = -1;
+    npy_intp out_dims[2];
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(
+            args,
+            "iiOOOOO",
+            &ntrunc,
+            &km,
+            &paia_obj,
+            &psia_obj,
+            &rpnma_obj,
+            &rpnms_obj,
+            &pw_obj)) {
+        return NULL;
+    }
+
+    paia_arr = require_array(paia_obj, NPY_FLOAT64);
+    psia_arr = require_array(psia_obj, NPY_FLOAT64);
+    rpnma_arr = require_array(rpnma_obj, NPY_FLOAT64);
+    rpnms_arr = require_array(rpnms_obj, NPY_FLOAT64);
+    pw_arr = require_array(pw_obj, NPY_FLOAT64);
+    if (paia_arr == NULL || psia_arr == NULL || rpnma_arr == NULL ||
+        rpnms_arr == NULL || pw_arr == NULL) {
+        goto fail;
+    }
+
+    if (ntrunc < 0 || km < 0 || km > ntrunc) {
+        PyErr_SetString(PyExc_ValueError, "require 0 <= km <= ntrunc");
+        goto fail;
+    }
+    if (PyArray_NDIM(paia_arr) != 2 || PyArray_NDIM(psia_arr) != 2) {
+        PyErr_SetString(PyExc_ValueError, "paia and psia must be rank-2 float64 arrays");
+        goto fail;
+    }
+    if (!PyArray_CompareLists(PyArray_DIMS(paia_arr), PyArray_DIMS(psia_arr), 2)) {
+        PyErr_SetString(PyExc_ValueError, "paia and psia must have the same shape");
+        goto fail;
+    }
+    if (PyArray_NDIM(rpnma_arr) != 2 || PyArray_NDIM(rpnms_arr) != 2) {
+        PyErr_SetString(PyExc_ValueError, "rpnma and rpnms must be rank-2 float64 arrays");
+        goto fail;
+    }
+    if (PyArray_NDIM(pw_arr) != 1) {
+        PyErr_SetString(PyExc_ValueError, "pw must be rank-1 float64 array");
+        goto fail;
+    }
+
+    kfc = (int) PyArray_DIM(paia_arr, 0);
+    kdglu = (int) PyArray_DIM(paia_arr, 1);
+    ila = (ntrunc - km + 2) / 2;
+    ils = (ntrunc - km + 3) / 2;
+    nlei1 = ntrunc + 4 + ((ntrunc + 5) % 2);
+
+    if ((int) PyArray_DIM(rpnma_arr, 0) != kdglu || (int) PyArray_DIM(rpnma_arr, 1) != ila) {
+        PyErr_SetString(PyExc_ValueError, "rpnma shape must be (kdglu, (ntrunc-km+2)//2)");
+        goto fail;
+    }
+    if ((int) PyArray_DIM(rpnms_arr, 0) != kdglu || (int) PyArray_DIM(rpnms_arr, 1) != ils) {
+        PyErr_SetString(PyExc_ValueError, "rpnms shape must be (kdglu, (ntrunc-km+3)//2)");
+        goto fail;
+    }
+    if ((int) PyArray_DIM(pw_arr, 0) != kdglu) {
+        PyErr_SetString(PyExc_ValueError, "pw size must equal kdglu");
+        goto fail;
+    }
+
+    out_dims[0] = nlei1;
+    out_dims[1] = kfc;
+    poa1_arr = (PyArrayObject *) PyArray_ZEROS(2, out_dims, NPY_FLOAT64, 0);
+    if (poa1_arr == NULL) {
+        goto fail;
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    ledir_dgemm(
+        ntrunc,
+        km,
+        kfc,
+        kdglu,
+        (const double *) PyArray_DATA(paia_arr),
+        (const double *) PyArray_DATA(psia_arr),
+        (const double *) PyArray_DATA(rpnma_arr),
+        (const double *) PyArray_DATA(rpnms_arr),
+        (const double *) PyArray_DATA(pw_arr),
+        (double *) PyArray_DATA(poa1_arr),
+        &ierror
+    );
+    Py_END_ALLOW_THREADS
+
+    Py_DECREF(paia_arr);
+    Py_DECREF(psia_arr);
+    Py_DECREF(rpnma_arr);
+    Py_DECREF(rpnms_arr);
+    Py_DECREF(pw_arr);
+    return Py_BuildValue("(Ni)", poa1_arr, ierror);
+
+fail:
+    Py_XDECREF(paia_arr);
+    Py_XDECREF(psia_arr);
+    Py_XDECREF(rpnma_arr);
+    Py_XDECREF(rpnms_arr);
+    Py_XDECREF(pw_arr);
+    Py_XDECREF(poa1_arr);
+    return NULL;
+}
+
 static PyMethodDef module_methods[] = {
     {"validate_nloen", backend_validate_nloen, METH_VARARGS, "Validate reduced-grid longitude counts."},
     {"create_setup", backend_create_setup, METH_VARARGS, "Create an experimental ectrans setup handle."},
@@ -1931,6 +2066,7 @@ static PyMethodDef module_methods[] = {
     {"vordiv_to_uv", backend_vordiv_to_uv, METH_VARARGS, "Call the experimental ectrans vordiv-to-uv spectral helper."},
     {"uv_to_vordiv", backend_uv_to_vordiv, METH_VARARGS, "Call the experimental ectrans uv-to-vordiv spectral helper."},
     {"ldfou2_uv_scaling", backend_ldfou2_uv_scaling, METH_VARARGS, "Apply the experimental ectrans LDFOU2 uv scaling helper."},
+    {"ledir_dgemm", backend_ledir_dgemm, METH_VARARGS, "Apply the experimental DGEMM-only OpenIFS LEDIR kernel."},
     {NULL, NULL, 0, NULL}
 };
 
