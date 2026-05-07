@@ -12,10 +12,12 @@ if str(REPO_SRC) not in sys.path:
 import skyborn.spharm as spharm_pkg  # noqa: E402
 from skyborn.spharm import _spherepack  # noqa: E402
 from skyborn.spharm.ectrans_backend_api import (  # noqa: E402
+    ldfou2_uv_scaling,
     scalar_analysis_stub,
     scalar_block_solve_stub,
     scalar_fourier_stub,
     scalar_synthesis_stub,
+    vordiv_to_uv,
     weighted_block_solve_stub,
 )
 from skyborn.spharm.reduced_gaussian import (
@@ -26,6 +28,181 @@ from skyborn.spharm.reduced_gaussian import (
 )
 from skyborn.spharm.reduced_gaussian import regrid as reduced_regrid  # noqa: E402
 from skyborn.spharm.reduced_gaussian import regriduv as reduced_regriduv
+
+
+def _single_set_ectrans_offsets(ntrunc: int) -> tuple[np.ndarray, np.ndarray]:
+    """Return OpenIFS-style single-set NASM0/NPMT offsets for one local wave set."""
+    nasm0 = np.empty(ntrunc + 1, dtype=np.int64)
+    npm_t = np.empty(ntrunc + 1, dtype=np.int64)
+
+    spec_offset = 0
+    leg_offset = 0
+    for m in range(ntrunc + 1):
+        nasm0[m] = spec_offset
+        npm_t[m] = leg_offset
+        spec_offset += 2 * (ntrunc - m + 1)
+        leg_offset += ntrunc + 2 - m
+    return nasm0, npm_t
+
+
+def _python_vordiv_to_uv_reference(
+    vrtspec: np.ndarray,
+    divspec: np.ndarray,
+    rsphere: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Pure-Python transcription of the narrowed OpenIFS vordiv->uv pilot chain."""
+    vrtspec = np.asarray(vrtspec, dtype=np.complex128)
+    divspec = np.asarray(divspec, dtype=np.complex128)
+    if vrtspec.shape != divspec.shape:
+        raise ValueError("vrtspec and divspec must have the same shape")
+
+    ncoeff = vrtspec.shape[0]
+    ntrunc = int(-1.5 + 0.5 * np.sqrt(1.0 + 8.0 * ncoeff))
+    if ((ntrunc + 1) * (ntrunc + 2)) // 2 != ncoeff:
+        raise ValueError("invalid triangular coefficient count")
+
+    extra_shape = vrtspec.shape[1:]
+    nt = int(np.prod(extra_shape, dtype=int)) if extra_shape else 1
+    vrt_flat = vrtspec.reshape(ncoeff, nt)
+    div_flat = divspec.reshape(ncoeff, nt)
+
+    nasm0, npm_t = _single_set_ectrans_offsets(ntrunc)
+    nspec2 = int(2 * ncoeff)
+    nlei1 = ntrunc + 4 + ((ntrunc + 5) % 2)
+
+    pspvor = np.zeros((nt, nspec2), dtype=np.float64)
+    pspdiv = np.zeros((nt, nspec2), dtype=np.float64)
+    pspu = np.zeros((nt, nspec2), dtype=np.float64)
+    pspv = np.zeros((nt, nspec2), dtype=np.float64)
+
+    idx = 0
+    for m in range(ntrunc + 1):
+        for n in range(m, ntrunc + 1):
+            inm = int(nasm0[m] + 2 * (n - m))
+            pspvor[:, inm] = vrt_flat[idx].real
+            pspvor[:, inm + 1] = vrt_flat[idx].imag
+            pspdiv[:, inm] = div_flat[idx].real
+            pspdiv[:, inm + 1] = div_flat[idx].imag
+            idx += 1
+
+    rn = np.arange(-1, ntrunc + 4, dtype=np.float64)
+    rlapin = np.zeros(ntrunc + 4, dtype=np.float64)
+    for n in range(1, ntrunc + 3):
+        rlapin[n + 1] = -(rsphere * rsphere) / float(n * (n + 1))
+
+    repsnm = []
+    for m in range(ntrunc + 1):
+        for n in range(m, ntrunc + 3):
+            repsnm.append(np.sqrt((n * n - m * m) / float(4 * n * n - 1)))
+    repsnm = np.asarray(repsnm, dtype=np.float64)
+
+    for m in range(ntrunc + 1):
+        zei = np.zeros(ntrunc + 3, dtype=np.float64)
+        if m > 0:
+            zei[:m] = 0.0
+        km_loc = m + 1
+        for n in range(m, ntrunc + 3):
+            zei[n] = repsnm[int(npm_t[m] + n)]
+
+        zia = np.zeros((nlei1, 8 * nt), dtype=np.float64)
+        ilcm = ntrunc + 1 - m
+        ioff = int(nasm0[m])
+
+        for j in range(1, ilcm + 1):
+            inm = ioff + (ilcm - j) * 2
+            row = j + 1
+            for fld in range(nt):
+                ir = 2 * fld
+                ii = ir + 1
+                zia[row, ir] = pspvor[fld, inm]
+                zia[row, ii] = pspvor[fld, inm + 1]
+                zia[row, 2 * nt + ir] = pspdiv[fld, inm]
+                zia[row, 2 * nt + ii] = pspdiv[fld, inm + 1]
+
+        zn = np.zeros(ntrunc + 6, dtype=np.float64)
+        zlap = np.zeros(ntrunc + 6, dtype=np.float64)
+        zeps = np.zeros(ntrunc + 6, dtype=np.float64)
+        ismax = ntrunc
+        for n in range(m - 1, ismax + 3):
+            ij = ismax + 3 - n
+            zn[ij + 1] = rn[n + 1]
+            zlap[ij + 1] = rlapin[n + 1]
+            if n >= 0:
+                zeps[ij + 1] = zei[n]
+        zn[1] = rn[ismax + 4]
+
+        if m == 0:
+            for fld in range(nt):
+                ir = 2 * fld
+                for ji in range(2, ismax + 4 - m):
+                    zia[ji - 1, 4 * nt + ir] = (
+                        zn[ji + 2] * zeps[ji + 1] * zlap[ji + 2] * zia[ji, ir]
+                        - zn[ji - 1] * zeps[ji] * zlap[ji] * zia[ji - 2, ir]
+                    )
+                    zia[ji - 1, 6 * nt + ir] = (
+                        -zn[ji + 2] * zeps[ji + 1] * zlap[ji + 2] * zia[ji, 2 * nt + ir]
+                        + zn[ji - 1] * zeps[ji] * zlap[ji] * zia[ji - 2, 2 * nt + ir]
+                    )
+        else:
+            zkm = float(m)
+            for fld in range(nt):
+                ir = 2 * fld
+                ii = ir + 1
+                for ji in range(2, ismax + 4 - m):
+                    zia[ji - 1, 4 * nt + ir] = (
+                        -zkm * zlap[ji + 1] * zia[ji - 1, 2 * nt + ii]
+                        + zn[ji + 2] * zeps[ji + 1] * zlap[ji + 2] * zia[ji, ir]
+                        - zn[ji - 1] * zeps[ji] * zlap[ji] * zia[ji - 2, ir]
+                    )
+                    zia[ji - 1, 4 * nt + ii] = (
+                        zkm * zlap[ji + 1] * zia[ji - 1, 2 * nt + ir]
+                        + zn[ji + 2] * zeps[ji + 1] * zlap[ji + 2] * zia[ji, ii]
+                        - zn[ji - 1] * zeps[ji] * zlap[ji] * zia[ji - 2, ii]
+                    )
+                    zia[ji - 1, 6 * nt + ir] = (
+                        -zkm * zlap[ji + 1] * zia[ji - 1, ii]
+                        - zn[ji + 2]
+                        * zeps[ji + 1]
+                        * zlap[ji + 2]
+                        * zia[ji, 2 * nt + ir]
+                        + zn[ji - 1] * zeps[ji] * zlap[ji] * zia[ji - 2, 2 * nt + ir]
+                    )
+                    zia[ji - 1, 6 * nt + ii] = (
+                        zkm * zlap[ji + 1] * zia[ji - 1, ir]
+                        - zn[ji + 2]
+                        * zeps[ji + 1]
+                        * zlap[ji + 2]
+                        * zia[ji, 2 * nt + ii]
+                        + zn[ji - 1] * zeps[ji] * zlap[ji] * zia[ji - 2, 2 * nt + ii]
+                    )
+
+        inv_ra = 1.0 / rsphere
+        for j in range(1, ilcm + 1):
+            inm = ioff + (ilcm - j) * 2
+            row = j + 1
+            for fld in range(nt):
+                ir = 2 * fld
+                ii = ir + 1
+                pspu[fld, inm] = zia[row, 4 * nt + ir] * inv_ra
+                pspu[fld, inm + 1] = zia[row, 4 * nt + ii] * inv_ra
+                pspv[fld, inm] = zia[row, 6 * nt + ir] * inv_ra
+                pspv[fld, inm + 1] = zia[row, 6 * nt + ii] * inv_ra
+
+    uspec = np.empty((ncoeff, nt), dtype=np.complex128)
+    vspec = np.empty((ncoeff, nt), dtype=np.complex128)
+    idx = 0
+    for m in range(ntrunc + 1):
+        for n in range(m, ntrunc + 1):
+            inm = int(nasm0[m] + 2 * (n - m))
+            uspec[idx, :] = pspu[:, inm] + 1j * pspu[:, inm + 1]
+            vspec[idx, :] = pspv[:, inm] + 1j * pspv[:, inm + 1]
+            idx += 1
+
+    if extra_shape:
+        return uspec.reshape((ncoeff,) + extra_shape), vspec.reshape(
+            (ncoeff,) + extra_shape
+        )
+    return uspec[:, 0], vspec[:, 0]
 
 
 def test_reduced_gaussian_grid_basic_metadata():
@@ -153,6 +330,82 @@ def test_reduced_gaussian_native_vector_pipeline_recovers_full_grid_reference():
     np.testing.assert_allclose(chi_vrt, chi_ref_vrt, rtol=0.0, atol=1e-8)
 
     backend.close()
+
+
+def test_vordiv_to_uv_matches_python_reference():
+    sht = spharm_pkg.Spharmt(nlon=32, nlat=17, gridtype="gaussian", legfunc="stored")
+    rng = np.random.default_rng(20260507)
+    ncoeff = (sht.nlat * (sht.nlat + 1)) // 2
+    vrtspec = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    divspec = rng.standard_normal(ncoeff).astype(np.float64) + 1j * rng.standard_normal(
+        ncoeff
+    ).astype(np.float64)
+    uspec_ref, vspec_ref = _python_vordiv_to_uv_reference(vrtspec, divspec, sht.rsphere)
+
+    uspec_pilot, vspec_pilot, ierror = vordiv_to_uv(vrtspec, divspec, sht.rsphere)
+
+    assert ierror == 0
+    np.testing.assert_allclose(uspec_pilot, uspec_ref, rtol=0.0, atol=1e-10)
+    np.testing.assert_allclose(vspec_pilot, vspec_ref, rtol=0.0, atol=1e-10)
+
+
+def test_vordiv_to_uv_supports_trailing_dimensions():
+    sht = spharm_pkg.Spharmt(nlon=24, nlat=13, gridtype="gaussian", legfunc="stored")
+    rng = np.random.default_rng(20260508)
+    ncoeff = (sht.nlat * (sht.nlat + 1)) // 2
+    vrtspec = rng.standard_normal((ncoeff, 2, 2)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 2, 2)).astype(np.float64)
+    divspec = rng.standard_normal((ncoeff, 2, 2)).astype(
+        np.float64
+    ) + 1j * rng.standard_normal((ncoeff, 2, 2)).astype(np.float64)
+
+    uspec_pilot, vspec_pilot, ierror = vordiv_to_uv(vrtspec, divspec, sht.rsphere)
+
+    assert ierror == 0
+    assert uspec_pilot.shape == vrtspec.shape
+    assert vspec_pilot.shape == divspec.shape
+
+
+def test_vordiv_to_uv_rejects_mismatched_shapes():
+    vrtspec = np.zeros((10,), dtype=np.complex128)
+    divspec = np.zeros((10, 2), dtype=np.complex128)
+
+    try:
+        vordiv_to_uv(vrtspec, divspec, 6.3712e6)
+    except Exception as exc:
+        assert "same rank" in str(exc) or "same shape" in str(exc)
+    else:
+        raise AssertionError("Expected shape validation error for vordiv_to_uv")
+
+
+def test_ldfou2_uv_scaling_matches_analytic_gaussian_factor():
+    ntrunc = 4
+    km = 0
+    kf_uv = 1
+    rsphere = 6.3712e6
+    nlat = ntrunc + 1
+    ndgnh = (nlat + 1) // 2
+
+    paia = np.ones((4 * kf_uv, ndgnh), dtype=np.float64)
+    psia = np.ones((4 * kf_uv, ndgnh), dtype=np.float64)
+    paia_out, psia_out, ierror = ldfou2_uv_scaling(ntrunc, km, paia, rsphere, psia)
+
+    assert ierror == 0
+    lats_deg, _ = spharm_pkg.gaussian_lats_wts(nlat)
+    north_lats = lats_deg[:ndgnh]
+    expected = 1.0 / (rsphere * np.cos(np.deg2rad(north_lats)))
+
+    np.testing.assert_allclose(paia_out[0], expected, rtol=0.0, atol=2e-12)
+    np.testing.assert_allclose(psia_out[0], expected, rtol=0.0, atol=2e-12)
+    np.testing.assert_allclose(
+        paia_out, np.broadcast_to(expected, paia_out.shape), rtol=0.0, atol=2e-12
+    )
+    np.testing.assert_allclose(
+        psia_out, np.broadcast_to(expected, psia_out.shape), rtol=0.0, atol=2e-12
+    )
 
 
 def test_reduced_gaussian_spharmt_vector_shape_validation():
