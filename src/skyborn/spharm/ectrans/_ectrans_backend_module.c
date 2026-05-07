@@ -16,6 +16,7 @@ typedef struct {
     int *lat_offsets;
     double *mu;
     double *weights;
+    double rsphere;
 } EctransSetup;
 
 void validate_nloen(
@@ -85,6 +86,20 @@ void scalar_block_solve_stub(
     int *ierror
 );
 
+void weighted_block_solve_stub(
+    int nrow,
+    int nblock,
+    int nt,
+    const double *weights,
+    const double *basis_real,
+    const double *basis_imag,
+    const double *observed_real,
+    const double *observed_imag,
+    double *solution_real,
+    double *solution_imag,
+    int *ierror
+);
+
 void vrtdiv_analysis_stub(
     int ndgl,
     const int *nloen,
@@ -104,6 +119,7 @@ void uv_synthesis_stub(
     int ndgl,
     const int *nloen,
     int ngptot,
+    double rsphere,
     int ntrunc,
     int nt,
     const double *vrtspec_r,
@@ -119,6 +135,7 @@ void gradient_synthesis_stub(
     int ndgl,
     const int *nloen,
     int ngptot,
+    double rsphere,
     int ntrunc,
     int nt,
     const double *chispec_r,
@@ -163,6 +180,7 @@ static void free_setup_contents(EctransSetup *setup) {
         PyMem_Free(setup->weights);
         setup->weights = NULL;
     }
+    setup->rsphere = 0.0;
     setup->ndgl = 0;
     setup->ngptot = 0;
     setup->max_nlon = 0;
@@ -321,6 +339,7 @@ static PyObject *backend_create_setup(PyObject *self, PyObject *args) {
     PyObject *nloen_obj = NULL;
     PyObject *mu_obj = NULL;
     PyObject *weights_obj = NULL;
+    double rsphere = 0.0;
     PyArrayObject *nloen_arr = NULL;
     PyArrayObject *mu_arr = NULL;
     PyArrayObject *weights_arr = NULL;
@@ -333,7 +352,7 @@ static PyObject *backend_create_setup(PyObject *self, PyObject *args) {
 
     (void) self;
 
-    if (!PyArg_ParseTuple(args, "OOO", &nloen_obj, &mu_obj, &weights_obj)) {
+    if (!PyArg_ParseTuple(args, "OOOd", &nloen_obj, &mu_obj, &weights_obj, &rsphere)) {
         return NULL;
     }
 
@@ -380,6 +399,7 @@ static PyObject *backend_create_setup(PyObject *self, PyObject *args) {
     setup->lat_offsets = NULL;
     setup->mu = NULL;
     setup->weights = NULL;
+    setup->rsphere = rsphere;
     setup->nloen = (int *) PyMem_Malloc((size_t) ndgl * sizeof(int));
     if (setup->nloen == NULL) {
         Py_DECREF(nloen_arr);
@@ -516,7 +536,9 @@ static PyObject *backend_describe_setup(PyObject *self, PyObject *args) {
         "mu",
         mu_arr,
         "weights",
-        weights_arr
+        weights_arr,
+        "rsphere",
+        setup->rsphere
     );
 }
 
@@ -953,6 +975,144 @@ fail:
     return NULL;
 }
 
+static PyObject *backend_weighted_block_solve(PyObject *self, PyObject *args) {
+    PyObject *weights_obj = NULL;
+    PyObject *basis_obj = NULL;
+    PyObject *observed_obj = NULL;
+    PyArrayObject *weights_arr = NULL;
+    PyArrayObject *basis_arr = NULL;
+    PyArrayObject *observed_arr = NULL;
+    PyArrayObject *basis_real_arr = NULL;
+    PyArrayObject *basis_imag_arr = NULL;
+    PyArrayObject *observed_real_arr = NULL;
+    PyArrayObject *observed_imag_arr = NULL;
+    PyArrayObject *solution_real_arr = NULL;
+    PyArrayObject *solution_imag_arr = NULL;
+    PyArrayObject *solution_out_arr = NULL;
+    int nrow = 0, nblock = 0, nt = 0, ierror = 0;
+    npy_intp out_dims[2];
+    npy_intp idx;
+    npy_complex128 *basis_data = NULL;
+    npy_complex128 *observed_data = NULL;
+    npy_complex128 *solution_out_data = NULL;
+    double *basis_real_data = NULL;
+    double *basis_imag_data = NULL;
+    double *observed_real_data = NULL;
+    double *observed_imag_data = NULL;
+    double *solution_real_data = NULL;
+    double *solution_imag_data = NULL;
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "OOO", &weights_obj, &basis_obj, &observed_obj)) {
+        return NULL;
+    }
+
+    weights_arr = require_array(weights_obj, NPY_FLOAT64);
+    basis_arr = require_array(basis_obj, NPY_COMPLEX128);
+    observed_arr = require_array(observed_obj, NPY_COMPLEX128);
+    if (weights_arr == NULL || basis_arr == NULL || observed_arr == NULL) {
+        goto fail;
+    }
+    if (PyArray_NDIM(weights_arr) != 1) {
+        PyErr_SetString(PyExc_ValueError, "weights must be a 1D float64 array");
+        goto fail;
+    }
+    if (PyArray_NDIM(basis_arr) != 2 || PyArray_NDIM(observed_arr) != 2) {
+        PyErr_SetString(PyExc_ValueError, "basis and observed must both be 2D complex128 arrays");
+        goto fail;
+    }
+
+    nrow = (int) PyArray_DIM(weights_arr, 0);
+    if (PyArray_DIM(basis_arr, 0) != (npy_intp) nrow || PyArray_DIM(observed_arr, 0) != (npy_intp) nrow) {
+        PyErr_SetString(PyExc_ValueError, "weights, basis, and observed must use the same leading dimension");
+        goto fail;
+    }
+
+    nblock = (int) PyArray_DIM(basis_arr, 1);
+    nt = (int) PyArray_DIM(observed_arr, 1);
+    out_dims[0] = (npy_intp) nblock;
+    out_dims[1] = (npy_intp) nt;
+
+    basis_real_arr = (PyArrayObject *) PyArray_ZEROS(2, PyArray_DIMS(basis_arr), NPY_FLOAT64, 0);
+    basis_imag_arr = (PyArrayObject *) PyArray_ZEROS(2, PyArray_DIMS(basis_arr), NPY_FLOAT64, 0);
+    observed_real_arr = (PyArrayObject *) PyArray_ZEROS(2, PyArray_DIMS(observed_arr), NPY_FLOAT64, 0);
+    observed_imag_arr = (PyArrayObject *) PyArray_ZEROS(2, PyArray_DIMS(observed_arr), NPY_FLOAT64, 0);
+    solution_real_arr = (PyArrayObject *) PyArray_ZEROS(2, out_dims, NPY_FLOAT64, 0);
+    solution_imag_arr = (PyArrayObject *) PyArray_ZEROS(2, out_dims, NPY_FLOAT64, 0);
+    solution_out_arr = (PyArrayObject *) PyArray_ZEROS(2, out_dims, NPY_COMPLEX128, 0);
+    if (
+        basis_real_arr == NULL || basis_imag_arr == NULL ||
+        observed_real_arr == NULL || observed_imag_arr == NULL ||
+        solution_real_arr == NULL || solution_imag_arr == NULL ||
+        solution_out_arr == NULL
+    ) {
+        goto fail;
+    }
+
+    basis_data = (npy_complex128 *) PyArray_DATA(basis_arr);
+    observed_data = (npy_complex128 *) PyArray_DATA(observed_arr);
+    basis_real_data = (double *) PyArray_DATA(basis_real_arr);
+    basis_imag_data = (double *) PyArray_DATA(basis_imag_arr);
+    observed_real_data = (double *) PyArray_DATA(observed_real_arr);
+    observed_imag_data = (double *) PyArray_DATA(observed_imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(basis_arr); ++idx) {
+        basis_real_data[idx] = creal(basis_data[idx]);
+        basis_imag_data[idx] = cimag(basis_data[idx]);
+    }
+    for (idx = 0; idx < PyArray_SIZE(observed_arr); ++idx) {
+        observed_real_data[idx] = creal(observed_data[idx]);
+        observed_imag_data[idx] = cimag(observed_data[idx]);
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    weighted_block_solve_stub(
+        nrow,
+        nblock,
+        nt,
+        (const double *) PyArray_DATA(weights_arr),
+        (const double *) PyArray_DATA(basis_real_arr),
+        (const double *) PyArray_DATA(basis_imag_arr),
+        (const double *) PyArray_DATA(observed_real_arr),
+        (const double *) PyArray_DATA(observed_imag_arr),
+        (double *) PyArray_DATA(solution_real_arr),
+        (double *) PyArray_DATA(solution_imag_arr),
+        &ierror
+    );
+    Py_END_ALLOW_THREADS
+
+    solution_out_data = (npy_complex128 *) PyArray_DATA(solution_out_arr);
+    solution_real_data = (double *) PyArray_DATA(solution_real_arr);
+    solution_imag_data = (double *) PyArray_DATA(solution_imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(solution_out_arr); ++idx) {
+        solution_out_data[idx] = solution_real_data[idx] + solution_imag_data[idx] * I;
+    }
+
+    Py_DECREF(weights_arr);
+    Py_DECREF(basis_arr);
+    Py_DECREF(observed_arr);
+    Py_DECREF(basis_real_arr);
+    Py_DECREF(basis_imag_arr);
+    Py_DECREF(observed_real_arr);
+    Py_DECREF(observed_imag_arr);
+    Py_DECREF(solution_real_arr);
+    Py_DECREF(solution_imag_arr);
+    return Py_BuildValue("(Ni)", solution_out_arr, ierror);
+
+fail:
+    Py_XDECREF(weights_arr);
+    Py_XDECREF(basis_arr);
+    Py_XDECREF(observed_arr);
+    Py_XDECREF(basis_real_arr);
+    Py_XDECREF(basis_imag_arr);
+    Py_XDECREF(observed_real_arr);
+    Py_XDECREF(observed_imag_arr);
+    Py_XDECREF(solution_real_arr);
+    Py_XDECREF(solution_imag_arr);
+    Py_XDECREF(solution_out_arr);
+    return NULL;
+}
+
 static PyObject *backend_vrtdiv_analysis(PyObject *self, PyObject *args) {
     PyObject *handle_obj = NULL;
     PyObject *ugrid_obj = NULL;
@@ -1194,6 +1354,7 @@ static PyObject *backend_uv_synthesis(PyObject *self, PyObject *args) {
         setup->ndgl,
         (const int *) setup->nloen,
         setup->ngptot,
+        setup->rsphere,
         ntrunc,
         nt,
         (const double *) PyArray_DATA(vrt_real_arr),
@@ -1295,6 +1456,7 @@ static PyObject *backend_gradient_synthesis(PyObject *self, PyObject *args) {
         setup->ndgl,
         (const int *) setup->nloen,
         setup->ngptot,
+        setup->rsphere,
         ntrunc,
         nt,
         (const double *) PyArray_DATA(chi_real_arr),
@@ -1332,6 +1494,7 @@ static PyMethodDef module_methods[] = {
     {"scalar_synthesis_stub", backend_scalar_synthesis, METH_VARARGS, "Call the native scalar-synthesis stub."},
     {"scalar_fourier_stub", backend_scalar_fourier, METH_VARARGS, "Call the native reduced-grid Fourier helper."},
     {"scalar_block_solve_stub", backend_scalar_block_solve, METH_VARARGS, "Call the native reduced-grid weighted block solver."},
+    {"weighted_block_solve_stub", backend_weighted_block_solve, METH_VARARGS, "Call the native general weighted complex block solver."},
     {"vrtdiv_analysis_stub", backend_vrtdiv_analysis, METH_VARARGS, "Call the native vector-analysis stub."},
     {"uv_synthesis_stub", backend_uv_synthesis, METH_VARARGS, "Call the native wind-synthesis stub."},
     {"gradient_synthesis_stub", backend_gradient_synthesis, METH_VARARGS, "Call the native gradient-synthesis stub."},
