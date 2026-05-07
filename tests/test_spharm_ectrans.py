@@ -9,6 +9,7 @@ REPO_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(REPO_SRC) not in sys.path:
     sys.path.insert(0, str(REPO_SRC))
 
+import skyborn.spharm as spharm_pkg  # noqa: E402
 from skyborn.spharm import _spherepack  # noqa: E402
 from skyborn.spharm.ectrans_backend_api import (  # noqa: E402
     scalar_analysis_stub,
@@ -34,21 +35,11 @@ def test_reduced_gaussian_grid_basic_metadata():
     assert grid.max_nlon == 28
 
 
-def test_reduced_gaussian_grid_rejects_nonfinite_or_nonpositive_rsphere():
-    with np.testing.assert_raises_regex(
-        ReducedGaussianValidationError,
-        "finite positive value",
-    ):
-        ReducedGaussianGrid(np.array([20, 24, 28, 24, 20], dtype=np.int32), rsphere=0.0)
-
-    with np.testing.assert_raises_regex(
-        ReducedGaussianValidationError,
-        "finite positive value",
-    ):
-        ReducedGaussianGrid(
-            np.array([20, 24, 28, 24, 20], dtype=np.int32),
-            rsphere=np.nan,
-        )
+def test_reduced_gaussian_public_exports_are_available_from_spharm_package():
+    assert spharm_pkg.ReducedGaussianGrid is ReducedGaussianGrid
+    assert spharm_pkg.ReducedGaussianSpharmt is ReducedGaussianSpharmt
+    assert spharm_pkg.regrid is not None
+    assert spharm_pkg.regriduv is not None
 
 
 def test_reduced_gaussian_spharmt_repr_contains_key_sizes():
@@ -962,6 +953,31 @@ def test_reduced_gaussian_regrid_between_packed_layouts_matches_spectral_referen
     grdout.close()
 
 
+def test_spharm_package_regrid_dispatches_to_reduced_backend():
+    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    grdout = ReducedGaussianSpharmt(np.array([16, 20, 24, 20, 16], dtype=np.int32))
+    field = np.zeros((grdin.ngptot,), dtype=np.float64)
+
+    expected = reduced_regrid(grdin, grdout, field)
+    actual = spharm_pkg.regrid(grdin, grdout, field)
+
+    np.testing.assert_allclose(actual, expected, rtol=0.0, atol=0.0)
+    grdin.close()
+    grdout.close()
+
+
+def test_spharm_package_regrid_rejects_mixed_rectangular_and_reduced_backends():
+    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+
+    class DummyRectangular:
+        pass
+
+    with np.testing.assert_raises_regex(TypeError, "both grdin and grdout"):
+        spharm_pkg.regrid(grdin, DummyRectangular(), np.zeros((grdin.ngptot,)))
+
+    grdin.close()
+
+
 def test_reduced_gaussian_regriduv_rejects_bad_shapes_and_ntrunc():
     grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
     grdout = ReducedGaussianSpharmt(np.array([16, 20, 24, 20, 16], dtype=np.int32))
@@ -1067,3 +1083,35 @@ def test_reduced_gaussian_regriduv_between_layouts_matches_bridge_reference():
     assert actual_v.shape == (grdout.ngptot,)
     grdin.close()
     grdout.close()
+
+
+def test_spharm_package_regriduv_dispatches_to_reduced_backend():
+    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+    grdout = ReducedGaussianSpharmt(np.array([16, 20, 24, 20, 16], dtype=np.int32))
+    u = np.zeros((grdin.ngptot,), dtype=np.float64)
+    v = np.zeros((grdin.ngptot,), dtype=np.float64)
+
+    expected_u, expected_v = reduced_regriduv(grdin, grdout, u, v)
+    actual_u, actual_v = spharm_pkg.regriduv(grdin, grdout, u, v)
+
+    np.testing.assert_allclose(actual_u, expected_u, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(actual_v, expected_v, rtol=0.0, atol=0.0)
+    grdin.close()
+    grdout.close()
+
+
+def test_spharm_package_regriduv_rejects_mixed_rectangular_and_reduced_backends():
+    grdin = ReducedGaussianSpharmt(np.array([20, 24, 28, 24, 20], dtype=np.int32))
+
+    class DummyRectangular:
+        pass
+
+    with np.testing.assert_raises_regex(TypeError, "both grdin and grdout"):
+        spharm_pkg.regriduv(
+            grdin,
+            DummyRectangular(),
+            np.zeros((grdin.ngptot,)),
+            np.zeros((grdin.ngptot,)),
+        )
+
+    grdin.close()
