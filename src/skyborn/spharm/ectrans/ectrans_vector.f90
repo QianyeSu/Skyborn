@@ -8,12 +8,24 @@ module vector_backend
   public :: gradient_synthesis_stub
 
   interface
-    subroutine vhsgsi(nlat, nlon, wvhsgs, lvhsgs, dwork, ldwork, ierror)
-      integer, intent(in) :: nlat, nlon, lvhsgs, ldwork
-      real, intent(out) :: wvhsgs(*)
-      double precision, intent(inout) :: dwork(*)
-      integer, intent(out) :: ierror
-    end subroutine vhsgsi
+    subroutine vhgsi1(nlat, imid, vb, wb, dthet, dwts, dpbar, work)
+      integer, intent(in) :: nlat, imid
+      real, intent(out) :: vb(imid, *)
+      real, intent(out) :: wb(imid, *)
+      double precision, intent(inout) :: dthet(*), dwts(*), dpbar(imid, nlat, 3), work(*)
+    end subroutine vhgsi1
+
+    subroutine hrffti(n, wsave)
+      integer, intent(in) :: n
+      real, intent(out) :: wsave(2 * n + 15)
+    end subroutine hrffti
+
+    subroutine hrfftb(m, n, r, mdimr, wsave, work)
+      integer, intent(in) :: m, n, mdimr
+      real, intent(inout) :: r(mdimr, n)
+      real, intent(in) :: wsave(2 * n + 15)
+      real, intent(inout) :: work(m, n)
+    end subroutine hrfftb
   end interface
 
 contains
@@ -41,10 +53,11 @@ contains
   end subroutine vrtdiv_analysis_stub
 
   subroutine uv_synthesis_stub( &
-    ndgl, nloen, ngptot, ntrunc, nt, vrtspec_r, vrtspec_i, divspec_r, divspec_i, ugrid, vgrid, ierror) bind(C)
+    ndgl, nloen, ngptot, rsphere, ntrunc, nt, vrtspec_r, vrtspec_i, divspec_r, divspec_i, ugrid, vgrid, ierror) bind(C)
     integer(c_int), value, intent(in) :: ndgl
     integer(c_int), intent(in) :: nloen(ndgl)
     integer(c_int), value, intent(in) :: ngptot
+    real(c_double), value, intent(in) :: rsphere
     integer(c_int), value, intent(in) :: ntrunc
     integer(c_int), value, intent(in) :: nt
     real(c_double), intent(in) :: vrtspec_r((((ntrunc + 1_c_int) * (ntrunc + 2_c_int)) / 2_c_int) * nt)
@@ -55,17 +68,13 @@ contains
     real(c_double), intent(out) :: vgrid(ngptot * nt)
     integer(c_int), intent(out) :: ierror
 
-    integer(c_int) :: imid, lmn, lvhsgs, ldwork, mmax, ndo1, ndo2, mlat, imm1
-    integer(c_int) :: idz, ilat, it, j, m, mp1, np1, mb, mn, nlon_lat, offset
-    integer(c_int) :: ncoeff, ierr_local
-    real :: br_val, bi_val, cr_val, ci_val, vb_val, wb_val
-    real :: ve_val, vo_val, we_val, wo_val
-    real(c_double) :: twopi, lon_step, lon
-    real(c_double), allocatable :: cos_table(:,:), sin_table(:,:)
-    real, allocatable :: wvhsgs(:), vb(:,:), wb(:,:)
+    integer(c_int) :: imid, lmn, ldwork, mmax, ndo1, ndo2, mlat, imm1
+    integer(c_int) :: idz, ilat, it, j, nlon_lat, offset, nlp1, source_ilat, current_nlon
+    real, allocatable :: vb(:,:), wb(:,:)
     real, allocatable :: br(:,:,:), bi(:,:,:), cr(:,:,:), ci(:,:,:)
     real, allocatable :: ve(:,:,:), vo(:,:,:), we(:,:,:), wo(:,:,:)
-    double precision, allocatable :: dwork(:)
+    real, allocatable :: vpack(:,:), wpack(:,:), fft_work(:,:), wsave(:)
+    double precision, allocatable :: dtheta(:), dwts(:), dpbar(:,:,:), dwork(:)
 
     if (ndgl < 3_c_int .or. ngptot < 1_c_int .or. nt < 1_c_int .or. ntrunc < 0_c_int) then
       ugrid = 0.0_c_double
@@ -81,45 +90,33 @@ contains
       return
     end if
 
-    ncoeff = (ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int
     imid = (ndgl + 1_c_int) / 2_c_int
     lmn = ndgl * (ndgl + 1_c_int) / 2_c_int
-    lvhsgs = 2_c_int * (imid * lmn) + maxval(nloen) + 15_c_int
     ldwork = (ndgl * 3_c_int * (ndgl + 3_c_int) + 2_c_int) / 2_c_int
     idz = imid * lmn
     mmax = min(ndgl, (maxval(nloen) + 1_c_int) / 2_c_int)
     mlat = mod(ndgl, 2_c_int)
     imm1 = imid
     if (mlat /= 0_c_int) imm1 = imid - 1_c_int
+    nlp1 = ndgl + 1_c_int
     ndo1 = ndgl
     ndo2 = ndgl
     if (mlat /= 0_c_int) ndo1 = ndgl - 1_c_int
     if (mlat == 0_c_int) ndo2 = ndgl - 1_c_int
 
-    allocate(wvhsgs(lvhsgs))
-    allocate(dwork(ldwork))
     allocate(vb(imid, idz))
     allocate(wb(imid, idz))
+    allocate(dtheta(ndgl), dwts(ndgl), dpbar(imid, ndgl, 3), dwork(ldwork))
     allocate(br(ndgl, ndgl, nt), bi(ndgl, ndgl, nt), cr(ndgl, ndgl, nt), ci(ndgl, ndgl, nt))
     allocate(ve(imid, 2 * mmax, nt), vo(imid, 2 * mmax, nt), we(imid, 2 * mmax, nt), wo(imid, 2 * mmax, nt))
 
-    call vhsgsi(ndgl, maxval(nloen), wvhsgs, lvhsgs, dwork, ldwork, ierr_local)
-    if (ierr_local /= 0_c_int) then
-      ugrid = 0.0_c_double
-      vgrid = 0.0_c_double
-      ierror = 100_c_int + ierr_local
-      deallocate(wvhsgs, dwork, vb, wb, br, bi, cr, ci, ve, vo, we, wo)
-      return
-    end if
-
-    vb(:, :) = reshape(wvhsgs(1:idz), shape(vb))
-    wb(:, :) = reshape(wvhsgs(idz + 1:2 * idz), shape(wb))
+    call vhgsi1(ndgl, imid, vb, wb, dtheta, dwts, dpbar, dwork)
 
     br = 0.0
     bi = 0.0
     cr = 0.0
     ci = 0.0
-    call unpack_vrtdiv_to_vector_harmonics(ndgl, ntrunc, nt, vrtspec_r, vrtspec_i, divspec_r, divspec_i, br, bi, cr, ci)
+    call unpack_vrtdiv_to_vector_harmonics(ndgl, ntrunc, nt, rsphere, vrtspec_r, vrtspec_i, divspec_r, divspec_i, br, bi, cr, ci)
 
     ve = 0.0
     vo = 0.0
@@ -131,66 +128,65 @@ contains
     ugrid = 0.0_c_double
     vgrid = 0.0_c_double
     offset = 0_c_int
-    twopi = 2.0_c_double * acos(-1.0_c_double)
+    current_nlon = -1_c_int
 
     do ilat = 1_c_int, ndgl
       nlon_lat = nloen(ilat)
-      allocate(cos_table(0:mmax-1, nlon_lat), sin_table(0:mmax-1, nlon_lat))
-      lon_step = twopi / real(nlon_lat, c_double)
-      do j = 1_c_int, nlon_lat
-        lon = real(j - 1_c_int, c_double) * lon_step
-        cos_table(0, j) = 1.0_c_double
-        sin_table(0, j) = 0.0_c_double
-        do m = 1_c_int, mmax - 1_c_int
-          cos_table(m, j) = cos(real(m, c_double) * lon)
-          sin_table(m, j) = sin(real(m, c_double) * lon)
-        end do
-      end do
+      if (nlon_lat /= current_nlon) then
+        if (allocated(vpack)) then
+          deallocate(vpack, wpack, fft_work, wsave)
+        end if
+        allocate(vpack(2, nlon_lat), wpack(2, nlon_lat), fft_work(2, nlon_lat), wsave(2 * nlon_lat + 15))
+        call hrffti(nlon_lat, wsave)
+        current_nlon = nlon_lat
+      end if
+
+      source_ilat = ilat
+      if (ilat > imid) source_ilat = nlp1 - ilat
 
       do it = 1_c_int, nt
-        do j = 1_c_int, nlon_lat
-          ve_val = 0.0
-          vo_val = 0.0
-          we_val = 0.0
-          wo_val = 0.0
-          do mp1 = 1_c_int, mmax
-            ve_val = ve_val + ve(min(ilat, imid), 2 * mp1 - 1_c_int, it) * real(cos_table(mp1 - 1_c_int, j), kind=kind(ve_val))
-            we_val = we_val + we(min(ilat, imid), 2 * mp1 - 1_c_int, it) * real(cos_table(mp1 - 1_c_int, j), kind=kind(we_val))
-            if (mp1 > 1_c_int) then
-              ve_val = ve_val + ve(min(ilat, imid), 2 * mp1 - 2_c_int, it) * real(sin_table(mp1 - 1_c_int, j), kind=kind(ve_val))
-              we_val = we_val + we(min(ilat, imid), 2 * mp1 - 2_c_int, it) * real(sin_table(mp1 - 1_c_int, j), kind=kind(we_val))
-              vo_val = vo_val + vo(min(ilat, imid), 2 * mp1 - 1_c_int, it) * real(cos_table(mp1 - 1_c_int, j), kind=kind(vo_val))
-              vo_val = vo_val + vo(min(ilat, imid), 2 * mp1 - 2_c_int, it) * real(sin_table(mp1 - 1_c_int, j), kind=kind(vo_val))
-              wo_val = wo_val + wo(min(ilat, imid), 2 * mp1 - 1_c_int, it) * real(cos_table(mp1 - 1_c_int, j), kind=kind(wo_val))
-              wo_val = wo_val + wo(min(ilat, imid), 2 * mp1 - 2_c_int, it) * real(sin_table(mp1 - 1_c_int, j), kind=kind(wo_val))
-            end if
-          end do
+        vpack = 0.0
+        wpack = 0.0
+        vpack(1, 1:min(size(ve, 2), nlon_lat)) = ve(source_ilat, 1:min(size(ve, 2), nlon_lat), it)
+        wpack(1, 1:min(size(we, 2), nlon_lat)) = we(source_ilat, 1:min(size(we, 2), nlon_lat), it)
 
+        if (ilat /= imid .or. mlat == 0_c_int) then
+          vpack(2, 1:min(size(vo, 2), nlon_lat)) = vo(source_ilat, 1:min(size(vo, 2), nlon_lat), it)
+          wpack(2, 1:min(size(wo, 2), nlon_lat)) = wo(source_ilat, 1:min(size(wo, 2), nlon_lat), it)
+          call hrfftb(2, nlon_lat, vpack, 2, wsave, fft_work)
+          call hrfftb(2, nlon_lat, wpack, 2, wsave, fft_work)
+        else
+          call hrfftb(1, nlon_lat, vpack(1:1, 1:nlon_lat), 1, wsave, fft_work(1:1, 1:nlon_lat))
+          call hrfftb(1, nlon_lat, wpack(1:1, 1:nlon_lat), 1, wsave, fft_work(1:1, 1:nlon_lat))
+        end if
+
+        do j = 1_c_int, nlon_lat
           if (ilat < imid .or. (mlat == 0_c_int .and. ilat <= imid)) then
-            ugrid((offset + j - 1_c_int) * nt + it) = 0.5_c_double * real(ve_val + vo_val, c_double)
-            vgrid((offset + j - 1_c_int) * nt + it) = 0.5_c_double * real(we_val + wo_val, c_double)
+            ugrid((offset + j - 1_c_int) * nt + it) = 0.5_c_double * real(wpack(1, j) + wpack(2, j), c_double)
+            vgrid((offset + j - 1_c_int) * nt + it) = -0.5_c_double * real(vpack(1, j) + vpack(2, j), c_double)
           else if (ilat == imid .and. mlat /= 0_c_int) then
-            ugrid((offset + j - 1_c_int) * nt + it) = 0.5_c_double * real(ve_val, c_double)
-            vgrid((offset + j - 1_c_int) * nt + it) = 0.5_c_double * real(we_val, c_double)
+            ugrid((offset + j - 1_c_int) * nt + it) = 0.5_c_double * real(wpack(1, j), c_double)
+            vgrid((offset + j - 1_c_int) * nt + it) = -0.5_c_double * real(vpack(1, j), c_double)
           else
-            ugrid((offset + j - 1_c_int) * nt + it) = 0.5_c_double * real(ve_val - vo_val, c_double)
-            vgrid((offset + j - 1_c_int) * nt + it) = 0.5_c_double * real(we_val - wo_val, c_double)
+            ugrid((offset + j - 1_c_int) * nt + it) = 0.5_c_double * real(wpack(1, j) - wpack(2, j), c_double)
+            vgrid((offset + j - 1_c_int) * nt + it) = -0.5_c_double * real(vpack(1, j) - vpack(2, j), c_double)
           end if
         end do
       end do
       offset = offset + nlon_lat
-      deallocate(cos_table, sin_table)
     end do
 
-    deallocate(wvhsgs, dwork, vb, wb, br, bi, cr, ci, ve, vo, we, wo)
+    if (allocated(vpack)) deallocate(vpack, wpack, fft_work, wsave)
+    deallocate(vb, wb, dtheta, dwts, dpbar, dwork, br, bi, cr, ci, ve, vo, we, wo)
     ierror = 0_c_int
   end subroutine uv_synthesis_stub
 
   subroutine gradient_synthesis_stub( &
-    ndgl, nloen, ngptot, ntrunc, nt, chispec_r, chispec_i, ugrad, vgrad, ierror) bind(C)
+    ndgl, nloen, ngptot, rsphere, ntrunc, nt, chispec_r, chispec_i, ugrad, vgrad, ierror) bind(C)
     integer(c_int), value, intent(in) :: ndgl
     integer(c_int), intent(in) :: nloen(ndgl)
     integer(c_int), value, intent(in) :: ngptot
+    real(c_double), value, intent(in) :: rsphere
     integer(c_int), value, intent(in) :: ntrunc
     integer(c_int), value, intent(in) :: nt
     real(c_double), intent(in) :: chispec_r((((ntrunc + 1_c_int) * (ntrunc + 2_c_int)) / 2_c_int) * nt)
@@ -199,14 +195,70 @@ contains
     real(c_double), intent(out) :: vgrad(ngptot * nt)
     integer(c_int), intent(out) :: ierror
 
-    ugrad = 0.0_c_double
-    vgrad = 0.0_c_double
-    ierror = -1_c_int
+    integer(c_int) :: ncoeff, nm, it, ierr_local
+    real(c_double) :: rsphere_inv_sq, nreal, lap_factor
+    real(c_double), allocatable :: zerospec_r(:), zerospec_i(:), divspec_r(:), divspec_i(:)
+
+    if (ndgl < 3_c_int .or. ngptot < 1_c_int .or. nt < 1_c_int .or. ntrunc < 0_c_int) then
+      ugrad = 0.0_c_double
+      vgrad = 0.0_c_double
+      ierror = 1_c_int
+      return
+    end if
+
+    ncoeff = (ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int
+    allocate(zerospec_r(ncoeff * nt), zerospec_i(ncoeff * nt), divspec_r(ncoeff * nt), divspec_i(ncoeff * nt))
+    zerospec_r = 0.0_c_double
+    zerospec_i = 0.0_c_double
+    divspec_r = 0.0_c_double
+    divspec_i = 0.0_c_double
+
+    rsphere_inv_sq = 1.0_c_double / (rsphere * rsphere)
+    call apply_lap_to_scalar_spec(ntrunc, nt, chispec_r, chispec_i, rsphere_inv_sq, divspec_r, divspec_i)
+
+    call uv_synthesis_stub( &
+      ndgl, nloen, ngptot, rsphere, ntrunc, nt, &
+      zerospec_r, zerospec_i, divspec_r, divspec_i, &
+      ugrad, vgrad, ierr_local)
+
+    deallocate(zerospec_r, zerospec_i, divspec_r, divspec_i)
+    ierror = ierr_local
   end subroutine gradient_synthesis_stub
 
+  subroutine apply_lap_to_scalar_spec( &
+    ntrunc, nt, spec_r, spec_i, rsphere_inv_sq, lap_r, lap_i)
+    integer(c_int), intent(in) :: ntrunc, nt
+    real(c_double), intent(in) :: spec_r(((ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int) * nt)
+    real(c_double), intent(in) :: spec_i(((ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int) * nt)
+    real(c_double), intent(in) :: rsphere_inv_sq
+    real(c_double), intent(out) :: lap_r(((ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int) * nt)
+    real(c_double), intent(out) :: lap_i(((ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int) * nt)
+
+    integer(c_int) :: m, n, nm, nmstrt, it
+    real(c_double) :: nreal, lap_factor
+
+    lap_r = 0.0_c_double
+    lap_i = 0.0_c_double
+
+    do it = 1_c_int, nt
+      nmstrt = 0_c_int
+      do m = 1_c_int, ntrunc + 1_c_int
+        do n = m, ntrunc + 1_c_int
+          nm = nmstrt + n - m + 1_c_int
+          nreal = real(n, c_double)
+          lap_factor = -nreal * real(n - 1_c_int, c_double) * rsphere_inv_sq
+          lap_r((nm - 1_c_int) * nt + it) = lap_factor * spec_r((nm - 1_c_int) * nt + it)
+          lap_i((nm - 1_c_int) * nt + it) = lap_factor * spec_i((nm - 1_c_int) * nt + it)
+        end do
+        nmstrt = nmstrt + ntrunc - m + 2_c_int
+      end do
+    end do
+  end subroutine apply_lap_to_scalar_spec
+
   subroutine unpack_vrtdiv_to_vector_harmonics( &
-    ndgl, ntrunc, nt, vrtspec_r, vrtspec_i, divspec_r, divspec_i, br, bi, cr, ci)
+    ndgl, ntrunc, nt, rsphere, vrtspec_r, vrtspec_i, divspec_r, divspec_i, br, bi, cr, ci)
     integer(c_int), intent(in) :: ndgl, ntrunc, nt
+    real(c_double), intent(in) :: rsphere
     real(c_double), intent(in) :: vrtspec_r(((ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int) * nt)
     real(c_double), intent(in) :: vrtspec_i(((ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int) * nt)
     real(c_double), intent(in) :: divspec_r(((ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int) * nt)
@@ -230,7 +282,7 @@ contains
           nreal = real(n - 1_c_int, c_double)
           factor = 1.0_c_double
           if (nreal > 0.0_c_double) then
-            factor = 1.0_c_double / sqrt(nreal * (nreal + 1.0_c_double))
+            factor = rsphere / sqrt(nreal * (nreal + 1.0_c_double))
           end if
           br(m, n, i) = real(-divspec_r((nm - 1_c_int) * nt + i) * factor / scale, kind=kind(br))
           bi(m, n, i) = real(-divspec_i((nm - 1_c_int) * nt + i) * factor / scale, kind=kind(bi))
