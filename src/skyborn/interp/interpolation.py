@@ -26,6 +26,9 @@ from .fortran.vinth2p_kernels import (
     ddelta_pressure_hybrid_pa_into as _ddelta_pressure_hybrid_pa_into,
 )
 from .fortran.vinth2p_kernels import (
+    dgeopotential_height_hybrid_corder_pa_into as _dgeopotential_height_hybrid_corder_pa_into,
+)
+from .fortran.vinth2p_kernels import (
     dpressure_at_hybrid_levels_pa as _dpressure_at_hybrid_levels_pa,
 )
 from .fortran.vinth2p_kernels import (
@@ -55,6 +58,7 @@ __all__ = [
     "interp_pressure_1d",
     "pressure_at_hybrid_levels",
     "delta_pressure_hybrid",
+    "geopotential_height_at_hybrid_levels",
     "interp_hybrid_to_pressure",
     "interp_sigma_to_hybrid",
     "interp_multidim",
@@ -685,6 +689,255 @@ def delta_pressure_hybrid(
     return _finalize_hybrid_level_output(
         dph,
         lev_name=lev_name,
+        lev_coord=lev_coord,
+        lev_dim=lev_dim,
+        output_dims=output_dims,
+    )
+
+
+def geopotential_height_at_hybrid_levels(
+    temperature: xr.DataArray,
+    q: xr.DataArray,
+    ps: xr.DataArray,
+    phis: xr.DataArray,
+    hyai: xr.DataArray,
+    hybi: xr.DataArray,
+    hyam: xr.DataArray,
+    hybm: xr.DataArray,
+    p0: float = 100000.0,
+    lev_dim: str = "lev",
+    output_dims: tuple[str, ...] = ("time", "lev", "lat", "lon"),
+) -> xr.DataArray:
+    """Compute geopotential height on hybrid model levels.
+
+    Parameters
+    ----------
+    temperature : :class:`xarray.DataArray`
+        Air temperature on hybrid full levels.
+
+    q : :class:`xarray.DataArray`
+        Specific humidity on hybrid full levels. Used to form virtual
+        temperature in the hypsometric integration.
+
+    ps : :class:`xarray.DataArray`
+        Surface pressure in Pascals.
+
+    phis : :class:`xarray.DataArray`
+        Surface geopotential in ``m^2 s^-2``.
+
+    hyai, hybi : :class:`xarray.DataArray`
+        One-dimensional hybrid A/B coefficients at layer interfaces.
+        If the top interface pressure is exactly zero, the calculation keeps
+        the ECMWF/IFS top-level shortcut. Otherwise it uses the general
+        hypsometric layer integral at the top model level as well.
+
+    hyam, hybm : :class:`xarray.DataArray`
+        One-dimensional hybrid A/B coefficients at layer midpoints.
+
+    p0 : float, optional
+        Reference pressure in Pascals. Defaults to ``100000.0``.
+        Use ``p0=1.0`` with ERA5's native ``a``/``b`` coefficients because the
+        ERA5 half-level relation is ``p_half = a + b * sp`` and the ERA5 ``a``
+        coefficients are already stored in Pascals. Use ``p0=100000.0`` only
+        when your hybrid ``A`` coefficients are normalized by a 100000 Pa
+        reference pressure, as in many CESM-style files.
+
+    lev_dim : str, optional
+        Output vertical dimension name. Defaults to ``"lev"``.
+
+    output_dims : sequence of str, optional
+        Preferred output dimension order. Defaults to
+        ``("time", "lev", "lat", "lon")``; missing names are ignored.
+
+    Returns
+    -------
+    :class:`xarray.DataArray`
+        Geopotential height on model full levels in meters.
+
+    Notes
+    -----
+    The vertical integration follows the ECMWF ERA5 model-level geopotential
+    recipe for virtual temperature and top-layer handling when the top
+    interface pressure is zero. See the ECMWF Copernicus Knowledge Base:
+    https://confluence.ecmwf.int/display/CKB/ERA5%3A+compute+pressure+and+geopotential+on+model+levels%2C+geopotential+height+and+geometric+height
+    """
+
+    if not all(
+        isinstance(x, xr.DataArray)
+        for x in (temperature, q, ps, phis, hyai, hybi, hyam, hybm)
+    ):
+        raise TypeError(
+            "temperature, q, ps, phis, hyai, hybi, hyam, and hybm must be xarray DataArray objects"
+        )
+
+    if not isinstance(p0, (float, int, np.floating, np.integer)):
+        raise TypeError(f"p0 must be a scalar numeric value, received {type(p0)}")
+
+    _require_compiled_interp(
+        "geopotential_height_at_hybrid_levels",
+        _dgeopotential_height_hybrid_corder_pa_into,
+    )
+    _reject_lazy_or_unit_backed_inputs(
+        "geopotential_height_at_hybrid_levels",
+        temperature,
+        q,
+        ps,
+        phis,
+        hyai,
+        hybi,
+        hyam,
+        hybm,
+    )
+
+    if lev_dim is None:
+        try:
+            if hasattr(temperature.cf, "guess_coord_axis"):
+                temperature = temperature.cf.guess_coord_axis()
+            lev_dim = temperature.cf["vertical"].name
+        except Exception as exc:
+            raise ValueError(
+                "Unable to determine vertical dimension name. Please specify the name via `lev_dim` argument."
+            ) from exc
+
+    hyam, hybm = _align_hybrid_level_dimension(hyam, hybm, lev_dim)
+
+    if hyai.shape != hybi.shape:
+        raise ValueError(
+            f"dimension mismatch between `hyai` and `hybi`: {hyai.shape} vs {hybi.shape}"
+        )
+    if hyai.ndim != 1 or hybi.ndim != 1:
+        raise ValueError("`hyai` and `hybi` must be one-dimensional arrays")
+    if hyai.shape[0] != hyam.shape[0] + 1:
+        raise ValueError(
+            "`hyai`/`hybi` must be exactly one element longer than `hyam`/`hybm`"
+        )
+
+    if hyai.dims != hybi.dims:
+        warnings.warn(
+            "hyai and hybi have different dimension names, attempting rename",
+            stacklevel=2,
+        )
+        hybi = hybi.rename(
+            {source: target for target, source in zip(hyai.dims, hybi.dims)}
+        )
+
+    if tuple(q.dims) != tuple(temperature.dims) or tuple(q.shape) != tuple(
+        temperature.shape
+    ):
+        raise ValueError("`q` must have the same dims and shape as `temperature`")
+
+    return _geopotential_height_hybrid_corder(
+        temperature=temperature,
+        q=q,
+        ps=ps,
+        phis=phis,
+        hyai=hyai,
+        hybi=hybi,
+        hyam=hyam,
+        p0=float(p0),
+        lev_dim=lev_dim,
+        output_dims=output_dims,
+    )
+
+
+def _geopotential_height_hybrid_corder(
+    temperature: xr.DataArray,
+    q: xr.DataArray,
+    ps: xr.DataArray,
+    phis: xr.DataArray,
+    hyai: xr.DataArray,
+    hybi: xr.DataArray,
+    hyam: xr.DataArray,
+    p0: float,
+    lev_dim: str,
+    output_dims,
+) -> xr.DataArray | None:
+    """Run geopotential-height calculation through the C-order backend."""
+
+    if _dgeopotential_height_hybrid_corder_pa_into is None:
+        return None
+
+    interp_axis = temperature.dims.index(lev_dim)
+    shape_before = temperature.shape[:interp_axis]
+    shape_after = temperature.shape[interp_axis + 1 :]
+    lead_dims = temperature.dims[:interp_axis] + temperature.dims[interp_axis + 1 :]
+    lead_shape = shape_before + shape_after
+    nouter = int(np.prod(shape_before, dtype=np.int64)) if shape_before else 1
+    ninner = int(np.prod(shape_after, dtype=np.int64)) if shape_after else 1
+    nlev = temperature.shape[interp_axis]
+    base_template = temperature.isel({lev_dim: 0}, drop=True)
+    raw_temperature = temperature.data
+    raw_q = q.data
+
+    if (
+        isinstance(raw_temperature, np.ndarray)
+        and raw_temperature.flags.c_contiguous
+        and raw_temperature.dtype == np.float64
+    ):
+        temp_flat = raw_temperature.reshape(-1)
+    else:
+        temp_flat = _compiled_float64_flat(
+            temperature.transpose(*temperature.dims).data
+        )
+
+    if (
+        isinstance(raw_q, np.ndarray)
+        and raw_q.flags.c_contiguous
+        and raw_q.dtype == np.float64
+    ):
+        q_flat = raw_q.reshape(-1)
+    else:
+        q_flat = _compiled_float64_flat(q.transpose(*q.dims).data)
+
+    ps_flat = _as_c_contiguous_compiled_flat(ps, lead_dims, lead_shape)
+    if ps_flat is None:
+        ps_flat = _as_broadcast_float64_flat(ps, base_template)
+    phis_flat = _as_c_contiguous_compiled_flat(phis, lead_dims, lead_shape)
+    if phis_flat is None:
+        phis_flat = _as_broadcast_float64_flat(phis, base_template)
+    if ps_flat is None or phis_flat is None:
+        return None
+
+    hyai_values = _compiled_float64_vector(hyai.data)
+    hybi_values = _compiled_float64_vector(hybi.data)
+
+    output_values = _compiled_float64_output(temperature.shape, order="C")
+    output_flat = output_values.reshape(-1)
+
+    _dgeopotential_height_hybrid_corder_pa_into(
+        temp_flat,
+        q_flat,
+        output_flat,
+        ps_flat,
+        phis_flat,
+        hyai_values,
+        hybi_values,
+        float(p0),
+        nouter=nouter,
+        nlev=nlev,
+        ninner=ninner,
+    )
+
+    output_values = _restore_compiled_interp_output_dtype(output_values, temperature)
+    coords = {k: v for k, v in base_template.coords.items()}
+    lev_coord = _dimension_coord_or_default(hyam, hyam.dims[0], output_dim=lev_dim)
+    coords[lev_dim] = lev_coord
+    z3 = xr.DataArray(
+        output_values,
+        dims=tuple(
+            dim if idx != interp_axis else lev_dim
+            for idx, dim in enumerate(temperature.dims)
+        ),
+        coords=coords,
+        name="z3",
+        attrs={
+            "long_name": "geopotential height on hybrid model levels",
+            "units": "m",
+        },
+    )
+    return _finalize_hybrid_level_output(
+        z3,
+        lev_name=lev_dim,
         lev_coord=lev_coord,
         lev_dim=lev_dim,
         output_dims=output_dims,
