@@ -103,7 +103,9 @@ void weighted_block_solve_stub(
 void vrtdiv_analysis_stub(
     int ndgl,
     const int *nloen,
+    const double *weights,
     int ngptot,
+    double rsphere,
     int ntrunc,
     int nt,
     const double *ugrid,
@@ -1206,7 +1208,9 @@ static PyObject *backend_vrtdiv_analysis(PyObject *self, PyObject *args) {
     vrtdiv_analysis_stub(
         setup->ndgl,
         (const int *) setup->nloen,
+        (const double *) setup->weights,
         setup->ngptot,
+        setup->rsphere,
         ntrunc,
         nt,
         (const double *) PyArray_DATA(ugrid_arr),
