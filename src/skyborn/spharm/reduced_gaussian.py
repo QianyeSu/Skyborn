@@ -23,13 +23,10 @@ try:
         destroy_setup,
         gradient_synthesis_stub,
         scalar_analysis_stub,
-        scalar_block_solve_stub,
-        scalar_fourier_stub,
         scalar_synthesis_stub,
         uv_synthesis_stub,
         validate_nloen,
         vrtdiv_analysis_stub,
-        weighted_block_solve_stub,
     )
 
     _ECTRANS_BACKEND_AVAILABLE = True
@@ -112,8 +109,10 @@ class ReducedGaussianSpharmt:
     `(ngptot,)` or `(ngptot, *extra_dims)` instead of rectangular
     `(nlat, nlon, *extra_dims)` arrays.
 
-    The actual native ectrans transform implementation is not wired yet; this
-    class currently provides validation, shape handling, and method contracts.
+    This class now assumes the native ectrans backend is the implementation of
+    record. It validates packed reduced-Gaussian inputs, dispatches directly to
+    the native backend, and raises explicit errors instead of falling back to
+    Python prototype or bridge paths.
     """
 
     def __init__(
@@ -132,14 +131,7 @@ class ReducedGaussianSpharmt:
         self._gaussian_mu = None
         self._gaussian_weights = None
         self._gaussian_lats = None
-        self._lat_offsets = None
-        self._bridge_spharmt = None
-        self._analysis_basis_cache = {}
-        self._vector_analysis_basis_cache = {}
         self._spectral_degree_index_cache = {}
-        self._native_uv_synthesis_available = None
-        self._native_vrtdiv_analysis_available = None
-        self._native_gradient_synthesis_available = None
 
     @property
     def ndgl(self) -> int:
@@ -334,10 +326,9 @@ class ReducedGaussianSpharmt:
         return self._restore_spectral_shape(complex_spec, extra_shape)
 
     def _not_implemented(self, method_name: str) -> None:
-        """Raise a consistent error for not-yet-wired native transforms."""
+        """Raise a consistent error when the native backend is unavailable."""
         raise ReducedGaussianBackendError(
-            f"{method_name} is not implemented yet for the experimental "
-            "ectrans reduced-Gaussian backend scaffold."
+            f"{method_name} requires the native ectrans reduced-Gaussian backend."
         )
 
     def _require_setup_handle(self):
@@ -367,76 +358,6 @@ class ReducedGaussianSpharmt:
             self._gaussian_lats = np.degrees(np.arcsin(mu))
         return self._gaussian_mu, self._gaussian_weights, self._gaussian_lats
 
-    def _get_lat_offsets(self) -> np.ndarray:
-        """Return cached packed-grid latitude starting offsets."""
-        if self._lat_offsets is None:
-            lat_offsets = np.empty(self.ndgl, dtype=np.int64)
-            lat_offsets[0] = 0
-            if self.ndgl > 1:
-                lat_offsets[1:] = np.cumsum(self.nloen[:-1], dtype=np.int64)
-            self._lat_offsets = lat_offsets
-        return self._lat_offsets
-
-    @staticmethod
-    def _resample_longitude_periodic(data: np.ndarray, target_nlon: int) -> np.ndarray:
-        """Resample periodic longitude data using truncated/zero-padded real Fourier modes."""
-        array = np.asarray(data, dtype=np.float64)
-        squeeze = False
-        if array.ndim == 1:
-            array = array[:, None]
-            squeeze = True
-        source_nlon = array.shape[0]
-        if source_nlon == target_nlon:
-            result = array.copy()
-            return result[:, 0] if squeeze else result
-
-        coeff = np.fft.rfft(array, axis=0)
-        target_nfreq = target_nlon // 2 + 1
-        resized = np.zeros((target_nfreq, array.shape[1]), dtype=np.complex128)
-        copy_nfreq = min(coeff.shape[0], target_nfreq)
-        resized[:copy_nfreq, :] = coeff[:copy_nfreq, :]
-        resized *= float(target_nlon) / float(source_nlon)
-        result = np.fft.irfft(resized, n=target_nlon, axis=0)
-        return result[:, 0] if squeeze else result
-
-    def _get_bridge_spharmt(self):
-        """Return a cached full-Gaussian bridge transform on the maximum longitude count."""
-        if self._bridge_spharmt is None:
-            from .spherical_harmonics import Spharmt
-
-            self._bridge_spharmt = Spharmt(
-                int(self.grid.max_nlon),
-                self.ndgl,
-                rsphere=self.rsphere,
-                gridtype="gaussian",
-                legfunc="stored",
-            )
-        return self._bridge_spharmt
-
-    def _packed_to_full_gaussian_grid(self, normalized_grid: np.ndarray) -> np.ndarray:
-        """Resample packed reduced-grid data onto a full Gaussian rectangular grid."""
-        nt = normalized_grid.shape[1]
-        target_nlon = int(self.grid.max_nlon)
-        full_grid = np.empty((self.ndgl, target_nlon, nt), dtype=np.float64)
-        lat_offsets = self._get_lat_offsets()
-        for ilat, nlon in enumerate(self.nloen):
-            offset = int(lat_offsets[ilat])
-            full_grid[ilat, :, :] = self._resample_longitude_periodic(
-                normalized_grid[offset : offset + int(nlon), :],
-                target_nlon,
-            )
-        return full_grid
-
-    def _spectral_column_slices(self, ntrunc: int) -> list[slice]:
-        """Return triangular coefficient slices grouped by zonal wavenumber."""
-        slices: list[slice] = []
-        start = 0
-        for m in range(ntrunc + 1):
-            count = ntrunc - m + 1
-            slices.append(slice(start, start + count))
-            start += count
-        return slices
-
     def _get_spectral_degree_index(self, ntrunc: int) -> np.ndarray:
         """Return cached total spherical wavenumber index per packed coefficient."""
         cached = self._spectral_degree_index_cache.get(ntrunc)
@@ -454,170 +375,6 @@ class ReducedGaussianSpharmt:
             start += count
         self._spectral_degree_index_cache[ntrunc] = degree_index
         return degree_index
-
-    def _scalar_fourier(
-        self,
-        normalized_grid: np.ndarray,
-        mmax: int,
-    ) -> np.ndarray:
-        """Return native reduced-grid Fourier coefficients shaped as (ndgl, mmax + 1, nt)."""
-        setup_handle = self._require_setup_handle()
-        fourier, ierror = scalar_fourier_stub(setup_handle, normalized_grid, mmax)
-        if ierror != 0:
-            raise ReducedGaussianBackendError(
-                f"native scalar_fourier_stub failed with ierror={ierror}"
-            )
-        return np.asarray(fourier, dtype=np.complex128)
-
-    @staticmethod
-    def _split_columnwise(
-        array: np.ndarray,
-        counts: tuple[int, ...],
-    ) -> tuple[np.ndarray, ...]:
-        """Split an array by consecutive blocks along its last axis."""
-        start = 0
-        chunks = []
-        for count in counts:
-            stop = start + count
-            chunks.append(array[..., start:stop])
-            start = stop
-        return tuple(chunks)
-
-    def _scalar_block_solve(
-        self,
-        basis_block: np.ndarray,
-        observed: np.ndarray,
-    ) -> np.ndarray:
-        """Return one native weighted least-squares block solve result."""
-        setup_handle = self._require_setup_handle()
-        solution, ierror = scalar_block_solve_stub(setup_handle, basis_block, observed)
-        if ierror != 0:
-            raise ReducedGaussianBackendError(
-                f"native scalar_block_solve_stub failed with ierror={ierror}"
-            )
-        return np.asarray(solution, dtype=np.complex128)
-
-    @staticmethod
-    def _weighted_block_solve(
-        weights: np.ndarray,
-        basis_block: np.ndarray,
-        observed: np.ndarray,
-    ) -> np.ndarray:
-        """Return one native general weighted least-squares solve result."""
-        solution, ierror = weighted_block_solve_stub(
-            np.asarray(weights, dtype=np.float64),
-            basis_block,
-            observed,
-        )
-        if ierror != 0:
-            raise ReducedGaussianBackendError(
-                f"native weighted_block_solve_stub failed with ierror={ierror}"
-            )
-        return np.asarray(solution, dtype=np.complex128)
-
-    def _get_analysis_basis(self, ntrunc: int) -> tuple[list[slice], list[np.ndarray]]:
-        """Return cached reduced-grid Fourier/latitude basis blocks from native synthesis."""
-        cached = self._analysis_basis_cache.get(ntrunc)
-        if cached is not None:
-            return cached
-
-        slices = self._spectral_column_slices(ntrunc)
-        basis_blocks: list[np.ndarray] = []
-        ncoeff = self._ncoeff_from_ntrunc(ntrunc)
-        basis_spec = np.eye(ncoeff, dtype=np.complex128)
-        basis_grid = np.asarray(self.spectogrd(basis_spec), dtype=np.float64)
-        basis_fourier = self._scalar_fourier(basis_grid, ntrunc)
-
-        for m, spectral_slice in enumerate(slices):
-            basis_blocks.append(
-                np.asarray(
-                    basis_fourier[:, m, spectral_slice],
-                    dtype=np.complex128,
-                )
-            )
-
-        cached = (slices, basis_blocks)
-        self._analysis_basis_cache[ntrunc] = cached
-        return cached
-
-    @staticmethod
-    def _solve_weighted_complex_lstsq(
-        basis: np.ndarray,
-        observed: np.ndarray,
-        weights: np.ndarray,
-    ) -> np.ndarray:
-        """Solve one weighted complex least-squares system."""
-        sqrt_weights = np.sqrt(np.asarray(weights, dtype=np.float64))[:, None]
-        weighted_basis = sqrt_weights * np.asarray(basis, dtype=np.complex128)
-        weighted_observed = sqrt_weights * np.asarray(observed, dtype=np.complex128)
-        solution, _, _, _ = np.linalg.lstsq(
-            weighted_basis,
-            weighted_observed,
-            rcond=None,
-        )
-        return np.asarray(solution, dtype=np.complex128)
-
-    def _get_vector_analysis_basis(
-        self,
-        ntrunc: int,
-    ) -> tuple[list[slice], list[np.ndarray]]:
-        """Return cached reduced-grid vector-analysis basis blocks."""
-        use_native_uv = self._supports_native_uv_synthesis()
-        cache_key = (ntrunc, use_native_uv)
-        cached = self._vector_analysis_basis_cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        spectral_slices = self._spectral_column_slices(ntrunc)
-        basis_blocks: list[np.ndarray] = []
-        ncoeff = self._ncoeff_from_ntrunc(ntrunc)
-        basis_spec = np.eye(ncoeff, dtype=np.complex128)
-        zero_spec = np.zeros_like(basis_spec)
-        joint_vrtspec = np.concatenate((basis_spec, zero_spec), axis=1)
-        joint_divspec = np.concatenate((zero_spec, basis_spec), axis=1)
-        joint_u, joint_v = self.getuv(joint_vrtspec, joint_divspec)
-        if use_native_uv and not self._supports_native_uv_synthesis():
-            return self._get_vector_analysis_basis(ntrunc)
-        joint_fourier = self._scalar_fourier(
-            np.concatenate(
-                (
-                    np.asarray(joint_u, dtype=np.float64),
-                    np.asarray(joint_v, dtype=np.float64),
-                ),
-                axis=1,
-            ),
-            ntrunc,
-        )
-        u_fourier_all, v_fourier_all = self._split_columnwise(
-            np.asarray(joint_fourier, dtype=np.complex128),
-            (2 * ncoeff, 2 * ncoeff),
-        )
-
-        for m, spectral_slice in enumerate(spectral_slices):
-            vort_slice = slice(spectral_slice.start, spectral_slice.stop)
-            div_slice = slice(
-                ncoeff + spectral_slice.start,
-                ncoeff + spectral_slice.stop,
-            )
-            u_basis = np.concatenate(
-                (
-                    u_fourier_all[:, m, vort_slice],
-                    u_fourier_all[:, m, div_slice],
-                ),
-                axis=1,
-            )
-            v_basis = np.concatenate(
-                (
-                    v_fourier_all[:, m, vort_slice],
-                    v_fourier_all[:, m, div_slice],
-                ),
-                axis=1,
-            )
-            basis_blocks.append(np.concatenate((u_basis, v_basis), axis=0))
-
-        cached = (spectral_slices, basis_blocks)
-        self._vector_analysis_basis_cache[cache_key] = cached
-        return cached
 
     def _lapspec(
         self,
@@ -696,148 +453,13 @@ class ReducedGaussianSpharmt:
         smoothed_spec = normalized_spec.astype(np.complex64) * factors[:, None]
         return self._restore_spectral_shape(smoothed_spec, extra_shape)
 
-    def _full_gaussian_to_packed_grid(self, full_grid: np.ndarray) -> np.ndarray:
-        """Resample a full Gaussian rectangular grid down to the packed reduced layout."""
-        nt = full_grid.shape[2]
-        packed_grid = np.empty((self.ngptot, nt), dtype=np.float64)
-        lat_offsets = self._get_lat_offsets()
-        for ilat, nlon in enumerate(self.nloen):
-            offset = int(lat_offsets[ilat])
-            packed_grid[offset : offset + int(nlon), :] = (
-                self._resample_longitude_periodic(
-                    full_grid[ilat, :, :],
-                    int(nlon),
-                )
-            )
-        return packed_grid
-
-    def _packed_to_bridge_grid(
-        self,
-        normalized_grid: np.ndarray,
-        extra_shape: Tuple[int, ...],
-    ) -> np.ndarray:
-        """Convert packed reduced-grid data to the bridge full-Gaussian grid shape."""
-        bridge = self._get_bridge_spharmt()
-        full_grid = self._packed_to_full_gaussian_grid(normalized_grid)
-        return bridge._restore_grid_shape(full_grid, extra_shape)
-
-    def _packed_pair_to_bridge_grids(
-        self,
-        normalized_a: np.ndarray,
-        normalized_b: np.ndarray,
-        extra_shape: Tuple[int, ...],
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Convert two packed reduced-grid fields to bridge-grid shape in one resampling pass."""
-        if normalized_a.shape != normalized_b.shape:
-            raise ReducedGaussianValidationError(
-                "paired packed fields must have the same normalized shape"
-            )
-        bridge = self._get_bridge_spharmt()
-        full_pair = self._packed_to_full_gaussian_grid(
-            np.concatenate((normalized_a, normalized_b), axis=1)
-        )
-        restored_pair = bridge._restore_grid_shape(full_pair, extra_shape + (2,))
-        return restored_pair[..., 0], restored_pair[..., 1]
-
-    def _bridge_to_packed_grid(
-        self,
-        full_grid: np.ndarray,
-        operation_name: str,
-    ) -> np.ndarray:
-        """Convert a bridge full-Gaussian grid field back to packed reduced layout."""
-        bridge = self._get_bridge_spharmt()
-        _, normalized_full_grid, extra_shape = bridge._validate_grid_data(
-            full_grid,
-            operation_name,
-        )
-        packed_grid = self._full_gaussian_to_packed_grid(normalized_full_grid)
-        return self._restore_grid_shape(packed_grid, extra_shape)
-
-    def _bridge_pair_to_packed_grids(
-        self,
-        full_a: np.ndarray,
-        full_b: np.ndarray,
-        operation_name: str,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Convert two bridge-grid fields back to packed reduced layout in one resampling pass."""
-        if np.asarray(full_a).shape != np.asarray(full_b).shape:
-            raise ReducedGaussianValidationError(
-                "paired bridge-grid fields must have the same shape"
-            )
-        bridge = self._get_bridge_spharmt()
-        _, normalized_a, extra_shape = bridge._validate_grid_data(
-            full_a, operation_name
-        )
-        _, normalized_b, extra_shape_b = bridge._validate_grid_data(
-            full_b,
-            operation_name,
-        )
-        if extra_shape != extra_shape_b:
-            raise ReducedGaussianValidationError(
-                "paired bridge-grid fields must have consistent dimensions"
-            )
-        packed_pair = self._full_gaussian_to_packed_grid(
-            np.concatenate((normalized_a, normalized_b), axis=2)
-        )
-        restored_pair = self._restore_grid_shape(packed_pair, extra_shape + (2,))
-        return restored_pair[..., 0], restored_pair[..., 1]
-
-    def _getvrtdivspec_bridge(
-        self,
-        normalized_u: np.ndarray,
-        normalized_v: np.ndarray,
-        extra_shape: Tuple[int, ...],
-        ntrunc: int,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Analyze winds through the full-Gaussian bridge fallback path."""
-        bridge_ugrid, bridge_vgrid = self._packed_pair_to_bridge_grids(
-            normalized_u,
-            normalized_v,
-            extra_shape,
-        )
-        bridge = self._get_bridge_spharmt()
-        return bridge.getvrtdivspec(
-            bridge_ugrid,
-            bridge_vgrid,
-            ntrunc=ntrunc,
-        )
-
-    def _getuv_bridge(
-        self,
-        vrtspec: np.ndarray,
-        divspec: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Synthesize winds through the full-Gaussian bridge fallback path."""
-        bridge = self._get_bridge_spharmt()
-        full_ugrid, full_vgrid = bridge.getuv(vrtspec, divspec)
-        return self._bridge_pair_to_packed_grids(
-            full_ugrid,
-            full_vgrid,
-            "reduced getuv bridge",
-        )
-
-    def _getgrad_bridge(
-        self,
-        chispec: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Synthesize gradient winds through the full-Gaussian bridge fallback path."""
-        bridge = self._get_bridge_spharmt()
-        full_ugrad, full_vgrad = bridge.getgrad(chispec)
-        return self._bridge_pair_to_packed_grids(
-            full_ugrad,
-            full_vgrad,
-            "reduced getgrad bridge",
-        )
-
-    def _try_native_vrtdiv_analysis(
+    def _native_vrtdiv_analysis(
         self,
         ugrid: np.ndarray,
         vgrid: np.ndarray,
         ntrunc: int,
-    ) -> Optional[Tuple[np.ndarray, np.ndarray]]:
-        """Try native reduced-grid vrt/div analysis and return None on stub fallback."""
-        if not self._supports_native_vrtdiv_analysis():
-            return None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Run native reduced-grid vorticity/divergence analysis."""
         setup_handle = self._require_setup_handle()
         vrtspec, divspec, ierror = vrtdiv_analysis_stub(
             setup_handle,
@@ -845,203 +467,79 @@ class ReducedGaussianSpharmt:
             np.asarray(vgrid, dtype=np.float64),
             ntrunc,
         )
-        if ierror == -1:
-            self._native_vrtdiv_analysis_available = False
-            return None
         if ierror != 0:
             raise ReducedGaussianBackendError(
-                f"getvrtdivspec native stub returned ierror={ierror}"
+                f"getvrtdivspec native backend returned ierror={ierror}"
             )
-        self._native_vrtdiv_analysis_available = True
         return vrtspec, divspec
 
-    def _try_native_uv_synthesis(
+    def _native_uv_synthesis(
         self,
         vrtspec: np.ndarray,
         divspec: np.ndarray,
-    ) -> Optional[Tuple[np.ndarray, np.ndarray]]:
-        """Try native reduced-grid uv synthesis and return None on stub fallback."""
-        if not self._supports_native_uv_synthesis():
-            return None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Run native reduced-grid wind synthesis."""
         setup_handle = self._require_setup_handle()
         ugrid, vgrid, ierror = uv_synthesis_stub(
             setup_handle,
             np.asarray(vrtspec, dtype=np.complex128),
             np.asarray(divspec, dtype=np.complex128),
         )
-        if ierror == -1:
-            self._native_uv_synthesis_available = False
-            return None
         if ierror != 0:
             raise ReducedGaussianBackendError(
-                f"getuv native stub returned ierror={ierror}"
+                f"getuv native backend returned ierror={ierror}"
             )
-        self._native_uv_synthesis_available = True
         return ugrid, vgrid
 
-    def _try_native_gradient_synthesis(
+    def _native_gradient_synthesis(
         self,
         chispec: np.ndarray,
-    ) -> Optional[Tuple[np.ndarray, np.ndarray]]:
-        """Try native reduced-grid gradient synthesis and return None on stub fallback."""
-        if not self._supports_native_gradient_synthesis():
-            return None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Run native reduced-grid gradient synthesis."""
         setup_handle = self._require_setup_handle()
         ugrad, vgrad, ierror = gradient_synthesis_stub(
             setup_handle,
             np.asarray(chispec, dtype=np.complex128),
         )
-        if ierror == -1:
-            self._native_gradient_synthesis_available = False
-            return None
         if ierror != 0:
             raise ReducedGaussianBackendError(
-                f"getgrad native stub returned ierror={ierror}"
+                f"getgrad native backend returned ierror={ierror}"
             )
-        self._native_gradient_synthesis_available = True
         return ugrad, vgrad
 
-    def _try_native_scalar_analysis(
+    def _native_scalar_analysis(
         self,
         datagrid: np.ndarray,
         ntrunc: int,
-    ) -> Optional[np.ndarray]:
-        """Try native reduced-grid scalar analysis and return None on stub fallback."""
+    ) -> np.ndarray:
+        """Run native reduced-grid scalar analysis."""
         setup_handle = self._require_setup_handle()
         dataspec_packed, ierror = scalar_analysis_stub(
             setup_handle,
             np.asarray(datagrid, dtype=np.float64),
             ntrunc,
         )
-        if ierror == -1:
-            return None
         if ierror != 0:
             raise ReducedGaussianBackendError(
-                f"grdtospec native stub returned ierror={ierror}"
+                f"grdtospec native backend returned ierror={ierror}"
             )
         return dataspec_packed
 
-    def _try_native_scalar_synthesis(
+    def _native_scalar_synthesis(
         self,
         packedspec: np.ndarray,
-    ) -> Optional[np.ndarray]:
-        """Try native reduced-grid scalar synthesis and return None on stub fallback."""
+    ) -> np.ndarray:
+        """Run native reduced-grid scalar synthesis."""
         setup_handle = self._require_setup_handle()
         datagrid, ierror = scalar_synthesis_stub(
             setup_handle,
             np.asarray(packedspec, dtype=np.float64),
         )
-        if ierror == -1:
-            return None
         if ierror != 0:
             raise ReducedGaussianBackendError(
-                f"spectogrd native stub returned ierror={ierror}"
+                f"spectogrd native backend returned ierror={ierror}"
             )
         return datagrid
-
-    def _spectogrd_specintrp_prototype(
-        self,
-        normalized_spec: np.ndarray,
-        ntrunc: int,
-        extra_shape: Tuple[int, ...],
-    ) -> np.ndarray:
-        """Prototype reduced-grid synthesis using a full Gaussian bridge grid."""
-        bridge = self._get_bridge_spharmt()
-        bridge_spec = bridge._restore_spectral_shape(normalized_spec, extra_shape)
-        full_grid = bridge.spectogrd(bridge_spec)
-        _, normalized_full_grid, _ = bridge._validate_grid_data(
-            full_grid, "reduced spectogrd bridge"
-        )
-        packed_grid = self._full_gaussian_to_packed_grid(normalized_full_grid)
-        return self._restore_grid_shape(packed_grid, extra_shape)
-
-    def _grdtospec_prototype(
-        self,
-        normalized_grid: np.ndarray,
-        ntrunc: int,
-        extra_shape: Tuple[int, ...],
-    ) -> np.ndarray:
-        """Prototype reduced-grid analysis using native-synthesis-consistent basis blocks."""
-        nt = normalized_grid.shape[1]
-        ncoeff = self._ncoeff_from_ntrunc(ntrunc)
-        dataspec = np.zeros((ncoeff, nt), dtype=np.complex128)
-        spectral_slices, basis_blocks = self._get_analysis_basis(ntrunc)
-        observed_fourier = self._scalar_fourier(normalized_grid, ntrunc)
-
-        for m, (spectral_slice, basis_block) in enumerate(
-            zip(spectral_slices, basis_blocks)
-        ):
-            observed = observed_fourier[:, m, :]
-            try:
-                solution = self._scalar_block_solve(basis_block, observed)
-            except ReducedGaussianBackendError:
-                _, weights, _ = self._get_gaussian_metadata()
-                sqrt_weights = np.sqrt(weights)[:, None]
-                weighted_basis = sqrt_weights * basis_block
-                weighted_observed = sqrt_weights * observed
-                solution, _, _, _ = np.linalg.lstsq(
-                    weighted_basis,
-                    weighted_observed,
-                    rcond=None,
-                )
-            dataspec[spectral_slice, :] = solution
-
-        return self._restore_spectral_shape(dataspec, extra_shape)
-
-    def _getvrtdivspec_prototype(
-        self,
-        normalized_u: np.ndarray,
-        normalized_v: np.ndarray,
-        ntrunc: int,
-        extra_shape: Tuple[int, ...],
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Prototype reduced-grid vector analysis using synthesis-consistent basis blocks."""
-        nt = normalized_u.shape[1]
-        ncoeff = self._ncoeff_from_ntrunc(ntrunc)
-        vrtspec = np.zeros((ncoeff, nt), dtype=np.complex128)
-        divspec = np.zeros((ncoeff, nt), dtype=np.complex128)
-        spectral_slices, basis_blocks = self._get_vector_analysis_basis(ntrunc)
-        combined_fourier = self._scalar_fourier(
-            np.concatenate((normalized_u, normalized_v), axis=1),
-            ntrunc,
-        )
-        u_fourier, v_fourier = self._split_columnwise(
-            np.asarray(combined_fourier, dtype=np.complex128),
-            (nt, nt),
-        )
-        _, weights, _ = self._get_gaussian_metadata()
-        vector_weights = np.concatenate((weights, weights))
-
-        for m, (spectral_slice, basis_block) in enumerate(
-            zip(spectral_slices, basis_blocks)
-        ):
-            observed = np.concatenate(
-                (
-                    np.asarray(u_fourier[:, m, :], dtype=np.complex128),
-                    np.asarray(v_fourier[:, m, :], dtype=np.complex128),
-                ),
-                axis=0,
-            )
-            try:
-                solution = self._weighted_block_solve(
-                    vector_weights,
-                    basis_block,
-                    observed,
-                )
-            except ReducedGaussianBackendError:
-                solution = self._solve_weighted_complex_lstsq(
-                    basis_block,
-                    observed,
-                    vector_weights,
-                )
-            nblock = spectral_slice.stop - spectral_slice.start
-            vrtspec[spectral_slice, :] = solution[:nblock, :]
-            divspec[spectral_slice, :] = solution[nblock:, :]
-
-        return (
-            self._restore_spectral_shape(vrtspec, extra_shape),
-            self._restore_spectral_shape(divspec, extra_shape),
-        )
 
     def close(self) -> None:
         """Release the native reduced-grid setup handle if it exists."""
@@ -1054,24 +552,6 @@ class ReducedGaussianSpharmt:
         setup_handle = self._require_setup_handle()
         return describe_setup(setup_handle)
 
-    def _supports_native_uv_synthesis(self) -> bool:
-        """Return whether native reduced-grid uv synthesis appears to be implemented."""
-        if self._native_uv_synthesis_available is None:
-            self._native_uv_synthesis_available = _ECTRANS_BACKEND_AVAILABLE
-        return self._native_uv_synthesis_available
-
-    def _supports_native_vrtdiv_analysis(self) -> bool:
-        """Return whether a bridge-free reduced-grid vrt/div analysis path is enabled."""
-        if self._native_vrtdiv_analysis_available is None:
-            self._native_vrtdiv_analysis_available = _ECTRANS_BACKEND_AVAILABLE
-        return self._native_vrtdiv_analysis_available
-
-    def _supports_native_gradient_synthesis(self) -> bool:
-        """Return whether native reduced-grid gradient synthesis appears to be implemented."""
-        if self._native_gradient_synthesis_available is None:
-            self._native_gradient_synthesis_available = _ECTRANS_BACKEND_AVAILABLE
-        return self._native_gradient_synthesis_available
-
     def __del__(self) -> None:
         """Best-effort native setup cleanup."""
         try:
@@ -1083,38 +563,21 @@ class ReducedGaussianSpharmt:
         self, datagrid: np.ndarray, ntrunc: Optional[int] = None
     ) -> np.ndarray:
         """Analyze packed reduced-grid scalar data to spherical-harmonic space."""
-        _, normalized_grid, extra_shape = self._validate_packed_grid_data(
-            datagrid, "grdtospec"
-        )
+        self._validate_packed_grid_data(datagrid, "grdtospec")
         ntrunc_value = self._validate_ntrunc(ntrunc)
-        native_result = self._try_native_scalar_analysis(datagrid, ntrunc_value)
-        if native_result is not None:
-            return self._unpack_scalar_spectrum_from_ectrans(
-                native_result,
-                "grdtospec",
-            )
-        return self._grdtospec_prototype(
-            normalized_grid,
-            ntrunc_value,
-            extra_shape,
+        native_result = self._native_scalar_analysis(datagrid, ntrunc_value)
+        return self._unpack_scalar_spectrum_from_ectrans(
+            native_result,
+            "grdtospec",
         )
 
     def spectogrd(self, dataspec: np.ndarray) -> np.ndarray:
         """Synthesize scalar spectra back to a packed reduced Gaussian grid."""
-        nt, ntrunc, normalized_spec, extra_shape = self._validate_spectral_data(
-            dataspec, "spectogrd"
-        )
+        self._validate_spectral_data(dataspec, "spectogrd")
         packed_spec, _, _ = self._pack_scalar_spectrum_for_ectrans(
             dataspec, "spectogrd"
         )
-        native_result = self._try_native_scalar_synthesis(packed_spec)
-        if native_result is not None:
-            return native_result
-        return self._spectogrd_specintrp_prototype(
-            normalized_spec,
-            ntrunc,
-            extra_shape,
-        )
+        return self._native_scalar_synthesis(packed_spec)
 
     def getvrtdivspec(
         self, ugrid: np.ndarray, vgrid: np.ndarray, ntrunc: Optional[int] = None
@@ -1126,28 +589,12 @@ class ReducedGaussianSpharmt:
             raise ReducedGaussianValidationError(
                 "getvrtdivspec needs ugrid and vgrid with the same shape"
             )
-        _, normalized_u, extra_shape = self._validate_packed_grid_data(
-            ugrid_array, "getvrtdivspec"
-        )
-        _, normalized_v, v_extra_shape = self._validate_packed_grid_data(
-            vgrid_array, "getvrtdivspec"
-        )
-        if extra_shape != v_extra_shape:
-            raise ReducedGaussianValidationError(
-                "getvrtdivspec needs ugrid and vgrid with consistent dimensions"
-            )
+        self._validate_packed_grid_data(ugrid_array, "getvrtdivspec")
+        self._validate_packed_grid_data(vgrid_array, "getvrtdivspec")
         ntrunc_value = self._validate_ntrunc(ntrunc)
-        native_result = self._try_native_vrtdiv_analysis(
+        return self._native_vrtdiv_analysis(
             ugrid_array,
             vgrid_array,
-            ntrunc_value,
-        )
-        if native_result is not None:
-            return native_result
-        return self._getvrtdivspec_bridge(
-            normalized_u,
-            normalized_v,
-            extra_shape,
             ntrunc_value,
         )
 
@@ -1189,22 +636,16 @@ class ReducedGaussianSpharmt:
             raise ReducedGaussianValidationError(
                 "getuv needs vrtspec and divspec with consistent dimensions"
             )
-        native_result = self._try_native_uv_synthesis(
+        return self._native_uv_synthesis(
             vrtspec_array,
             divspec_array,
         )
-        if native_result is not None:
-            return native_result
-        return self._getuv_bridge(vrtspec_array, divspec_array)
 
     def getgrad(self, chispec: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Synthesize the packed reduced-grid horizontal gradient of a scalar spectrum."""
         chispec_array = np.asarray(chispec)
         self._validate_spectral_data(chispec_array, "getgrad")
-        native_result = self._try_native_gradient_synthesis(chispec_array)
-        if native_result is not None:
-            return native_result
-        return self._getgrad_bridge(chispec_array)
+        return self._native_gradient_synthesis(chispec_array)
 
     def getpsichi_spec_component(
         self,
