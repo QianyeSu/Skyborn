@@ -1156,7 +1156,7 @@ static PyObject *backend_create_uv_to_vordiv_poa1_block_setup(PyObject *self, Py
     size_t ncoeff = 0, total_dense_entries = 0, total_active_columns = 0;
     size_t cache_bytes = 0, running_basis_offset = 0, running_active_offset = 0;
     double *poa_basis = NULL, *obs_basis = NULL;
-    double *basis_real = NULL;
+    double *basis_real = NULL, *ortho_basis = NULL, *residual = NULL;
     double *vrt_basis_real = NULL, *vrt_basis_imag = NULL;
     double *div_basis_real = NULL, *div_basis_imag = NULL;
     double *u_basis_real = NULL, *u_basis_imag = NULL;
@@ -1246,6 +1246,8 @@ static PyObject *backend_create_uv_to_vordiv_poa1_block_setup(PyObject *self, Py
     poa_basis = (double *) PyMem_Calloc((size_t) nlei1 * 4U, sizeof(double));
     obs_basis = (double *) PyMem_Calloc((size_t) nlei1 * 4U, sizeof(double));
     basis_real = (double *) PyMem_Calloc((size_t) nlei1 * 4U * (size_t) nlei1 * 4U, sizeof(double));
+    ortho_basis = (double *) PyMem_Calloc((size_t) nlei1 * 4U * (size_t) nlei1 * 4U, sizeof(double));
+    residual = (double *) PyMem_Calloc((size_t) nlei1 * 4U, sizeof(double));
     vrt_basis_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
     vrt_basis_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
     div_basis_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
@@ -1256,6 +1258,7 @@ static PyObject *backend_create_uv_to_vordiv_poa1_block_setup(PyObject *self, Py
     v_basis_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
     if (
         poa_basis == NULL || obs_basis == NULL || basis_real == NULL ||
+        ortho_basis == NULL || residual == NULL ||
         vrt_basis_real == NULL || vrt_basis_imag == NULL ||
         div_basis_real == NULL || div_basis_imag == NULL ||
         u_basis_real == NULL || u_basis_imag == NULL ||
@@ -1273,6 +1276,7 @@ static PyObject *backend_create_uv_to_vordiv_poa1_block_setup(PyObject *self, Py
         int active_count = 0;
 
         memset(basis_real, 0, (size_t) nrow * (size_t) ncol * sizeof(double));
+        memset(ortho_basis, 0, (size_t) nrow * (size_t) ncol * sizeof(double));
 
         for (basis_idx = 0; basis_idx < ncol; ++basis_idx) {
             memset(poa_basis, 0, (size_t) nrow * sizeof(double));
@@ -1348,17 +1352,44 @@ static PyObject *backend_create_uv_to_vordiv_poa1_block_setup(PyObject *self, Py
         }
 
         for (basis_idx = 0; basis_idx < ncol; ++basis_idx) {
-            double column_norm = 0.0;
+            double residual_norm_sq = 0.0;
+            int keep_column = 0;
+            int ortho_idx = 0;
+
             for (row = 0; row < nrow; ++row) {
-                double column_value = fabs(
-                    basis_real[(size_t) row * (size_t) ncol + (size_t) basis_idx]
-                );
-                if (column_value > column_norm) {
-                    column_norm = column_value;
+                residual[row] = basis_real[
+                    (size_t) row * (size_t) ncol + (size_t) basis_idx
+                ];
+            }
+            for (ortho_idx = 0; ortho_idx < active_count; ++ortho_idx) {
+                double dot = 0.0;
+                double inv_norm = 0.0;
+                for (row = 0; row < nrow; ++row) {
+                    dot += residual[row] * ortho_basis[
+                        (size_t) row * (size_t) ncol + (size_t) ortho_idx
+                    ];
+                }
+                inv_norm = dot;
+                for (row = 0; row < nrow; ++row) {
+                    residual[row] -= inv_norm * ortho_basis[
+                        (size_t) row * (size_t) ncol + (size_t) ortho_idx
+                    ];
                 }
             }
-            if (column_norm > 1.0e-18) {
-                setup->active_columns[running_active_offset + (size_t) active_count] = basis_idx;
+            for (row = 0; row < nrow; ++row) {
+                residual_norm_sq += residual[row] * residual[row];
+            }
+            if (sqrt(residual_norm_sq) > 1.0e-12) {
+                double inv_col_norm = 1.0 / sqrt(residual_norm_sq);
+                keep_column = 1;
+                setup->active_columns[running_active_offset + (size_t) active_count] =
+                    basis_idx;
+                for (row = 0; row < nrow; ++row) {
+                    ortho_basis[(size_t) row * (size_t) ncol + (size_t) active_count] =
+                        residual[row] * inv_col_norm;
+                }
+            }
+            if (keep_column) {
                 active_count += 1;
             }
         }
@@ -1392,6 +1423,8 @@ static PyObject *backend_create_uv_to_vordiv_poa1_block_setup(PyObject *self, Py
     if (poa_basis != NULL) PyMem_Free(poa_basis);
     if (obs_basis != NULL) PyMem_Free(obs_basis);
     if (basis_real != NULL) PyMem_Free(basis_real);
+    if (ortho_basis != NULL) PyMem_Free(ortho_basis);
+    if (residual != NULL) PyMem_Free(residual);
     if (vrt_basis_real != NULL) PyMem_Free(vrt_basis_real);
     if (vrt_basis_imag != NULL) PyMem_Free(vrt_basis_imag);
     if (div_basis_real != NULL) PyMem_Free(div_basis_real);
@@ -1408,6 +1441,8 @@ fail:
     if (poa_basis != NULL) PyMem_Free(poa_basis);
     if (obs_basis != NULL) PyMem_Free(obs_basis);
     if (basis_real != NULL) PyMem_Free(basis_real);
+    if (ortho_basis != NULL) PyMem_Free(ortho_basis);
+    if (residual != NULL) PyMem_Free(residual);
     if (vrt_basis_real != NULL) PyMem_Free(vrt_basis_real);
     if (vrt_basis_imag != NULL) PyMem_Free(vrt_basis_imag);
     if (div_basis_real != NULL) PyMem_Free(div_basis_real);
@@ -3451,13 +3486,14 @@ static PyObject *backend_uv_to_vordiv_poa1_block_native_with_setup(PyObject *sel
     double *observed_real = NULL, *observed_imag = NULL;
     double *reduced_solution_real = NULL, *reduced_solution_imag = NULL;
     double *poa1_solution = NULL, *prfi_block = NULL;
+    double *ortho_basis = NULL, *residual = NULL;
     double *u_col_real = NULL, *u_col_imag = NULL;
     double *v_col_real = NULL, *v_col_imag = NULL;
     double *vrt_accum_real = NULL, *vrt_accum_imag = NULL;
     double *div_accum_real = NULL, *div_accum_imag = NULL;
     double *vrt_block_real = NULL, *vrt_block_imag = NULL;
     double *div_block_real = NULL, *div_block_imag = NULL;
-    int *active_columns = NULL;
+    int *active_columns = NULL, *independent_columns = NULL;
     int it = 0, m = 0;
 
     (void) self;
@@ -3516,6 +3552,8 @@ static PyObject *backend_uv_to_vordiv_poa1_block_native_with_setup(PyObject *sel
     reduced_solution_imag = (double *) PyMem_Calloc(max_nrow, sizeof(double));
     poa1_solution = (double *) PyMem_Calloc(max_nrow, sizeof(double));
     prfi_block = (double *) PyMem_Calloc(max_nrow, sizeof(double));
+    ortho_basis = (double *) PyMem_Calloc(max_nrow * max_nrow, sizeof(double));
+    residual = (double *) PyMem_Calloc(max_nrow, sizeof(double));
     u_col_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
     u_col_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
     v_col_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
@@ -3529,25 +3567,26 @@ static PyObject *backend_uv_to_vordiv_poa1_block_native_with_setup(PyObject *sel
     div_block_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
     div_block_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
     active_columns = (int *) PyMem_Malloc(max_nrow * sizeof(int));
+    independent_columns = (int *) PyMem_Malloc(max_nrow * sizeof(int));
     if (
         weights == NULL || reduced_basis_real == NULL || reduced_basis_imag == NULL ||
         observed_real == NULL || observed_imag == NULL ||
         reduced_solution_real == NULL || reduced_solution_imag == NULL ||
         poa1_solution == NULL || prfi_block == NULL ||
+        ortho_basis == NULL || residual == NULL ||
         u_col_real == NULL || u_col_imag == NULL ||
         v_col_real == NULL || v_col_imag == NULL ||
         vrt_accum_real == NULL || vrt_accum_imag == NULL ||
         div_accum_real == NULL || div_accum_imag == NULL ||
         vrt_block_real == NULL || vrt_block_imag == NULL ||
         div_block_real == NULL || div_block_imag == NULL ||
-        active_columns == NULL
+        active_columns == NULL || independent_columns == NULL
     ) {
         PyErr_NoMemory();
         goto fail;
     }
 
     for (it = 0; it < nt; ++it) {
-        size_t coeff_idx = 0;
         for (coeff_idx = 0; coeff_idx < ncoeff; ++coeff_idx) {
             size_t idx = coeff_idx * (size_t) nt + (size_t) it;
             u_col_real[coeff_idx] = creal(u_data[idx]);
@@ -3565,6 +3604,7 @@ static PyObject *backend_uv_to_vordiv_poa1_block_native_with_setup(PyObject *sel
             int nrow = setup->nlei1 * 4;
             int ncol = nrow;
             int active_count = setup->active_counts[m];
+            int independent_count = 0;
             size_t basis_offset = setup->basis_offsets[m];
             size_t active_offset = setup->active_offsets[m];
             int row = 0, active_idx = 0;
@@ -3577,6 +3617,8 @@ static PyObject *backend_uv_to_vordiv_poa1_block_native_with_setup(PyObject *sel
             memset(reduced_solution_imag, 0, (size_t) nrow * sizeof(double));
             memset(poa1_solution, 0, (size_t) nrow * sizeof(double));
             memset(prfi_block, 0, (size_t) nrow * sizeof(double));
+            memset(ortho_basis, 0, (size_t) nrow * (size_t) nrow * sizeof(double));
+            memset(residual, 0, (size_t) nrow * sizeof(double));
             memset(vrt_block_real, 0, ncoeff * sizeof(double));
             memset(vrt_block_imag, 0, ncoeff * sizeof(double));
             memset(div_block_real, 0, ncoeff * sizeof(double));
@@ -3615,9 +3657,59 @@ static PyObject *backend_uv_to_vordiv_poa1_block_native_with_setup(PyObject *sel
                 }
             }
 
-            if (active_count > 0) {
+            for (active_idx = 0; active_idx < active_count; ++active_idx) {
+                double residual_norm_sq = 0.0;
+                int ortho_idx = 0;
+
+                for (row = 0; row < nrow; ++row) {
+                    residual[row] = reduced_basis_real[
+                        (size_t) row * (size_t) active_count + (size_t) active_idx
+                    ];
+                }
+                for (ortho_idx = 0; ortho_idx < independent_count; ++ortho_idx) {
+                    double dot = 0.0;
+                    for (row = 0; row < nrow; ++row) {
+                        dot += residual[row] * ortho_basis[
+                            (size_t) row * (size_t) nrow + (size_t) ortho_idx
+                        ];
+                    }
+                    for (row = 0; row < nrow; ++row) {
+                        residual[row] -= dot * ortho_basis[
+                            (size_t) row * (size_t) nrow + (size_t) ortho_idx
+                        ];
+                    }
+                }
+                for (row = 0; row < nrow; ++row) {
+                    residual_norm_sq += residual[row] * residual[row];
+                }
+                if (sqrt(residual_norm_sq) > 1.0e-12) {
+                    double inv_col_norm = 1.0 / sqrt(residual_norm_sq);
+                    independent_columns[independent_count] = active_idx;
+                    for (row = 0; row < nrow; ++row) {
+                        ortho_basis[(size_t) row * (size_t) nrow + (size_t) independent_count] =
+                            residual[row] * inv_col_norm;
+                    }
+                    independent_count += 1;
+                }
+            }
+
+            if (independent_count != active_count) {
+                for (row = 0; row < nrow; ++row) {
+                    int compact_idx = 0;
+                    for (compact_idx = 0; compact_idx < independent_count; ++compact_idx) {
+                        int source_col = independent_columns[compact_idx];
+                        reduced_basis_real[
+                            (size_t) row * (size_t) independent_count + (size_t) compact_idx
+                        ] = reduced_basis_real[
+                            (size_t) row * (size_t) active_count + (size_t) source_col
+                        ];
+                    }
+                }
+            }
+
+            if (independent_count > 0) {
                 weighted_block_solve_stub(
-                    nrow, active_count, 1, weights,
+                    nrow, independent_count, 1, weights,
                     reduced_basis_real, reduced_basis_imag,
                     observed_real, observed_imag,
                     reduced_solution_real, reduced_solution_imag,
@@ -3632,8 +3724,9 @@ static PyObject *backend_uv_to_vordiv_poa1_block_native_with_setup(PyObject *sel
                     );
                     goto fail;
                 }
-                for (active_idx = 0; active_idx < active_count; ++active_idx) {
-                    poa1_solution[active_columns[active_idx]] = reduced_solution_real[active_idx];
+                for (active_idx = 0; active_idx < independent_count; ++active_idx) {
+                    poa1_solution[active_columns[independent_columns[active_idx]]] =
+                        reduced_solution_real[active_idx];
                 }
             }
 
@@ -3679,6 +3772,8 @@ static PyObject *backend_uv_to_vordiv_poa1_block_native_with_setup(PyObject *sel
     if (reduced_solution_imag != NULL) PyMem_Free(reduced_solution_imag);
     if (poa1_solution != NULL) PyMem_Free(poa1_solution);
     if (prfi_block != NULL) PyMem_Free(prfi_block);
+    if (ortho_basis != NULL) PyMem_Free(ortho_basis);
+    if (residual != NULL) PyMem_Free(residual);
     if (u_col_real != NULL) PyMem_Free(u_col_real);
     if (u_col_imag != NULL) PyMem_Free(u_col_imag);
     if (v_col_real != NULL) PyMem_Free(v_col_real);
@@ -3692,6 +3787,7 @@ static PyObject *backend_uv_to_vordiv_poa1_block_native_with_setup(PyObject *sel
     if (div_block_real != NULL) PyMem_Free(div_block_real);
     if (div_block_imag != NULL) PyMem_Free(div_block_imag);
     if (active_columns != NULL) PyMem_Free(active_columns);
+    if (independent_columns != NULL) PyMem_Free(independent_columns);
     return Py_BuildValue("(NNi)", vrt_out_arr, div_out_arr, 0);
 
 fail:
@@ -3706,6 +3802,8 @@ fail:
     if (reduced_solution_imag != NULL) PyMem_Free(reduced_solution_imag);
     if (poa1_solution != NULL) PyMem_Free(poa1_solution);
     if (prfi_block != NULL) PyMem_Free(prfi_block);
+    if (ortho_basis != NULL) PyMem_Free(ortho_basis);
+    if (residual != NULL) PyMem_Free(residual);
     if (u_col_real != NULL) PyMem_Free(u_col_real);
     if (u_col_imag != NULL) PyMem_Free(u_col_imag);
     if (v_col_real != NULL) PyMem_Free(v_col_real);
@@ -3719,6 +3817,7 @@ fail:
     if (div_block_real != NULL) PyMem_Free(div_block_real);
     if (div_block_imag != NULL) PyMem_Free(div_block_imag);
     if (active_columns != NULL) PyMem_Free(active_columns);
+    if (independent_columns != NULL) PyMem_Free(independent_columns);
     Py_XDECREF(vrt_out_arr);
     Py_XDECREF(div_out_arr);
     return NULL;
