@@ -3,9 +3,9 @@
 ! Copyright (C) 2026 by Qianye Su
 ! Created : 2026-05-08
 ! File    : isentropic_kernels.f90
-! Purpose : C-order and column-major kernels for interpolation to isentropic
-!           surfaces. The public Python wrapper handles xarray metadata while
-!           these routines keep the hot vertical profile loops in Fortran.
+! Purpose : C-order kernel for interpolation to isentropic surfaces. The public
+!           Python wrapper handles xarray metadata while this file keeps the hot
+!           vertical profile loops in Fortran.
 ! =============================================================================
 !
 module isentropic_kernels_core
@@ -14,7 +14,6 @@ module isentropic_kernels_core
     private
 
     public :: real64
-    public :: interp_isentropic_profile
     public :: interp_isentropic_flat_profile
 
 contains
@@ -94,39 +93,6 @@ contains
     end function interp_sorted_profile
 
 
-    pure subroutine interp_isentropic_profile( &
-        data_col, temp_col, pressure_col, theta_levels, output_col, p0, kappa, spvl, kxtrp)
-        real(real64), intent(in) :: data_col(:), temp_col(:), pressure_col(:), theta_levels(:)
-        real(real64), intent(out) :: output_col(size(theta_levels))
-        real(real64), intent(in) :: p0, kappa, spvl
-        integer, intent(in) :: kxtrp
-
-        integer :: k, out, nlev, nvalid
-        real(real64) :: theta(size(data_col)), values(size(data_col))
-
-        nlev = size(data_col)
-        nvalid = 0
-        do k = 1, nlev
-            if (valid_value(data_col(k), spvl) .and. &
-                valid_value(temp_col(k), spvl) .and. &
-                valid_value(pressure_col(k), spvl) .and. pressure_col(k) > 0.0_real64) then
-                nvalid = nvalid + 1
-                theta(nvalid) = temp_col(k) * (p0 / pressure_col(k)) ** kappa
-                values(nvalid) = data_col(k)
-            end if
-        end do
-
-        output_col = spvl
-        if (nvalid < 2) return
-
-        call sort_pairs(theta(:nvalid), values(:nvalid))
-        do out = 1, size(theta_levels)
-            output_col(out) = interp_sorted_profile( &
-                theta(:nvalid), values(:nvalid), nvalid, theta_levels(out), kxtrp, spvl)
-        end do
-    end subroutine interp_isentropic_profile
-
-
     pure subroutine interp_isentropic_flat_profile( &
         data_flat, temp_flat, pressure_flat, theta_levels, output_flat, &
         p0, kappa, spvl, kxtrp, base_in, base_out, inner, ninner, nlev, ntheta)
@@ -168,44 +134,6 @@ contains
     end subroutine interp_isentropic_flat_profile
 
 end module isentropic_kernels_core
-
-
-subroutine dinterp_to_isentropic(data, temp, pressure, theta_levels, output, p0, kappa, spvl, kxtrp, nlev, ncol, ntheta)
-    use isentropic_kernels_core, only : real64, interp_isentropic_profile
-    implicit none
-
-    integer, intent(in) :: nlev, ncol, ntheta, kxtrp
-    real(real64), intent(in) :: data(nlev, ncol), temp(nlev, ncol), pressure(nlev, ncol)
-    real(real64), intent(in) :: theta_levels(ntheta), p0, kappa, spvl
-    real(real64), intent(out) :: output(ntheta, ncol)
-
-    integer :: col
-
-    do col = 1, ncol
-        call interp_isentropic_profile( &
-            data(:, col), temp(:, col), pressure(:, col), theta_levels, output(:, col), &
-            p0, kappa, spvl, kxtrp)
-    end do
-end subroutine dinterp_to_isentropic
-
-
-subroutine dinterp_to_isentropic_into(data, temp, pressure, theta_levels, output, p0, kappa, spvl, kxtrp, nlev, ncol, ntheta)
-    use isentropic_kernels_core, only : real64, interp_isentropic_profile
-    implicit none
-
-    integer, intent(in) :: nlev, ncol, ntheta, kxtrp
-    real(real64), intent(in) :: data(nlev, ncol), temp(nlev, ncol), pressure(nlev, ncol)
-    real(real64), intent(in) :: theta_levels(ntheta), p0, kappa, spvl
-    real(real64), intent(inout) :: output(ntheta, ncol)
-
-    integer :: col
-
-    do col = 1, ncol
-        call interp_isentropic_profile( &
-            data(:, col), temp(:, col), pressure(:, col), theta_levels, output(:, col), &
-            p0, kappa, spvl, kxtrp)
-    end do
-end subroutine dinterp_to_isentropic_into
 
 
 subroutine dinterp_to_isentropic_corder_into( &
