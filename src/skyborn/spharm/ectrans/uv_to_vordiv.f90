@@ -1,6 +1,7 @@
 module uv_to_vordiv_mod
   use, intrinsic :: iso_c_binding, only : c_int, c_double
   use PARKIND1, only : JPIM, JPRB
+  use TPM_CONSTANTS, only : RA
   use TPM_DISTR, only : D
   use PREPSNM_MOD, only : PREPSNM
   use PRFI1B_MOD, only : PRFI1B
@@ -33,6 +34,7 @@ contains
 
     integer(kind=JPIM) :: ncoeff, nspec2, ierr_local
     integer(kind=JPIM) :: m, n, it, idx, inm
+    real(kind=JPRB) :: za_inv
     real(kind=JPRB), allocatable :: pspu(:,:), pspv(:,:), pspvor(:,:), pspdiv(:,:), zia(:,:), zep(:)
 
     vrtspec_r = 0.0_c_double
@@ -58,6 +60,7 @@ contains
     pspv = 0.0_JPRB
     pspvor = 0.0_JPRB
     pspdiv = 0.0_JPRB
+    za_inv = 1.0_JPRB / RA
 
     idx = 0_JPIM
     do m = 0_JPIM, int(ntrunc, JPIM)
@@ -65,10 +68,10 @@ contains
         idx = idx + 1_JPIM
         inm = D%NASM0(m) + 2_JPIM * (n - m)
         do it = 1_JPIM, int(nt, JPIM)
-          pspu(it, inm) = uspec_r((idx - 1_JPIM) * int(nt, JPIM) + it)
-          pspu(it, inm + 1_JPIM) = uspec_i((idx - 1_JPIM) * int(nt, JPIM) + it)
-          pspv(it, inm) = vspec_r((idx - 1_JPIM) * int(nt, JPIM) + it)
-          pspv(it, inm + 1_JPIM) = vspec_i((idx - 1_JPIM) * int(nt, JPIM) + it)
+          pspu(it, inm) = uspec_r((idx - 1_JPIM) * int(nt, JPIM) + it) * za_inv
+          pspu(it, inm + 1_JPIM) = uspec_i((idx - 1_JPIM) * int(nt, JPIM) + it) * za_inv
+          pspv(it, inm) = vspec_r((idx - 1_JPIM) * int(nt, JPIM) + it) * za_inv
+          pspv(it, inm + 1_JPIM) = vspec_i((idx - 1_JPIM) * int(nt, JPIM) + it) * za_inv
         end do
       end do
     end do
