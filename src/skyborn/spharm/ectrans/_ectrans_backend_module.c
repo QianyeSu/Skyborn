@@ -222,6 +222,32 @@ void ledir_dgemm(
     int *ierror
 );
 
+void prfi1b_uv_block(
+    int ntrunc,
+    int km,
+    int nt,
+    double rsphere,
+    const double *uspec_r,
+    const double *uspec_i,
+    const double *vspec_r,
+    const double *vspec_i,
+    double *poa1_out,
+    int *ierror
+);
+
+void vd2uv_uv_block(
+    int ntrunc,
+    int km,
+    int nt,
+    double rsphere,
+    const double *vrtspec_r,
+    const double *vrtspec_i,
+    const double *divspec_r,
+    const double *divspec_i,
+    double *poa1_out,
+    int *ierror
+);
+
 void poa1_to_vordiv(
     int ntrunc,
     int km,
@@ -2089,6 +2115,248 @@ fail:
     return NULL;
 }
 
+static PyObject *backend_prfi1b_uv_block(PyObject *self, PyObject *args) {
+    PyObject *u_obj = NULL;
+    PyObject *v_obj = NULL;
+    PyArrayObject *u_arr = NULL;
+    PyArrayObject *v_arr = NULL;
+    PyArrayObject *u_real_arr = NULL;
+    PyArrayObject *u_imag_arr = NULL;
+    PyArrayObject *v_real_arr = NULL;
+    PyArrayObject *v_imag_arr = NULL;
+    PyArrayObject *poa1_arr = NULL;
+    double rsphere = 0.0;
+    int km = -1, nt = 0, spec_rank = 0, ierror = 0, ntrunc = -1, v_ntrunc = -1;
+    int nlei1 = -1;
+    npy_intp *spec_dims = NULL;
+    npy_intp poa1_dims[2];
+    npy_intp idx;
+    npy_complex128 *u_data = NULL;
+    npy_complex128 *v_data = NULL;
+    double *u_real_data = NULL;
+    double *u_imag_data = NULL;
+    double *v_real_data = NULL;
+    double *v_imag_data = NULL;
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "iOOd", &km, &u_obj, &v_obj, &rsphere)) {
+        return NULL;
+    }
+
+    u_arr = require_array(u_obj, NPY_COMPLEX128);
+    v_arr = require_array(v_obj, NPY_COMPLEX128);
+    if (u_arr == NULL || v_arr == NULL) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(u_arr, INT_MAX, &ntrunc, &nt, &spec_rank, &spec_dims)) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(v_arr, INT_MAX, &v_ntrunc, &nt, &spec_rank, &spec_dims)) {
+        goto fail;
+    }
+    if (PyArray_NDIM(u_arr) != PyArray_NDIM(v_arr)) {
+        PyErr_SetString(PyExc_ValueError, "uspec and vspec must have the same rank");
+        goto fail;
+    }
+    if (!PyArray_CompareLists(
+            PyArray_DIMS(u_arr), PyArray_DIMS(v_arr), PyArray_NDIM(u_arr))) {
+        PyErr_SetString(PyExc_ValueError, "uspec and vspec must have the same shape");
+        goto fail;
+    }
+    if (ntrunc != v_ntrunc) {
+        PyErr_SetString(PyExc_ValueError, "uspec and vspec must use the same ntrunc");
+        goto fail;
+    }
+    if (km < 0 || km > ntrunc) {
+        PyErr_SetString(PyExc_ValueError, "require 0 <= km <= ntrunc");
+        goto fail;
+    }
+
+    u_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    u_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    v_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    v_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    nlei1 = ntrunc + 4 + ((ntrunc + 5) % 2);
+    poa1_dims[0] = (npy_intp) nlei1;
+    poa1_dims[1] = (npy_intp) (4 * nt);
+    poa1_arr = (PyArrayObject *) PyArray_ZEROS(2, poa1_dims, NPY_FLOAT64, 0);
+    if (
+        u_real_arr == NULL || u_imag_arr == NULL ||
+        v_real_arr == NULL || v_imag_arr == NULL ||
+        poa1_arr == NULL
+    ) {
+        goto fail;
+    }
+
+    u_data = (npy_complex128 *) PyArray_DATA(u_arr);
+    v_data = (npy_complex128 *) PyArray_DATA(v_arr);
+    u_real_data = (double *) PyArray_DATA(u_real_arr);
+    u_imag_data = (double *) PyArray_DATA(u_imag_arr);
+    v_real_data = (double *) PyArray_DATA(v_real_arr);
+    v_imag_data = (double *) PyArray_DATA(v_imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(u_arr); ++idx) {
+        u_real_data[idx] = creal(u_data[idx]);
+        u_imag_data[idx] = cimag(u_data[idx]);
+        v_real_data[idx] = creal(v_data[idx]);
+        v_imag_data[idx] = cimag(v_data[idx]);
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    prfi1b_uv_block(
+        ntrunc,
+        km,
+        nt,
+        rsphere,
+        (const double *) PyArray_DATA(u_real_arr),
+        (const double *) PyArray_DATA(u_imag_arr),
+        (const double *) PyArray_DATA(v_real_arr),
+        (const double *) PyArray_DATA(v_imag_arr),
+        (double *) PyArray_DATA(poa1_arr),
+        &ierror
+    );
+    Py_END_ALLOW_THREADS
+
+    Py_DECREF(u_arr);
+    Py_DECREF(v_arr);
+    Py_DECREF(u_real_arr);
+    Py_DECREF(u_imag_arr);
+    Py_DECREF(v_real_arr);
+    Py_DECREF(v_imag_arr);
+    return Py_BuildValue("(Ni)", poa1_arr, ierror);
+
+fail:
+    Py_XDECREF(u_arr);
+    Py_XDECREF(v_arr);
+    Py_XDECREF(u_real_arr);
+    Py_XDECREF(u_imag_arr);
+    Py_XDECREF(v_real_arr);
+    Py_XDECREF(v_imag_arr);
+    Py_XDECREF(poa1_arr);
+    return NULL;
+}
+
+static PyObject *backend_vd2uv_uv_block(PyObject *self, PyObject *args) {
+    PyObject *vrt_obj = NULL;
+    PyObject *div_obj = NULL;
+    PyArrayObject *vrt_arr = NULL;
+    PyArrayObject *div_arr = NULL;
+    PyArrayObject *vrt_real_arr = NULL;
+    PyArrayObject *vrt_imag_arr = NULL;
+    PyArrayObject *div_real_arr = NULL;
+    PyArrayObject *div_imag_arr = NULL;
+    PyArrayObject *poa1_arr = NULL;
+    double rsphere = 0.0;
+    int km = -1, nt = 0, spec_rank = 0, ierror = 0, ntrunc = -1, div_ntrunc = -1;
+    int nlei1 = -1;
+    npy_intp *spec_dims = NULL;
+    npy_intp poa1_dims[2];
+    npy_intp idx;
+    npy_complex128 *vrt_data = NULL;
+    npy_complex128 *div_data = NULL;
+    double *vrt_real_data = NULL;
+    double *vrt_imag_data = NULL;
+    double *div_real_data = NULL;
+    double *div_imag_data = NULL;
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "iOOd", &km, &vrt_obj, &div_obj, &rsphere)) {
+        return NULL;
+    }
+
+    vrt_arr = require_array(vrt_obj, NPY_COMPLEX128);
+    div_arr = require_array(div_obj, NPY_COMPLEX128);
+    if (vrt_arr == NULL || div_arr == NULL) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(vrt_arr, INT_MAX, &ntrunc, &nt, &spec_rank, &spec_dims)) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(div_arr, INT_MAX, &div_ntrunc, &nt, &spec_rank, &spec_dims)) {
+        goto fail;
+    }
+    if (PyArray_NDIM(vrt_arr) != PyArray_NDIM(div_arr)) {
+        PyErr_SetString(PyExc_ValueError, "vrtspec and divspec must have the same rank");
+        goto fail;
+    }
+    if (!PyArray_CompareLists(
+            PyArray_DIMS(vrt_arr), PyArray_DIMS(div_arr), PyArray_NDIM(vrt_arr))) {
+        PyErr_SetString(PyExc_ValueError, "vrtspec and divspec must have the same shape");
+        goto fail;
+    }
+    if (ntrunc != div_ntrunc) {
+        PyErr_SetString(PyExc_ValueError, "vrtspec and divspec must use the same ntrunc");
+        goto fail;
+    }
+    if (km < 0 || km > ntrunc) {
+        PyErr_SetString(PyExc_ValueError, "require 0 <= km <= ntrunc");
+        goto fail;
+    }
+
+    vrt_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    vrt_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    div_real_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    div_imag_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_FLOAT64, 0);
+    nlei1 = ntrunc + 4 + ((ntrunc + 5) % 2);
+    poa1_dims[0] = (npy_intp) nlei1;
+    poa1_dims[1] = (npy_intp) (4 * nt);
+    poa1_arr = (PyArrayObject *) PyArray_ZEROS(2, poa1_dims, NPY_FLOAT64, 0);
+    if (
+        vrt_real_arr == NULL || vrt_imag_arr == NULL ||
+        div_real_arr == NULL || div_imag_arr == NULL ||
+        poa1_arr == NULL
+    ) {
+        goto fail;
+    }
+
+    vrt_data = (npy_complex128 *) PyArray_DATA(vrt_arr);
+    div_data = (npy_complex128 *) PyArray_DATA(div_arr);
+    vrt_real_data = (double *) PyArray_DATA(vrt_real_arr);
+    vrt_imag_data = (double *) PyArray_DATA(vrt_imag_arr);
+    div_real_data = (double *) PyArray_DATA(div_real_arr);
+    div_imag_data = (double *) PyArray_DATA(div_imag_arr);
+    for (idx = 0; idx < PyArray_SIZE(vrt_arr); ++idx) {
+        vrt_real_data[idx] = creal(vrt_data[idx]);
+        vrt_imag_data[idx] = cimag(vrt_data[idx]);
+        div_real_data[idx] = creal(div_data[idx]);
+        div_imag_data[idx] = cimag(div_data[idx]);
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    vd2uv_uv_block(
+        ntrunc,
+        km,
+        nt,
+        rsphere,
+        (const double *) PyArray_DATA(vrt_real_arr),
+        (const double *) PyArray_DATA(vrt_imag_arr),
+        (const double *) PyArray_DATA(div_real_arr),
+        (const double *) PyArray_DATA(div_imag_arr),
+        (double *) PyArray_DATA(poa1_arr),
+        &ierror
+    );
+    Py_END_ALLOW_THREADS
+
+    Py_DECREF(vrt_arr);
+    Py_DECREF(div_arr);
+    Py_DECREF(vrt_real_arr);
+    Py_DECREF(vrt_imag_arr);
+    Py_DECREF(div_real_arr);
+    Py_DECREF(div_imag_arr);
+    return Py_BuildValue("(Ni)", poa1_arr, ierror);
+
+fail:
+    Py_XDECREF(vrt_arr);
+    Py_XDECREF(div_arr);
+    Py_XDECREF(vrt_real_arr);
+    Py_XDECREF(vrt_imag_arr);
+    Py_XDECREF(div_real_arr);
+    Py_XDECREF(div_imag_arr);
+    Py_XDECREF(poa1_arr);
+    return NULL;
+}
+
 static PyObject *backend_uv_to_vordiv(PyObject *self, PyObject *args) {
     PyObject *u_obj = NULL;
     PyObject *v_obj = NULL;
@@ -3095,6 +3363,8 @@ static PyMethodDef module_methods[] = {
     {"uv_synthesis_stub", backend_uv_synthesis, METH_VARARGS, "Call the native wind-synthesis stub."},
     {"gradient_synthesis_stub", backend_gradient_synthesis, METH_VARARGS, "Call the native gradient-synthesis stub."},
     {"vordiv_to_uv", backend_vordiv_to_uv, METH_VARARGS, "Call the experimental ectrans vordiv-to-uv spectral helper."},
+    {"prfi1b_uv_block", backend_prfi1b_uv_block, METH_VARARGS, "Build a PRFI1B-style UV POA1 block from public spectral u/v."},
+    {"vd2uv_uv_block", backend_vd2uv_uv_block, METH_VARARGS, "Build a VD2UV internal UV POA1 block from public spectral vrt/div."},
     {"uv_to_vordiv", backend_uv_to_vordiv, METH_VARARGS, "Call the experimental ectrans uv-to-vordiv spectral helper."},
     {"uv_to_vordiv_block_native", backend_uv_to_vordiv_block_native, METH_VARARGS, "Call the experimental ectrans blockwise native uv-to-vordiv spectral helper."},
     {"uv_to_vordiv_block_native_with_setup", backend_uv_to_vordiv_block_native_with_setup, METH_VARARGS, "Call the cached experimental ectrans blockwise native uv-to-vordiv helper."},
