@@ -19,6 +19,9 @@ import numpy as np
 import xarray as xr
 
 from .fortran.int2p_kernels import dinterp_pressure_1d as _dinterp_pressure_1d
+from .fortran.isentropic_kernels import (
+    dinterp_to_isentropic_corder_into as _dinterp_to_isentropic_corder_into,
+)
 from .fortran.vinth2p_kernels import (
     ddelta_pressure_hybrid_pa as _ddelta_pressure_hybrid_pa,
 )
@@ -60,6 +63,7 @@ __all__ = [
     "delta_pressure_hybrid",
     "geopotential_height_at_hybrid_levels",
     "interp_hybrid_to_pressure",
+    "interp_to_isentropic",
     "interp_sigma_to_hybrid",
     "interp_multidim",
 ]
@@ -68,6 +72,8 @@ supported_types = typing.Union[xr.DataArray, np.ndarray]
 coordinate_types = typing.Union[xr.DataArray, np.ndarray, typing.Sequence[float]]
 _PRESSURE_INTERP_SPVL = np.float64(np.finfo(np.float64).max)
 _VINTH2P_SPVL = np.float64(-9.96921e36)
+_ISENTROPIC_SPVL = np.float64(-9.96921e36)
+_RD_OVER_CP = 0.2854
 
 __pres_lev_mandatory__ = np.array(
     [
@@ -199,6 +205,124 @@ def _finalize_hybrid_level_output(
         result = result.transpose(*output_dims)
 
     return result
+
+
+def _target_level_dataarray(
+    target_levels: coordinate_types,
+    *,
+    default_dim: str,
+    units: str,
+    long_name: str,
+) -> xr.DataArray:
+    """Return target levels as a one-dimensional DataArray."""
+
+    if isinstance(target_levels, xr.DataArray):
+        if target_levels.ndim != 1:
+            raise ValueError("target levels must be one-dimensional")
+        result = target_levels.copy()
+        attrs = result.attrs.copy()
+        attrs.setdefault("units", units)
+        attrs.setdefault("long_name", long_name)
+        return result.assign_attrs(attrs)
+
+    values = np.asarray(target_levels, dtype=np.float64)
+    if values.ndim != 1:
+        raise ValueError("target levels must be one-dimensional")
+    return xr.DataArray(
+        values,
+        dims=(default_dim,),
+        coords={default_dim: values},
+        attrs={"units": units, "long_name": long_name},
+    )
+
+
+def _interp_to_isentropic_fortran_corder(
+    data: xr.DataArray,
+    temperature: xr.DataArray,
+    pressure: xr.DataArray,
+    theta_levels: np.ndarray,
+    *,
+    lev_dim: str,
+    p0: float,
+    kappa: float,
+    spvl: float,
+    extrapolate: bool,
+) -> xr.DataArray:
+    """Run isentropic interpolation through the flat C-order Fortran kernel."""
+
+    if _dinterp_to_isentropic_corder_into is None:
+        raise RuntimeError("isentropic interpolation backend is not available")
+
+    interp_axis = data.dims.index(lev_dim)
+    shape_before = data.shape[:interp_axis]
+    shape_after = data.shape[interp_axis + 1 :]
+    nouter = int(np.prod(shape_before, dtype=np.int64)) if shape_before else 1
+    ninner = int(np.prod(shape_after, dtype=np.int64)) if shape_after else 1
+    nlev = data.shape[interp_axis]
+    ntheta = theta_levels.size
+
+    output_values = _compiled_float64_output(
+        (*shape_before, ntheta, *shape_after), order="C"
+    )
+    _dinterp_to_isentropic_corder_into(
+        _compiled_float64_flat_with_missing(data.data, spvl),
+        _compiled_float64_flat_with_missing(temperature.data, spvl),
+        _compiled_float64_flat_with_missing(pressure.data, spvl),
+        _compiled_float64_vector(theta_levels),
+        output_values.reshape(-1),
+        float(p0),
+        float(kappa),
+        float(spvl),
+        int(bool(extrapolate)),
+        nouter,
+        nlev,
+        ninner,
+    )
+    output_values[output_values == spvl] = np.nan
+    output_values = _restore_compiled_interp_output_dtype(output_values, data)
+
+    dims = tuple(
+        dim if idx != interp_axis else "theta" for idx, dim in enumerate(data.dims)
+    )
+    coords = {
+        dim: coord
+        for dim, coord in data.coords.items()
+        if dim in dims and dim != lev_dim
+    }
+    return xr.DataArray(
+        output_values,
+        dims=dims,
+        coords=coords,
+        name=data.name,
+        attrs=data.attrs.copy(),
+    )
+
+
+def _interp_to_isentropic(
+    data: xr.DataArray,
+    temperature: xr.DataArray,
+    pressure: xr.DataArray,
+    theta_levels: np.ndarray,
+    *,
+    lev_dim: str,
+    p0: float,
+    kappa: float,
+    spvl: float,
+    extrapolate: bool,
+) -> xr.DataArray:
+    """Interpolate to isentropic levels through the compiled Fortran backend."""
+
+    return _interp_to_isentropic_fortran_corder(
+        data,
+        temperature,
+        pressure,
+        theta_levels,
+        lev_dim=lev_dim,
+        p0=p0,
+        kappa=kappa,
+        spvl=spvl,
+        extrapolate=extrapolate,
+    )
 
 
 def interp_pressure_1d(
@@ -1084,7 +1208,7 @@ def _require_compiled_interp(function_name: str, *handles) -> None:
     if not any(handle is not None for handle in handles):
         raise RuntimeError(
             f"{function_name} requires the compiled Fortran backend in "
-            "`skyborn.interp.fortran.vinth2p_kernels`."
+            "`skyborn.interp.fortran`."
         )
 
 
@@ -1194,6 +1318,16 @@ def _compiled_float64_flat(values) -> np.ndarray:
     """Materialize a contiguous 1D float64 buffer for the compiled boundary."""
 
     return np.ascontiguousarray(np.asarray(values, dtype=np.float64)).reshape(-1)
+
+
+def _compiled_float64_flat_with_missing(values, spvl: float) -> np.ndarray:
+    """Materialize a C-order float64 buffer with NaNs converted to ``spvl``."""
+
+    flat = _compiled_float64_flat(values)
+    if np.isnan(flat).any():
+        flat = flat.copy()
+        flat[np.isnan(flat)] = spvl
+    return flat
 
 
 def _compiled_float64_columns(values, ncol: int, nlev: int) -> np.ndarray:
@@ -2005,6 +2139,120 @@ def interp_hybrid_to_pressure(
         t_bot=t_bot,
         phi_sfc=phi_sfc,
     )
+
+
+def interp_to_isentropic(
+    data: xr.DataArray,
+    temperature: xr.DataArray,
+    pressure: xr.DataArray,
+    theta_levels: coordinate_types,
+    *,
+    lev_dim: str | None = None,
+    p0: float = 100000.0,
+    kappa: float = _RD_OVER_CP,
+    extrapolate: bool = False,
+    missing_value: object = np.nan,
+    output_dim: str = "theta",
+) -> xr.DataArray:
+    """Interpolate data from model or pressure levels to isentropic levels.
+
+    Parameters
+    ----------
+    data, temperature, pressure : :class:`xarray.DataArray`
+        Arrays sharing the same vertical dimension. ``temperature`` is in Kelvin
+        and ``pressure`` is in Pa.
+
+    theta_levels : array-like or :class:`xarray.DataArray`
+        Target potential-temperature levels in Kelvin.
+
+    lev_dim : str, optional
+        Name of the input vertical dimension. If omitted, common names are tried.
+
+    p0 : float, optional
+        Reference pressure in Pa. Defaults to 100000 Pa.
+
+    kappa : float, optional
+        Poisson exponent ``R_d / c_p``. Defaults to 0.2854.
+
+    extrapolate : bool, optional
+        If True, extend end slopes as constant-endpoint extrapolation through
+        :func:`numpy.interp`. Defaults to False.
+
+    missing_value : scalar, optional
+        Optional finite missing-value marker in addition to NaN.
+
+    output_dim : str, optional
+        Name of the output isentropic-level dimension when ``theta_levels`` is
+        not an xarray object. Defaults to ``"theta"``.
+
+    Returns
+    -------
+    :class:`xarray.DataArray`
+        ``data`` interpolated to ``theta_levels`` with metadata preserved.
+    """
+
+    if not all(isinstance(x, xr.DataArray) for x in (data, temperature, pressure)):
+        raise TypeError(
+            "data, temperature, and pressure must be xarray DataArray objects"
+        )
+
+    if lev_dim is None:
+        candidates = ("lev", "level", "hybrid", "plev", "isobaricInhPa")
+        lev_dim = next((dim for dim in candidates if dim in data.dims), None)
+        if lev_dim is None:
+            raise ValueError(
+                "Unable to determine vertical dimension name. Please specify "
+                "the name via `lev_dim` argument."
+            )
+
+    if lev_dim not in data.dims:
+        raise ValueError(f"`lev_dim` {lev_dim!r} is not a dimension of data")
+    if lev_dim not in temperature.dims:
+        raise ValueError(f"`lev_dim` {lev_dim!r} is not a dimension of temperature")
+    if lev_dim not in pressure.dims:
+        raise ValueError(f"`lev_dim` {lev_dim!r} is not a dimension of pressure")
+
+    theta_coord = _target_level_dataarray(
+        theta_levels,
+        default_dim=output_dim,
+        units="K",
+        long_name="potential temperature",
+    )
+    theta_dim = theta_coord.dims[0]
+    target_theta = np.asarray(theta_coord.data, dtype=np.float64)
+    if not np.isfinite(target_theta).all():
+        raise ValueError("theta_levels must be finite")
+
+    _require_compiled_interp(
+        "interp_to_isentropic",
+        _dinterp_to_isentropic_corder_into,
+    )
+    _reject_lazy_or_unit_backed_inputs(
+        "interp_to_isentropic", data, temperature, pressure
+    )
+
+    temperature, pressure = xr.align(temperature, pressure, join="exact")
+    data, temperature = xr.align(data, temperature, join="exact")
+
+    spvl = (
+        float(missing_value) if not np.isnan(missing_value) else float(_ISENTROPIC_SPVL)
+    )
+    result = _interp_to_isentropic(
+        data,
+        temperature,
+        pressure,
+        target_theta,
+        lev_dim=lev_dim,
+        p0=p0,
+        kappa=kappa,
+        spvl=spvl,
+        extrapolate=extrapolate,
+    )
+    if result.dims[data.dims.index(lev_dim)] != theta_dim:
+        result = result.rename({"theta": theta_dim})
+    result = result.assign_coords({theta_dim: theta_coord})
+    result[theta_dim].attrs.update(theta_coord.attrs)
+    return result
 
 
 def interp_sigma_to_hybrid(
