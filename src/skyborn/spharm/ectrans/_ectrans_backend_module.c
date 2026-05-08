@@ -1141,6 +1141,306 @@ static PyObject *backend_destroy_uv_to_vordiv_block_setup(PyObject *self, PyObje
     Py_RETURN_NONE;
 }
 
+static PyObject *backend_create_uv_to_vordiv_poa1_block_setup(PyObject *self, PyObject *args) {
+    PyObject *u_obj = NULL;
+    PyObject *v_obj = NULL;
+    PyArrayObject *u_arr = NULL;
+    PyArrayObject *v_arr = NULL;
+    UvToVordivPoa1BlockSetup *setup = NULL;
+    PyObject *capsule = NULL;
+    double rsphere = 0.0;
+    double inv_rsphere = 0.0;
+    int ignored_nt = 0, ignored_rank = 0, ntrunc = -1, v_ntrunc = -1, ierror = 0;
+    int nlei1 = 0;
+    npy_intp *ignored_dims = NULL;
+    size_t ncoeff = 0, total_dense_entries = 0, total_active_columns = 0;
+    size_t cache_bytes = 0, running_basis_offset = 0, running_active_offset = 0;
+    double *poa_basis = NULL, *obs_basis = NULL;
+    double *basis_real = NULL;
+    double *vrt_basis_real = NULL, *vrt_basis_imag = NULL;
+    double *div_basis_real = NULL, *div_basis_imag = NULL;
+    double *u_basis_real = NULL, *u_basis_imag = NULL;
+    double *v_basis_real = NULL, *v_basis_imag = NULL;
+    int m = 0;
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "OOd", &u_obj, &v_obj, &rsphere)) {
+        return NULL;
+    }
+    if (rsphere == 0.0) {
+        PyErr_SetString(PyExc_ValueError, "rsphere must be non-zero");
+        return NULL;
+    }
+    inv_rsphere = 1.0 / rsphere;
+
+    u_arr = require_array(u_obj, NPY_COMPLEX128);
+    v_arr = require_array(v_obj, NPY_COMPLEX128);
+    if (u_arr == NULL || v_arr == NULL) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(u_arr, INT_MAX, &ntrunc, &ignored_nt, &ignored_rank, &ignored_dims)) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(v_arr, INT_MAX, &v_ntrunc, &ignored_nt, &ignored_rank, &ignored_dims)) {
+        goto fail;
+    }
+    if (PyArray_NDIM(u_arr) != PyArray_NDIM(v_arr)) {
+        PyErr_SetString(PyExc_ValueError, "uspec and vspec must have the same rank");
+        goto fail;
+    }
+    if (!PyArray_CompareLists(
+            PyArray_DIMS(u_arr), PyArray_DIMS(v_arr), PyArray_NDIM(u_arr))) {
+        PyErr_SetString(PyExc_ValueError, "uspec and vspec must have the same shape");
+        goto fail;
+    }
+    if (ntrunc != v_ntrunc) {
+        PyErr_SetString(PyExc_ValueError, "uspec and vspec must use the same ntrunc");
+        goto fail;
+    }
+
+    ncoeff = (size_t) PyArray_DIM(u_arr, 0);
+    nlei1 = ntrunc + 4 + ((ntrunc + 5) % 2);
+    for (m = 0; m <= ntrunc; ++m) {
+        size_t nrow = (size_t) nlei1 * 4U;
+        total_dense_entries += nrow * nrow;
+        total_active_columns += nrow;
+    }
+    cache_bytes =
+        total_dense_entries * sizeof(double) +
+        total_active_columns * sizeof(int) +
+        (size_t) (ntrunc + 1) * (sizeof(size_t) * 2U + sizeof(int));
+    if (cache_bytes > SKYBORN_UV_TO_VORDIV_POA1_BLOCK_CACHE_MAX_BYTES) {
+        PyErr_Format(
+            PyExc_MemoryError,
+            "uv_to_vordiv POA1 block cache would require about %.2f MiB, above the %.2f MiB limit",
+            (double) cache_bytes / (1024.0 * 1024.0),
+            (double) SKYBORN_UV_TO_VORDIV_POA1_BLOCK_CACHE_MAX_BYTES / (1024.0 * 1024.0)
+        );
+        goto fail;
+    }
+
+    setup = (UvToVordivPoa1BlockSetup *) PyMem_Malloc(sizeof(UvToVordivPoa1BlockSetup));
+    if (setup == NULL) {
+        PyErr_NoMemory();
+        goto fail;
+    }
+    memset(setup, 0, sizeof(UvToVordivPoa1BlockSetup));
+    setup->ntrunc = ntrunc;
+    setup->nlei1 = nlei1;
+    setup->rsphere = rsphere;
+    setup->basis_offsets = (size_t *) PyMem_Malloc((size_t) (ntrunc + 1) * sizeof(size_t));
+    setup->active_counts = (int *) PyMem_Malloc((size_t) (ntrunc + 1) * sizeof(int));
+    setup->active_offsets = (size_t *) PyMem_Malloc((size_t) (ntrunc + 1) * sizeof(size_t));
+    setup->active_columns = (int *) PyMem_Malloc(total_active_columns * sizeof(int));
+    setup->basis_real = (double *) PyMem_Calloc(total_dense_entries, sizeof(double));
+    if (
+        setup->basis_offsets == NULL || setup->active_counts == NULL ||
+        setup->active_offsets == NULL || setup->active_columns == NULL ||
+        setup->basis_real == NULL
+    ) {
+        PyErr_NoMemory();
+        goto fail;
+    }
+
+    poa_basis = (double *) PyMem_Calloc((size_t) nlei1 * 4U, sizeof(double));
+    obs_basis = (double *) PyMem_Calloc((size_t) nlei1 * 4U, sizeof(double));
+    basis_real = (double *) PyMem_Calloc((size_t) nlei1 * 4U * (size_t) nlei1 * 4U, sizeof(double));
+    vrt_basis_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    vrt_basis_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    div_basis_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    div_basis_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    u_basis_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    u_basis_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    v_basis_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    v_basis_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    if (
+        poa_basis == NULL || obs_basis == NULL || basis_real == NULL ||
+        vrt_basis_real == NULL || vrt_basis_imag == NULL ||
+        div_basis_real == NULL || div_basis_imag == NULL ||
+        u_basis_real == NULL || u_basis_imag == NULL ||
+        v_basis_real == NULL || v_basis_imag == NULL
+    ) {
+        PyErr_NoMemory();
+        goto fail;
+    }
+
+    for (m = 0; m <= ntrunc; ++m) {
+        int nrow = nlei1 * 4;
+        int ncol = nrow;
+        int basis_idx = 0;
+        int row = 0;
+        int active_count = 0;
+
+        memset(basis_real, 0, (size_t) nrow * (size_t) ncol * sizeof(double));
+
+        for (basis_idx = 0; basis_idx < ncol; ++basis_idx) {
+            memset(poa_basis, 0, (size_t) nrow * sizeof(double));
+            memset(obs_basis, 0, (size_t) nrow * sizeof(double));
+            memset(vrt_basis_real, 0, ncoeff * sizeof(double));
+            memset(vrt_basis_imag, 0, ncoeff * sizeof(double));
+            memset(div_basis_real, 0, ncoeff * sizeof(double));
+            memset(div_basis_imag, 0, ncoeff * sizeof(double));
+            memset(u_basis_real, 0, ncoeff * sizeof(double));
+            memset(u_basis_imag, 0, ncoeff * sizeof(double));
+            memset(v_basis_real, 0, ncoeff * sizeof(double));
+            memset(v_basis_imag, 0, ncoeff * sizeof(double));
+
+            poa_basis[basis_idx] = 1.0;
+            poa1_to_vordiv(
+                ntrunc, m, 1, rsphere, poa_basis,
+                vrt_basis_real, vrt_basis_imag,
+                div_basis_real, div_basis_imag,
+                &ierror
+            );
+            if (ierror != 0) {
+                PyErr_Format(
+                    PyExc_RuntimeError,
+                    "poa1_to_vordiv failed while building POA1 basis (ierror=%d, m=%d, idx=%d)",
+                    ierror,
+                    m,
+                    basis_idx
+                );
+                goto fail;
+            }
+
+            vordiv_to_uv(
+                ntrunc, 1, rsphere,
+                vrt_basis_real, vrt_basis_imag,
+                div_basis_real, div_basis_imag,
+                u_basis_real, u_basis_imag,
+                v_basis_real, v_basis_imag,
+                &ierror
+            );
+            if (ierror != 0) {
+                PyErr_Format(
+                    PyExc_RuntimeError,
+                    "vordiv_to_uv failed while building POA1 basis (ierror=%d, m=%d, idx=%d)",
+                    ierror,
+                    m,
+                    basis_idx
+                );
+                goto fail;
+            }
+
+            prfi1b_uv_block(
+                ntrunc, m, 1, rsphere,
+                u_basis_real, u_basis_imag,
+                v_basis_real, v_basis_imag,
+                obs_basis,
+                &ierror
+            );
+            if (ierror != 0) {
+                PyErr_Format(
+                    PyExc_RuntimeError,
+                    "prfi1b_uv_block failed while building POA1 basis (ierror=%d, m=%d, idx=%d)",
+                    ierror,
+                    m,
+                    basis_idx
+                );
+                goto fail;
+            }
+
+            for (row = 0; row < nrow; ++row) {
+                basis_real[(size_t) row * (size_t) ncol + (size_t) basis_idx] =
+                    obs_basis[row] * inv_rsphere;
+            }
+        }
+
+        for (basis_idx = 0; basis_idx < ncol; ++basis_idx) {
+            double column_norm = 0.0;
+            for (row = 0; row < nrow; ++row) {
+                double column_value = fabs(
+                    basis_real[(size_t) row * (size_t) ncol + (size_t) basis_idx]
+                );
+                if (column_value > column_norm) {
+                    column_norm = column_value;
+                }
+            }
+            if (column_norm > 1.0e-18) {
+                setup->active_columns[running_active_offset + (size_t) active_count] = basis_idx;
+                active_count += 1;
+            }
+        }
+
+        setup->basis_offsets[m] = running_basis_offset;
+        setup->active_counts[m] = active_count;
+        setup->active_offsets[m] = running_active_offset;
+        memcpy(
+            setup->basis_real + running_basis_offset,
+            basis_real,
+            (size_t) nrow * (size_t) ncol * sizeof(double)
+        );
+        running_basis_offset += (size_t) nrow * (size_t) ncol;
+        running_active_offset += (size_t) active_count;
+    }
+
+    setup->basis_used_entries = running_basis_offset;
+    setup->active_used_entries = running_active_offset;
+
+    capsule = PyCapsule_New(
+        (void *) setup,
+        SKYBORN_UV_TO_VORDIV_POA1_BLOCK_CAPSULE,
+        uv_to_vordiv_poa1_block_setup_capsule_destructor
+    );
+    if (capsule == NULL) {
+        goto fail;
+    }
+
+    Py_DECREF(u_arr);
+    Py_DECREF(v_arr);
+    if (poa_basis != NULL) PyMem_Free(poa_basis);
+    if (obs_basis != NULL) PyMem_Free(obs_basis);
+    if (basis_real != NULL) PyMem_Free(basis_real);
+    if (vrt_basis_real != NULL) PyMem_Free(vrt_basis_real);
+    if (vrt_basis_imag != NULL) PyMem_Free(vrt_basis_imag);
+    if (div_basis_real != NULL) PyMem_Free(div_basis_real);
+    if (div_basis_imag != NULL) PyMem_Free(div_basis_imag);
+    if (u_basis_real != NULL) PyMem_Free(u_basis_real);
+    if (u_basis_imag != NULL) PyMem_Free(u_basis_imag);
+    if (v_basis_real != NULL) PyMem_Free(v_basis_real);
+    if (v_basis_imag != NULL) PyMem_Free(v_basis_imag);
+    return capsule;
+
+fail:
+    Py_XDECREF(u_arr);
+    Py_XDECREF(v_arr);
+    if (poa_basis != NULL) PyMem_Free(poa_basis);
+    if (obs_basis != NULL) PyMem_Free(obs_basis);
+    if (basis_real != NULL) PyMem_Free(basis_real);
+    if (vrt_basis_real != NULL) PyMem_Free(vrt_basis_real);
+    if (vrt_basis_imag != NULL) PyMem_Free(vrt_basis_imag);
+    if (div_basis_real != NULL) PyMem_Free(div_basis_real);
+    if (div_basis_imag != NULL) PyMem_Free(div_basis_imag);
+    if (u_basis_real != NULL) PyMem_Free(u_basis_real);
+    if (u_basis_imag != NULL) PyMem_Free(u_basis_imag);
+    if (v_basis_real != NULL) PyMem_Free(v_basis_real);
+    if (v_basis_imag != NULL) PyMem_Free(v_basis_imag);
+    if (setup != NULL) {
+        free_uv_to_vordiv_poa1_block_setup(setup);
+        PyMem_Free(setup);
+    }
+    Py_XDECREF(capsule);
+    return NULL;
+}
+
+static PyObject *backend_destroy_uv_to_vordiv_poa1_block_setup(PyObject *self, PyObject *args) {
+    PyObject *handle_obj = NULL;
+    UvToVordivPoa1BlockSetup *setup = NULL;
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "O", &handle_obj)) {
+        return NULL;
+    }
+    if (!get_uv_to_vordiv_poa1_block_setup_from_capsule(handle_obj, &setup)) {
+        return NULL;
+    }
+
+    free_uv_to_vordiv_poa1_block_setup(setup);
+    Py_RETURN_NONE;
+}
+
 static PyObject *backend_scalar_analysis(PyObject *self, PyObject *args) {
     PyObject *handle_obj = NULL;
     PyObject *grid_obj = NULL;
@@ -3126,6 +3426,298 @@ fail:
     if (solution_imag != NULL) PyMem_Free(solution_imag);
     if (reduced_solution_real != NULL) PyMem_Free(reduced_solution_real);
     if (reduced_solution_imag != NULL) PyMem_Free(reduced_solution_imag);
+    if (active_columns != NULL) PyMem_Free(active_columns);
+    Py_XDECREF(vrt_out_arr);
+    Py_XDECREF(div_out_arr);
+    return NULL;
+}
+
+static PyObject *backend_uv_to_vordiv_poa1_block_native_with_setup(PyObject *self, PyObject *args) {
+    PyObject *handle_obj = NULL;
+    PyObject *u_obj = NULL;
+    PyObject *v_obj = NULL;
+    UvToVordivPoa1BlockSetup *setup = NULL;
+    PyArrayObject *u_arr = NULL;
+    PyArrayObject *v_arr = NULL;
+    PyArrayObject *vrt_out_arr = NULL;
+    PyArrayObject *div_out_arr = NULL;
+    npy_intp *spec_dims = NULL;
+    npy_complex128 *u_data = NULL, *v_data = NULL;
+    npy_complex128 *vrt_out_data = NULL, *div_out_data = NULL;
+    int nt = 0, spec_rank = 0, ntrunc = -1, v_ntrunc = -1, ierror = 0;
+    size_t ncoeff = 0, max_nrow = 0, coeff_idx = 0;
+    double *weights = NULL;
+    double *reduced_basis_real = NULL, *reduced_basis_imag = NULL;
+    double *observed_real = NULL, *observed_imag = NULL;
+    double *reduced_solution_real = NULL, *reduced_solution_imag = NULL;
+    double *poa1_solution = NULL, *prfi_block = NULL;
+    double *u_col_real = NULL, *u_col_imag = NULL;
+    double *v_col_real = NULL, *v_col_imag = NULL;
+    double *vrt_accum_real = NULL, *vrt_accum_imag = NULL;
+    double *div_accum_real = NULL, *div_accum_imag = NULL;
+    double *vrt_block_real = NULL, *vrt_block_imag = NULL;
+    double *div_block_real = NULL, *div_block_imag = NULL;
+    int *active_columns = NULL;
+    int it = 0, m = 0;
+
+    (void) self;
+
+    if (!PyArg_ParseTuple(args, "OOO", &handle_obj, &u_obj, &v_obj)) {
+        return NULL;
+    }
+    if (!get_uv_to_vordiv_poa1_block_setup_from_capsule(handle_obj, &setup)) {
+        return NULL;
+    }
+
+    u_arr = require_array(u_obj, NPY_COMPLEX128);
+    v_arr = require_array(v_obj, NPY_COMPLEX128);
+    if (u_arr == NULL || v_arr == NULL) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(u_arr, INT_MAX, &ntrunc, &nt, &spec_rank, &spec_dims)) {
+        goto fail;
+    }
+    if (!flatten_spectral_array(v_arr, INT_MAX, &v_ntrunc, &nt, &spec_rank, &spec_dims)) {
+        goto fail;
+    }
+    if (PyArray_NDIM(u_arr) != PyArray_NDIM(v_arr)) {
+        PyErr_SetString(PyExc_ValueError, "uspec and vspec must have the same rank");
+        goto fail;
+    }
+    if (!PyArray_CompareLists(
+            PyArray_DIMS(u_arr), PyArray_DIMS(v_arr), PyArray_NDIM(u_arr))) {
+        PyErr_SetString(PyExc_ValueError, "uspec and vspec must have the same shape");
+        goto fail;
+    }
+    if (ntrunc != v_ntrunc || ntrunc != setup->ntrunc) {
+        PyErr_SetString(PyExc_ValueError, "uspec/vspec ntrunc must match the POA1 setup handle");
+        goto fail;
+    }
+
+    vrt_out_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_COMPLEX128, 0);
+    div_out_arr = (PyArrayObject *) PyArray_ZEROS(spec_rank, spec_dims, NPY_COMPLEX128, 0);
+    if (vrt_out_arr == NULL || div_out_arr == NULL) {
+        goto fail;
+    }
+
+    u_data = (npy_complex128 *) PyArray_DATA(u_arr);
+    v_data = (npy_complex128 *) PyArray_DATA(v_arr);
+    vrt_out_data = (npy_complex128 *) PyArray_DATA(vrt_out_arr);
+    div_out_data = (npy_complex128 *) PyArray_DATA(div_out_arr);
+    ncoeff = (size_t) PyArray_DIM(u_arr, 0);
+    max_nrow = (size_t) setup->nlei1 * 4U;
+
+    weights = (double *) PyMem_Malloc(max_nrow * sizeof(double));
+    reduced_basis_real = (double *) PyMem_Calloc(max_nrow * max_nrow, sizeof(double));
+    reduced_basis_imag = (double *) PyMem_Calloc(max_nrow * max_nrow, sizeof(double));
+    observed_real = (double *) PyMem_Calloc(max_nrow, sizeof(double));
+    observed_imag = (double *) PyMem_Calloc(max_nrow, sizeof(double));
+    reduced_solution_real = (double *) PyMem_Calloc(max_nrow, sizeof(double));
+    reduced_solution_imag = (double *) PyMem_Calloc(max_nrow, sizeof(double));
+    poa1_solution = (double *) PyMem_Calloc(max_nrow, sizeof(double));
+    prfi_block = (double *) PyMem_Calloc(max_nrow, sizeof(double));
+    u_col_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    u_col_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    v_col_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    v_col_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    vrt_accum_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    vrt_accum_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    div_accum_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    div_accum_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    vrt_block_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    vrt_block_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    div_block_real = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    div_block_imag = (double *) PyMem_Calloc(ncoeff, sizeof(double));
+    active_columns = (int *) PyMem_Malloc(max_nrow * sizeof(int));
+    if (
+        weights == NULL || reduced_basis_real == NULL || reduced_basis_imag == NULL ||
+        observed_real == NULL || observed_imag == NULL ||
+        reduced_solution_real == NULL || reduced_solution_imag == NULL ||
+        poa1_solution == NULL || prfi_block == NULL ||
+        u_col_real == NULL || u_col_imag == NULL ||
+        v_col_real == NULL || v_col_imag == NULL ||
+        vrt_accum_real == NULL || vrt_accum_imag == NULL ||
+        div_accum_real == NULL || div_accum_imag == NULL ||
+        vrt_block_real == NULL || vrt_block_imag == NULL ||
+        div_block_real == NULL || div_block_imag == NULL ||
+        active_columns == NULL
+    ) {
+        PyErr_NoMemory();
+        goto fail;
+    }
+
+    for (it = 0; it < nt; ++it) {
+        size_t coeff_idx = 0;
+        for (coeff_idx = 0; coeff_idx < ncoeff; ++coeff_idx) {
+            size_t idx = coeff_idx * (size_t) nt + (size_t) it;
+            u_col_real[coeff_idx] = creal(u_data[idx]);
+            u_col_imag[coeff_idx] = cimag(u_data[idx]);
+            v_col_real[coeff_idx] = creal(v_data[idx]);
+            v_col_imag[coeff_idx] = cimag(v_data[idx]);
+        }
+
+        memset(vrt_accum_real, 0, ncoeff * sizeof(double));
+        memset(vrt_accum_imag, 0, ncoeff * sizeof(double));
+        memset(div_accum_real, 0, ncoeff * sizeof(double));
+        memset(div_accum_imag, 0, ncoeff * sizeof(double));
+
+        for (m = 0; m <= ntrunc; ++m) {
+            int nrow = setup->nlei1 * 4;
+            int ncol = nrow;
+            int active_count = setup->active_counts[m];
+            size_t basis_offset = setup->basis_offsets[m];
+            size_t active_offset = setup->active_offsets[m];
+            int row = 0, active_idx = 0;
+
+            memset(reduced_basis_real, 0, (size_t) nrow * (size_t) nrow * sizeof(double));
+            memset(reduced_basis_imag, 0, (size_t) nrow * (size_t) nrow * sizeof(double));
+            memset(observed_real, 0, (size_t) nrow * sizeof(double));
+            memset(observed_imag, 0, (size_t) nrow * sizeof(double));
+            memset(reduced_solution_real, 0, (size_t) nrow * sizeof(double));
+            memset(reduced_solution_imag, 0, (size_t) nrow * sizeof(double));
+            memset(poa1_solution, 0, (size_t) nrow * sizeof(double));
+            memset(prfi_block, 0, (size_t) nrow * sizeof(double));
+            memset(vrt_block_real, 0, ncoeff * sizeof(double));
+            memset(vrt_block_imag, 0, ncoeff * sizeof(double));
+            memset(div_block_real, 0, ncoeff * sizeof(double));
+            memset(div_block_imag, 0, ncoeff * sizeof(double));
+
+            prfi1b_uv_block(
+                ntrunc, m, 1, setup->rsphere,
+                u_col_real, u_col_imag,
+                v_col_real, v_col_imag,
+                prfi_block,
+                &ierror
+            );
+            if (ierror != 0) {
+                PyErr_Format(
+                    PyExc_RuntimeError,
+                    "uv_to_vordiv_poa1_block_native_with_setup prfi1b failed (ierror=%d, m=%d)",
+                    ierror,
+                    m
+                );
+                goto fail;
+            }
+
+            for (row = 0; row < nrow; ++row) {
+                weights[row] = 1.0;
+                observed_real[row] = prfi_block[row] / setup->rsphere;
+            }
+            for (active_idx = 0; active_idx < active_count; ++active_idx) {
+                active_columns[active_idx] = setup->active_columns[active_offset + (size_t) active_idx];
+            }
+            for (row = 0; row < nrow; ++row) {
+                for (active_idx = 0; active_idx < active_count; ++active_idx) {
+                    int col = active_columns[active_idx];
+                    size_t source_idx = basis_offset + (size_t) row * (size_t) ncol + (size_t) col;
+                    size_t target_idx = (size_t) row * (size_t) active_count + (size_t) active_idx;
+                    reduced_basis_real[target_idx] = setup->basis_real[source_idx];
+                }
+            }
+
+            if (active_count > 0) {
+                weighted_block_solve_stub(
+                    nrow, active_count, 1, weights,
+                    reduced_basis_real, reduced_basis_imag,
+                    observed_real, observed_imag,
+                    reduced_solution_real, reduced_solution_imag,
+                    &ierror
+                );
+                if (ierror != 0) {
+                    PyErr_Format(
+                        PyExc_RuntimeError,
+                        "uv_to_vordiv_poa1_block_native_with_setup solve failed (ierror=%d, m=%d)",
+                        ierror,
+                        m
+                    );
+                    goto fail;
+                }
+                for (active_idx = 0; active_idx < active_count; ++active_idx) {
+                    poa1_solution[active_columns[active_idx]] = reduced_solution_real[active_idx];
+                }
+            }
+
+            poa1_to_vordiv(
+                ntrunc, m, 1, setup->rsphere, poa1_solution,
+                vrt_block_real, vrt_block_imag,
+                div_block_real, div_block_imag,
+                &ierror
+            );
+            if (ierror != 0) {
+                PyErr_Format(
+                    PyExc_RuntimeError,
+                    "uv_to_vordiv_poa1_block_native_with_setup poa1_to_vordiv failed (ierror=%d, m=%d)",
+                    ierror,
+                    m
+                );
+                goto fail;
+            }
+
+            for (coeff_idx = 0; coeff_idx < ncoeff; ++coeff_idx) {
+                vrt_accum_real[coeff_idx] += vrt_block_real[coeff_idx];
+                vrt_accum_imag[coeff_idx] += vrt_block_imag[coeff_idx];
+                div_accum_real[coeff_idx] += div_block_real[coeff_idx];
+                div_accum_imag[coeff_idx] += div_block_imag[coeff_idx];
+            }
+        }
+
+        for (coeff_idx = 0; coeff_idx < ncoeff; ++coeff_idx) {
+            size_t idx = coeff_idx * (size_t) nt + (size_t) it;
+            vrt_out_data[idx] = vrt_accum_real[coeff_idx] + vrt_accum_imag[coeff_idx] * I;
+            div_out_data[idx] = div_accum_real[coeff_idx] + div_accum_imag[coeff_idx] * I;
+        }
+    }
+
+    Py_DECREF(u_arr);
+    Py_DECREF(v_arr);
+    if (weights != NULL) PyMem_Free(weights);
+    if (reduced_basis_real != NULL) PyMem_Free(reduced_basis_real);
+    if (reduced_basis_imag != NULL) PyMem_Free(reduced_basis_imag);
+    if (observed_real != NULL) PyMem_Free(observed_real);
+    if (observed_imag != NULL) PyMem_Free(observed_imag);
+    if (reduced_solution_real != NULL) PyMem_Free(reduced_solution_real);
+    if (reduced_solution_imag != NULL) PyMem_Free(reduced_solution_imag);
+    if (poa1_solution != NULL) PyMem_Free(poa1_solution);
+    if (prfi_block != NULL) PyMem_Free(prfi_block);
+    if (u_col_real != NULL) PyMem_Free(u_col_real);
+    if (u_col_imag != NULL) PyMem_Free(u_col_imag);
+    if (v_col_real != NULL) PyMem_Free(v_col_real);
+    if (v_col_imag != NULL) PyMem_Free(v_col_imag);
+    if (vrt_accum_real != NULL) PyMem_Free(vrt_accum_real);
+    if (vrt_accum_imag != NULL) PyMem_Free(vrt_accum_imag);
+    if (div_accum_real != NULL) PyMem_Free(div_accum_real);
+    if (div_accum_imag != NULL) PyMem_Free(div_accum_imag);
+    if (vrt_block_real != NULL) PyMem_Free(vrt_block_real);
+    if (vrt_block_imag != NULL) PyMem_Free(vrt_block_imag);
+    if (div_block_real != NULL) PyMem_Free(div_block_real);
+    if (div_block_imag != NULL) PyMem_Free(div_block_imag);
+    if (active_columns != NULL) PyMem_Free(active_columns);
+    return Py_BuildValue("(NNi)", vrt_out_arr, div_out_arr, 0);
+
+fail:
+    Py_XDECREF(u_arr);
+    Py_XDECREF(v_arr);
+    if (weights != NULL) PyMem_Free(weights);
+    if (reduced_basis_real != NULL) PyMem_Free(reduced_basis_real);
+    if (reduced_basis_imag != NULL) PyMem_Free(reduced_basis_imag);
+    if (observed_real != NULL) PyMem_Free(observed_real);
+    if (observed_imag != NULL) PyMem_Free(observed_imag);
+    if (reduced_solution_real != NULL) PyMem_Free(reduced_solution_real);
+    if (reduced_solution_imag != NULL) PyMem_Free(reduced_solution_imag);
+    if (poa1_solution != NULL) PyMem_Free(poa1_solution);
+    if (prfi_block != NULL) PyMem_Free(prfi_block);
+    if (u_col_real != NULL) PyMem_Free(u_col_real);
+    if (u_col_imag != NULL) PyMem_Free(u_col_imag);
+    if (v_col_real != NULL) PyMem_Free(v_col_real);
+    if (v_col_imag != NULL) PyMem_Free(v_col_imag);
+    if (vrt_accum_real != NULL) PyMem_Free(vrt_accum_real);
+    if (vrt_accum_imag != NULL) PyMem_Free(vrt_accum_imag);
+    if (div_accum_real != NULL) PyMem_Free(div_accum_real);
+    if (div_accum_imag != NULL) PyMem_Free(div_accum_imag);
+    if (vrt_block_real != NULL) PyMem_Free(vrt_block_real);
+    if (vrt_block_imag != NULL) PyMem_Free(vrt_block_imag);
+    if (div_block_real != NULL) PyMem_Free(div_block_real);
+    if (div_block_imag != NULL) PyMem_Free(div_block_imag);
     if (active_columns != NULL) PyMem_Free(active_columns);
     Py_XDECREF(vrt_out_arr);
     Py_XDECREF(div_out_arr);
