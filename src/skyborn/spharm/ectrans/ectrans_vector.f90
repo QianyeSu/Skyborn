@@ -20,12 +20,12 @@ module vector_backend
   real(c_double), allocatable, save :: vector_cache_v_basis_imag(:)
 
   interface
-    subroutine vhgsi1(nlat, imid, vb, wb, dthet, dwts, dpbar, work)
-      integer, intent(in) :: nlat, imid
-      real, intent(out) :: vb(imid, *)
-      real, intent(out) :: wb(imid, *)
-      double precision, intent(inout) :: dthet(*), dwts(*), dpbar(imid, nlat, 3), work(*)
-    end subroutine vhgsi1
+    subroutine gaqd(nlat, theta, wts, dwork, ldwork, ierror)
+      integer, intent(in) :: nlat, ldwork
+      double precision, intent(out) :: theta(nlat), wts(nlat)
+      double precision, intent(inout) :: dwork(ldwork)
+      integer, intent(out) :: ierror
+    end subroutine gaqd
 
     subroutine hrffti(n, wsave)
       integer, intent(in) :: n
@@ -334,7 +334,7 @@ contains
     allocate(br(ndgl, ndgl, nt), bi(ndgl, ndgl, nt), cr(ndgl, ndgl, nt), ci(ndgl, ndgl, nt))
     allocate(ve(imid, 2 * mmax, nt), vo(imid, 2 * mmax, nt), we(imid, 2 * mmax, nt), wo(imid, 2 * mmax, nt))
 
-    call vhgsi1(ndgl, imid, vb, wb, dtheta, dwts, dpbar, dwork)
+    call vhgsi1_local(ndgl, imid, vb, wb, dtheta, dwts, dpbar, dwork)
 
     br = 0.0
     bi = 0.0
@@ -478,6 +478,270 @@ contains
       end do
     end do
   end subroutine apply_lap_to_scalar_spec
+
+  subroutine vhgsi1_local(nlat, imid, vb, wb, dthet, dwts, dpbar, work)
+    integer(c_int), intent(in) :: nlat, imid
+    real, intent(out) :: vb(imid, *), wb(imid, *)
+    double precision, intent(inout) :: dthet(*), dwts(*), dpbar(imid, nlat, 3), work(*)
+
+    integer(c_int) :: lwk, ierror, i, n, nm, nz, np, m, ix, iy
+    real(c_double) :: abel, bbel, cbel, ssqr2, dcf
+
+    lwk = nlat * (nlat + 2_c_int)
+    call gaqd(nlat, dthet, dwts, dpbar, lwk, ierror)
+
+    ssqr2 = 1.0_c_double / sqrt(2.0_c_double)
+    do i = 1_c_int, imid
+      dpbar(i, 1, 1) = ssqr2
+    end do
+    vb(:, 1) = 0.0
+    wb(:, 1) = 0.0
+
+    do n = 1_c_int, nlat - 1_c_int
+      nm = mod(n - 2_c_int, 3_c_int) + 1_c_int
+      nz = mod(n - 1_c_int, 3_c_int) + 1_c_int
+      np = mod(n, 3_c_int) + 1_c_int
+
+      call dnlfk_local(0_c_int, n, work)
+      do i = 1_c_int, imid
+        call dnlft_local(0_c_int, n, dthet(i), work, dpbar(i, 1, np))
+      end do
+
+      call dnlfk_local(1_c_int, n, work)
+      do i = 1_c_int, imid
+        call dnlft_local(1_c_int, n, dthet(i), work, dpbar(i, 2, np))
+      end do
+
+      if (n >= 2_c_int) then
+        do m = 2_c_int, n
+          abel = sqrt( &
+            real((2_c_int * n + 1_c_int) * (m + n - 2_c_int) * (m + n - 3_c_int), c_double) / &
+            real((2_c_int * n - 3_c_int) * (m + n - 1_c_int) * (m + n), c_double))
+          bbel = sqrt( &
+            real((2_c_int * n + 1_c_int) * (n - m - 1_c_int) * (n - m), c_double) / &
+            real((2_c_int * n - 3_c_int) * (m + n - 1_c_int) * (m + n), c_double))
+          cbel = sqrt( &
+            real((n - m + 1_c_int) * (n - m + 2_c_int), c_double) / &
+            real((m + n - 1_c_int) * (m + n), c_double))
+
+          if (m < n - 1_c_int) then
+            do i = 1_c_int, imid
+              dpbar(i, m + 1_c_int, np) = &
+                abel * dpbar(i, m - 1_c_int, nm) + &
+                bbel * dpbar(i, m + 1_c_int, nm) - &
+                cbel * dpbar(i, m - 1_c_int, np)
+            end do
+          else
+            do i = 1_c_int, imid
+              dpbar(i, m + 1_c_int, np) = &
+                abel * dpbar(i, m - 1_c_int, nm) - &
+                cbel * dpbar(i, m - 1_c_int, np)
+            end do
+          end if
+        end do
+      end if
+
+      ix = vector_indx_local(nlat, 0_c_int, n)
+      iy = vector_indx_local(nlat, n, n)
+      do i = 1_c_int, imid
+        vb(i, ix) = -real(dpbar(i, 2, np), kind(vb))
+        vb(i, iy) = real(dpbar(i, n, np) / sqrt(real(2_c_int * (n + 1_c_int), c_double)), kind(vb))
+      end do
+
+      if (n >= 2_c_int) then
+        dcf = sqrt(real(4_c_int * n * (n + 1_c_int), c_double))
+        do m = 1_c_int, n - 1_c_int
+          ix = vector_indx_local(nlat, m, n)
+          abel = sqrt(real((n + m) * (n - m + 1_c_int), c_double)) / dcf
+          bbel = sqrt(real((n - m) * (n + m + 1_c_int), c_double)) / dcf
+          do i = 1_c_int, imid
+            vb(i, ix) = real(abel * dpbar(i, m, np) - bbel * dpbar(i, m + 2_c_int, np), kind(vb))
+          end do
+        end do
+      end if
+
+      ix = vector_indx_local(nlat, 0_c_int, n)
+      do i = 1_c_int, imid
+        wb(i, ix) = 0.0
+      end do
+
+      dcf = sqrt(real(2_c_int * n + 1_c_int, c_double) / real(4_c_int * n * (n + 1_c_int) * (2_c_int * n - 1_c_int), c_double))
+      do m = 1_c_int, n
+        ix = vector_indx_local(nlat, m, n)
+        abel = dcf * sqrt(real((n + m) * (n + m - 1_c_int), c_double))
+        bbel = dcf * sqrt(real((n - m) * (n - m - 1_c_int), c_double))
+        if (m < n - 1_c_int) then
+          do i = 1_c_int, imid
+            wb(i, ix) = real(abel * dpbar(i, m, nz) + bbel * dpbar(i, m + 2_c_int, nz), kind(wb))
+          end do
+        else
+          do i = 1_c_int, imid
+            wb(i, ix) = real(abel * dpbar(i, m, nz), kind(wb))
+          end do
+        end if
+      end do
+    end do
+  end subroutine vhgsi1_local
+
+  integer(c_int) function vector_indx_local(nlat, m, n) result(indx)
+    integer(c_int), intent(in) :: nlat, m, n
+    indx = m * nlat - (m * (m + 1_c_int)) / 2_c_int + n + 1_c_int
+  end function vector_indx_local
+
+  subroutine dnlfk_local(m, n, cp)
+    integer(c_int), intent(in) :: m, n
+    double precision, intent(out) :: cp(*)
+
+    integer(c_int) :: ma, nmms2, l, nex, i
+    real(c_double) :: fnum, fden, fnmh, a1, b1, c1, cp2, fnnp1, fnmsq, fk
+    real(c_double) :: t1, t2, pm1
+    real(c_double), parameter :: sc10 = 1024.0_c_double
+    real(c_double), parameter :: sc20 = sc10 * sc10
+    real(c_double), parameter :: sc40 = sc20 * sc20
+
+    cp(1) = 0.0d0
+    ma = abs(m)
+    if (ma > n) return
+
+    select case (n)
+    case (: -1_c_int)
+      return
+    case (0_c_int)
+      cp(1) = sqrt(2.0d0)
+      return
+    case (1_c_int)
+      if (ma == 0_c_int) then
+        cp(1) = sqrt(1.5d0)
+      else
+        cp(1) = sqrt(0.75d0)
+        if (m == -1_c_int) cp(1) = -cp(1)
+      end if
+      return
+    end select
+
+    if (mod(n + ma, 2_c_int) == 0_c_int) then
+      nmms2 = (n - ma) / 2_c_int
+      fnum = real(n + ma + 1_c_int, c_double)
+      fnmh = real(n - ma + 1_c_int, c_double)
+      pm1 = 1.0_c_double
+    else
+      nmms2 = (n - ma - 1_c_int) / 2_c_int
+      fnum = real(n + ma + 2_c_int, c_double)
+      fnmh = real(n - ma + 2_c_int, c_double)
+      pm1 = -1.0_c_double
+    end if
+
+    t1 = 1.0_c_double / sc20
+    nex = 20_c_int
+    fden = 2.0_c_double
+    if (nmms2 >= 1_c_int) then
+      do i = 1_c_int, nmms2
+        t1 = fnum * t1 / fden
+        if (t1 > sc20) then
+          t1 = t1 / sc40
+          nex = nex + 40_c_int
+        end if
+        fnum = fnum + 2.0_c_double
+        fden = fden + 2.0_c_double
+      end do
+    end if
+
+    t1 = t1 / (2.0_c_double ** real(n - 1_c_int - nex, c_double))
+    if (mod(ma / 2_c_int, 2_c_int) /= 0_c_int) t1 = -t1
+
+    t2 = 1.0_c_double
+    if (ma > 0_c_int) then
+      do i = 1_c_int, ma
+        t2 = fnmh * t2 / (fnmh + pm1)
+        fnmh = fnmh + 2.0_c_double
+      end do
+    end if
+
+    cp2 = t1 * sqrt((real(n, c_double) + 0.5_c_double) * t2)
+    fnnp1 = real(n * (n + 1_c_int), c_double)
+    fnmsq = fnnp1 - 2.0_c_double * real(ma * ma, c_double)
+    l = (n + 1_c_int) / 2_c_int
+    if (mod(n, 2_c_int) == 0_c_int .and. mod(ma, 2_c_int) == 0_c_int) l = l + 1_c_int
+    cp(l) = cp2
+
+    if (m < 0_c_int) then
+      if (mod(ma, 2_c_int) /= 0_c_int) cp(l) = -cp(l)
+    end if
+    if (l <= 1_c_int) return
+
+    fk = real(n, c_double)
+    a1 = (fk - 2.0_c_double) * (fk - 1.0_c_double) - fnnp1
+    b1 = 2.0_c_double * (fk * fk - fnmsq)
+    cp(l - 1_c_int) = b1 * cp(l) / a1
+
+    do l = l - 1_c_int, 2_c_int, -1_c_int
+      fk = fk - 2.0_c_double
+      a1 = (fk - 2.0_c_double) * (fk - 1.0_c_double) - fnnp1
+      b1 = -2.0_c_double * (fk * fk - fnmsq)
+      c1 = (fk + 1.0_c_double) * (fk + 2.0_c_double) - fnnp1
+      cp(l - 1_c_int) = -(b1 * cp(l) + c1 * cp(l + 1_c_int)) / a1
+    end do
+  end subroutine dnlfk_local
+
+  subroutine dnlft_local(m, n, theta, cp, pb)
+    integer(c_int), intent(in) :: m, n
+    double precision, intent(in) :: theta
+    double precision, intent(in) :: cp(*)
+    double precision, intent(out) :: pb
+
+    integer(c_int) :: kdo, k
+    real(c_double) :: cdt, sdt, cth, sth, chh
+
+    cdt = cos(theta + theta)
+    sdt = sin(theta + theta)
+
+    if (mod(n, 2_c_int) == 0_c_int) then
+      kdo = n / 2_c_int
+      if (mod(m, 2_c_int) == 0_c_int) then
+        pb = 0.5d0 * cp(1)
+        if (n == 0_c_int) return
+        cth = cdt
+        sth = sdt
+        do k = 1_c_int, kdo
+          pb = pb + cp(k + 1_c_int) * cth
+          chh = cdt * cth - sdt * sth
+          sth = sdt * cth + cdt * sth
+          cth = chh
+        end do
+      else
+        pb = 0.0d0
+        if (kdo == 0_c_int) return
+        cth = cdt
+        sth = sdt
+        do k = 1_c_int, kdo
+          pb = pb + cp(k) * sth
+          chh = cdt * cth - sdt * sth
+          sth = sdt * cth + cdt * sth
+          cth = chh
+        end do
+      end if
+    else
+      kdo = (n + 1_c_int) / 2_c_int
+      cth = cos(theta)
+      sth = sin(theta)
+      pb = 0.0d0
+      if (mod(m, 2_c_int) == 0_c_int) then
+        do k = 1_c_int, kdo
+          pb = pb + cp(k) * cth
+          chh = cdt * cth - sdt * sth
+          sth = sdt * cth + cdt * sth
+          cth = chh
+        end do
+      else
+        do k = 1_c_int, kdo
+          pb = pb + cp(k) * sth
+          chh = cdt * cth - sdt * sth
+          sth = sdt * cth + cdt * sth
+          cth = chh
+        end do
+      end if
+    end if
+  end subroutine dnlft_local
 
   subroutine unpack_vrtdiv_to_vector_harmonics( &
     ndgl, ntrunc, nt, rsphere, vrtspec_r, vrtspec_i, divspec_r, divspec_i, br, bi, cr, ci)
