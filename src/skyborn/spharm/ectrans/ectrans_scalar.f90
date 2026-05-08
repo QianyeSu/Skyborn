@@ -24,15 +24,6 @@ module scalar_backend
       real, intent(in) :: lat
       real, intent(out) :: legfunc((ntrunc + 1) * (ntrunc + 2) / 2)
     end subroutine getlegfunc
-
-    subroutine specintrp(rlon, ntrunc, datnm, scrm, pnm, ob)
-      integer, intent(in) :: ntrunc
-      real, intent(in) :: rlon
-      complex, intent(in) :: datnm((ntrunc + 1) * (ntrunc + 2) / 2)
-      complex, intent(out) :: scrm(ntrunc + 1)
-      real, intent(in) :: pnm((ntrunc + 1) * (ntrunc + 2) / 2)
-      real, intent(out) :: ob
-    end subroutine specintrp
   end interface
 
 contains
@@ -373,13 +364,12 @@ contains
     real(c_double), intent(out) :: datagrid(ngptot * nt)
     integer(c_int), intent(out) :: ierror
 
-    integer(c_int) :: ilat, ilon, it, nm, ncoeff
-    integer(c_int) :: nlon_lat, offset
-    real(c_double) :: lat_deg, lon_rad, lon_step
-    real :: ob_single
-    real, allocatable :: legfunc(:)
-    complex, allocatable :: dataspec_single(:)
-    complex, allocatable :: scrm(:)
+    integer(c_int) :: ilat, ilon, it, m, nblock, coeff_index, ncoeff
+    integer(c_int) :: nlon_lat, offset, start_idx, icol
+    real(c_double) :: lon_rad, lon_step, basis_val, value
+    real(c_double) :: cos_angle, sin_angle, two_pi
+    real(c_double), allocatable :: fourier_real(:), fourier_imag(:)
+    integer(c_int) :: ierr_local
 
     if (ndgl < 3_c_int .or. ngptot < 1_c_int .or. nt < 1_c_int) then
       datagrid = 0.0_c_double
@@ -388,38 +378,65 @@ contains
     end if
 
     ncoeff = (ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int
-    allocate(legfunc(ncoeff))
-    allocate(dataspec_single(ncoeff))
-    allocate(scrm(ntrunc + 1_c_int))
+    two_pi = 2.0_c_double * acos(-1.0_c_double)
+
+    call ensure_scalar_basis_cache(ndgl, nloen, mu, ngptot, ntrunc, ierr_local)
+    if (ierr_local /= 0_c_int) then
+      datagrid = 0.0_c_double
+      ierror = ierr_local
+      return
+    end if
+
+    allocate(fourier_real(ndgl * (ntrunc + 1_c_int) * nt))
+    allocate(fourier_imag(ndgl * (ntrunc + 1_c_int) * nt))
 
     datagrid = 0.0_c_double
+    fourier_real = 0.0_c_double
+    fourier_imag = 0.0_c_double
+
+    start_idx = 1_c_int
+    do m = 0_c_int, ntrunc
+      nblock = ntrunc - m + 1_c_int
+      do ilat = 1_c_int, ndgl
+        do icol = 1_c_int, nblock
+          coeff_index = start_idx + icol - 1_c_int
+          basis_val = cache_basis_real((ilat - 1_c_int) * ncoeff + coeff_index)
+          do it = 1_c_int, nt
+            fourier_real(((ilat - 1_c_int) * (ntrunc + 1_c_int) + m) * nt + it) = &
+              fourier_real(((ilat - 1_c_int) * (ntrunc + 1_c_int) + m) * nt + it) + &
+              basis_val * dataspec_packed((2_c_int * coeff_index - 2_c_int) * nt + it)
+            fourier_imag(((ilat - 1_c_int) * (ntrunc + 1_c_int) + m) * nt + it) = &
+              fourier_imag(((ilat - 1_c_int) * (ntrunc + 1_c_int) + m) * nt + it) + &
+              basis_val * dataspec_packed((2_c_int * coeff_index - 1_c_int) * nt + it)
+          end do
+        end do
+      end do
+      start_idx = start_idx + nblock
+    end do
 
     do it = 1_c_int, nt
-      do nm = 1_c_int, ncoeff
-        dataspec_single(nm) = cmplx( &
-          real(dataspec_packed((2_c_int * nm - 2_c_int) * nt + it), kind=kind(1.0)), &
-          real(dataspec_packed((2_c_int * nm - 1_c_int) * nt + it), kind=kind(1.0)), &
-          kind=kind((1.0, 0.0)) &
-        )
-      end do
-
       offset = 0_c_int
       do ilat = 1_c_int, ndgl
-        lat_deg = mu_to_lat(mu(ilat))
-        call getlegfunc(legfunc, real(lat_deg, kind=kind(1.0)), ntrunc)
-
         nlon_lat = nloen(ilat)
-        lon_step = 2.0_c_double * acos(-1.0_c_double) / real(nlon_lat, c_double)
-        do ilon = 1_c_int, nlon_lat
-          lon_rad = real(ilon - 1_c_int, c_double) * lon_step
-          call specintrp(real(lon_rad, kind=kind(1.0)), ntrunc, dataspec_single, scrm, legfunc, ob_single)
-          datagrid((offset + ilon - 1_c_int) * nt + it) = real(ob_single, c_double)
+        lon_step = two_pi / real(nlon_lat, c_double)
+        do ilon = 0_c_int, nlon_lat - 1_c_int
+          lon_rad = real(ilon, c_double) * lon_step
+          value = fourier_real(((ilat - 1_c_int) * (ntrunc + 1_c_int)) * nt + it)
+          do m = 1_c_int, ntrunc
+            cos_angle = cos(real(m, c_double) * lon_rad)
+            sin_angle = sin(real(m, c_double) * lon_rad)
+            value = value + 2.0_c_double * ( &
+              fourier_real(((ilat - 1_c_int) * (ntrunc + 1_c_int) + m) * nt + it) * cos_angle - &
+              fourier_imag(((ilat - 1_c_int) * (ntrunc + 1_c_int) + m) * nt + it) * sin_angle &
+            )
+          end do
+          datagrid((offset + ilon) * nt + it) = value
         end do
         offset = offset + nlon_lat
       end do
     end do
 
-    deallocate(legfunc, dataspec_single, scrm)
+    deallocate(fourier_real, fourier_imag)
     ierror = 0_c_int
   end subroutine scalar_synthesis_stub
 
