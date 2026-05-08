@@ -67,7 +67,6 @@ ectrans_ext = py.extension_module(
     '../src/gaqd.f90',
     '../src/getlegfunc.f90',
     '../src/hrfft.f90',
-    '../src/specintrp.f90',
     '../src/sphcom.f90',
     '../src/vhsgs.f90',
   ],
