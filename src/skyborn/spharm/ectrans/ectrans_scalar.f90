@@ -18,14 +18,6 @@ module scalar_backend
   real(c_double), allocatable, save :: cache_basis_real(:)
   real(c_double), allocatable, save :: cache_basis_imag(:)
 
-  interface
-    subroutine getlegfunc(legfunc, lat, ntrunc)
-      integer, intent(in) :: ntrunc
-      real, intent(in) :: lat
-      real, intent(out) :: legfunc((ntrunc + 1) * (ntrunc + 2) / 2)
-    end subroutine getlegfunc
-  end interface
-
 contains
 
   subroutine scalar_block_solve_stub( &
@@ -445,6 +437,222 @@ contains
     lat_deg = asin(max(-1.0_c_double, min(1.0_c_double, mu))) * 180.0_c_double / acos(-1.0_c_double)
   end function mu_to_lat
 
+  subroutine build_legfunc_triangle(legfunc, lat_deg, ntrunc)
+    integer(c_int), intent(in) :: ntrunc
+    real(c_double), intent(in) :: lat_deg
+    real(c_double), intent(out) :: legfunc((ntrunc + 1_c_int) * (ntrunc + 2_c_int) / 2_c_int)
+
+    integer(c_int) :: m, n, nm, nmstrt
+    real(c_double) :: theta, pi
+    real(c_double), allocatable :: cp(:)
+
+    pi = 4.0_c_double * atan(1.0_c_double)
+    theta = 0.5_c_double * pi - (pi / 180.0_c_double) * lat_deg
+
+    legfunc = 0.0_c_double
+    nmstrt = 0_c_int
+    allocate(cp((ntrunc / 2_c_int) + 1_c_int))
+
+    do m = 1_c_int, ntrunc + 1_c_int
+      do n = m, ntrunc + 1_c_int
+        nm = nmstrt + n - m + 1_c_int
+        call alfk_local(n - 1_c_int, m - 1_c_int, cp)
+        call lfpt_local(n - 1_c_int, m - 1_c_int, theta, cp, legfunc(nm))
+      end do
+      nmstrt = nmstrt + ntrunc - m + 2_c_int
+    end do
+
+    deallocate(cp)
+  end subroutine build_legfunc_triangle
+
+  subroutine alfk_local(n, m, cp)
+    integer(c_int), intent(in) :: n, m
+    real(c_double), intent(out) :: cp(n / 2_c_int + 1_c_int)
+
+    integer(c_int) :: ma, nmms2, i, l
+    real(c_double) :: fnum, fnmh, pm1, t1, t2, fden, nex
+    real(c_double) :: cp2, fnnp1, fnmsq, fk, a1, b1, c1
+    real(c_double), parameter :: sc10 = 1024.0_c_double
+    real(c_double), parameter :: sc20 = sc10 * sc10
+    real(c_double), parameter :: sc40 = sc20 * sc20
+
+    cp(1) = 0.0_c_double
+    ma = abs(m)
+    if (ma > n) then
+      return
+    end if
+
+    select case (n)
+    case (0_c_int)
+      cp(1) = sqrt(2.0_c_double)
+      return
+    case (1_c_int)
+      if (ma == 0_c_int) then
+        cp(1) = sqrt(1.5_c_double)
+      else
+        cp(1) = sqrt(0.75_c_double)
+        if (m == -1_c_int) then
+          cp(1) = -cp(1)
+        end if
+      end if
+      return
+    end select
+
+    if (mod(n + ma, 2_c_int) == 0_c_int) then
+      nmms2 = (n - ma) / 2_c_int
+      fnum = real(n + ma + 1_c_int, c_double)
+      fnmh = real(n - ma + 1_c_int, c_double)
+      pm1 = 1.0_c_double
+    else
+      nmms2 = (n - ma - 1_c_int) / 2_c_int
+      fnum = real(n + ma + 2_c_int, c_double)
+      fnmh = real(n - ma + 2_c_int, c_double)
+      pm1 = -1.0_c_double
+    end if
+
+    t1 = 1.0_c_double / sc20
+    nex = 20.0_c_double
+    fden = 2.0_c_double
+
+    if (nmms2 >= 1_c_int) then
+      do i = 1_c_int, nmms2
+        t1 = fnum * t1 / fden
+        if (t1 > sc20) then
+          t1 = t1 / sc40
+          nex = nex + 40.0_c_double
+        end if
+        fnum = fnum + 2.0_c_double
+        fden = fden + 2.0_c_double
+      end do
+    end if
+
+    t1 = t1 / (2.0_c_double ** real(n - 1_c_int - int(nex, c_int), c_double))
+    if (mod(ma / 2_c_int, 2_c_int) /= 0_c_int) then
+      t1 = -t1
+    end if
+
+    t2 = 1.0_c_double
+    if (ma > 0_c_int) then
+      do i = 1_c_int, ma
+        t2 = fnmh * t2 / (fnmh + pm1)
+        fnmh = fnmh + 2.0_c_double
+      end do
+    end if
+
+    cp2 = t1 * sqrt((real(n, c_double) + 0.5_c_double) * t2)
+    fnnp1 = real(n * (n + 1_c_int), c_double)
+    fnmsq = fnnp1 - 2.0_c_double * real(ma * ma, c_double)
+    l = (n + 1_c_int) / 2_c_int
+    if (mod(n, 2_c_int) == 0_c_int .and. mod(ma, 2_c_int) == 0_c_int) then
+      l = l + 1_c_int
+    end if
+    cp(l) = cp2
+
+    if (m < 0_c_int .and. mod(ma, 2_c_int) /= 0_c_int) then
+      cp(l) = -cp(l)
+    end if
+
+    if (l <= 1_c_int) then
+      return
+    end if
+
+    fk = real(n, c_double)
+    a1 = (fk - 2.0_c_double) * (fk - 1.0_c_double) - fnnp1
+    b1 = 2.0_c_double * (fk * fk - fnmsq)
+    cp(l - 1_c_int) = b1 * cp(l) / a1
+
+    do while (l > 2_c_int)
+      l = l - 1_c_int
+      fk = fk - 2.0_c_double
+      a1 = (fk - 2.0_c_double) * (fk - 1.0_c_double) - fnnp1
+      b1 = -2.0_c_double * (fk * fk - fnmsq)
+      c1 = (fk + 1.0_c_double) * (fk + 2.0_c_double) - fnnp1
+      cp(l - 1_c_int) = -(b1 * cp(l) + c1 * cp(l + 1_c_int)) / a1
+    end do
+  end subroutine alfk_local
+
+  subroutine lfpt_local(n, m, theta, cp, pb)
+    integer(c_int), intent(in) :: n, m
+    real(c_double), intent(in) :: theta
+    real(c_double), intent(in) :: cp(*)
+    real(c_double), intent(out) :: pb
+
+    integer(c_int) :: ma, np1, nmod, mmod, kdo, k
+    real(c_double) :: cdt, sdt, ct, st, sum, cth
+
+    pb = 0.0_c_double
+    ma = abs(m)
+    if (ma > n) then
+      return
+    end if
+
+    if (n <= 0_c_int) then
+      if (ma <= 0_c_int) then
+        pb = sqrt(0.5_c_double)
+      end if
+      return
+    end if
+
+    np1 = n + 1_c_int
+    nmod = mod(n, 2_c_int)
+    mmod = mod(ma, 2_c_int)
+
+    if (nmod == 0_c_int) then
+      if (mmod == 0_c_int) then
+        kdo = n / 2_c_int + 1_c_int
+        cdt = cos(theta + theta)
+        sdt = sin(theta + theta)
+        ct = 1.0_c_double
+        st = 0.0_c_double
+        sum = 0.5_c_double * cp(1)
+        do k = 2_c_int, kdo
+          cth = cdt * ct - sdt * st
+          st = sdt * ct + cdt * st
+          ct = cth
+          sum = sum + cp(k) * ct
+        end do
+        pb = sum
+      else
+        kdo = n / 2_c_int
+        cdt = cos(theta + theta)
+        sdt = sin(theta + theta)
+        ct = 1.0_c_double
+        st = 0.0_c_double
+        sum = 0.0_c_double
+        do k = 1_c_int, kdo
+          cth = cdt * ct - sdt * st
+          st = sdt * ct + cdt * st
+          ct = cth
+          sum = sum + cp(k) * st
+        end do
+        pb = sum
+      end if
+    else
+      kdo = (n + 1_c_int) / 2_c_int
+      cdt = cos(theta + theta)
+      sdt = sin(theta + theta)
+      ct = cos(theta)
+      st = -sin(theta)
+      sum = 0.0_c_double
+      if (mmod == 0_c_int) then
+        do k = 1_c_int, kdo
+          cth = cdt * ct - sdt * st
+          st = sdt * ct + cdt * st
+          ct = cth
+          sum = sum + cp(k) * ct
+        end do
+      else
+        do k = 1_c_int, kdo
+          cth = cdt * ct - sdt * st
+          st = sdt * ct + cdt * st
+          ct = cth
+          sum = sum + cp(k) * st
+        end do
+      end if
+      pb = sum
+    end if
+  end subroutine lfpt_local
+
   subroutine solve_complex_system(matrix, rhs, nsize, nrhs, info)
     integer(c_int), intent(in) :: nsize, nrhs
     complex(c_double_complex), intent(inout) :: matrix(nsize, nsize)
@@ -566,7 +774,7 @@ contains
     integer(c_int) :: ncoeff, m, nblock, start_idx
     integer(c_int) :: icol, ilat, coeff_index
     real(c_double) :: lat_deg
-    real, allocatable :: legfunc_all(:,:)
+    real(c_double), allocatable :: legfunc_all(:,:)
 
     if (scalar_basis_cache_matches(ndgl, nloen, mu, ngptot, ntrunc)) then
       ierror = 0_c_int
@@ -589,7 +797,7 @@ contains
     allocate(legfunc_all(ncoeff, ndgl))
     do ilat = 1_c_int, ndgl
       lat_deg = mu_to_lat(mu(ilat))
-      call getlegfunc(legfunc_all(:, ilat), real(lat_deg, kind=kind(1.0)), ntrunc)
+      call build_legfunc_triangle(legfunc_all(:, ilat), lat_deg, ntrunc)
     end do
 
     start_idx = 1_c_int
