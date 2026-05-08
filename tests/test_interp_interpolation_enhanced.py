@@ -27,6 +27,7 @@ from skyborn.interp.interpolation import (
     interp_multidim,
     interp_pressure_1d,
     interp_sigma_to_hybrid,
+    interp_to_isentropic,
     pressure_at_hybrid_levels,
 )
 
@@ -3586,6 +3587,163 @@ class TestInterpolationHelperCoverage:
                 hyam=hyam,
                 hybm=hybm,
             )
+
+
+class TestIsentropicInterpolation:
+    """Behavior checks for interpolation to isentropic surfaces."""
+
+    def test_matches_linear_profile(self):
+        """A profile linear in theta should interpolate exactly."""
+
+        theta_source = np.array([280.0, 300.0, 320.0, 340.0])
+        pressure = xr.DataArray(
+            np.array([100000.0, 90000.0, 80000.0, 70000.0]),
+            dims=("lev",),
+            coords={"lev": [1, 2, 3, 4]},
+        )
+        temperature = xr.DataArray(
+            theta_source * (pressure.values / 100000.0) ** 0.2854,
+            dims=("lev",),
+            coords=pressure.coords,
+        )
+        data = xr.DataArray(
+            2.0 * theta_source + 5.0,
+            dims=("lev",),
+            coords=pressure.coords,
+            name="u",
+            attrs={"units": "m s-1"},
+        )
+
+        result = interp_to_isentropic(
+            data,
+            temperature,
+            pressure,
+            theta_levels=np.array([290.0, 310.0, 330.0]),
+            lev_dim="lev",
+        )
+
+        assert result.dims == ("theta",)
+        assert result.name == "u"
+        assert result.attrs["units"] == "m s-1"
+        assert_array_equal(result["theta"].values, np.array([290.0, 310.0, 330.0]))
+        assert result["theta"].attrs["units"] == "K"
+        assert_allclose(result.values, np.array([585.0, 625.0, 665.0]), atol=1e-12)
+
+    def test_preserves_input_dimension_order(self):
+        """Replacing the vertical dimension should not reorder other dimensions."""
+
+        lev = [1, 2, 3]
+        lat = [10.0, 20.0]
+        lon = [100.0, 110.0]
+        pressure_1d = np.array([100000.0, 85000.0, 70000.0])
+        theta_1d = np.array([290.0, 310.0, 330.0])
+
+        pressure = xr.DataArray(
+            np.broadcast_to(pressure_1d[:, None, None], (3, 2, 2)),
+            dims=("lev", "lat", "lon"),
+            coords={"lev": lev, "lat": lat, "lon": lon},
+        )
+        temperature = xr.DataArray(
+            np.broadcast_to(theta_1d[:, None, None], (3, 2, 2))
+            * (pressure.values / 100000.0) ** 0.2854,
+            dims=pressure.dims,
+            coords=pressure.coords,
+        )
+        data = xr.DataArray(
+            np.arange(12.0).reshape(2, 3, 2),
+            dims=("lat", "lev", "lon"),
+            coords={"lat": lat, "lev": lev, "lon": lon},
+        )
+
+        result = interp_to_isentropic(
+            data,
+            temperature.transpose("lat", "lev", "lon"),
+            pressure.transpose("lat", "lev", "lon"),
+            theta_levels=xr.DataArray([300.0, 320.0], dims=("isentropic",)),
+            lev_dim="lev",
+        )
+
+        assert result.dims == ("lat", "isentropic", "lon")
+        assert result.shape == (2, 2, 2)
+        assert_allclose(
+            result.sel(lat=10.0, lon=100.0).values,
+            np.array([1.0, 3.0]),
+            atol=1e-12,
+        )
+
+    def test_missing_and_out_of_range_values(self):
+        """Finite missing markers are skipped and out-of-range levels stay NaN."""
+
+        theta_source = np.array([280.0, 300.0, 320.0, 340.0])
+        pressure = xr.DataArray(
+            np.array([100000.0, 90000.0, 80000.0, 70000.0]),
+            dims=("lev",),
+        )
+        temperature = xr.DataArray(
+            theta_source * (pressure.values / 100000.0) ** 0.2854,
+            dims=("lev",),
+        )
+        data = xr.DataArray(np.array([1.0, -9999.0, 5.0, 7.0]), dims=("lev",))
+
+        result = interp_to_isentropic(
+            data,
+            temperature,
+            pressure,
+            theta_levels=np.array([270.0, 300.0, 330.0, 350.0]),
+            lev_dim="lev",
+            missing_value=-9999.0,
+        )
+
+        assert np.isnan(result.values[0])
+        assert np.isnan(result.values[-1])
+        assert_allclose(result.values[1:3], np.array([3.0, 6.0]), atol=1e-12)
+
+    def test_nan_missing_stays_nan(self):
+        """Default missing output should stay NaN instead of exposing sentinels."""
+
+        theta_source = np.array([280.0, 300.0, 320.0, 340.0])
+        pressure = xr.DataArray(
+            np.array([100000.0, 90000.0, 80000.0, 70000.0]),
+            dims=("lev",),
+        )
+        temperature = xr.DataArray(
+            theta_source * (pressure.values / 100000.0) ** 0.2854,
+            dims=("lev",),
+        )
+        data = xr.DataArray(np.array([1.0, np.nan, 5.0, 7.0]), dims=("lev",))
+
+        result = interp_to_isentropic(
+            data,
+            temperature,
+            pressure,
+            theta_levels=np.array([270.0, 300.0, 330.0, 350.0]),
+            lev_dim="lev",
+        )
+
+        assert np.isnan(result.values[0])
+        assert np.isnan(result.values[-1])
+        assert not np.any(result.values == -9.96921e36)
+        assert_allclose(result.values[1:3], np.array([3.0, 6.0]), atol=1e-12)
+
+    def test_rejects_nonfinite_theta_levels(self):
+        """Target isentropic levels must be finite before reaching Fortran."""
+
+        data = xr.DataArray(np.ones((2,)), dims=("lev",))
+        temperature = xr.DataArray(np.ones((2,)), dims=("lev",))
+        pressure = xr.DataArray(np.ones((2,)), dims=("lev",))
+
+        with pytest.raises(ValueError, match="theta_levels must be finite"):
+            interp_to_isentropic(data, temperature, pressure, [300.0, np.nan])
+
+    def test_requires_matching_vertical_dimension(self):
+        """Mismatched vertical metadata should fail before doing numerical work."""
+
+        data = xr.DataArray(np.ones((2,)), dims=("lev",))
+        temperature = xr.DataArray(np.ones((2,)), dims=("level",))
+        pressure = xr.DataArray(np.ones((2,)), dims=("lev",))
+
+        with pytest.raises(ValueError, match="temperature"):
+            interp_to_isentropic(data, temperature, pressure, [300.0], lev_dim="lev")
 
 
 # Performance and stress tests
