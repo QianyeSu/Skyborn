@@ -16,6 +16,7 @@ from .interpolation import (
     interp_multidim,
     interp_pressure_1d,
     interp_sigma_to_hybrid,
+    interp_to_isentropic,
     pressure_at_hybrid_levels,
 )
 
@@ -39,6 +40,7 @@ __all__ = [
     "interp_pressure_1d",
     "interp_multidim",
     "interp_sigma_to_hybrid",
+    "interp_to_isentropic",
     "pressure_at_hybrid_levels",
     "BilinearRegridder",
     "ConservativeRegridder",
