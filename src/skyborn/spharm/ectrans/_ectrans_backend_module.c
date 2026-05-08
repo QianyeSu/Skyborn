@@ -23,6 +23,8 @@ typedef struct {
 
 #define SKYBORN_UV_TO_VORDIV_BLOCK_CAPSULE "skyborn.spharm._ectrans_uv_to_vordiv_block_setup"
 #define SKYBORN_UV_TO_VORDIV_BLOCK_CACHE_MAX_BYTES (96ULL * 1024ULL * 1024ULL)
+#define SKYBORN_UV_TO_VORDIV_POA1_BLOCK_CAPSULE "skyborn.spharm._ectrans_uv_to_vordiv_poa1_block_setup"
+#define SKYBORN_UV_TO_VORDIV_POA1_BLOCK_CACHE_MAX_BYTES (96ULL * 1024ULL * 1024ULL)
 
 typedef struct {
     int ntrunc;
@@ -36,6 +38,19 @@ typedef struct {
     double *basis_real;
     double *basis_imag;
 } UvToVordivBlockSetup;
+
+typedef struct {
+    int ntrunc;
+    int nlei1;
+    double rsphere;
+    size_t basis_used_entries;
+    size_t active_used_entries;
+    size_t *basis_offsets;
+    int *active_counts;
+    size_t *active_offsets;
+    int *active_columns;
+    double *basis_real;
+} UvToVordivPoa1BlockSetup;
 
 
 void validate_nloen(
@@ -336,6 +351,37 @@ static void free_uv_to_vordiv_block_setup(UvToVordivBlockSetup *setup) {
     setup->active_used_entries = 0;
 }
 
+static void free_uv_to_vordiv_poa1_block_setup(UvToVordivPoa1BlockSetup *setup) {
+    if (setup == NULL) {
+        return;
+    }
+    if (setup->basis_offsets != NULL) {
+        PyMem_Free(setup->basis_offsets);
+        setup->basis_offsets = NULL;
+    }
+    if (setup->active_counts != NULL) {
+        PyMem_Free(setup->active_counts);
+        setup->active_counts = NULL;
+    }
+    if (setup->active_offsets != NULL) {
+        PyMem_Free(setup->active_offsets);
+        setup->active_offsets = NULL;
+    }
+    if (setup->active_columns != NULL) {
+        PyMem_Free(setup->active_columns);
+        setup->active_columns = NULL;
+    }
+    if (setup->basis_real != NULL) {
+        PyMem_Free(setup->basis_real);
+        setup->basis_real = NULL;
+    }
+    setup->ntrunc = -1;
+    setup->nlei1 = 0;
+    setup->rsphere = 0.0;
+    setup->basis_used_entries = 0;
+    setup->active_used_entries = 0;
+}
+
 static void setup_capsule_destructor(PyObject *capsule) {
     EctransSetup *setup = (EctransSetup *) PyCapsule_GetPointer(
         capsule,
@@ -359,6 +405,19 @@ static void uv_to_vordiv_block_setup_capsule_destructor(PyObject *capsule) {
         return;
     }
     free_uv_to_vordiv_block_setup(setup);
+    PyMem_Free(setup);
+}
+
+static void uv_to_vordiv_poa1_block_setup_capsule_destructor(PyObject *capsule) {
+    UvToVordivPoa1BlockSetup *setup = (UvToVordivPoa1BlockSetup *) PyCapsule_GetPointer(
+        capsule,
+        SKYBORN_UV_TO_VORDIV_POA1_BLOCK_CAPSULE
+    );
+    if (setup == NULL) {
+        PyErr_Clear();
+        return;
+    }
+    free_uv_to_vordiv_poa1_block_setup(setup);
     PyMem_Free(setup);
 }
 
@@ -437,6 +496,40 @@ static int get_uv_to_vordiv_block_setup_from_capsule(
         setup->ntrunc < 0
     ) {
         PyErr_SetString(PyExc_RuntimeError, "uv_to_vordiv block setup handle is closed");
+        return 0;
+    }
+
+    *setup_out = setup;
+    return 1;
+}
+
+static int get_uv_to_vordiv_poa1_block_setup_from_capsule(
+    PyObject *handle_obj,
+    UvToVordivPoa1BlockSetup **setup_out
+) {
+    UvToVordivPoa1BlockSetup *setup = NULL;
+
+    if (!PyCapsule_IsValid(handle_obj, SKYBORN_UV_TO_VORDIV_POA1_BLOCK_CAPSULE)) {
+        PyErr_SetString(
+            PyExc_TypeError,
+            "uv_to_vordiv POA1 block handle must be a valid setup capsule"
+        );
+        return 0;
+    }
+
+    setup = (UvToVordivPoa1BlockSetup *) PyCapsule_GetPointer(
+        handle_obj,
+        SKYBORN_UV_TO_VORDIV_POA1_BLOCK_CAPSULE
+    );
+    if (setup == NULL) {
+        return 0;
+    }
+    if (
+        setup->basis_offsets == NULL || setup->active_counts == NULL ||
+        setup->active_offsets == NULL || setup->active_columns == NULL ||
+        setup->basis_real == NULL || setup->ntrunc < 0 || setup->nlei1 <= 0
+    ) {
+        PyErr_SetString(PyExc_RuntimeError, "uv_to_vordiv POA1 block setup handle is closed");
         return 0;
     }
 
