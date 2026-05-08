@@ -1,0 +1,54 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module isentropic_kernels ! in
+    interface ! in :isentropic_kernels
+        subroutine dinterp_to_isentropic(data,temp,pressure,theta_levels,output,p0,kappa,spvl,kxtrp,nlev,ncol,ntheta)
+            integer, optional, check(shape(data,0)==nlev), depend(data) :: nlev=shape(data,0)
+            integer, optional, check(shape(data,1)==ncol), depend(data) :: ncol=shape(data,1)
+            integer, optional, check(len(theta_levels)>=ntheta), depend(theta_levels) :: ntheta=len(theta_levels)
+            double precision dimension(nlev,ncol), intent(in) :: data
+            double precision dimension(nlev,ncol), check(shape(temp,0)==nlev), check(shape(temp,1)==ncol), depend(nlev,ncol), intent(in) :: temp
+            double precision dimension(nlev,ncol), check(shape(pressure,0)==nlev), check(shape(pressure,1)==ncol), depend(nlev,ncol), intent(in) :: pressure
+            double precision dimension(ntheta), intent(in) :: theta_levels
+            double precision dimension(ntheta,ncol), depend(ntheta,ncol), intent(out) :: output
+            double precision intent(in) :: p0
+            double precision intent(in) :: kappa
+            double precision intent(in) :: spvl
+            integer intent(in) :: kxtrp
+        end subroutine dinterp_to_isentropic
+
+        subroutine dinterp_to_isentropic_into(data,temp,pressure,theta_levels,output,p0,kappa,spvl,kxtrp,nlev,ncol,ntheta)
+            integer, optional, check(shape(data,0)==nlev), depend(data) :: nlev=shape(data,0)
+            integer, optional, check(shape(data,1)==ncol), depend(data) :: ncol=shape(data,1)
+            integer, optional, check(len(theta_levels)>=ntheta), depend(theta_levels) :: ntheta=len(theta_levels)
+            double precision dimension(nlev,ncol), intent(in) :: data
+            double precision dimension(nlev,ncol), check(shape(temp,0)==nlev), check(shape(temp,1)==ncol), depend(nlev,ncol), intent(in) :: temp
+            double precision dimension(nlev,ncol), check(shape(pressure,0)==nlev), check(shape(pressure,1)==ncol), depend(nlev,ncol), intent(in) :: pressure
+            double precision dimension(ntheta), intent(in) :: theta_levels
+            double precision dimension(ntheta,ncol), check(shape(output,0)==ntheta), check(shape(output,1)==ncol), depend(ntheta,ncol), intent(in,out) :: output
+            double precision intent(in) :: p0
+            double precision intent(in) :: kappa
+            double precision intent(in) :: spvl
+            integer intent(in) :: kxtrp
+        end subroutine dinterp_to_isentropic_into
+
+        subroutine dinterp_to_isentropic_corder_into(data_flat,temp_flat,pressure_flat,theta_levels,output_flat,p0,kappa,spvl,kxtrp,nouter,nlev,ninner,ntheta)
+            integer intent(in) :: nouter
+            integer intent(in) :: nlev
+            integer intent(in) :: ninner
+            integer, optional, check(len(theta_levels)>=ntheta), depend(theta_levels) :: ntheta=len(theta_levels)
+            double precision dimension(nouter*nlev*ninner), depend(nouter,nlev,ninner), intent(in) :: data_flat
+            double precision dimension(nouter*nlev*ninner), depend(nouter,nlev,ninner), intent(in) :: temp_flat
+            double precision dimension(nouter*nlev*ninner), depend(nouter,nlev,ninner), intent(in) :: pressure_flat
+            double precision dimension(ntheta), intent(in) :: theta_levels
+            double precision dimension(nouter*ntheta*ninner), check(len(output_flat)>=nouter*ntheta*ninner), depend(nouter,ntheta,ninner), intent(in,out) :: output_flat
+            double precision intent(in) :: p0
+            double precision intent(in) :: kappa
+            double precision intent(in) :: spvl
+            integer intent(in) :: kxtrp
+        end subroutine dinterp_to_isentropic_corder_into
+    end interface
+end python module isentropic_kernels
+
+! This file was auto-generated manually for f2py compatibility.
