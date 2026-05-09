@@ -136,7 +136,7 @@ python module _spherepack ! in
         subroutine reduced_gaussian_spectogrd(dataspec,pl,basis,datagrid,nmdim,nlat,ntrunc,nt,ngptot,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
             complex dimension(nmdim,nt) :: dataspec
             integer dimension(nlat) :: pl
-            real dimension(nlat,nmdim) :: basis
+            real dimension(nmdim,nlat) :: basis
             real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: datagrid
             integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
             integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
@@ -149,7 +149,7 @@ python module _spherepack ! in
             complex dimension(nmdim,nt) :: speca
             complex dimension(nmdim,nt) :: specb
             integer dimension(nlat) :: pl
-            real dimension(nlat,nmdim) :: basis
+            real dimension(nmdim,nlat) :: basis
             real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: grida
             real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: gridb
             integer optional,check(shape(speca,0)==nmdim),depend(speca) :: nmdim=shape(speca,0)
@@ -162,8 +162,8 @@ python module _spherepack ! in
         subroutine reduced_gaussian_getgrad(dataspec,pl,basis,dbasis,sin_theta,ugrad,vgrad,nmdim,nlat,ntrunc,nt,ngptot,rsphere,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
             complex dimension(nmdim,nt) :: dataspec
             integer dimension(nlat) :: pl
-            real dimension(nlat,nmdim) :: basis
-            real dimension(nlat,nmdim) :: dbasis
+            real dimension(nmdim,nlat) :: basis
+            real dimension(nmdim,nlat) :: dbasis
             real dimension(nlat) :: sin_theta
             real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: ugrad
             real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: vgrad
@@ -179,8 +179,8 @@ python module _spherepack ! in
             complex dimension(nmdim,nt) :: speca
             complex dimension(nmdim,nt) :: specb
             integer dimension(nlat) :: pl
-            real dimension(nlat,nmdim) :: basis
-            real dimension(nlat,nmdim) :: dbasis
+            real dimension(nmdim,nlat) :: basis
+            real dimension(nmdim,nlat) :: dbasis
             real dimension(nlat) :: sin_theta
             real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: a_ugrad
             real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: a_vgrad

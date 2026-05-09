@@ -326,7 +326,7 @@ class ReducedGaussianSpharmt:
         """
         _, normalized, extra_shape = self._validate_grid_data(datagrid, "grdtospec")
         ntrunc = self._validate_ntrunc(ntrunc)
-        basis = self._basis_transposed(ntrunc)
+        basis = self._basis(ntrunc)
 
         try:
             dataspec, ierror = _spherepack.reduced_gaussian_grdtospec(
@@ -484,73 +484,15 @@ class ReducedGaussianSpharmt:
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
     ) -> ComplexArray:
         """Compute only vorticity spectral coefficients from packed winds."""
-        _, normalized_u, normalized_v, extra_shape = self._validate_paired_grid_data(
-            ugrid, vgrid, "getvrtspec"
-        )
-        ntrunc = self._validate_ntrunc(ntrunc)
-        basis = self._basis_transposed(ntrunc)
-        dbasis = self._dbasis_transposed(ntrunc)
-
-        try:
-            vrtspec, ierror = _spherepack.reduced_gaussian_getvrtspec(
-                normalized_u,
-                normalized_v,
-                self.pl,
-                self._weights,
-                basis,
-                dbasis,
-                self._sin_theta,
-                ntrunc,
-                self.rsphere,
-            )
-        except Exception as exc:
-            raise SpheremackError(
-                f"reduced Gaussian vorticity analysis failed: {exc}"
-            ) from exc
-
-        if ierror != 0:
-            raise SpheremackError(
-                "reduced Gaussian vorticity analysis failed with "
-                f"error code {ierror}"
-            )
-
-        return self._restore_spectral_shape(vrtspec, extra_shape)
+        vrtspec, _ = self.getvrtdivspec(ugrid, vgrid, ntrunc=ntrunc)
+        return vrtspec
 
     def getdivspec(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
     ) -> ComplexArray:
         """Compute only divergence spectral coefficients from packed winds."""
-        _, normalized_u, normalized_v, extra_shape = self._validate_paired_grid_data(
-            ugrid, vgrid, "getdivspec"
-        )
-        ntrunc = self._validate_ntrunc(ntrunc)
-        basis = self._basis_transposed(ntrunc)
-        dbasis = self._dbasis_transposed(ntrunc)
-
-        try:
-            divspec, ierror = _spherepack.reduced_gaussian_getdivspec(
-                normalized_u,
-                normalized_v,
-                self.pl,
-                self._weights,
-                basis,
-                dbasis,
-                self._sin_theta,
-                ntrunc,
-                self.rsphere,
-            )
-        except Exception as exc:
-            raise SpheremackError(
-                f"reduced Gaussian divergence analysis failed: {exc}"
-            ) from exc
-
-        if ierror != 0:
-            raise SpheremackError(
-                "reduced Gaussian divergence analysis failed with "
-                f"error code {ierror}"
-            )
-
-        return self._restore_spectral_shape(divspec, extra_shape)
+        _, divspec = self.getvrtdivspec(ugrid, vgrid, ntrunc=ntrunc)
+        return divspec
 
     def getuv(
         self, vrtspec: ComplexArray, divspec: ComplexArray
