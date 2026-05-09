@@ -15,6 +15,7 @@ Example:
     >>> data_back = sht.spectogrd(spec)  # Spectral to grid transform
 """
 
+from .reduced_gaussian import ReducedGaussianSpharmt
 from .spherical_harmonics import *
 
 __author__ = "Qianye Su"
