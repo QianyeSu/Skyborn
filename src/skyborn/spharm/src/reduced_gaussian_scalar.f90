@@ -1528,8 +1528,8 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
     real, intent(in) :: vgrid(ngptot, nt)
     integer, intent(in) :: pl(nlat)
     real, intent(in) :: weights(nlat)
-    real, intent(in) :: basis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
-    real, intent(in) :: dbasis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    real, intent(in) :: basis((ntrunc + 1) * (ntrunc + 2) / 2, nlat)
+    real, intent(in) :: dbasis((ntrunc + 1) * (ntrunc + 2) / 2, nlat)
     real, intent(in) :: sin_theta(nlat)
     real, intent(in) :: rsphere
     complex, intent(out) :: vrtspec((ntrunc + 1) * (ntrunc + 2) / 2, nt)
@@ -1673,7 +1673,7 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                     parity = 1.0d0
                     do n = m, ntrunc
                         nm = nm + 1
-                        dpval = dble(dbasis(j, nm))
+                        dpval = dble(dbasis(nm, j))
                         dp_weighted = dp_scale * dpval
                         div_real = dp_weighted * (v_mean - parity * v_mean_s)
                         vrt_real = -dp_weighted * (u_mean - parity * u_mean_s)
@@ -1692,7 +1692,7 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                     dp_scale = weight_inv_r(j)
                     do n = m, ntrunc
                         nm = nm + 1
-                        dpval = dble(dbasis(j, nm))
+                        dpval = dble(dbasis(nm, j))
                         dp_weighted = dp_scale * dpval
                         div_real = dp_weighted * v_mean
                         vrt_real = -dp_weighted * u_mean
@@ -1723,8 +1723,8 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                     parity = 1.0d0
                     do n = m, ntrunc
                         nm = nm + 1
-                        pval = dble(basis(j, nm))
-                        dpval = dble(dbasis(j, nm))
+                        pval = dble(basis(nm, j))
+                        dpval = dble(dbasis(nm, j))
                         p_weighted = p_scale * pval
                         dp_weighted = dp_scale * dpval
                         p_u_sin = u_sin + parity * u_sin_s
@@ -1761,8 +1761,8 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                         dp_scale = weight_inv_r(j)
                         do n = m, ntrunc
                             nm = nm + 1
-                            pval = dble(basis(j, nm))
-                            dpval = dble(dbasis(j, nm))
+                            pval = dble(basis(nm, j))
+                            dpval = dble(dbasis(nm, j))
                             p_weighted = p_scale * pval
                             dp_weighted = dp_scale * dpval
                             div_real = p_weighted * u_sin + dp_weighted * v_cos
@@ -1807,7 +1807,7 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                     dp_scale = weight_inv_r(j)
                     do n = m, ntrunc
                         nm = nm + 1
-                        dpval = dble(dbasis(j, nm))
+                        dpval = dble(dbasis(nm, j))
                         dp_weighted = dp_scale * dpval
                         div_real = dp_weighted * v_mean
                         vrt_real = -dp_weighted * u_mean
@@ -1829,8 +1829,8 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                         dp_scale = weight_inv_r(j)
                         do n = m, ntrunc
                             nm = nm + 1
-                            pval = dble(basis(j, nm))
-                            dpval = dble(dbasis(j, nm))
+                            pval = dble(basis(nm, j))
+                            dpval = dble(dbasis(nm, j))
                             p_weighted = p_scale * pval
                             dp_weighted = dp_scale * dpval
                             div_real = p_weighted * u_sin + dp_weighted * v_cos
