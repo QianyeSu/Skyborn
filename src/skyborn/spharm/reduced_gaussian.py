@@ -21,6 +21,25 @@ from .spherical_harmonics import (
 IntArray = NDArray[np.integer]
 
 _private_vars = ("pl", "nlat", "npoints", "rsphere", "gridtype", "legfunc")
+_GLOBAL_BASIS_CACHE: Dict[Tuple[int, int], FloatArray] = {}
+_GLOBAL_DBASIS_CACHE: Dict[Tuple[int, int], FloatArray] = {}
+_GLOBAL_BASIS_TRANSPOSED_CACHE: Dict[Tuple[int, int], FloatArray] = {}
+_GLOBAL_DBASIS_TRANSPOSED_CACHE: Dict[Tuple[int, int], FloatArray] = {}
+_MAX_GLOBAL_BASIS_ENTRIES = 2
+_MAX_GLOBAL_TRANSPOSED_BASIS_ENTRIES = 1
+
+
+def _cache_basis_array(
+    cache: Dict[Tuple[int, int], FloatArray],
+    key: Tuple[int, int],
+    value: FloatArray,
+    max_entries: int = _MAX_GLOBAL_BASIS_ENTRIES,
+) -> None:
+    if key in cache:
+        return
+    if len(cache) >= max_entries:
+        cache.pop(next(iter(cache)))
+    cache[key] = value
 
 
 class ReducedGaussianSpharmt:
@@ -57,6 +76,8 @@ class ReducedGaussianSpharmt:
         )
         self._basis_cache: Dict[int, FloatArray] = {}
         self._dbasis_cache: Dict[int, FloatArray] = {}
+        self._basis_transposed_cache: Dict[int, FloatArray] = {}
+        self._dbasis_transposed_cache: Dict[int, FloatArray] = {}
 
     @staticmethod
     def _validate_pl(pl: IntArray) -> IntArray:
@@ -111,6 +132,12 @@ class ReducedGaussianSpharmt:
         if basis is not None:
             return basis
 
+        key = (self.nlat, ntrunc)
+        basis = _GLOBAL_BASIS_CACHE.get(key)
+        if basis is not None:
+            self._basis_cache[ntrunc] = basis
+            return basis
+
         try:
             basis, ierror = _spherepack.reduced_gaussian_legendre_basis(
                 self.nlat, ntrunc
@@ -126,6 +153,7 @@ class ReducedGaussianSpharmt:
             )
 
         basis = np.asfortranarray(np.asarray(basis, dtype=np.float32))
+        _cache_basis_array(_GLOBAL_BASIS_CACHE, key, basis)
         self._basis_cache[ntrunc] = basis
         return basis
 
@@ -134,10 +162,24 @@ class ReducedGaussianSpharmt:
         if dbasis is not None:
             return dbasis
 
+        key = (self.nlat, ntrunc)
+        dbasis = _GLOBAL_DBASIS_CACHE.get(key)
+        if dbasis is not None:
+            self._dbasis_cache[ntrunc] = dbasis
+            return dbasis
+
         try:
-            dbasis, ierror = _spherepack.reduced_gaussian_legendre_derivative_basis(
-                self.nlat, ntrunc
-            )
+            basis = self._basis(ntrunc)
+            if hasattr(_spherepack, "reduced_gaussian_legendre_derivative_from_basis"):
+                dbasis, ierror = (
+                    _spherepack.reduced_gaussian_legendre_derivative_from_basis(
+                        basis, ntrunc
+                    )
+                )
+            else:
+                dbasis, ierror = _spherepack.reduced_gaussian_legendre_derivative_basis(
+                    self.nlat, ntrunc
+                )
         except Exception as exc:
             raise SpheremackError(
                 f"reduced Gaussian Legendre derivative setup failed: {exc}"
@@ -150,7 +192,44 @@ class ReducedGaussianSpharmt:
             )
 
         dbasis = np.asfortranarray(np.asarray(dbasis, dtype=np.float32))
+        _cache_basis_array(_GLOBAL_DBASIS_CACHE, key, dbasis)
         self._dbasis_cache[ntrunc] = dbasis
+        return dbasis
+
+    def _basis_transposed(self, ntrunc: int) -> FloatArray:
+        basis = self._basis_transposed_cache.get(ntrunc)
+        if basis is not None:
+            return basis
+
+        key = (self.nlat, ntrunc)
+        basis = _GLOBAL_BASIS_TRANSPOSED_CACHE.get(key)
+        if basis is None:
+            basis = np.asfortranarray(self._basis(ntrunc).T)
+            _cache_basis_array(
+                _GLOBAL_BASIS_TRANSPOSED_CACHE,
+                key,
+                basis,
+                max_entries=_MAX_GLOBAL_TRANSPOSED_BASIS_ENTRIES,
+            )
+        self._basis_transposed_cache[ntrunc] = basis
+        return basis
+
+    def _dbasis_transposed(self, ntrunc: int) -> FloatArray:
+        dbasis = self._dbasis_transposed_cache.get(ntrunc)
+        if dbasis is not None:
+            return dbasis
+
+        key = (self.nlat, ntrunc)
+        dbasis = _GLOBAL_DBASIS_TRANSPOSED_CACHE.get(key)
+        if dbasis is None:
+            dbasis = np.asfortranarray(self._dbasis(ntrunc).T)
+            _cache_basis_array(
+                _GLOBAL_DBASIS_TRANSPOSED_CACHE,
+                key,
+                dbasis,
+                max_entries=_MAX_GLOBAL_TRANSPOSED_BASIS_ENTRIES,
+            )
+        self._dbasis_transposed_cache[ntrunc] = dbasis
         return dbasis
 
     def _validate_grid_data(
@@ -294,6 +373,45 @@ class ReducedGaussianSpharmt:
 
         return self._restore_grid_shape(datagrid, extra_shape)
 
+    def _spectogrd_pair(
+        self, spec_a: ComplexArray, spec_b: ComplexArray
+    ) -> Tuple[FloatArray, FloatArray]:
+        """Synthesize two scalar spectra together through one batched call."""
+        _, ntrunc, normalized_a, normalized_b, extra_shape = (
+            self._validate_paired_spectral_data(spec_a, spec_b, "_spectogrd_pair")
+        )
+
+        if hasattr(_spherepack, "reduced_gaussian_spectogrd_pair"):
+            basis = self._basis(ntrunc)
+            try:
+                grid_a, grid_b, ierror = _spherepack.reduced_gaussian_spectogrd_pair(
+                    normalized_a,
+                    normalized_b,
+                    self.pl,
+                    basis,
+                    ntrunc,
+                    self.npoints,
+                )
+            except Exception as exc:
+                raise SpheremackError(
+                    f"reduced Gaussian paired spectogrd failed: {exc}"
+                ) from exc
+
+            if ierror != 0:
+                raise SpheremackError(
+                    "reduced Gaussian paired spectogrd failed with "
+                    f"error code {ierror}"
+                )
+
+            return (
+                self._restore_grid_shape(grid_a, extra_shape),
+                self._restore_grid_shape(grid_b, extra_shape),
+            )
+
+        paired_specs = np.stack((spec_a, spec_b), axis=-1)
+        paired_grids = self.spectogrd(paired_specs)
+        return paired_grids[..., 0], paired_grids[..., 1]
+
     def _validate_paired_grid_data(
         self, ugrid: FloatArray, vgrid: FloatArray, operation_name: str
     ) -> Tuple[int, FloatArray, FloatArray, Tuple[int, ...]]:
@@ -332,8 +450,8 @@ class ReducedGaussianSpharmt:
             ugrid, vgrid, "getvrtdivspec"
         )
         ntrunc = self._validate_ntrunc(ntrunc)
-        basis = self._basis(ntrunc)
-        dbasis = self._dbasis(ntrunc)
+        basis = self._basis_transposed(ntrunc)
+        dbasis = self._dbasis_transposed(ntrunc)
 
         try:
             vrtspec, divspec, ierror = _spherepack.reduced_gaussian_getvrtdivspec(
@@ -366,15 +484,73 @@ class ReducedGaussianSpharmt:
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
     ) -> ComplexArray:
         """Compute only vorticity spectral coefficients from packed winds."""
-        vrtspec, _ = self.getvrtdivspec(ugrid, vgrid, ntrunc=ntrunc)
-        return vrtspec
+        _, normalized_u, normalized_v, extra_shape = self._validate_paired_grid_data(
+            ugrid, vgrid, "getvrtspec"
+        )
+        ntrunc = self._validate_ntrunc(ntrunc)
+        basis = self._basis(ntrunc)
+        dbasis = self._dbasis(ntrunc)
+
+        try:
+            vrtspec, ierror = _spherepack.reduced_gaussian_getvrtspec(
+                normalized_u,
+                normalized_v,
+                self.pl,
+                self._weights,
+                basis,
+                dbasis,
+                self._sin_theta,
+                ntrunc,
+                self.rsphere,
+            )
+        except Exception as exc:
+            raise SpheremackError(
+                f"reduced Gaussian vorticity analysis failed: {exc}"
+            ) from exc
+
+        if ierror != 0:
+            raise SpheremackError(
+                "reduced Gaussian vorticity analysis failed with "
+                f"error code {ierror}"
+            )
+
+        return self._restore_spectral_shape(vrtspec, extra_shape)
 
     def getdivspec(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
     ) -> ComplexArray:
         """Compute only divergence spectral coefficients from packed winds."""
-        _, divspec = self.getvrtdivspec(ugrid, vgrid, ntrunc=ntrunc)
-        return divspec
+        _, normalized_u, normalized_v, extra_shape = self._validate_paired_grid_data(
+            ugrid, vgrid, "getdivspec"
+        )
+        ntrunc = self._validate_ntrunc(ntrunc)
+        basis = self._basis(ntrunc)
+        dbasis = self._dbasis(ntrunc)
+
+        try:
+            divspec, ierror = _spherepack.reduced_gaussian_getdivspec(
+                normalized_u,
+                normalized_v,
+                self.pl,
+                self._weights,
+                basis,
+                dbasis,
+                self._sin_theta,
+                ntrunc,
+                self.rsphere,
+            )
+        except Exception as exc:
+            raise SpheremackError(
+                f"reduced Gaussian divergence analysis failed: {exc}"
+            ) from exc
+
+        if ierror != 0:
+            raise SpheremackError(
+                "reduced Gaussian divergence analysis failed with "
+                f"error code {ierror}"
+            )
+
+        return self._restore_spectral_shape(divspec, extra_shape)
 
     def getuv(
         self, vrtspec: ComplexArray, divspec: ComplexArray
@@ -408,16 +584,30 @@ class ReducedGaussianSpharmt:
         dbasis = self._dbasis(ntrunc)
 
         try:
-            ugrad, vgrad, ierror = _spherepack.reduced_gaussian_getgrad(
-                normalized_spec,
-                self.pl,
-                basis,
-                dbasis,
-                self._sin_theta,
-                ntrunc,
-                self.npoints,
-                self.rsphere,
-            )
+            if hasattr(_spherepack, "reduced_gaussian_getgrad_pair"):
+                zero_spec = np.zeros_like(normalized_spec)
+                ugrad, vgrad, _, _, ierror = _spherepack.reduced_gaussian_getgrad_pair(
+                    normalized_spec,
+                    zero_spec,
+                    self.pl,
+                    basis,
+                    dbasis,
+                    self._sin_theta,
+                    ntrunc,
+                    self.npoints,
+                    self.rsphere,
+                )
+            else:
+                ugrad, vgrad, ierror = _spherepack.reduced_gaussian_getgrad(
+                    normalized_spec,
+                    self.pl,
+                    basis,
+                    dbasis,
+                    self._sin_theta,
+                    ntrunc,
+                    self.npoints,
+                    self.rsphere,
+                )
         except Exception as exc:
             raise SpheremackError(
                 f"reduced Gaussian gradient synthesis failed: {exc}"
