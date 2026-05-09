@@ -1035,7 +1035,7 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
     integer :: max_nlon, mlimit, alloc_status, pair_count, half_nlat
     integer :: offsets(nlat + 1)
     logical :: symmetric_pl
-    double precision :: inv_r, inv_r_sin, two_inv_r, two_inv_r_sin
+    double precision :: inv_r, two_inv_r, two_inv_r_sin
     double precision :: a_spec_real, a_spec_imag, b_spec_real, b_spec_imag
     double precision :: a_p_real, a_p_imag, a_dp_real, a_dp_imag
     double precision :: b_p_real, b_p_imag, b_dp_real, b_dp_imag
@@ -1110,7 +1110,7 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
     b_vgrad(:, :) = 0.0
 
 !$omp parallel private(j, js, i, k, m, n, nm, offset, offset_s, row_nlon, mlimit, &
-!$omp& alloc_status, inv_r_sin, two_inv_r_sin, a_spec_real, a_spec_imag, &
+!$omp& alloc_status, two_inv_r_sin, a_spec_real, a_spec_imag, &
 !$omp& b_spec_real, b_spec_imag, a_p_real, a_p_imag, a_dp_real, &
 !$omp& a_dp_imag, b_p_real, b_p_imag, b_dp_real, b_dp_imag, pval, &
 !$omp& dpval, a_sum_p_real, a_sum_p_imag, a_sum_dp_real, a_sum_dp_imag, &
@@ -1133,7 +1133,6 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
             offset = offsets(j)
             offset_s = offsets(js)
             row_nlon = pl(j)
-            inv_r_sin = inv_r / dble(sin_theta(j))
             two_inv_r_sin = two_inv_r / dble(sin_theta(j))
             mlimit = min(ntrunc, row_nlon / 2)
 
@@ -1295,7 +1294,6 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
         else
             offset = offsets(j)
             row_nlon = pl(j)
-            inv_r_sin = inv_r / dble(sin_theta(j))
             two_inv_r_sin = two_inv_r / dble(sin_theta(j))
             mlimit = min(ntrunc, row_nlon / 2)
 
@@ -1391,7 +1389,6 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
     do j = 1, nlat
         offset = offsets(j)
         row_nlon = pl(j)
-        inv_r_sin = inv_r / dble(sin_theta(j))
         two_inv_r_sin = two_inv_r / dble(sin_theta(j))
         mlimit = min(ntrunc, row_nlon / 2)
 
@@ -1523,7 +1520,7 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
     integer :: max_nlon, mlimit, alloc_status, pair_count, half_nlat
     integer :: offsets(nlat + 1), first_pair_for_m(0:ntrunc)
     logical :: symmetric_pl, center_active(0:ntrunc)
-    double precision :: inv_nlon, inv_r, inv_r_sin
+    double precision :: inv_nlon, inv_r
     double precision :: u_mean, v_mean, u_cos, u_sin, v_cos, v_sin
     double precision :: u_mean_s, v_mean_s, u_cos_s, u_sin_s, v_cos_s, v_sin_s
     double precision :: pval, dpval, wval, div_real, div_imag, vrt_real, vrt_imag
@@ -1639,7 +1636,7 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
 
         if (symmetric_pl) then
 !$omp parallel do schedule(dynamic) private(m, j, js, n, nm, row_nlon, first_j, &
-!$omp& inv_r_sin, u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, &
+!$omp& u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, &
 !$omp& u_mean_s, v_mean_s, u_cos_s, u_sin_s, v_cos_s, v_sin_s, &
 !$omp& pval, dpval, wval, div_real, div_imag, vrt_real, vrt_imag, &
 !$omp& p_scale, dp_scale, p_weighted, dp_weighted, parity, &
@@ -1774,7 +1771,7 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
 !$omp end parallel do
         else
 !$omp parallel do schedule(dynamic) private(m, j, n, nm, row_nlon, &
-!$omp& inv_r_sin, u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, pval, &
+!$omp& u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, pval, &
 !$omp& dpval, wval, div_real, div_imag, vrt_real, vrt_imag, p_scale, &
 !$omp& dp_scale, p_weighted, dp_weighted, div_real_acc, div_imag_acc, &
 !$omp& vrt_real_acc, vrt_imag_acc)
@@ -1930,7 +1927,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
     integer :: max_nlon, mlimit, alloc_status, pair_count, half_nlat
     integer :: offsets(nlat + 1), first_pair_for_m(0:ntrunc)
     logical :: symmetric_pl, center_active(0:ntrunc)
-    double precision :: inv_nlon, inv_r, inv_r_sin
+    double precision :: inv_nlon, inv_r
     double precision :: u_mean, v_mean, u_cos, u_sin, v_cos, v_sin
     double precision :: u_mean_s, v_mean_s, u_cos_s, u_sin_s
     double precision :: v_cos_s, v_sin_s
@@ -2048,7 +2045,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
 
         if (symmetric_pl) then
 !$omp parallel do schedule(dynamic) private(m, j, js, n, nm, row_nlon, first_j, &
-!$omp& inv_r_sin, u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, &
+!$omp& u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, &
 !$omp& u_mean_s, v_mean_s, u_cos_s, u_sin_s, v_cos_s, v_sin_s, &
 !$omp& pval, dpval, wval, value_real, value_imag, p_scale, dp_scale, &
 !$omp& p_weighted, dp_weighted, parity, p_u_cos, p_u_sin, p_v_cos, &
@@ -2194,7 +2191,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
 !$omp end parallel do
         else
 !$omp parallel do schedule(dynamic) private(m, j, n, nm, row_nlon, &
-!$omp& inv_r_sin, u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, pval, &
+!$omp& u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, pval, &
 !$omp& dpval, wval, value_real, value_imag, p_scale, dp_scale, &
 !$omp& p_weighted, dp_weighted, value_real_acc, value_imag_acc)
         do m = 0, ntrunc
