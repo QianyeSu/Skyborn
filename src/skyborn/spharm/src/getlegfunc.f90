@@ -1,8 +1,7 @@
 !
-! Optimized version of getlegfunc.f - MODIFIED TO TEST EQUIVALENCE
+! Optimized version of getlegfunc.f
 ! Computes associated Legendre functions with improved performance
 ! Optimizations: Modern Fortran syntax, reduced function calls, better memory access
-! MODIFIED: Added a test comment to verify recompilation works
 !
 subroutine getlegfunc(legfunc, lat, ntrunc)
     implicit none
@@ -10,7 +9,7 @@ subroutine getlegfunc(legfunc, lat, ntrunc)
     ! Input/Output parameters
     integer, intent(in) :: ntrunc
     real, intent(in) :: lat
-    real, intent(out) :: legfunc((ntrunc + 1)*(ntrunc + 2)/2)
+    real, intent(out) :: legfunc((ntrunc + 1) * (ntrunc + 2) / 2)
 
     ! Local variables
     integer :: m, n, nm, nmstrt
@@ -26,7 +25,6 @@ subroutine getlegfunc(legfunc, lat, ntrunc)
     ! Main computation loop - optimized memory access pattern
     nmstrt = 0
     do m = 1, ntrunc + 1
-        !$OMP SIMD PRIVATE(nm)
         do n = m, ntrunc + 1
             nm = nmstrt + n - m + 1
 
