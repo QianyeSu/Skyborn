@@ -6,6 +6,95 @@
 ! FFT with row-wise Fourier sums over each reduced latitude circle.
 !
 
+module reduced_gaussian_fft_cache_mod
+    implicit none
+
+    integer, save :: reduced_gaussian_fft_cache_nlat = 0
+    integer, save :: reduced_gaussian_fft_cache_max_wsave = 0
+    integer, allocatable, save :: reduced_gaussian_fft_cache_pl(:)
+    real, allocatable, save :: reduced_gaussian_fft_wsave(:, :)
+
+contains
+
+    subroutine reduced_gaussian_prepare_fft_cache(pl, nlat, ierror)
+        implicit none
+
+        integer, intent(in) :: nlat
+        integer, intent(in) :: pl(nlat)
+        integer, intent(out) :: ierror
+
+        integer :: j, max_nlon, max_wsave, alloc_status
+        logical :: cache_matches
+
+        external :: hrffti
+
+        ierror = 1
+        if (nlat < 1) return
+
+        max_nlon = 0
+        do j = 1, nlat
+            if (pl(j) < 1) return
+            if (pl(j) > max_nlon) max_nlon = pl(j)
+        end do
+        max_wsave = 2 * max_nlon + 15
+
+        cache_matches = allocated(reduced_gaussian_fft_cache_pl) .and. &
+            allocated(reduced_gaussian_fft_wsave) .and. &
+            reduced_gaussian_fft_cache_nlat == nlat .and. &
+            reduced_gaussian_fft_cache_max_wsave >= max_wsave
+        if (cache_matches) then
+            if (all(reduced_gaussian_fft_cache_pl(1:nlat) == pl(1:nlat))) then
+                ierror = 0
+                return
+            end if
+        end if
+
+!$omp critical
+        cache_matches = allocated(reduced_gaussian_fft_cache_pl) .and. &
+            allocated(reduced_gaussian_fft_wsave) .and. &
+            reduced_gaussian_fft_cache_nlat == nlat .and. &
+            reduced_gaussian_fft_cache_max_wsave >= max_wsave
+        if (cache_matches) then
+            if (all(reduced_gaussian_fft_cache_pl(1:nlat) == pl(1:nlat))) then
+                ierror = 0
+            else
+                cache_matches = .false.
+            end if
+        end if
+
+        if (.not. cache_matches) then
+            if (allocated(reduced_gaussian_fft_cache_pl)) then
+                deallocate(reduced_gaussian_fft_cache_pl)
+            end if
+            if (allocated(reduced_gaussian_fft_wsave)) then
+                deallocate(reduced_gaussian_fft_wsave)
+            end if
+
+            allocate(reduced_gaussian_fft_cache_pl(nlat), &
+                     reduced_gaussian_fft_wsave(max_wsave, nlat), &
+                     stat=alloc_status)
+            if (alloc_status /= 0) then
+                reduced_gaussian_fft_cache_nlat = 0
+                reduced_gaussian_fft_cache_max_wsave = 0
+                ierror = 2
+            else
+                reduced_gaussian_fft_cache_pl(:) = pl(:)
+                reduced_gaussian_fft_wsave(:, :) = 0.0
+                do j = 1, nlat
+                    call hrffti(pl(j), reduced_gaussian_fft_wsave(1, j))
+                end do
+                reduced_gaussian_fft_cache_nlat = nlat
+                reduced_gaussian_fft_cache_max_wsave = max_wsave
+                ierror = 0
+            end if
+        end if
+!$omp end critical
+
+    end subroutine reduced_gaussian_prepare_fft_cache
+
+end module reduced_gaussian_fft_cache_mod
+
+
 subroutine reduced_gaussian_legendre_basis(basis, nlat, ntrunc, ierror)
     implicit none
 
@@ -171,6 +260,8 @@ end subroutine reduced_gaussian_legendre_derivative_basis
 
 subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
                                       ngptot, nlat, ntrunc, nt, ierror)
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
+        reduced_gaussian_fft_wsave
     implicit none
 
     integer, intent(in) :: ngptot, nlat, ntrunc, nt
@@ -187,9 +278,9 @@ subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
     double precision :: inv_nlon
     double precision :: coeff_real, coeff_imag, weighted_basis
     double precision, allocatable :: cos_fft(:, :), sin_fft(:, :)
-    real, allocatable :: fft_rows(:, :), fft_work(:, :), fft_wsave(:)
+    real, allocatable :: fft_rows(:, :), fft_work(:, :)
 
-    external :: hrffti, hrfftf
+    external :: hrfftf
 
     ierror = 1
     if (nlat < 3) return
@@ -213,9 +304,13 @@ subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
     ierror = 4
     if (total /= ngptot) return
 
+    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    ierror = 5
+    if (alloc_status /= 0) return
+
     allocate(cos_fft(0:ntrunc, nlat), sin_fft(0:ntrunc, nlat), &
              stat=alloc_status)
-    ierror = 5
+    ierror = 6
     if (alloc_status /= 0) return
 
     dataspec(:, :) = (0.0, 0.0)
@@ -225,9 +320,8 @@ subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
         sin_fft(:, :) = 0.0d0
 
 !$omp parallel private(j, i, m, offset, row_nlon, mlimit, inv_nlon, &
-!$omp& fft_rows, fft_work, fft_wsave)
-        allocate(fft_rows(1, max_nlon), fft_work(1, max_nlon), &
-                 fft_wsave(2 * max_nlon + 15))
+!$omp& fft_rows, fft_work)
+        allocate(fft_rows(1, max_nlon), fft_work(1, max_nlon))
 !$omp do schedule(dynamic)
         do j = 1, nlat
             offset = offsets(j)
@@ -239,8 +333,8 @@ subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
                 fft_rows(1, i) = datagrid(offset + i, k)
             end do
 
-            call hrffti(row_nlon, fft_wsave)
-            call hrfftf(1, row_nlon, fft_rows, 1, fft_wsave, fft_work)
+            call hrfftf(1, row_nlon, fft_rows, 1, &
+                reduced_gaussian_fft_wsave(1, j), fft_work)
 
             cos_fft(0, j) = dble(fft_rows(1, 1)) * inv_nlon
             do m = 1, mlimit
@@ -251,7 +345,7 @@ subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
             end do
         end do
 !$omp end do
-        deallocate(fft_rows, fft_work, fft_wsave)
+        deallocate(fft_rows, fft_work)
 !$omp end parallel
 
 !$omp parallel do schedule(dynamic) private(m, j, n, nm, row_nlon, &
@@ -291,6 +385,8 @@ end subroutine reduced_gaussian_grdtospec
 
 subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
                                       nmdim, nlat, ntrunc, nt, ngptot, ierror)
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
+        reduced_gaussian_fft_wsave
     implicit none
 
     integer, intent(in) :: nmdim, nlat, ntrunc, nt, ngptot
@@ -301,12 +397,12 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
     integer, intent(out) :: ierror
 
     integer :: j, i, k, m, n, nm, offset, row_nlon, total
-    integer :: max_nlon, mlimit
+    integer :: max_nlon, mlimit, alloc_status
     integer :: offsets(nlat + 1)
     double precision :: scrm_real, scrm_imag
-    real, allocatable :: fft_rows(:, :), fft_work(:, :), fft_wsave(:)
+    real, allocatable :: fft_rows(:, :), fft_work(:, :)
 
-    external :: hrffti, hrfftb
+    external :: hrfftb
 
     ierror = 1
     if (nlat < 3) return
@@ -333,12 +429,15 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
     ierror = 5
     if (total /= ngptot) return
 
+    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    ierror = 6
+    if (alloc_status /= 0) return
+
     datagrid(:, :) = 0.0
 
 !$omp parallel private(j, i, k, m, n, nm, offset, row_nlon, mlimit, &
-!$omp& scrm_real, scrm_imag, fft_rows, fft_work, fft_wsave)
-    allocate(fft_rows(nt, max_nlon), fft_work(nt, max_nlon), &
-             fft_wsave(2 * max_nlon + 15))
+!$omp& scrm_real, scrm_imag, fft_rows, fft_work)
+    allocate(fft_rows(nt, max_nlon), fft_work(nt, max_nlon))
 !$omp do schedule(dynamic)
     do j = 1, nlat
         offset = offsets(j)
@@ -370,8 +469,8 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
             end do
         end do
 
-        call hrffti(row_nlon, fft_wsave)
-        call hrfftb(nt, row_nlon, fft_rows, nt, fft_wsave, fft_work)
+        call hrfftb(nt, row_nlon, fft_rows, nt, &
+            reduced_gaussian_fft_wsave(1, j), fft_work)
 
         do k = 1, nt
             do i = 1, row_nlon
@@ -380,7 +479,7 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
         end do
     end do
 !$omp end do
-    deallocate(fft_rows, fft_work, fft_wsave)
+    deallocate(fft_rows, fft_work)
 !$omp end parallel
 
     ierror = 0
@@ -393,6 +492,284 @@ contains
     end function spectral_offset
 
 end subroutine reduced_gaussian_spectogrd
+
+
+subroutine reduced_gaussian_spectogrd_pair(speca, specb, pl, basis, &
+                                           grida, gridb, nmdim, nlat, &
+                                           ntrunc, nt, ngptot, ierror)
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
+        reduced_gaussian_fft_wsave
+    implicit none
+
+    integer, intent(in) :: nmdim, nlat, ntrunc, nt, ngptot
+    complex, intent(in) :: speca(nmdim, nt)
+    complex, intent(in) :: specb(nmdim, nt)
+    integer, intent(in) :: pl(nlat)
+    real, intent(in) :: basis(nlat, nmdim)
+    real, intent(out) :: grida(ngptot, nt)
+    real, intent(out) :: gridb(ngptot, nt)
+    integer, intent(out) :: ierror
+
+    integer :: j, js, i, k, m, n, nm, offset, offset_s, row_nlon, total
+    integer :: max_nlon, mlimit, alloc_status, pair_count, half_nlat
+    integer :: offsets(nlat + 1)
+    integer :: row_a, row_b, row_a_s, row_b_s
+    logical :: symmetric_pl
+    double precision :: a_real, a_imag, b_real, b_imag
+    double precision :: a_real_s, a_imag_s, b_real_s, b_imag_s
+    double precision :: pval, parity
+    real, allocatable :: fft_rows(:, :), fft_work(:, :)
+
+    external :: hrfftb
+
+    ierror = 1
+    if (nlat < 3) return
+
+    ierror = 2
+    if (ntrunc < 0 .or. ntrunc > nlat - 1) return
+
+    ierror = 3
+    if (nmdim /= (ntrunc + 1) * (ntrunc + 2) / 2) return
+
+    ierror = 4
+    if (nt < 1) return
+
+    total = 0
+    max_nlon = 0
+    offsets(1) = 0
+    do j = 1, nlat
+        if (pl(j) < 1) return
+        total = total + pl(j)
+        if (pl(j) > max_nlon) max_nlon = pl(j)
+        offsets(j + 1) = total
+    end do
+
+    pair_count = nlat / 2
+    half_nlat = (nlat + 1) / 2
+    symmetric_pl = .true.
+    do j = 1, pair_count
+        if (pl(j) /= pl(nlat - j + 1)) symmetric_pl = .false.
+    end do
+
+    ierror = 5
+    if (total /= ngptot) return
+
+    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    ierror = 6
+    if (alloc_status /= 0) return
+
+    grida(:, :) = 0.0
+    gridb(:, :) = 0.0
+
+!$omp parallel private(j, js, i, k, m, n, nm, offset, offset_s, &
+!$omp& row_nlon, mlimit, alloc_status, row_a, row_b, row_a_s, row_b_s, &
+!$omp& a_real, a_imag, b_real, b_imag, a_real_s, a_imag_s, &
+!$omp& b_real_s, b_imag_s, pval, parity, fft_rows, fft_work)
+    allocate(fft_rows(4 * nt, max_nlon), fft_work(4 * nt, max_nlon), &
+             stat=alloc_status)
+    if (alloc_status == 0) then
+    if (symmetric_pl) then
+!$omp do schedule(dynamic)
+    do j = 1, half_nlat
+        if (j <= pair_count) then
+            js = nlat - j + 1
+            offset = offsets(j)
+            offset_s = offsets(js)
+            row_nlon = pl(j)
+            mlimit = min(ntrunc, row_nlon / 2)
+            fft_rows(:, 1:row_nlon) = 0.0
+
+            do k = 1, nt
+                row_a = 4 * k - 3
+                row_b = 4 * k - 2
+                row_a_s = 4 * k - 1
+                row_b_s = 4 * k
+                do m = 0, mlimit
+                    a_real = 0.0d0
+                    a_imag = 0.0d0
+                    b_real = 0.0d0
+                    b_imag = 0.0d0
+                    a_real_s = 0.0d0
+                    a_imag_s = 0.0d0
+                    b_real_s = 0.0d0
+                    b_imag_s = 0.0d0
+                    nm = spectral_offset(m, ntrunc)
+                    parity = 1.0d0
+                    do n = m, ntrunc
+                        nm = nm + 1
+                        pval = dble(basis(j, nm))
+                        a_real = a_real + dble(real(speca(nm, k))) * pval
+                        a_imag = a_imag + dble(aimag(speca(nm, k))) * pval
+                        b_real = b_real + dble(real(specb(nm, k))) * pval
+                        b_imag = b_imag + dble(aimag(specb(nm, k))) * pval
+                        a_real_s = a_real_s + parity * &
+                            dble(real(speca(nm, k))) * pval
+                        a_imag_s = a_imag_s + parity * &
+                            dble(aimag(speca(nm, k))) * pval
+                        b_real_s = b_real_s + parity * &
+                            dble(real(specb(nm, k))) * pval
+                        b_imag_s = b_imag_s + parity * &
+                            dble(aimag(specb(nm, k))) * pval
+                        parity = -parity
+                    end do
+
+                    if (m == 0) then
+                        fft_rows(row_a, 1) = real(2.0d0 * a_real)
+                        fft_rows(row_b, 1) = real(2.0d0 * b_real)
+                        fft_rows(row_a_s, 1) = real(2.0d0 * a_real_s)
+                        fft_rows(row_b_s, 1) = real(2.0d0 * b_real_s)
+                    else
+                        fft_rows(row_a, 2 * m) = real(2.0d0 * a_real)
+                        fft_rows(row_b, 2 * m) = real(2.0d0 * b_real)
+                        fft_rows(row_a_s, 2 * m) = real(2.0d0 * a_real_s)
+                        fft_rows(row_b_s, 2 * m) = real(2.0d0 * b_real_s)
+                        if (2 * m < row_nlon) then
+                            fft_rows(row_a, 2 * m + 1) = real(2.0d0 * a_imag)
+                            fft_rows(row_b, 2 * m + 1) = real(2.0d0 * b_imag)
+                            fft_rows(row_a_s, 2 * m + 1) = &
+                                real(2.0d0 * a_imag_s)
+                            fft_rows(row_b_s, 2 * m + 1) = &
+                                real(2.0d0 * b_imag_s)
+                        end if
+                    end if
+                end do
+            end do
+
+            call hrfftb(4 * nt, row_nlon, fft_rows, 4 * nt, &
+                reduced_gaussian_fft_wsave(1, j), fft_work)
+
+            do k = 1, nt
+                row_a = 4 * k - 3
+                row_b = 4 * k - 2
+                row_a_s = 4 * k - 1
+                row_b_s = 4 * k
+                do i = 1, row_nlon
+                    grida(offset + i, k) = 0.5 * fft_rows(row_a, i)
+                    gridb(offset + i, k) = 0.5 * fft_rows(row_b, i)
+                    grida(offset_s + i, k) = 0.5 * fft_rows(row_a_s, i)
+                    gridb(offset_s + i, k) = 0.5 * fft_rows(row_b_s, i)
+                end do
+            end do
+        else
+            offset = offsets(j)
+            row_nlon = pl(j)
+            mlimit = min(ntrunc, row_nlon / 2)
+            fft_rows(:, 1:row_nlon) = 0.0
+
+            do k = 1, nt
+                row_a = 4 * k - 3
+                row_b = 4 * k - 2
+                do m = 0, mlimit
+                    a_real = 0.0d0
+                    a_imag = 0.0d0
+                    b_real = 0.0d0
+                    b_imag = 0.0d0
+                    nm = spectral_offset(m, ntrunc)
+                    do n = m, ntrunc
+                        nm = nm + 1
+                        pval = dble(basis(j, nm))
+                        a_real = a_real + dble(real(speca(nm, k))) * pval
+                        a_imag = a_imag + dble(aimag(speca(nm, k))) * pval
+                        b_real = b_real + dble(real(specb(nm, k))) * pval
+                        b_imag = b_imag + dble(aimag(specb(nm, k))) * pval
+                    end do
+
+                    if (m == 0) then
+                        fft_rows(row_a, 1) = real(2.0d0 * a_real)
+                        fft_rows(row_b, 1) = real(2.0d0 * b_real)
+                    else
+                        fft_rows(row_a, 2 * m) = real(2.0d0 * a_real)
+                        fft_rows(row_b, 2 * m) = real(2.0d0 * b_real)
+                        if (2 * m < row_nlon) then
+                            fft_rows(row_a, 2 * m + 1) = real(2.0d0 * a_imag)
+                            fft_rows(row_b, 2 * m + 1) = real(2.0d0 * b_imag)
+                        end if
+                    end if
+                end do
+            end do
+
+            call hrfftb(4 * nt, row_nlon, fft_rows, 4 * nt, &
+                reduced_gaussian_fft_wsave(1, j), fft_work)
+
+            do k = 1, nt
+                row_a = 4 * k - 3
+                row_b = 4 * k - 2
+                do i = 1, row_nlon
+                    grida(offset + i, k) = 0.5 * fft_rows(row_a, i)
+                    gridb(offset + i, k) = 0.5 * fft_rows(row_b, i)
+                end do
+            end do
+        end if
+    end do
+!$omp end do
+    else
+!$omp do schedule(dynamic)
+    do j = 1, nlat
+        offset = offsets(j)
+        row_nlon = pl(j)
+        mlimit = min(ntrunc, row_nlon / 2)
+        fft_rows(:, 1:row_nlon) = 0.0
+
+        do k = 1, nt
+            row_a = 4 * k - 3
+            row_b = 4 * k - 2
+            do m = 0, mlimit
+                a_real = 0.0d0
+                a_imag = 0.0d0
+                b_real = 0.0d0
+                b_imag = 0.0d0
+                nm = spectral_offset(m, ntrunc)
+                do n = m, ntrunc
+                    nm = nm + 1
+                    pval = dble(basis(j, nm))
+                    a_real = a_real + dble(real(speca(nm, k))) * pval
+                    a_imag = a_imag + dble(aimag(speca(nm, k))) * pval
+                    b_real = b_real + dble(real(specb(nm, k))) * pval
+                    b_imag = b_imag + dble(aimag(specb(nm, k))) * pval
+                end do
+
+                if (m == 0) then
+                    fft_rows(row_a, 1) = real(2.0d0 * a_real)
+                    fft_rows(row_b, 1) = real(2.0d0 * b_real)
+                else
+                    fft_rows(row_a, 2 * m) = real(2.0d0 * a_real)
+                    fft_rows(row_b, 2 * m) = real(2.0d0 * b_real)
+                    if (2 * m < row_nlon) then
+                        fft_rows(row_a, 2 * m + 1) = real(2.0d0 * a_imag)
+                        fft_rows(row_b, 2 * m + 1) = real(2.0d0 * b_imag)
+                    end if
+                end if
+            end do
+        end do
+
+        call hrfftb(4 * nt, row_nlon, fft_rows, 4 * nt, &
+            reduced_gaussian_fft_wsave(1, j), fft_work)
+
+        do k = 1, nt
+            row_a = 4 * k - 3
+            row_b = 4 * k - 2
+            do i = 1, row_nlon
+                grida(offset + i, k) = 0.5 * fft_rows(row_a, i)
+                gridb(offset + i, k) = 0.5 * fft_rows(row_b, i)
+            end do
+        end do
+    end do
+!$omp end do
+    end if
+    end if
+    if (allocated(fft_rows)) deallocate(fft_rows, fft_work)
+!$omp end parallel
+
+    ierror = 0
+
+contains
+
+    integer function spectral_offset(m_value, trunc)
+        integer, intent(in) :: m_value, trunc
+        spectral_offset = m_value * (2 * trunc - m_value + 3) / 2
+    end function spectral_offset
+
+end subroutine reduced_gaussian_spectogrd_pair
 
 
 subroutine reduced_gaussian_getgrad(dataspec, pl, basis, dbasis, sin_theta, &
@@ -545,6 +922,8 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
                                          sin_theta, a_ugrad, a_vgrad, &
                                          b_ugrad, b_vgrad, nmdim, nlat, &
                                          ntrunc, nt, ngptot, rsphere, ierror)
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
+        reduced_gaussian_fft_wsave
     implicit none
 
     integer, intent(in) :: nmdim, nlat, ntrunc, nt, ngptot
@@ -586,9 +965,9 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
     double precision :: a_v_cos_s(0:ntrunc, nt), a_v_sin_s(0:ntrunc, nt)
     double precision :: b_u_cos_s(0:ntrunc, nt), b_u_sin_s(0:ntrunc, nt)
     double precision :: b_v_cos_s(0:ntrunc, nt), b_v_sin_s(0:ntrunc, nt)
-    real, allocatable :: fft_rows(:, :), fft_work(:, :), fft_wsave(:)
+    real, allocatable :: fft_rows(:, :), fft_work(:, :)
 
-    external :: hrffti, hrfftb
+    external :: hrfftb
 
     ierror = 1
     if (nlat < 3) return
@@ -626,6 +1005,10 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
     ierror = 6
     if (total /= ngptot) return
 
+    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    ierror = 7
+    if (alloc_status /= 0) return
+
     inv_r = 1.0d0 / dble(rsphere)
     a_ugrad(:, :) = 0.0
     a_vgrad(:, :) = 0.0
@@ -642,9 +1025,9 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
 !$omp& a_u_cos, a_u_sin, a_v_cos, a_v_sin, b_u_cos, b_u_sin, &
 !$omp& b_v_cos, b_v_sin, a_u_cos_s, a_u_sin_s, a_v_cos_s, a_v_sin_s, &
 !$omp& b_u_cos_s, b_u_sin_s, b_v_cos_s, b_v_sin_s, parity, &
-!$omp& fft_rows, fft_work, fft_wsave)
+!$omp& fft_rows, fft_work)
     allocate(fft_rows(4, max_nlon), fft_work(4, max_nlon), &
-             fft_wsave(2 * max_nlon + 15), stat=alloc_status)
+             stat=alloc_status)
     if (alloc_status == 0) then
     if (symmetric_pl) then
 !$omp do schedule(dynamic)
@@ -750,7 +1133,6 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
             end do
 
             do k = 1, nt
-                call hrffti(row_nlon, fft_wsave)
                 fft_rows(:, 1:row_nlon) = 0.0
                 fft_rows(2, 1) = 2.0 * real(a_v_cos(0, k))
                 fft_rows(4, 1) = 2.0 * real(b_v_cos(0, k))
@@ -768,7 +1150,8 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
                     end if
                 end do
 
-                call hrfftb(4, row_nlon, fft_rows, 4, fft_wsave, fft_work)
+                call hrfftb(4, row_nlon, fft_rows, 4, &
+                    reduced_gaussian_fft_wsave(1, j), fft_work)
 
                 do i = 1, row_nlon
                     a_ugrad(offset + i, k) = 0.5 * fft_rows(1, i)
@@ -794,7 +1177,8 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
                     end if
                 end do
 
-                call hrfftb(4, row_nlon, fft_rows, 4, fft_wsave, fft_work)
+                call hrfftb(4, row_nlon, fft_rows, 4, &
+                    reduced_gaussian_fft_wsave(1, js), fft_work)
 
                 do i = 1, row_nlon
                     a_ugrad(offset_s + i, k) = 0.5 * fft_rows(1, i)
@@ -883,8 +1267,8 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
                     end if
                 end do
 
-                call hrffti(row_nlon, fft_wsave)
-                call hrfftb(4, row_nlon, fft_rows, 4, fft_wsave, fft_work)
+                call hrfftb(4, row_nlon, fft_rows, 4, &
+                    reduced_gaussian_fft_wsave(1, j), fft_work)
 
                 do i = 1, row_nlon
                     a_ugrad(offset + i, k) = 0.5 * fft_rows(1, i)
@@ -978,8 +1362,8 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
                 end if
             end do
 
-            call hrffti(row_nlon, fft_wsave)
-            call hrfftb(4, row_nlon, fft_rows, 4, fft_wsave, fft_work)
+            call hrfftb(4, row_nlon, fft_rows, 4, &
+                reduced_gaussian_fft_wsave(1, j), fft_work)
 
             do i = 1, row_nlon
                 a_ugrad(offset + i, k) = 0.5 * fft_rows(1, i)
@@ -992,7 +1376,7 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
 !$omp end do
     end if
     end if
-    if (allocated(fft_rows)) deallocate(fft_rows, fft_work, fft_wsave)
+    if (allocated(fft_rows)) deallocate(fft_rows, fft_work)
 !$omp end parallel
 
     ierror = 0
@@ -1011,6 +1395,8 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                                           dbasis, sin_theta, vrtspec, divspec, &
                                           ngptot, nlat, ntrunc, nt, rsphere, &
                                           ierror)
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
+        reduced_gaussian_fft_wsave
     implicit none
 
     integer, intent(in) :: ngptot, nlat, ntrunc, nt
@@ -1039,9 +1425,9 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
     double precision :: dp_u_cos, dp_u_sin, dp_v_cos, dp_v_sin
     double precision, allocatable :: u_cos_fft(:, :), u_sin_fft(:, :)
     double precision, allocatable :: v_cos_fft(:, :), v_sin_fft(:, :)
-    real, allocatable :: fft_rows(:, :), fft_work(:, :), fft_wsave(:)
+    real, allocatable :: fft_rows(:, :), fft_work(:, :)
 
-    external :: hrffti, hrfftf
+    external :: hrfftf
 
     ierror = 1
     if (nlat < 3) return
@@ -1076,10 +1462,14 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
     ierror = 5
     if (total /= ngptot) return
 
+    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    ierror = 6
+    if (alloc_status /= 0) return
+
     allocate(u_cos_fft(0:ntrunc, nlat), u_sin_fft(0:ntrunc, nlat), &
              v_cos_fft(0:ntrunc, nlat), v_sin_fft(0:ntrunc, nlat), &
              stat=alloc_status)
-    ierror = 6
+    ierror = 7
     if (alloc_status /= 0) return
 
     inv_r = 1.0d0 / dble(rsphere)
@@ -1093,9 +1483,8 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
         v_sin_fft(:, :) = 0.0d0
 
 !$omp parallel private(j, i, m, offset, row_nlon, mlimit, inv_nlon, &
-!$omp& fft_rows, fft_work, fft_wsave)
-        allocate(fft_rows(2, max_nlon), fft_work(2, max_nlon), &
-                 fft_wsave(2 * max_nlon + 15))
+!$omp& fft_rows, fft_work)
+        allocate(fft_rows(2, max_nlon), fft_work(2, max_nlon))
 !$omp do schedule(dynamic)
         do j = 1, nlat
             offset = offsets(j)
@@ -1108,8 +1497,8 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                 fft_rows(2, i) = vgrid(offset + i, k)
             end do
 
-            call hrffti(row_nlon, fft_wsave)
-            call hrfftf(2, row_nlon, fft_rows, 2, fft_wsave, fft_work)
+            call hrfftf(2, row_nlon, fft_rows, 2, &
+                reduced_gaussian_fft_wsave(1, j), fft_work)
 
             u_cos_fft(0, j) = dble(fft_rows(1, 1)) * inv_nlon
             v_cos_fft(0, j) = dble(fft_rows(2, 1)) * inv_nlon
@@ -1123,7 +1512,7 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
             end do
         end do
 !$omp end do
-        deallocate(fft_rows, fft_work, fft_wsave)
+        deallocate(fft_rows, fft_work)
 !$omp end parallel
 
         if (symmetric_pl) then
@@ -1386,6 +1775,8 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                                                  outspec, ngptot, nlat, &
                                                  ntrunc, nt, rsphere, &
                                                  component, ierror)
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
+        reduced_gaussian_fft_wsave
     implicit none
 
     integer, intent(in) :: ngptot, nlat, ntrunc, nt, component
@@ -1414,9 +1805,9 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
     double precision :: dp_u_cos, dp_u_sin, dp_v_cos, dp_v_sin
     double precision, allocatable :: u_cos_fft(:, :), u_sin_fft(:, :)
     double precision, allocatable :: v_cos_fft(:, :), v_sin_fft(:, :)
-    real, allocatable :: fft_rows(:, :), fft_work(:, :), fft_wsave(:)
+    real, allocatable :: fft_rows(:, :), fft_work(:, :)
 
-    external :: hrffti, hrfftf
+    external :: hrfftf
 
     ierror = 1
     if (nlat < 3) return
@@ -1454,10 +1845,14 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
     ierror = 6
     if (total /= ngptot) return
 
+    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    ierror = 7
+    if (alloc_status /= 0) return
+
     allocate(u_cos_fft(0:ntrunc, nlat), u_sin_fft(0:ntrunc, nlat), &
              v_cos_fft(0:ntrunc, nlat), v_sin_fft(0:ntrunc, nlat), &
              stat=alloc_status)
-    ierror = 7
+    ierror = 8
     if (alloc_status /= 0) return
 
     inv_r = 1.0d0 / dble(rsphere)
@@ -1470,9 +1865,8 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
         v_sin_fft(:, :) = 0.0d0
 
 !$omp parallel private(j, i, m, offset, row_nlon, mlimit, inv_nlon, &
-!$omp& fft_rows, fft_work, fft_wsave)
-        allocate(fft_rows(2, max_nlon), fft_work(2, max_nlon), &
-                 fft_wsave(2 * max_nlon + 15))
+!$omp& fft_rows, fft_work)
+        allocate(fft_rows(2, max_nlon), fft_work(2, max_nlon))
 !$omp do schedule(dynamic)
         do j = 1, nlat
             offset = offsets(j)
@@ -1485,8 +1879,8 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                 fft_rows(2, i) = vgrid(offset + i, k)
             end do
 
-            call hrffti(row_nlon, fft_wsave)
-            call hrfftf(2, row_nlon, fft_rows, 2, fft_wsave, fft_work)
+            call hrfftf(2, row_nlon, fft_rows, 2, &
+                reduced_gaussian_fft_wsave(1, j), fft_work)
 
             u_cos_fft(0, j) = dble(fft_rows(1, 1)) * inv_nlon
             v_cos_fft(0, j) = dble(fft_rows(2, 1)) * inv_nlon
@@ -1500,7 +1894,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
             end do
         end do
 !$omp end do
-        deallocate(fft_rows, fft_work, fft_wsave)
+        deallocate(fft_rows, fft_work)
 !$omp end parallel
 
         if (symmetric_pl) then
