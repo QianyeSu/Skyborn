@@ -17,7 +17,7 @@ if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 try:
-    from skyborn.spharm import Spharmt, gaussian_lats_wts, getspecindx, regrid, regriduv
+    from skyborn.spharm import Spharmt, gaussian_lats_wts, getspecindx, regrid
     from skyborn.spharm import spherical_harmonics as spharm_mod
     from skyborn.spharm.spherical_harmonics import SpheremackError, ValidationError
 
@@ -560,39 +560,6 @@ class TestRegridFunction:
 
         assert regridded.shape == (19, 36)
         assert isinstance(regridded, np.ndarray)
-
-    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
-    def test_regriduv_basic(self):
-        """Test basic vector-wind regrid functionality."""
-        grid_in = Spharmt(nlon=72, nlat=37)
-        grid_out = Spharmt(nlon=36, nlat=19)
-
-        lons = np.linspace(0, 2 * np.pi, 72, endpoint=False)
-        lats = np.linspace(-np.pi / 2, np.pi / 2, 37)
-        lon_grid, lat_grid = np.meshgrid(lons, lats)
-        u = np.sin(lon_grid) * np.cos(lat_grid)
-        v = np.cos(lon_grid) * np.cos(lat_grid)
-
-        u_out, v_out = regriduv(grid_in, grid_out, u, v)
-
-        assert u_out.shape == (19, 36)
-        assert v_out.shape == (19, 36)
-        assert isinstance(u_out, np.ndarray)
-        assert isinstance(v_out, np.ndarray)
-
-    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
-    def test_regriduv_rejects_bad_shape(self):
-        """Test vector-wind regrid input validation."""
-        grid_in = Spharmt(nlon=72, nlat=37)
-        grid_out = Spharmt(nlon=36, nlat=19)
-
-        with pytest.raises(ValidationError, match="same shape"):
-            regriduv(
-                grid_in,
-                grid_out,
-                np.zeros((37, 72), dtype=np.float64),
-                np.zeros((37, 72, 2), dtype=np.float64),
-            )
 
 
 class TestSpharmtIntegration:

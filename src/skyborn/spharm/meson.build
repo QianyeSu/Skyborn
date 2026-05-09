@@ -13,7 +13,7 @@ openmp_dep = dependency('openmp', required: false)
 
 # Install Python module files
 py.install_sources(
-    ['__init__.py', 'spherical_harmonics.py', 'reduced_gaussian.py', 'ectrans_backend_api.py'],
+    ['__init__.py', 'spherical_harmonics.py'],
     subdir: 'skyborn/spharm',
 )
 
@@ -333,7 +333,6 @@ else:
             'src/specintrp.f90',
             'src/onedtotwod.f90',
             'src/twodtooned.f90',
-            'src/reduced_gaussian_scalar.f90',
             'src/multsmoothfact.f90',
             'src/gaqd.f90',
             'src/shses.f90',
