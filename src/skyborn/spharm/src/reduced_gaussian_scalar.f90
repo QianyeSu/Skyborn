@@ -13,12 +13,13 @@ subroutine reduced_gaussian_legendre_basis(basis, nlat, ntrunc, ierror)
     real, intent(out) :: basis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
     integer, intent(out) :: ierror
 
-    integer :: j, m, n, nm, nmdim, ldwork, lw
-    double precision :: theta(nlat), weights(nlat)
-    double precision :: dwork(nlat * (nlat + 2))
-    double precision :: cp(nlat + 1), pb
+    integer :: i, js, m, n, nm, nmdim, l, late, nlon_basis
+    integer :: lwork, ldwork, lshags, alloc_status, mode, km
+    real :: parity, value
+    real, allocatable :: wshags(:), work(:), pmn(:, :, :)
+    double precision, allocatable :: dwork(:)
 
-    external :: gaqd, dnlfk, dnlft
+    external :: shagsp, legin
 
     ierror = 1
     if (nlat < 3) return
@@ -29,26 +30,107 @@ subroutine reduced_gaussian_legendre_basis(basis, nlat, ntrunc, ierror)
     nmdim = (ntrunc + 1) * (ntrunc + 2) / 2
     basis(:, :) = 0.0
 
+    l = ntrunc + 1
+    late = (nlat + 1) / 2
+    nlon_basis = max(4, 2 * ntrunc)
+    lshags = nlat * (2 * late + 3 * l - 2) + &
+        3 * l * (1 - l) / 2 + nlon_basis + 15
+    lwork = 4 * nlat * (nlat + 2) + 2
+    ldwork = nlat * (nlat + 4)
+
+    allocate(wshags(lshags), work(lwork), dwork(ldwork), &
+             pmn(nlat, late, 3), stat=alloc_status)
+    ierror = 3
+    if (alloc_status /= 0) return
+
+    call shagsp(nlat, nlon_basis, wshags, lshags, dwork, ldwork, ierror)
+    if (ierror /= 0) then
+        ierror = 4
+        deallocate(wshags, work, dwork, pmn)
+        return
+    end if
+
+    pmn(:, :, :) = 0.0
+    mode = 0
+    do m = 0, ntrunc
+        call legin(mode, l, nlat, m, wshags, pmn, km)
+        parity = 1.0
+        do n = m, ntrunc
+            nm = m * (2 * ntrunc - m + 3) / 2 + n - m + 1
+            do i = 1, late
+                value = pmn(n + 1, i, km)
+                basis(i, nm) = value
+                js = nlat - i + 1
+                if (js /= i) basis(js, nm) = parity * value
+            end do
+            parity = -parity
+        end do
+    end do
+
+    deallocate(wshags, work, dwork, pmn)
+    ierror = 0
+
+end subroutine reduced_gaussian_legendre_basis
+
+
+subroutine reduced_gaussian_legendre_derivative_from_basis(basis, dbasis, &
+                                                           nlat, ntrunc, &
+                                                           ierror)
+    implicit none
+
+    integer, intent(in) :: nlat, ntrunc
+    real, intent(in) :: basis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    real, intent(out) :: dbasis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    integer, intent(out) :: ierror
+
+    integer :: j, m, n, nm, prev_nm, ldwork, lw
+    double precision :: theta(nlat), weights(nlat)
+    double precision :: dwork(nlat * (nlat + 2))
+    double precision :: sin_theta, cos_theta, coeff, deriv
+
+    external :: gaqd
+
+    ierror = 1
+    if (nlat < 3) return
+
+    ierror = 2
+    if (ntrunc < 0 .or. ntrunc > nlat - 1) return
+
+    dbasis(:, :) = 0.0
+
     ierror = 0
     ldwork = nlat * (nlat + 2)
     lw = ldwork
     call gaqd(nlat, theta, weights, dwork, lw, ierror)
     if (ierror /= 0) return
 
-!$omp parallel do schedule(dynamic) private(m, n, nm, j, cp, pb)
+!$omp parallel do schedule(dynamic) private(m, n, nm, prev_nm, j, &
+!$omp& sin_theta, cos_theta, coeff, deriv)
     do m = 0, ntrunc
-        do n = m, ntrunc
+        do n = max(1, m), ntrunc
             nm = m * (2 * ntrunc - m + 3) / 2 + n - m + 1
-            call dnlfk(m, n, cp)
+            coeff = 0.0d0
+            prev_nm = 0
+            if (n > m) then
+                prev_nm = m * (2 * ntrunc - m + 3) / 2 + (n - 1) - m + 1
+                coeff = sqrt(dble((2 * n + 1) * (n * n - m * m)) / &
+                             dble(2 * n - 1))
+            end if
+
             do j = 1, nlat
-                call dnlft(m, n, theta(j), cp, pb)
-                basis(j, nm) = real(pb)
+                sin_theta = sin(theta(j))
+                cos_theta = cos(theta(j))
+                deriv = dble(n) * cos_theta * dble(basis(j, nm))
+                if (prev_nm > 0) then
+                    deriv = deriv - coeff * dble(basis(j, prev_nm))
+                end if
+                dbasis(j, nm) = real(deriv / sin_theta)
             end do
         end do
     end do
 !$omp end parallel do
 
-end subroutine reduced_gaussian_legendre_basis
+end subroutine reduced_gaussian_legendre_derivative_from_basis
 
 
 subroutine reduced_gaussian_legendre_derivative_basis(dbasis, nlat, ntrunc, ierror)
@@ -58,12 +140,8 @@ subroutine reduced_gaussian_legendre_derivative_basis(dbasis, nlat, ntrunc, ierr
     real, intent(out) :: dbasis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
     integer, intent(out) :: ierror
 
-    integer :: j, m, n, nm, nmdim, ldwork, lw
-    double precision :: theta(nlat), weights(nlat)
-    double precision :: dwork(nlat * (nlat + 2))
-    double precision :: cp(nlat + 1), dpb
-
-    external :: gaqd, dnlfk, dnlftd
+    integer :: nmdim, alloc_status
+    real, allocatable :: basis(:, :)
 
     ierror = 1
     if (nlat < 3) return
@@ -74,24 +152,19 @@ subroutine reduced_gaussian_legendre_derivative_basis(dbasis, nlat, ntrunc, ierr
     nmdim = (ntrunc + 1) * (ntrunc + 2) / 2
     dbasis(:, :) = 0.0
 
-    ierror = 0
-    ldwork = nlat * (nlat + 2)
-    lw = ldwork
-    call gaqd(nlat, theta, weights, dwork, lw, ierror)
-    if (ierror /= 0) return
+    allocate(basis(nlat, nmdim), stat=alloc_status)
+    ierror = 3
+    if (alloc_status /= 0) return
 
-!$omp parallel do schedule(dynamic) private(m, n, nm, j, cp, dpb)
-    do m = 0, ntrunc
-        do n = m, ntrunc
-            nm = m * (2 * ntrunc - m + 3) / 2 + n - m + 1
-            call dnlfk(m, n, cp)
-            do j = 1, nlat
-                call dnlftd(m, n, theta(j), cp, dpb)
-                dbasis(j, nm) = real(dpb)
-            end do
-        end do
-    end do
-!$omp end parallel do
+    call reduced_gaussian_legendre_basis(basis, nlat, ntrunc, ierror)
+    if (ierror /= 0) then
+        deallocate(basis)
+        return
+    end if
+
+    call reduced_gaussian_legendre_derivative_from_basis( &
+        basis, dbasis, nlat, ntrunc, ierror)
+    deallocate(basis)
 
 end subroutine reduced_gaussian_legendre_derivative_basis
 
@@ -109,10 +182,14 @@ subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
     integer, intent(out) :: ierror
 
     integer :: j, i, k, m, n, nm, offset, row_nlon, total
-    double precision :: angle, angle_step, inv_nlon
-    double precision :: cos_angle, sin_angle
-    double precision :: coeff_real, coeff_imag, value, weighted_basis
-    double precision, parameter :: twopi = 6.283185307179586476925286766559d0
+    integer :: max_nlon, mlimit, alloc_status
+    integer :: offsets(nlat + 1)
+    double precision :: inv_nlon
+    double precision :: coeff_real, coeff_imag, weighted_basis
+    double precision, allocatable :: cos_fft(:, :), sin_fft(:, :)
+    real, allocatable :: fft_rows(:, :), fft_work(:, :), fft_wsave(:)
+
+    external :: hrffti, hrfftf
 
     ierror = 1
     if (nlat < 3) return
@@ -124,54 +201,67 @@ subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
     if (nt < 1) return
 
     total = 0
+    max_nlon = 0
+    offsets(1) = 0
     do j = 1, nlat
         if (pl(j) < 1) return
         total = total + pl(j)
+        if (pl(j) > max_nlon) max_nlon = pl(j)
+        offsets(j + 1) = total
     end do
 
     ierror = 4
     if (total /= ngptot) return
 
+    allocate(cos_fft(0:ntrunc, nlat), sin_fft(0:ntrunc, nlat), &
+             stat=alloc_status)
+    ierror = 5
+    if (alloc_status /= 0) return
+
     dataspec(:, :) = (0.0, 0.0)
-    offset = 0
 
-    do j = 1, nlat
-        row_nlon = pl(j)
-        inv_nlon = 1.0d0 / dble(row_nlon)
+    do k = 1, nt
+        cos_fft(:, :) = 0.0d0
+        sin_fft(:, :) = 0.0d0
 
+!$omp parallel private(j, i, m, offset, row_nlon, mlimit, inv_nlon, &
+!$omp& fft_rows, fft_work, fft_wsave)
+        allocate(fft_rows(1, max_nlon), fft_work(1, max_nlon), &
+                 fft_wsave(2 * max_nlon + 15))
+!$omp do schedule(dynamic)
+        do j = 1, nlat
+            offset = offsets(j)
+            row_nlon = pl(j)
+            mlimit = min(ntrunc, row_nlon / 2)
+            inv_nlon = 1.0d0 / dble(row_nlon)
+            fft_rows(:, 1:row_nlon) = 0.0
+            do i = 1, row_nlon
+                fft_rows(1, i) = datagrid(offset + i, k)
+            end do
+
+            call hrffti(row_nlon, fft_wsave)
+            call hrfftf(1, row_nlon, fft_rows, 1, fft_wsave, fft_work)
+
+            cos_fft(0, j) = dble(fft_rows(1, 1)) * inv_nlon
+            do m = 1, mlimit
+                cos_fft(m, j) = dble(fft_rows(1, 2 * m)) * inv_nlon
+                if (2 * m < row_nlon) then
+                    sin_fft(m, j) = dble(fft_rows(1, 2 * m + 1)) * inv_nlon
+                end if
+            end do
+        end do
+!$omp end do
+        deallocate(fft_rows, fft_work, fft_wsave)
+!$omp end parallel
+
+!$omp parallel do schedule(dynamic) private(m, j, n, nm, row_nlon, &
+!$omp& coeff_real, coeff_imag, weighted_basis)
         do m = 0, ntrunc
-            if (m == 0) then
-                do k = 1, nt
-                    coeff_real = 0.0d0
-                    do i = 1, row_nlon
-                        coeff_real = coeff_real + dble(datagrid(offset + i, k))
-                    end do
-                    coeff_real = coeff_real * inv_nlon
-
-                    nm = spectral_offset(m, ntrunc)
-                    do n = m, ntrunc
-                        nm = nm + 1
-                        weighted_basis = dble(weights(j)) * dble(basis(j, nm))
-                        dataspec(nm, k) = dataspec(nm, k) + &
-                            cmplx(real(coeff_real * weighted_basis), 0.0)
-                    end do
-                end do
-            else if (2 * m <= row_nlon) then
-                angle_step = twopi * dble(m) * inv_nlon
-                do k = 1, nt
-                    coeff_real = 0.0d0
-                    coeff_imag = 0.0d0
-                    do i = 1, row_nlon
-                        angle = angle_step * dble(i - 1)
-                        cos_angle = cos(angle)
-                        sin_angle = sin(angle)
-                        value = dble(datagrid(offset + i, k))
-                        coeff_real = coeff_real + value * cos_angle
-                        coeff_imag = coeff_imag - value * sin_angle
-                    end do
-                    coeff_real = coeff_real * inv_nlon
-                    coeff_imag = coeff_imag * inv_nlon
-
+            do j = 1, nlat
+                row_nlon = pl(j)
+                if (2 * m <= row_nlon) then
+                    coeff_real = cos_fft(m, j)
+                    coeff_imag = sin_fft(m, j)
                     nm = spectral_offset(m, ntrunc)
                     do n = m, ntrunc
                         nm = nm + 1
@@ -180,13 +270,13 @@ subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
                             cmplx(real(coeff_real * weighted_basis), &
                                   real(coeff_imag * weighted_basis))
                     end do
-                end do
-            end if
+                end if
+            end do
         end do
-
-        offset = offset + row_nlon
+!$omp end parallel do
     end do
 
+    deallocate(cos_fft, sin_fft)
     ierror = 0
 
 contains
@@ -211,9 +301,12 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
     integer, intent(out) :: ierror
 
     integer :: j, i, k, m, n, nm, offset, row_nlon, total
-    double precision :: angle, angle_step, value
+    integer :: max_nlon, mlimit
+    integer :: offsets(nlat + 1)
     double precision :: scrm_real, scrm_imag
-    double precision, parameter :: twopi = 6.283185307179586476925286766559d0
+    real, allocatable :: fft_rows(:, :), fft_work(:, :), fft_wsave(:)
+
+    external :: hrffti, hrfftb
 
     ierror = 1
     if (nlat < 3) return
@@ -228,46 +321,67 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
     if (nt < 1) return
 
     total = 0
+    max_nlon = 0
+    offsets(1) = 0
     do j = 1, nlat
         if (pl(j) < 1) return
         total = total + pl(j)
+        if (pl(j) > max_nlon) max_nlon = pl(j)
+        offsets(j + 1) = total
     end do
 
     ierror = 5
     if (total /= ngptot) return
 
-    offset = 0
-    do j = 1, nlat
-        row_nlon = pl(j)
-        do k = 1, nt
-            do i = 1, row_nlon
-                value = 0.0d0
-                do m = 0, ntrunc
-                    scrm_real = 0.0d0
-                    scrm_imag = 0.0d0
-                    nm = spectral_offset(m, ntrunc)
-                    do n = m, ntrunc
-                        nm = nm + 1
-                        scrm_real = scrm_real + dble(real(dataspec(nm, k))) * &
-                            dble(basis(j, nm))
-                        scrm_imag = scrm_imag + dble(aimag(dataspec(nm, k))) * &
-                            dble(basis(j, nm))
-                    end do
+    datagrid(:, :) = 0.0
 
-                    if (m == 0) then
-                        value = value + scrm_real
-                    else
-                        angle_step = twopi * dble(m) / dble(row_nlon)
-                        angle = angle_step * dble(i - 1)
-                        value = value + 2.0d0 * &
-                            (scrm_real * cos(angle) - scrm_imag * sin(angle))
-                    end if
+!$omp parallel private(j, i, k, m, n, nm, offset, row_nlon, mlimit, &
+!$omp& scrm_real, scrm_imag, fft_rows, fft_work, fft_wsave)
+    allocate(fft_rows(nt, max_nlon), fft_work(nt, max_nlon), &
+             fft_wsave(2 * max_nlon + 15))
+!$omp do schedule(dynamic)
+    do j = 1, nlat
+        offset = offsets(j)
+        row_nlon = pl(j)
+        mlimit = min(ntrunc, row_nlon / 2)
+        fft_rows(:, 1:row_nlon) = 0.0
+
+        do k = 1, nt
+            do m = 0, mlimit
+                scrm_real = 0.0d0
+                scrm_imag = 0.0d0
+                nm = spectral_offset(m, ntrunc)
+                do n = m, ntrunc
+                    nm = nm + 1
+                    scrm_real = scrm_real + dble(real(dataspec(nm, k))) * &
+                        dble(basis(j, nm))
+                    scrm_imag = scrm_imag + dble(aimag(dataspec(nm, k))) * &
+                        dble(basis(j, nm))
                 end do
-                datagrid(offset + i, k) = real(value)
+
+                if (m == 0) then
+                    fft_rows(k, 1) = real(2.0d0 * scrm_real)
+                else
+                    fft_rows(k, 2 * m) = real(2.0d0 * scrm_real)
+                    if (2 * m < row_nlon) then
+                        fft_rows(k, 2 * m + 1) = real(2.0d0 * scrm_imag)
+                    end if
+                end if
             end do
         end do
-        offset = offset + row_nlon
+
+        call hrffti(row_nlon, fft_wsave)
+        call hrfftb(nt, row_nlon, fft_rows, nt, fft_wsave, fft_work)
+
+        do k = 1, nt
+            do i = 1, row_nlon
+                datagrid(offset + i, k) = 0.5 * fft_rows(k, i)
+            end do
+        end do
     end do
+!$omp end do
+    deallocate(fft_rows, fft_work, fft_wsave)
+!$omp end parallel
 
     ierror = 0
 
@@ -1215,3 +1329,405 @@ contains
     end function spectral_offset
 
 end subroutine reduced_gaussian_getvrtdivspec
+
+
+subroutine reduced_gaussian_getvrtspec(ugrid, vgrid, pl, weights, basis, &
+                                       dbasis, sin_theta, vrtspec, &
+                                       ngptot, nlat, ntrunc, nt, rsphere, &
+                                       ierror)
+    implicit none
+
+    integer, intent(in) :: ngptot, nlat, ntrunc, nt
+    real, intent(in) :: ugrid(ngptot, nt)
+    real, intent(in) :: vgrid(ngptot, nt)
+    integer, intent(in) :: pl(nlat)
+    real, intent(in) :: weights(nlat)
+    real, intent(in) :: basis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    real, intent(in) :: dbasis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    real, intent(in) :: sin_theta(nlat)
+    real, intent(in) :: rsphere
+    complex, intent(out) :: vrtspec((ntrunc + 1) * (ntrunc + 2) / 2, nt)
+    integer, intent(out) :: ierror
+
+    call reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
+        basis, dbasis, sin_theta, vrtspec, ngptot, nlat, ntrunc, nt, &
+        rsphere, 1, ierror)
+
+end subroutine reduced_gaussian_getvrtspec
+
+
+subroutine reduced_gaussian_getdivspec(ugrid, vgrid, pl, weights, basis, &
+                                       dbasis, sin_theta, divspec, &
+                                       ngptot, nlat, ntrunc, nt, rsphere, &
+                                       ierror)
+    implicit none
+
+    integer, intent(in) :: ngptot, nlat, ntrunc, nt
+    real, intent(in) :: ugrid(ngptot, nt)
+    real, intent(in) :: vgrid(ngptot, nt)
+    integer, intent(in) :: pl(nlat)
+    real, intent(in) :: weights(nlat)
+    real, intent(in) :: basis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    real, intent(in) :: dbasis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    real, intent(in) :: sin_theta(nlat)
+    real, intent(in) :: rsphere
+    complex, intent(out) :: divspec((ntrunc + 1) * (ntrunc + 2) / 2, nt)
+    integer, intent(out) :: ierror
+
+    call reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
+        basis, dbasis, sin_theta, divspec, ngptot, nlat, ntrunc, nt, &
+        rsphere, 2, ierror)
+
+end subroutine reduced_gaussian_getdivspec
+
+
+subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
+                                                 basis, dbasis, sin_theta, &
+                                                 outspec, ngptot, nlat, &
+                                                 ntrunc, nt, rsphere, &
+                                                 component, ierror)
+    implicit none
+
+    integer, intent(in) :: ngptot, nlat, ntrunc, nt, component
+    real, intent(in) :: ugrid(ngptot, nt)
+    real, intent(in) :: vgrid(ngptot, nt)
+    integer, intent(in) :: pl(nlat)
+    real, intent(in) :: weights(nlat)
+    real, intent(in) :: basis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    real, intent(in) :: dbasis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    real, intent(in) :: sin_theta(nlat)
+    real, intent(in) :: rsphere
+    complex, intent(out) :: outspec((ntrunc + 1) * (ntrunc + 2) / 2, nt)
+    integer, intent(out) :: ierror
+
+    integer :: j, js, i, k, m, n, nm, offset, row_nlon, total
+    integer :: max_nlon, mlimit, alloc_status, pair_count, half_nlat
+    integer :: offsets(nlat + 1)
+    logical :: symmetric_pl
+    double precision :: inv_nlon, inv_r, inv_r_sin
+    double precision :: u_mean, v_mean, u_cos, u_sin, v_cos, v_sin
+    double precision :: u_mean_s, v_mean_s, u_cos_s, u_sin_s
+    double precision :: v_cos_s, v_sin_s
+    double precision :: pval, dpval, wval, value_real, value_imag
+    double precision :: p_scale, dp_scale, p_weighted, dp_weighted
+    double precision :: parity, p_u_cos, p_u_sin, p_v_cos, p_v_sin
+    double precision :: dp_u_cos, dp_u_sin, dp_v_cos, dp_v_sin
+    double precision, allocatable :: u_cos_fft(:, :), u_sin_fft(:, :)
+    double precision, allocatable :: v_cos_fft(:, :), v_sin_fft(:, :)
+    real, allocatable :: fft_rows(:, :), fft_work(:, :), fft_wsave(:)
+
+    external :: hrffti, hrfftf
+
+    ierror = 1
+    if (nlat < 3) return
+
+    ierror = 2
+    if (ntrunc < 0 .or. ntrunc > nlat - 1) return
+
+    ierror = 3
+    if (nt < 1) return
+
+    ierror = 4
+    if (rsphere <= 0.0) return
+
+    ierror = 5
+    if (component < 1 .or. component > 2) return
+
+    total = 0
+    max_nlon = 0
+    offsets(1) = 0
+    do j = 1, nlat
+        if (pl(j) < 1) return
+        if (sin_theta(j) <= 0.0) return
+        total = total + pl(j)
+        if (pl(j) > max_nlon) max_nlon = pl(j)
+        offsets(j + 1) = total
+    end do
+
+    pair_count = nlat / 2
+    half_nlat = (nlat + 1) / 2
+    symmetric_pl = .true.
+    do j = 1, pair_count
+        if (pl(j) /= pl(nlat - j + 1)) symmetric_pl = .false.
+    end do
+
+    ierror = 6
+    if (total /= ngptot) return
+
+    allocate(u_cos_fft(0:ntrunc, nlat), u_sin_fft(0:ntrunc, nlat), &
+             v_cos_fft(0:ntrunc, nlat), v_sin_fft(0:ntrunc, nlat), &
+             stat=alloc_status)
+    ierror = 7
+    if (alloc_status /= 0) return
+
+    inv_r = 1.0d0 / dble(rsphere)
+    outspec(:, :) = (0.0, 0.0)
+
+    do k = 1, nt
+        u_cos_fft(:, :) = 0.0d0
+        u_sin_fft(:, :) = 0.0d0
+        v_cos_fft(:, :) = 0.0d0
+        v_sin_fft(:, :) = 0.0d0
+
+!$omp parallel private(j, i, m, offset, row_nlon, mlimit, inv_nlon, &
+!$omp& fft_rows, fft_work, fft_wsave)
+        allocate(fft_rows(2, max_nlon), fft_work(2, max_nlon), &
+                 fft_wsave(2 * max_nlon + 15))
+!$omp do schedule(dynamic)
+        do j = 1, nlat
+            offset = offsets(j)
+            row_nlon = pl(j)
+            mlimit = min(ntrunc, row_nlon / 2)
+            inv_nlon = 1.0d0 / dble(row_nlon)
+            fft_rows(:, 1:row_nlon) = 0.0
+            do i = 1, row_nlon
+                fft_rows(1, i) = ugrid(offset + i, k)
+                fft_rows(2, i) = vgrid(offset + i, k)
+            end do
+
+            call hrffti(row_nlon, fft_wsave)
+            call hrfftf(2, row_nlon, fft_rows, 2, fft_wsave, fft_work)
+
+            u_cos_fft(0, j) = dble(fft_rows(1, 1)) * inv_nlon
+            v_cos_fft(0, j) = dble(fft_rows(2, 1)) * inv_nlon
+            do m = 1, mlimit
+                u_cos_fft(m, j) = dble(fft_rows(1, 2 * m)) * inv_nlon
+                v_cos_fft(m, j) = dble(fft_rows(2, 2 * m)) * inv_nlon
+                if (2 * m < row_nlon) then
+                    u_sin_fft(m, j) = -dble(fft_rows(1, 2 * m + 1)) * inv_nlon
+                    v_sin_fft(m, j) = -dble(fft_rows(2, 2 * m + 1)) * inv_nlon
+                end if
+            end do
+        end do
+!$omp end do
+        deallocate(fft_rows, fft_work, fft_wsave)
+!$omp end parallel
+
+        if (symmetric_pl) then
+!$omp parallel do schedule(dynamic) private(m, j, js, n, nm, row_nlon, &
+!$omp& inv_r_sin, u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, &
+!$omp& u_mean_s, v_mean_s, u_cos_s, u_sin_s, v_cos_s, v_sin_s, &
+!$omp& pval, dpval, wval, value_real, value_imag, p_scale, dp_scale, &
+!$omp& p_weighted, dp_weighted, parity, p_u_cos, p_u_sin, p_v_cos, &
+!$omp& p_v_sin, dp_u_cos, dp_u_sin, dp_v_cos, dp_v_sin)
+        do m = 0, ntrunc
+            if (m == 0) then
+                do j = 1, pair_count
+                    js = nlat - j + 1
+                    wval = dble(weights(j))
+                    u_mean = u_cos_fft(0, j)
+                    v_mean = v_cos_fft(0, j)
+                    u_mean_s = u_cos_fft(0, js)
+                    v_mean_s = v_cos_fft(0, js)
+
+                    nm = spectral_offset(m, ntrunc)
+                    dp_scale = wval * inv_r
+                    parity = 1.0d0
+                    do n = m, ntrunc
+                        nm = nm + 1
+                        dpval = dble(dbasis(j, nm))
+                        dp_weighted = dp_scale * dpval
+                        if (component == 1) then
+                            value_real = -dp_weighted * &
+                                (u_mean - parity * u_mean_s)
+                        else
+                            value_real = dp_weighted * &
+                                (v_mean - parity * v_mean_s)
+                        end if
+                        outspec(nm, k) = outspec(nm, k) + &
+                            cmplx(real(value_real), 0.0)
+                        parity = -parity
+                    end do
+                end do
+
+                if (half_nlat > pair_count) then
+                    j = half_nlat
+                    wval = dble(weights(j))
+                    u_mean = u_cos_fft(0, j)
+                    v_mean = v_cos_fft(0, j)
+
+                    nm = spectral_offset(m, ntrunc)
+                    dp_scale = wval * inv_r
+                    do n = m, ntrunc
+                        nm = nm + 1
+                        dpval = dble(dbasis(j, nm))
+                        dp_weighted = dp_scale * dpval
+                        if (component == 1) then
+                            value_real = -dp_weighted * u_mean
+                        else
+                            value_real = dp_weighted * v_mean
+                        end if
+                        outspec(nm, k) = outspec(nm, k) + &
+                            cmplx(real(value_real), 0.0)
+                    end do
+                end if
+            else
+                do j = 1, pair_count
+                    row_nlon = pl(j)
+                    if (2 * m <= row_nlon) then
+                        js = nlat - j + 1
+                        inv_r_sin = inv_r / dble(sin_theta(j))
+                        wval = dble(weights(j))
+                        u_cos = u_cos_fft(m, j)
+                        u_sin = u_sin_fft(m, j)
+                        v_cos = v_cos_fft(m, j)
+                        v_sin = v_sin_fft(m, j)
+                        u_cos_s = u_cos_fft(m, js)
+                        u_sin_s = u_sin_fft(m, js)
+                        v_cos_s = v_cos_fft(m, js)
+                        v_sin_s = v_sin_fft(m, js)
+
+                        nm = spectral_offset(m, ntrunc)
+                        p_scale = wval * dble(m) * inv_r_sin
+                        dp_scale = wval * inv_r
+                        parity = 1.0d0
+                        do n = m, ntrunc
+                            nm = nm + 1
+                            pval = dble(basis(j, nm))
+                            dpval = dble(dbasis(j, nm))
+                            p_weighted = p_scale * pval
+                            dp_weighted = dp_scale * dpval
+                            if (component == 1) then
+                                p_v_sin = v_sin + parity * v_sin_s
+                                p_v_cos = v_cos + parity * v_cos_s
+                                dp_u_sin = u_sin - parity * u_sin_s
+                                dp_u_cos = u_cos - parity * u_cos_s
+                                value_real = -dp_weighted * dp_u_cos + &
+                                    p_weighted * p_v_sin
+                                value_imag = dp_weighted * dp_u_sin + &
+                                    p_weighted * p_v_cos
+                            else
+                                p_u_sin = u_sin + parity * u_sin_s
+                                p_u_cos = u_cos + parity * u_cos_s
+                                dp_v_sin = v_sin - parity * v_sin_s
+                                dp_v_cos = v_cos - parity * v_cos_s
+                                value_real = p_weighted * p_u_sin + &
+                                    dp_weighted * dp_v_cos
+                                value_imag = p_weighted * p_u_cos - &
+                                    dp_weighted * dp_v_sin
+                            end if
+                            outspec(nm, k) = outspec(nm, k) + &
+                                cmplx(real(value_real), real(value_imag))
+                            parity = -parity
+                        end do
+                    end if
+                end do
+
+                if (half_nlat > pair_count) then
+                    j = half_nlat
+                    row_nlon = pl(j)
+                    if (2 * m <= row_nlon) then
+                        inv_r_sin = inv_r / dble(sin_theta(j))
+                        wval = dble(weights(j))
+                        u_cos = u_cos_fft(m, j)
+                        u_sin = u_sin_fft(m, j)
+                        v_cos = v_cos_fft(m, j)
+                        v_sin = v_sin_fft(m, j)
+
+                        nm = spectral_offset(m, ntrunc)
+                        p_scale = wval * dble(m) * inv_r_sin
+                        dp_scale = wval * inv_r
+                        do n = m, ntrunc
+                            nm = nm + 1
+                            pval = dble(basis(j, nm))
+                            dpval = dble(dbasis(j, nm))
+                            p_weighted = p_scale * pval
+                            dp_weighted = dp_scale * dpval
+                            if (component == 1) then
+                                value_real = -dp_weighted * u_cos + &
+                                    p_weighted * v_sin
+                                value_imag = dp_weighted * u_sin + &
+                                    p_weighted * v_cos
+                            else
+                                value_real = p_weighted * u_sin + &
+                                    dp_weighted * v_cos
+                                value_imag = p_weighted * u_cos - &
+                                    dp_weighted * v_sin
+                            end if
+                            outspec(nm, k) = outspec(nm, k) + &
+                                cmplx(real(value_real), real(value_imag))
+                        end do
+                    end if
+                end if
+            end if
+        end do
+!$omp end parallel do
+        else
+!$omp parallel do schedule(dynamic) private(m, j, n, nm, row_nlon, &
+!$omp& inv_r_sin, u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, pval, &
+!$omp& dpval, wval, value_real, value_imag, p_scale, dp_scale, &
+!$omp& p_weighted, dp_weighted)
+        do m = 0, ntrunc
+            if (m == 0) then
+                do j = 1, nlat
+                    wval = dble(weights(j))
+                    u_mean = u_cos_fft(0, j)
+                    v_mean = v_cos_fft(0, j)
+
+                    nm = spectral_offset(m, ntrunc)
+                    dp_scale = wval * inv_r
+                    do n = m, ntrunc
+                        nm = nm + 1
+                        dpval = dble(dbasis(j, nm))
+                        dp_weighted = dp_scale * dpval
+                        if (component == 1) then
+                            value_real = -dp_weighted * u_mean
+                        else
+                            value_real = dp_weighted * v_mean
+                        end if
+                        outspec(nm, k) = outspec(nm, k) + &
+                            cmplx(real(value_real), 0.0)
+                    end do
+                end do
+            else
+                do j = 1, nlat
+                    row_nlon = pl(j)
+                    if (2 * m <= row_nlon) then
+                        inv_r_sin = inv_r / dble(sin_theta(j))
+                        wval = dble(weights(j))
+                        u_cos = u_cos_fft(m, j)
+                        u_sin = u_sin_fft(m, j)
+                        v_cos = v_cos_fft(m, j)
+                        v_sin = v_sin_fft(m, j)
+
+                        nm = spectral_offset(m, ntrunc)
+                        p_scale = wval * dble(m) * inv_r_sin
+                        dp_scale = wval * inv_r
+                        do n = m, ntrunc
+                            nm = nm + 1
+                            pval = dble(basis(j, nm))
+                            dpval = dble(dbasis(j, nm))
+                            p_weighted = p_scale * pval
+                            dp_weighted = dp_scale * dpval
+                            if (component == 1) then
+                                value_real = -dp_weighted * u_cos + &
+                                    p_weighted * v_sin
+                                value_imag = dp_weighted * u_sin + &
+                                    p_weighted * v_cos
+                            else
+                                value_real = p_weighted * u_sin + &
+                                    dp_weighted * v_cos
+                                value_imag = p_weighted * u_cos - &
+                                    dp_weighted * v_sin
+                            end if
+                            outspec(nm, k) = outspec(nm, k) + &
+                                cmplx(real(value_real), real(value_imag))
+                        end do
+                    end if
+                end do
+            end if
+        end do
+!$omp end parallel do
+        end if
+    end do
+
+    ierror = 0
+
+contains
+
+    integer function spectral_offset(m_value, trunc)
+        integer, intent(in) :: m_value, trunc
+        spectral_offset = m_value * (2 * trunc - m_value + 3) / 2
+    end function spectral_offset
+
+end subroutine reduced_gaussian_getvecspec_component
