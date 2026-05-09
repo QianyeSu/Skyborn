@@ -333,6 +333,7 @@ else:
             'src/specintrp.f90',
             'src/onedtotwod.f90',
             'src/twodtooned.f90',
+            'src/reduced_gaussian_scalar.f90',
             'src/multsmoothfact.f90',
             'src/gaqd.f90',
             'src/shses.f90',
