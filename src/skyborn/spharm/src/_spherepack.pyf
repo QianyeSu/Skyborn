@@ -102,6 +102,75 @@ python module _spherepack ! in
             integer :: ntrunc
             real :: rsphere
         end subroutine twodtooned_vrtdiv
+        subroutine reduced_gaussian_legendre_basis(basis,nlat,ntrunc,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
+            integer, required, intent(in) :: nlat
+            integer, required, intent(in) :: ntrunc
+            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2),depend(nlat,ntrunc),intent(out) :: basis
+            integer, intent(out) :: ierror
+        end subroutine reduced_gaussian_legendre_basis
+        subroutine reduced_gaussian_legendre_derivative_basis(dbasis,nlat,ntrunc,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
+            integer, required, intent(in) :: nlat
+            integer, required, intent(in) :: ntrunc
+            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2),depend(nlat,ntrunc),intent(out) :: dbasis
+            integer, intent(out) :: ierror
+        end subroutine reduced_gaussian_legendre_derivative_basis
+        subroutine reduced_gaussian_grdtospec(datagrid,pl,weights,basis,dataspec,ngptot,nlat,ntrunc,nt,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
+            real dimension(ngptot,nt) :: datagrid
+            integer dimension(nlat) :: pl
+            real dimension(nlat) :: weights
+            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: basis
+            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: dataspec
+            integer optional,check(shape(datagrid,0)==ngptot),depend(datagrid) :: ngptot=shape(datagrid,0)
+            integer optional,check(shape(datagrid,1)==nt),depend(datagrid) :: nt=shape(datagrid,1)
+            integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
+            integer, required, intent(in) :: ntrunc
+            integer, intent(out) :: ierror
+        end subroutine reduced_gaussian_grdtospec
+        subroutine reduced_gaussian_spectogrd(dataspec,pl,basis,datagrid,nmdim,nlat,ntrunc,nt,ngptot,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
+            complex dimension(nmdim,nt) :: dataspec
+            integer dimension(nlat) :: pl
+            real dimension(nlat,nmdim) :: basis
+            real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: datagrid
+            integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
+            integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
+            integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
+            integer, required, intent(in) :: ntrunc
+            integer, required, intent(in) :: ngptot
+            integer, intent(out) :: ierror
+        end subroutine reduced_gaussian_spectogrd
+        subroutine reduced_gaussian_getgrad(dataspec,pl,basis,dbasis,sin_theta,ugrad,vgrad,nmdim,nlat,ntrunc,nt,ngptot,rsphere,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
+            complex dimension(nmdim,nt) :: dataspec
+            integer dimension(nlat) :: pl
+            real dimension(nlat,nmdim) :: basis
+            real dimension(nlat,nmdim) :: dbasis
+            real dimension(nlat) :: sin_theta
+            real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: ugrad
+            real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: vgrad
+            integer optional,check(shape(dataspec,0)==nmdim),depend(dataspec) :: nmdim=shape(dataspec,0)
+            integer optional,check(shape(dataspec,1)==nt),depend(dataspec) :: nt=shape(dataspec,1)
+            integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
+            integer, required, intent(in) :: ntrunc
+            integer, required, intent(in) :: ngptot
+            real, required, intent(in) :: rsphere
+            integer, intent(out) :: ierror
+        end subroutine reduced_gaussian_getgrad
+        subroutine reduced_gaussian_getvrtdivspec(ugrid,vgrid,pl,weights,basis,dbasis,sin_theta,vrtspec,divspec,ngptot,nlat,ntrunc,nt,rsphere,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
+            real dimension(ngptot,nt) :: ugrid
+            real dimension(ngptot,nt) :: vgrid
+            integer dimension(nlat) :: pl
+            real dimension(nlat) :: weights
+            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: basis
+            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: dbasis
+            real dimension(nlat) :: sin_theta
+            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
+            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
+            integer optional,check(shape(ugrid,0)==ngptot),depend(ugrid) :: ngptot=shape(ugrid,0)
+            integer optional,check(shape(ugrid,1)==nt),depend(ugrid) :: nt=shape(ugrid,1)
+            integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
+            integer, required, intent(in) :: ntrunc
+            real, required, intent(in) :: rsphere
+            integer, intent(out) :: ierror
+        end subroutine reduced_gaussian_getvrtdivspec
 
 ! gaqd - computing gaussian lats and weights.
 
