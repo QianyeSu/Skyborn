@@ -108,6 +108,13 @@ python module _spherepack ! in
             real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2),depend(nlat,ntrunc),intent(out) :: basis
             integer, intent(out) :: ierror
         end subroutine reduced_gaussian_legendre_basis
+        subroutine reduced_gaussian_legendre_derivative_from_basis(basis,dbasis,nlat,ntrunc,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
+            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: basis
+            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2),depend(nlat,ntrunc),intent(out) :: dbasis
+            integer optional,check(shape(basis,0)==nlat),depend(basis) :: nlat=shape(basis,0)
+            integer, required, intent(in) :: ntrunc
+            integer, intent(out) :: ierror
+        end subroutine reduced_gaussian_legendre_derivative_from_basis
         subroutine reduced_gaussian_legendre_derivative_basis(dbasis,nlat,ntrunc,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
             integer, required, intent(in) :: nlat
             integer, required, intent(in) :: ntrunc
@@ -138,6 +145,20 @@ python module _spherepack ! in
             integer, required, intent(in) :: ngptot
             integer, intent(out) :: ierror
         end subroutine reduced_gaussian_spectogrd
+        subroutine reduced_gaussian_spectogrd_pair(speca,specb,pl,basis,grida,gridb,nmdim,nlat,ntrunc,nt,ngptot,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
+            complex dimension(nmdim,nt) :: speca
+            complex dimension(nmdim,nt) :: specb
+            integer dimension(nlat) :: pl
+            real dimension(nlat,nmdim) :: basis
+            real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: grida
+            real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: gridb
+            integer optional,check(shape(speca,0)==nmdim),depend(speca) :: nmdim=shape(speca,0)
+            integer optional,check(shape(speca,1)==nt),depend(speca) :: nt=shape(speca,1)
+            integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
+            integer, required, intent(in) :: ntrunc
+            integer, required, intent(in) :: ngptot
+            integer, intent(out) :: ierror
+        end subroutine reduced_gaussian_spectogrd_pair
         subroutine reduced_gaussian_getgrad(dataspec,pl,basis,dbasis,sin_theta,ugrad,vgrad,nmdim,nlat,ntrunc,nt,ngptot,rsphere,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
             complex dimension(nmdim,nt) :: dataspec
             integer dimension(nlat) :: pl
@@ -154,13 +175,32 @@ python module _spherepack ! in
             real, required, intent(in) :: rsphere
             integer, intent(out) :: ierror
         end subroutine reduced_gaussian_getgrad
+        subroutine reduced_gaussian_getgrad_pair(speca,specb,pl,basis,dbasis,sin_theta,a_ugrad,a_vgrad,b_ugrad,b_vgrad,nmdim,nlat,ntrunc,nt,ngptot,rsphere,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
+            complex dimension(nmdim,nt) :: speca
+            complex dimension(nmdim,nt) :: specb
+            integer dimension(nlat) :: pl
+            real dimension(nlat,nmdim) :: basis
+            real dimension(nlat,nmdim) :: dbasis
+            real dimension(nlat) :: sin_theta
+            real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: a_ugrad
+            real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: a_vgrad
+            real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: b_ugrad
+            real dimension(ngptot,nt),depend(ngptot,nt),intent(out) :: b_vgrad
+            integer optional,check(shape(speca,0)==nmdim),depend(speca) :: nmdim=shape(speca,0)
+            integer optional,check(shape(speca,1)==nt),depend(speca) :: nt=shape(speca,1)
+            integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
+            integer, required, intent(in) :: ntrunc
+            integer, required, intent(in) :: ngptot
+            real, required, intent(in) :: rsphere
+            integer, intent(out) :: ierror
+        end subroutine reduced_gaussian_getgrad_pair
         subroutine reduced_gaussian_getvrtdivspec(ugrid,vgrid,pl,weights,basis,dbasis,sin_theta,vrtspec,divspec,ngptot,nlat,ntrunc,nt,rsphere,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
             real dimension(ngptot,nt) :: ugrid
             real dimension(ngptot,nt) :: vgrid
             integer dimension(nlat) :: pl
             real dimension(nlat) :: weights
-            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: basis
-            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: dbasis
+            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: basis
+            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: dbasis
             real dimension(nlat) :: sin_theta
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
@@ -171,6 +211,38 @@ python module _spherepack ! in
             real, required, intent(in) :: rsphere
             integer, intent(out) :: ierror
         end subroutine reduced_gaussian_getvrtdivspec
+        subroutine reduced_gaussian_getvrtspec(ugrid,vgrid,pl,weights,basis,dbasis,sin_theta,vrtspec,ngptot,nlat,ntrunc,nt,rsphere,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
+            real dimension(ngptot,nt) :: ugrid
+            real dimension(ngptot,nt) :: vgrid
+            integer dimension(nlat) :: pl
+            real dimension(nlat) :: weights
+            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: basis
+            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: dbasis
+            real dimension(nlat) :: sin_theta
+            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
+            integer optional,check(shape(ugrid,0)==ngptot),depend(ugrid) :: ngptot=shape(ugrid,0)
+            integer optional,check(shape(ugrid,1)==nt),depend(ugrid) :: nt=shape(ugrid,1)
+            integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
+            integer, required, intent(in) :: ntrunc
+            real, required, intent(in) :: rsphere
+            integer, intent(out) :: ierror
+        end subroutine reduced_gaussian_getvrtspec
+        subroutine reduced_gaussian_getdivspec(ugrid,vgrid,pl,weights,basis,dbasis,sin_theta,divspec,ngptot,nlat,ntrunc,nt,rsphere,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
+            real dimension(ngptot,nt) :: ugrid
+            real dimension(ngptot,nt) :: vgrid
+            integer dimension(nlat) :: pl
+            real dimension(nlat) :: weights
+            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: basis
+            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: dbasis
+            real dimension(nlat) :: sin_theta
+            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
+            integer optional,check(shape(ugrid,0)==ngptot),depend(ugrid) :: ngptot=shape(ugrid,0)
+            integer optional,check(shape(ugrid,1)==nt),depend(ugrid) :: nt=shape(ugrid,1)
+            integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
+            integer, required, intent(in) :: ntrunc
+            real, required, intent(in) :: rsphere
+            integer, intent(out) :: ierror
+        end subroutine reduced_gaussian_getdivspec
 
 ! gaqd - computing gaussian lats and weights.
 
