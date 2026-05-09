@@ -1536,7 +1536,7 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
     complex, intent(out) :: divspec((ntrunc + 1) * (ntrunc + 2) / 2, nt)
     integer, intent(out) :: ierror
 
-    integer :: j, js, i, k, m, n, nm, offset, row_nlon, total
+    integer :: j, js, i, k, m, n, nm, offset, row_nlon, total, first_j
     integer :: max_nlon, mlimit, alloc_status, pair_count, half_nlat
     integer :: offsets(nlat + 1)
     logical :: symmetric_pl
@@ -1547,6 +1547,9 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
     double precision :: p_scale, dp_scale, p_weighted, dp_weighted
     double precision :: parity, p_u_cos, p_u_sin, p_v_cos, p_v_sin
     double precision :: dp_u_cos, dp_u_sin, dp_v_cos, dp_v_sin
+    double precision :: div_real_acc(0:ntrunc), div_imag_acc(0:ntrunc)
+    double precision :: vrt_real_acc(0:ntrunc), vrt_imag_acc(0:ntrunc)
+    double precision :: weight_inv_r(nlat), weight_inv_r_sin(nlat)
     double precision, allocatable :: u_cos_fft(:, :), u_sin_fft(:, :)
     double precision, allocatable :: v_cos_fft(:, :), v_sin_fft(:, :)
     real, allocatable :: fft_rows(:, :), fft_work(:, :)
@@ -1590,13 +1593,17 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
     ierror = 6
     if (alloc_status /= 0) return
 
-    allocate(u_cos_fft(0:ntrunc, nlat), u_sin_fft(0:ntrunc, nlat), &
-             v_cos_fft(0:ntrunc, nlat), v_sin_fft(0:ntrunc, nlat), &
+    allocate(u_cos_fft(nlat, 0:ntrunc), u_sin_fft(nlat, 0:ntrunc), &
+             v_cos_fft(nlat, 0:ntrunc), v_sin_fft(nlat, 0:ntrunc), &
              stat=alloc_status)
     ierror = 7
     if (alloc_status /= 0) return
 
     inv_r = 1.0d0 / dble(rsphere)
+    do j = 1, nlat
+        weight_inv_r(j) = dble(weights(j)) * inv_r
+        weight_inv_r_sin(j) = weight_inv_r(j) / dble(sin_theta(j))
+    end do
     vrtspec(:, :) = (0.0, 0.0)
     divspec(:, :) = (0.0, 0.0)
 
@@ -1624,14 +1631,14 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
             call hrfftf(2, row_nlon, fft_rows, 2, &
                 reduced_gaussian_fft_wsave(1, j), fft_work)
 
-            u_cos_fft(0, j) = dble(fft_rows(1, 1)) * inv_nlon
-            v_cos_fft(0, j) = dble(fft_rows(2, 1)) * inv_nlon
+            u_cos_fft(j, 0) = dble(fft_rows(1, 1)) * inv_nlon
+            v_cos_fft(j, 0) = dble(fft_rows(2, 1)) * inv_nlon
             do m = 1, mlimit
-                u_cos_fft(m, j) = dble(fft_rows(1, 2 * m)) * inv_nlon
-                v_cos_fft(m, j) = dble(fft_rows(2, 2 * m)) * inv_nlon
+                u_cos_fft(j, m) = dble(fft_rows(1, 2 * m)) * inv_nlon
+                v_cos_fft(j, m) = dble(fft_rows(2, 2 * m)) * inv_nlon
                 if (2 * m < row_nlon) then
-                    u_sin_fft(m, j) = -dble(fft_rows(1, 2 * m + 1)) * inv_nlon
-                    v_sin_fft(m, j) = -dble(fft_rows(2, 2 * m + 1)) * inv_nlon
+                    u_sin_fft(j, m) = -dble(fft_rows(1, 2 * m + 1)) * inv_nlon
+                    v_sin_fft(j, m) = -dble(fft_rows(2, 2 * m + 1)) * inv_nlon
                 end if
             end do
         end do
@@ -1640,25 +1647,29 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
 !$omp end parallel
 
         if (symmetric_pl) then
-!$omp parallel do schedule(dynamic) private(m, j, js, n, nm, row_nlon, &
+!$omp parallel do schedule(dynamic) private(m, j, js, n, nm, row_nlon, first_j, &
 !$omp& inv_r_sin, u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, &
 !$omp& u_mean_s, v_mean_s, u_cos_s, u_sin_s, v_cos_s, v_sin_s, &
 !$omp& pval, dpval, wval, div_real, div_imag, vrt_real, vrt_imag, &
 !$omp& p_scale, dp_scale, p_weighted, dp_weighted, parity, &
 !$omp& p_u_cos, p_u_sin, p_v_cos, p_v_sin, dp_u_cos, dp_u_sin, &
-!$omp& dp_v_cos, dp_v_sin)
+!$omp& dp_v_cos, dp_v_sin, div_real_acc, div_imag_acc, &
+!$omp& vrt_real_acc, vrt_imag_acc)
         do m = 0, ntrunc
+            div_real_acc(m:ntrunc) = 0.0d0
+            div_imag_acc(m:ntrunc) = 0.0d0
+            vrt_real_acc(m:ntrunc) = 0.0d0
+            vrt_imag_acc(m:ntrunc) = 0.0d0
             if (m == 0) then
                 do j = 1, pair_count
                     js = nlat - j + 1
-                    wval = dble(weights(j))
-                    u_mean = u_cos_fft(0, j)
-                    v_mean = v_cos_fft(0, j)
-                    u_mean_s = u_cos_fft(0, js)
-                    v_mean_s = v_cos_fft(0, js)
+                    u_mean = u_cos_fft(j, 0)
+                    v_mean = v_cos_fft(j, 0)
+                    u_mean_s = u_cos_fft(js, 0)
+                    v_mean_s = v_cos_fft(js, 0)
 
                     nm = spectral_offset(m, ntrunc)
-                    dp_scale = wval * inv_r
+                    dp_scale = weight_inv_r(j)
                     parity = 1.0d0
                     do n = m, ntrunc
                         nm = nm + 1
@@ -1666,91 +1677,88 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                         dp_weighted = dp_scale * dpval
                         div_real = dp_weighted * (v_mean - parity * v_mean_s)
                         vrt_real = -dp_weighted * (u_mean - parity * u_mean_s)
-                        divspec(nm, k) = divspec(nm, k) + cmplx(real(div_real), 0.0)
-                        vrtspec(nm, k) = vrtspec(nm, k) + cmplx(real(vrt_real), 0.0)
+                        div_real_acc(n) = div_real_acc(n) + div_real
+                        vrt_real_acc(n) = vrt_real_acc(n) + vrt_real
                         parity = -parity
                     end do
                 end do
 
                 if (half_nlat > pair_count) then
                     j = half_nlat
-                    wval = dble(weights(j))
-                    u_mean = u_cos_fft(0, j)
-                    v_mean = v_cos_fft(0, j)
+                    u_mean = u_cos_fft(j, 0)
+                    v_mean = v_cos_fft(j, 0)
 
                     nm = spectral_offset(m, ntrunc)
-                    dp_scale = wval * inv_r
+                    dp_scale = weight_inv_r(j)
                     do n = m, ntrunc
                         nm = nm + 1
                         dpval = dble(dbasis(j, nm))
                         dp_weighted = dp_scale * dpval
                         div_real = dp_weighted * v_mean
                         vrt_real = -dp_weighted * u_mean
-                        divspec(nm, k) = divspec(nm, k) + cmplx(real(div_real), 0.0)
-                        vrtspec(nm, k) = vrtspec(nm, k) + cmplx(real(vrt_real), 0.0)
+                        div_real_acc(n) = div_real_acc(n) + div_real
+                        vrt_real_acc(n) = vrt_real_acc(n) + vrt_real
                     end do
                 end if
             else
-                do j = 1, pair_count
+                first_j = 1
+                do while (first_j <= pair_count .and. 2 * m > pl(first_j))
+                    first_j = first_j + 1
+                end do
+                do j = first_j, pair_count
                     row_nlon = pl(j)
-                    if (2 * m <= row_nlon) then
-                        js = nlat - j + 1
-                        inv_r_sin = inv_r / dble(sin_theta(j))
-                        wval = dble(weights(j))
-                        u_cos = u_cos_fft(m, j)
-                        u_sin = u_sin_fft(m, j)
-                        v_cos = v_cos_fft(m, j)
-                        v_sin = v_sin_fft(m, j)
-                        u_cos_s = u_cos_fft(m, js)
-                        u_sin_s = u_sin_fft(m, js)
-                        v_cos_s = v_cos_fft(m, js)
-                        v_sin_s = v_sin_fft(m, js)
+                    js = nlat - j + 1
+                    u_cos = u_cos_fft(j, m)
+                    u_sin = u_sin_fft(j, m)
+                    v_cos = v_cos_fft(j, m)
+                    v_sin = v_sin_fft(j, m)
+                    u_cos_s = u_cos_fft(js, m)
+                    u_sin_s = u_sin_fft(js, m)
+                    v_cos_s = v_cos_fft(js, m)
+                    v_sin_s = v_sin_fft(js, m)
 
-                        nm = spectral_offset(m, ntrunc)
-                        p_scale = wval * dble(m) * inv_r_sin
-                        dp_scale = wval * inv_r
-                        parity = 1.0d0
-                        do n = m, ntrunc
-                            nm = nm + 1
-                            pval = dble(basis(j, nm))
-                            dpval = dble(dbasis(j, nm))
-                            p_weighted = p_scale * pval
-                            dp_weighted = dp_scale * dpval
-                            p_u_sin = u_sin + parity * u_sin_s
-                            p_u_cos = u_cos + parity * u_cos_s
-                            p_v_sin = v_sin + parity * v_sin_s
-                            p_v_cos = v_cos + parity * v_cos_s
-                            dp_u_sin = u_sin - parity * u_sin_s
-                            dp_u_cos = u_cos - parity * u_cos_s
-                            dp_v_sin = v_sin - parity * v_sin_s
-                            dp_v_cos = v_cos - parity * v_cos_s
-                            div_real = p_weighted * p_u_sin + dp_weighted * dp_v_cos
-                            div_imag = p_weighted * p_u_cos - dp_weighted * dp_v_sin
-                            vrt_real = -dp_weighted * dp_u_cos + p_weighted * p_v_sin
-                            vrt_imag = dp_weighted * dp_u_sin + p_weighted * p_v_cos
-                            divspec(nm, k) = divspec(nm, k) + &
-                                cmplx(real(div_real), real(div_imag))
-                            vrtspec(nm, k) = vrtspec(nm, k) + &
-                                cmplx(real(vrt_real), real(vrt_imag))
-                            parity = -parity
-                        end do
-                    end if
+                    nm = spectral_offset(m, ntrunc)
+                    p_scale = dble(m) * weight_inv_r_sin(j)
+                    dp_scale = weight_inv_r(j)
+                    parity = 1.0d0
+                    do n = m, ntrunc
+                        nm = nm + 1
+                        pval = dble(basis(j, nm))
+                        dpval = dble(dbasis(j, nm))
+                        p_weighted = p_scale * pval
+                        dp_weighted = dp_scale * dpval
+                        p_u_sin = u_sin + parity * u_sin_s
+                        p_u_cos = u_cos + parity * u_cos_s
+                        p_v_sin = v_sin + parity * v_sin_s
+                        p_v_cos = v_cos + parity * v_cos_s
+                        dp_u_sin = u_sin - parity * u_sin_s
+                        dp_u_cos = u_cos - parity * u_cos_s
+                        dp_v_sin = v_sin - parity * v_sin_s
+                        dp_v_cos = v_cos - parity * v_cos_s
+                        div_real = p_weighted * p_u_sin + dp_weighted * dp_v_cos
+                        div_imag = p_weighted * p_u_cos - dp_weighted * dp_v_sin
+                        vrt_real = -dp_weighted * dp_u_cos + p_weighted * p_v_sin
+                        vrt_imag = dp_weighted * dp_u_sin + p_weighted * p_v_cos
+                        div_real_acc(n) = div_real_acc(n) + div_real
+                        div_imag_acc(n) = div_imag_acc(n) + div_imag
+                        vrt_real_acc(n) = vrt_real_acc(n) + vrt_real
+                        vrt_imag_acc(n) = vrt_imag_acc(n) + vrt_imag
+                        parity = -parity
+                    end do
                 end do
 
                 if (half_nlat > pair_count) then
                     j = half_nlat
                     row_nlon = pl(j)
                     if (2 * m <= row_nlon) then
-                        inv_r_sin = inv_r / dble(sin_theta(j))
-                        wval = dble(weights(j))
-                        u_cos = u_cos_fft(m, j)
-                        u_sin = u_sin_fft(m, j)
-                        v_cos = v_cos_fft(m, j)
-                        v_sin = v_sin_fft(m, j)
+                        u_cos = u_cos_fft(j, m)
+                        u_sin = u_sin_fft(j, m)
+                        v_cos = v_cos_fft(j, m)
+                        v_sin = v_sin_fft(j, m)
 
                         nm = spectral_offset(m, ntrunc)
-                        p_scale = wval * dble(m) * inv_r_sin
-                        dp_scale = wval * inv_r
+                        p_scale = dble(m) * weight_inv_r_sin(j)
+                        dp_scale = weight_inv_r(j)
                         do n = m, ntrunc
                             nm = nm + 1
                             pval = dble(basis(j, nm))
@@ -1761,54 +1769,64 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                             div_imag = p_weighted * u_cos - dp_weighted * v_sin
                             vrt_real = -dp_weighted * u_cos + p_weighted * v_sin
                             vrt_imag = dp_weighted * u_sin + p_weighted * v_cos
-                            divspec(nm, k) = divspec(nm, k) + &
-                                cmplx(real(div_real), real(div_imag))
-                            vrtspec(nm, k) = vrtspec(nm, k) + &
-                                cmplx(real(vrt_real), real(vrt_imag))
+                            div_real_acc(n) = div_real_acc(n) + div_real
+                            div_imag_acc(n) = div_imag_acc(n) + div_imag
+                            vrt_real_acc(n) = vrt_real_acc(n) + vrt_real
+                            vrt_imag_acc(n) = vrt_imag_acc(n) + vrt_imag
                         end do
                     end if
                 end if
             end if
+            nm = spectral_offset(m, ntrunc)
+            do n = m, ntrunc
+                nm = nm + 1
+                divspec(nm, k) = cmplx(real(div_real_acc(n)), &
+                    real(div_imag_acc(n)))
+                vrtspec(nm, k) = cmplx(real(vrt_real_acc(n)), &
+                    real(vrt_imag_acc(n)))
+            end do
         end do
 !$omp end parallel do
         else
 !$omp parallel do schedule(dynamic) private(m, j, n, nm, row_nlon, &
 !$omp& inv_r_sin, u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, pval, &
 !$omp& dpval, wval, div_real, div_imag, vrt_real, vrt_imag, p_scale, &
-!$omp& dp_scale, p_weighted, dp_weighted)
+!$omp& dp_scale, p_weighted, dp_weighted, div_real_acc, div_imag_acc, &
+!$omp& vrt_real_acc, vrt_imag_acc)
         do m = 0, ntrunc
+            div_real_acc(m:ntrunc) = 0.0d0
+            div_imag_acc(m:ntrunc) = 0.0d0
+            vrt_real_acc(m:ntrunc) = 0.0d0
+            vrt_imag_acc(m:ntrunc) = 0.0d0
             if (m == 0) then
                 do j = 1, nlat
-                    wval = dble(weights(j))
-                    u_mean = u_cos_fft(0, j)
-                    v_mean = v_cos_fft(0, j)
+                    u_mean = u_cos_fft(j, 0)
+                    v_mean = v_cos_fft(j, 0)
 
                     nm = spectral_offset(m, ntrunc)
-                    dp_scale = wval * inv_r
+                    dp_scale = weight_inv_r(j)
                     do n = m, ntrunc
                         nm = nm + 1
                         dpval = dble(dbasis(j, nm))
                         dp_weighted = dp_scale * dpval
                         div_real = dp_weighted * v_mean
                         vrt_real = -dp_weighted * u_mean
-                        divspec(nm, k) = divspec(nm, k) + cmplx(real(div_real), 0.0)
-                        vrtspec(nm, k) = vrtspec(nm, k) + cmplx(real(vrt_real), 0.0)
+                        div_real_acc(n) = div_real_acc(n) + div_real
+                        vrt_real_acc(n) = vrt_real_acc(n) + vrt_real
                     end do
                 end do
             else
                 do j = 1, nlat
                     row_nlon = pl(j)
                     if (2 * m <= row_nlon) then
-                        inv_r_sin = inv_r / dble(sin_theta(j))
-                        wval = dble(weights(j))
-                        u_cos = u_cos_fft(m, j)
-                        u_sin = u_sin_fft(m, j)
-                        v_cos = v_cos_fft(m, j)
-                        v_sin = v_sin_fft(m, j)
+                        u_cos = u_cos_fft(j, m)
+                        u_sin = u_sin_fft(j, m)
+                        v_cos = v_cos_fft(j, m)
+                        v_sin = v_sin_fft(j, m)
 
                         nm = spectral_offset(m, ntrunc)
-                        p_scale = wval * dble(m) * inv_r_sin
-                        dp_scale = wval * inv_r
+                        p_scale = dble(m) * weight_inv_r_sin(j)
+                        dp_scale = weight_inv_r(j)
                         do n = m, ntrunc
                             nm = nm + 1
                             pval = dble(basis(j, nm))
@@ -1819,14 +1837,22 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                             div_imag = p_weighted * u_cos - dp_weighted * v_sin
                             vrt_real = -dp_weighted * u_cos + p_weighted * v_sin
                             vrt_imag = dp_weighted * u_sin + p_weighted * v_cos
-                            divspec(nm, k) = divspec(nm, k) + &
-                                cmplx(real(div_real), real(div_imag))
-                            vrtspec(nm, k) = vrtspec(nm, k) + &
-                                cmplx(real(vrt_real), real(vrt_imag))
+                            div_real_acc(n) = div_real_acc(n) + div_real
+                            div_imag_acc(n) = div_imag_acc(n) + div_imag
+                            vrt_real_acc(n) = vrt_real_acc(n) + vrt_real
+                            vrt_imag_acc(n) = vrt_imag_acc(n) + vrt_imag
                         end do
                     end if
                 end do
             end if
+            nm = spectral_offset(m, ntrunc)
+            do n = m, ntrunc
+                nm = nm + 1
+                divspec(nm, k) = cmplx(real(div_real_acc(n)), &
+                    real(div_imag_acc(n)))
+                vrtspec(nm, k) = cmplx(real(vrt_real_acc(n)), &
+                    real(vrt_imag_acc(n)))
+            end do
         end do
 !$omp end parallel do
         end if
@@ -1915,7 +1941,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
     complex, intent(out) :: outspec((ntrunc + 1) * (ntrunc + 2) / 2, nt)
     integer, intent(out) :: ierror
 
-    integer :: j, js, i, k, m, n, nm, offset, row_nlon, total
+    integer :: j, js, i, k, m, n, nm, offset, row_nlon, total, first_j
     integer :: max_nlon, mlimit, alloc_status, pair_count, half_nlat
     integer :: offsets(nlat + 1)
     logical :: symmetric_pl
@@ -1927,6 +1953,8 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
     double precision :: p_scale, dp_scale, p_weighted, dp_weighted
     double precision :: parity, p_u_cos, p_u_sin, p_v_cos, p_v_sin
     double precision :: dp_u_cos, dp_u_sin, dp_v_cos, dp_v_sin
+    double precision :: value_real_acc(0:ntrunc), value_imag_acc(0:ntrunc)
+    double precision :: weight_inv_r(nlat), weight_inv_r_sin(nlat)
     double precision, allocatable :: u_cos_fft(:, :), u_sin_fft(:, :)
     double precision, allocatable :: v_cos_fft(:, :), v_sin_fft(:, :)
     real, allocatable :: fft_rows(:, :), fft_work(:, :)
@@ -1973,13 +2001,17 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
     ierror = 7
     if (alloc_status /= 0) return
 
-    allocate(u_cos_fft(0:ntrunc, nlat), u_sin_fft(0:ntrunc, nlat), &
-             v_cos_fft(0:ntrunc, nlat), v_sin_fft(0:ntrunc, nlat), &
+    allocate(u_cos_fft(nlat, 0:ntrunc), u_sin_fft(nlat, 0:ntrunc), &
+             v_cos_fft(nlat, 0:ntrunc), v_sin_fft(nlat, 0:ntrunc), &
              stat=alloc_status)
     ierror = 8
     if (alloc_status /= 0) return
 
     inv_r = 1.0d0 / dble(rsphere)
+    do j = 1, nlat
+        weight_inv_r(j) = dble(weights(j)) * inv_r
+        weight_inv_r_sin(j) = weight_inv_r(j) / dble(sin_theta(j))
+    end do
     outspec(:, :) = (0.0, 0.0)
 
     do k = 1, nt
@@ -2006,14 +2038,14 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
             call hrfftf(2, row_nlon, fft_rows, 2, &
                 reduced_gaussian_fft_wsave(1, j), fft_work)
 
-            u_cos_fft(0, j) = dble(fft_rows(1, 1)) * inv_nlon
-            v_cos_fft(0, j) = dble(fft_rows(2, 1)) * inv_nlon
+            u_cos_fft(j, 0) = dble(fft_rows(1, 1)) * inv_nlon
+            v_cos_fft(j, 0) = dble(fft_rows(2, 1)) * inv_nlon
             do m = 1, mlimit
-                u_cos_fft(m, j) = dble(fft_rows(1, 2 * m)) * inv_nlon
-                v_cos_fft(m, j) = dble(fft_rows(2, 2 * m)) * inv_nlon
+                u_cos_fft(j, m) = dble(fft_rows(1, 2 * m)) * inv_nlon
+                v_cos_fft(j, m) = dble(fft_rows(2, 2 * m)) * inv_nlon
                 if (2 * m < row_nlon) then
-                    u_sin_fft(m, j) = -dble(fft_rows(1, 2 * m + 1)) * inv_nlon
-                    v_sin_fft(m, j) = -dble(fft_rows(2, 2 * m + 1)) * inv_nlon
+                    u_sin_fft(j, m) = -dble(fft_rows(1, 2 * m + 1)) * inv_nlon
+                    v_sin_fft(j, m) = -dble(fft_rows(2, 2 * m + 1)) * inv_nlon
                 end if
             end do
         end do
@@ -2022,24 +2054,26 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
 !$omp end parallel
 
         if (symmetric_pl) then
-!$omp parallel do schedule(dynamic) private(m, j, js, n, nm, row_nlon, &
+!$omp parallel do schedule(dynamic) private(m, j, js, n, nm, row_nlon, first_j, &
 !$omp& inv_r_sin, u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, &
 !$omp& u_mean_s, v_mean_s, u_cos_s, u_sin_s, v_cos_s, v_sin_s, &
 !$omp& pval, dpval, wval, value_real, value_imag, p_scale, dp_scale, &
 !$omp& p_weighted, dp_weighted, parity, p_u_cos, p_u_sin, p_v_cos, &
-!$omp& p_v_sin, dp_u_cos, dp_u_sin, dp_v_cos, dp_v_sin)
+!$omp& p_v_sin, dp_u_cos, dp_u_sin, dp_v_cos, dp_v_sin, &
+!$omp& value_real_acc, value_imag_acc)
         do m = 0, ntrunc
+            value_real_acc(m:ntrunc) = 0.0d0
+            value_imag_acc(m:ntrunc) = 0.0d0
             if (m == 0) then
                 do j = 1, pair_count
                     js = nlat - j + 1
-                    wval = dble(weights(j))
-                    u_mean = u_cos_fft(0, j)
-                    v_mean = v_cos_fft(0, j)
-                    u_mean_s = u_cos_fft(0, js)
-                    v_mean_s = v_cos_fft(0, js)
+                    u_mean = u_cos_fft(j, 0)
+                    v_mean = v_cos_fft(j, 0)
+                    u_mean_s = u_cos_fft(js, 0)
+                    v_mean_s = v_cos_fft(js, 0)
 
                     nm = spectral_offset(m, ntrunc)
-                    dp_scale = wval * inv_r
+                    dp_scale = weight_inv_r(j)
                     parity = 1.0d0
                     do n = m, ntrunc
                         nm = nm + 1
@@ -2052,20 +2086,18 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                             value_real = dp_weighted * &
                                 (v_mean - parity * v_mean_s)
                         end if
-                        outspec(nm, k) = outspec(nm, k) + &
-                            cmplx(real(value_real), 0.0)
+                        value_real_acc(n) = value_real_acc(n) + value_real
                         parity = -parity
                     end do
                 end do
 
                 if (half_nlat > pair_count) then
                     j = half_nlat
-                    wval = dble(weights(j))
-                    u_mean = u_cos_fft(0, j)
-                    v_mean = v_cos_fft(0, j)
+                    u_mean = u_cos_fft(j, 0)
+                    v_mean = v_cos_fft(j, 0)
 
                     nm = spectral_offset(m, ntrunc)
-                    dp_scale = wval * inv_r
+                    dp_scale = weight_inv_r(j)
                     do n = m, ntrunc
                         nm = nm + 1
                         dpval = dble(dbasis(j, nm))
@@ -2075,76 +2107,73 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                         else
                             value_real = dp_weighted * v_mean
                         end if
-                        outspec(nm, k) = outspec(nm, k) + &
-                            cmplx(real(value_real), 0.0)
+                        value_real_acc(n) = value_real_acc(n) + value_real
                     end do
                 end if
             else
-                do j = 1, pair_count
+                first_j = 1
+                do while (first_j <= pair_count .and. 2 * m > pl(first_j))
+                    first_j = first_j + 1
+                end do
+                do j = first_j, pair_count
                     row_nlon = pl(j)
-                    if (2 * m <= row_nlon) then
-                        js = nlat - j + 1
-                        inv_r_sin = inv_r / dble(sin_theta(j))
-                        wval = dble(weights(j))
-                        u_cos = u_cos_fft(m, j)
-                        u_sin = u_sin_fft(m, j)
-                        v_cos = v_cos_fft(m, j)
-                        v_sin = v_sin_fft(m, j)
-                        u_cos_s = u_cos_fft(m, js)
-                        u_sin_s = u_sin_fft(m, js)
-                        v_cos_s = v_cos_fft(m, js)
-                        v_sin_s = v_sin_fft(m, js)
+                    js = nlat - j + 1
+                    u_cos = u_cos_fft(j, m)
+                    u_sin = u_sin_fft(j, m)
+                    v_cos = v_cos_fft(j, m)
+                    v_sin = v_sin_fft(j, m)
+                    u_cos_s = u_cos_fft(js, m)
+                    u_sin_s = u_sin_fft(js, m)
+                    v_cos_s = v_cos_fft(js, m)
+                    v_sin_s = v_sin_fft(js, m)
 
-                        nm = spectral_offset(m, ntrunc)
-                        p_scale = wval * dble(m) * inv_r_sin
-                        dp_scale = wval * inv_r
-                        parity = 1.0d0
-                        do n = m, ntrunc
-                            nm = nm + 1
-                            pval = dble(basis(j, nm))
-                            dpval = dble(dbasis(j, nm))
-                            p_weighted = p_scale * pval
-                            dp_weighted = dp_scale * dpval
-                            if (component == 1) then
-                                p_v_sin = v_sin + parity * v_sin_s
-                                p_v_cos = v_cos + parity * v_cos_s
-                                dp_u_sin = u_sin - parity * u_sin_s
-                                dp_u_cos = u_cos - parity * u_cos_s
-                                value_real = -dp_weighted * dp_u_cos + &
-                                    p_weighted * p_v_sin
-                                value_imag = dp_weighted * dp_u_sin + &
-                                    p_weighted * p_v_cos
-                            else
-                                p_u_sin = u_sin + parity * u_sin_s
-                                p_u_cos = u_cos + parity * u_cos_s
-                                dp_v_sin = v_sin - parity * v_sin_s
-                                dp_v_cos = v_cos - parity * v_cos_s
-                                value_real = p_weighted * p_u_sin + &
-                                    dp_weighted * dp_v_cos
-                                value_imag = p_weighted * p_u_cos - &
-                                    dp_weighted * dp_v_sin
-                            end if
-                            outspec(nm, k) = outspec(nm, k) + &
-                                cmplx(real(value_real), real(value_imag))
-                            parity = -parity
-                        end do
-                    end if
+                    nm = spectral_offset(m, ntrunc)
+                    p_scale = dble(m) * weight_inv_r_sin(j)
+                    dp_scale = weight_inv_r(j)
+                    parity = 1.0d0
+                    do n = m, ntrunc
+                        nm = nm + 1
+                        pval = dble(basis(j, nm))
+                        dpval = dble(dbasis(j, nm))
+                        p_weighted = p_scale * pval
+                        dp_weighted = dp_scale * dpval
+                        if (component == 1) then
+                            p_v_sin = v_sin + parity * v_sin_s
+                            p_v_cos = v_cos + parity * v_cos_s
+                            dp_u_sin = u_sin - parity * u_sin_s
+                            dp_u_cos = u_cos - parity * u_cos_s
+                            value_real = -dp_weighted * dp_u_cos + &
+                                p_weighted * p_v_sin
+                            value_imag = dp_weighted * dp_u_sin + &
+                                p_weighted * p_v_cos
+                        else
+                            p_u_sin = u_sin + parity * u_sin_s
+                            p_u_cos = u_cos + parity * u_cos_s
+                            dp_v_sin = v_sin - parity * v_sin_s
+                            dp_v_cos = v_cos - parity * v_cos_s
+                            value_real = p_weighted * p_u_sin + &
+                                dp_weighted * dp_v_cos
+                            value_imag = p_weighted * p_u_cos - &
+                                dp_weighted * dp_v_sin
+                        end if
+                        value_real_acc(n) = value_real_acc(n) + value_real
+                        value_imag_acc(n) = value_imag_acc(n) + value_imag
+                        parity = -parity
+                    end do
                 end do
 
                 if (half_nlat > pair_count) then
                     j = half_nlat
                     row_nlon = pl(j)
                     if (2 * m <= row_nlon) then
-                        inv_r_sin = inv_r / dble(sin_theta(j))
-                        wval = dble(weights(j))
-                        u_cos = u_cos_fft(m, j)
-                        u_sin = u_sin_fft(m, j)
-                        v_cos = v_cos_fft(m, j)
-                        v_sin = v_sin_fft(m, j)
+                        u_cos = u_cos_fft(j, m)
+                        u_sin = u_sin_fft(j, m)
+                        v_cos = v_cos_fft(j, m)
+                        v_sin = v_sin_fft(j, m)
 
                         nm = spectral_offset(m, ntrunc)
-                        p_scale = wval * dble(m) * inv_r_sin
-                        dp_scale = wval * inv_r
+                        p_scale = dble(m) * weight_inv_r_sin(j)
+                        dp_scale = weight_inv_r(j)
                         do n = m, ntrunc
                             nm = nm + 1
                             pval = dble(basis(j, nm))
@@ -2162,28 +2191,35 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                                 value_imag = p_weighted * u_cos - &
                                     dp_weighted * v_sin
                             end if
-                            outspec(nm, k) = outspec(nm, k) + &
-                                cmplx(real(value_real), real(value_imag))
+                            value_real_acc(n) = value_real_acc(n) + value_real
+                            value_imag_acc(n) = value_imag_acc(n) + value_imag
                         end do
                     end if
                 end if
             end if
+            nm = spectral_offset(m, ntrunc)
+            do n = m, ntrunc
+                nm = nm + 1
+                outspec(nm, k) = cmplx(real(value_real_acc(n)), &
+                    real(value_imag_acc(n)))
+            end do
         end do
 !$omp end parallel do
         else
 !$omp parallel do schedule(dynamic) private(m, j, n, nm, row_nlon, &
 !$omp& inv_r_sin, u_mean, v_mean, u_cos, u_sin, v_cos, v_sin, pval, &
 !$omp& dpval, wval, value_real, value_imag, p_scale, dp_scale, &
-!$omp& p_weighted, dp_weighted)
+!$omp& p_weighted, dp_weighted, value_real_acc, value_imag_acc)
         do m = 0, ntrunc
+            value_real_acc(m:ntrunc) = 0.0d0
+            value_imag_acc(m:ntrunc) = 0.0d0
             if (m == 0) then
                 do j = 1, nlat
-                    wval = dble(weights(j))
-                    u_mean = u_cos_fft(0, j)
-                    v_mean = v_cos_fft(0, j)
+                    u_mean = u_cos_fft(j, 0)
+                    v_mean = v_cos_fft(j, 0)
 
                     nm = spectral_offset(m, ntrunc)
-                    dp_scale = wval * inv_r
+                    dp_scale = weight_inv_r(j)
                     do n = m, ntrunc
                         nm = nm + 1
                         dpval = dble(dbasis(j, nm))
@@ -2193,24 +2229,21 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                         else
                             value_real = dp_weighted * v_mean
                         end if
-                        outspec(nm, k) = outspec(nm, k) + &
-                            cmplx(real(value_real), 0.0)
+                        value_real_acc(n) = value_real_acc(n) + value_real
                     end do
                 end do
             else
                 do j = 1, nlat
                     row_nlon = pl(j)
                     if (2 * m <= row_nlon) then
-                        inv_r_sin = inv_r / dble(sin_theta(j))
-                        wval = dble(weights(j))
-                        u_cos = u_cos_fft(m, j)
-                        u_sin = u_sin_fft(m, j)
-                        v_cos = v_cos_fft(m, j)
-                        v_sin = v_sin_fft(m, j)
+                        u_cos = u_cos_fft(j, m)
+                        u_sin = u_sin_fft(j, m)
+                        v_cos = v_cos_fft(j, m)
+                        v_sin = v_sin_fft(j, m)
 
                         nm = spectral_offset(m, ntrunc)
-                        p_scale = wval * dble(m) * inv_r_sin
-                        dp_scale = wval * inv_r
+                        p_scale = dble(m) * weight_inv_r_sin(j)
+                        dp_scale = weight_inv_r(j)
                         do n = m, ntrunc
                             nm = nm + 1
                             pval = dble(basis(j, nm))
@@ -2228,12 +2261,18 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                                 value_imag = p_weighted * u_cos - &
                                     dp_weighted * v_sin
                             end if
-                            outspec(nm, k) = outspec(nm, k) + &
-                                cmplx(real(value_real), real(value_imag))
+                            value_real_acc(n) = value_real_acc(n) + value_real
+                            value_imag_acc(n) = value_imag_acc(n) + value_imag
                         end do
                     end if
                 end do
             end if
+            nm = spectral_offset(m, ntrunc)
+            do n = m, ntrunc
+                nm = nm + 1
+                outspec(nm, k) = cmplx(real(value_real_acc(n)), &
+                    real(value_imag_acc(n)))
+            end do
         end do
 !$omp end parallel do
         end if
