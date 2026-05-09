@@ -326,7 +326,7 @@ class ReducedGaussianSpharmt:
         """
         _, normalized, extra_shape = self._validate_grid_data(datagrid, "grdtospec")
         ntrunc = self._validate_ntrunc(ntrunc)
-        basis = self._basis(ntrunc)
+        basis = self._basis_transposed(ntrunc)
 
         try:
             dataspec, ierror = _spherepack.reduced_gaussian_grdtospec(
@@ -353,7 +353,7 @@ class ReducedGaussianSpharmt:
         _, ntrunc, normalized, extra_shape = self._validate_spectral_data(
             dataspec, "spectogrd"
         )
-        basis = self._basis(ntrunc)
+        basis = self._basis_transposed(ntrunc)
 
         try:
             datagrid, ierror = _spherepack.reduced_gaussian_spectogrd(
@@ -382,7 +382,7 @@ class ReducedGaussianSpharmt:
         )
 
         if hasattr(_spherepack, "reduced_gaussian_spectogrd_pair"):
-            basis = self._basis(ntrunc)
+            basis = self._basis_transposed(ntrunc)
             try:
                 grid_a, grid_b, ierror = _spherepack.reduced_gaussian_spectogrd_pair(
                     normalized_a,
@@ -488,8 +488,8 @@ class ReducedGaussianSpharmt:
             ugrid, vgrid, "getvrtspec"
         )
         ntrunc = self._validate_ntrunc(ntrunc)
-        basis = self._basis(ntrunc)
-        dbasis = self._dbasis(ntrunc)
+        basis = self._basis_transposed(ntrunc)
+        dbasis = self._dbasis_transposed(ntrunc)
 
         try:
             vrtspec, ierror = _spherepack.reduced_gaussian_getvrtspec(
@@ -524,8 +524,8 @@ class ReducedGaussianSpharmt:
             ugrid, vgrid, "getdivspec"
         )
         ntrunc = self._validate_ntrunc(ntrunc)
-        basis = self._basis(ntrunc)
-        dbasis = self._dbasis(ntrunc)
+        basis = self._basis_transposed(ntrunc)
+        dbasis = self._dbasis_transposed(ntrunc)
 
         try:
             divspec, ierror = _spherepack.reduced_gaussian_getdivspec(
@@ -580,8 +580,8 @@ class ReducedGaussianSpharmt:
         _, ntrunc, normalized_spec, extra_shape = self._validate_spectral_data(
             dataspec, "getgrad"
         )
-        basis = self._basis(ntrunc)
-        dbasis = self._dbasis(ntrunc)
+        basis = self._basis_transposed(ntrunc)
+        dbasis = self._dbasis_transposed(ntrunc)
 
         try:
             if hasattr(_spherepack, "reduced_gaussian_getgrad_pair"):
@@ -637,8 +637,8 @@ class ReducedGaussianSpharmt:
         _, ntrunc, normalized_a, normalized_b, extra_shape = (
             self._validate_paired_spectral_data(spec_a, spec_b, "getgrad_pair")
         )
-        basis = self._basis(ntrunc)
-        dbasis = self._dbasis(ntrunc)
+        basis = self._basis_transposed(ntrunc)
+        dbasis = self._dbasis_transposed(ntrunc)
 
         try:
             a_ugrad, a_vgrad, b_ugrad, b_vgrad, ierror = (
