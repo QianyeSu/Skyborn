@@ -334,6 +334,7 @@ subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
                 reduced_gaussian_fft_wsave(1, j), fft_work)
 
             cos_fft(0, j) = dble(fft_rows(1, 1)) * inv_nlon
+            sin_fft(0, j) = 0.0d0
             do m = 1, mlimit
                 twom = 2 * m
                 cos_fft(m, j) = dble(fft_rows(1, twom)) * inv_nlon
