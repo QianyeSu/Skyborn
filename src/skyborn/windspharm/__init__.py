@@ -4,7 +4,8 @@ This module is based on the ajdawson/windspharm project (https://github.com/ajda
 originally authored by Andrew Dawson. The current version is maintained by Qianye Su and is licensed under the BSD-3-Clause.
 
 Main Classes:
-    VectorWind: Enhanced interface for wind field analysis with modern Python features
+    VectorWind: Enhanced interface for wind analysis on regular grids
+    ReducedVectorWind: Packed reduced-Gaussian wind analysis
 
 Example:
     >>> from skyborn.windspharm import VectorWind
@@ -32,9 +33,10 @@ Notes:
 
 from __future__ import absolute_import
 
-from . import standard, tools, xarray
+from . import reduced, standard, tools, xarray
 
 # Import main class for easier access
+from .reduced import ReducedVectorWind
 from .standard import VectorWind
 
 __author__ = "Qianye Su"
