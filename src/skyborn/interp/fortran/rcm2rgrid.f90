@@ -494,7 +494,7 @@ end module rcm2rgrid_kernels_core
 ! OUTPUT
 !    FO(NXO,NYO,NGRD) HOLDS THE INTERPOLATED RECTILINEAR RESULT.
 !    IER=0 ON SUCCESS, IER=1 WHEN AN INPUT GRID IS TOO SMALL.
-subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, ncrit, opt, ier)
+subroutine drcm2rgrid_impl(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, ncrit, opt, ier)
     use rcm2rgrid_kernels_core, only : real64, is_strictly_increasing, build_stride_candidates_increasing, &
         find_exact_curv_local, find_exact_curv_full, find_curv_cell_local, find_curv_cell_full, &
         interpolate_curv_cell, fill_missing_rows
@@ -603,7 +603,7 @@ subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, nc
     end do
 
     call fill_missing_rows(fo, xmsg)
-end subroutine drcm2rgrid
+end subroutine drcm2rgrid_impl
 
 
 ! QUICK REFERENCE
@@ -627,7 +627,7 @@ end subroutine drcm2rgrid
 ! OUTPUT
 !    FO(NXO,NYO,NGRD) HOLDS THE INTERPOLATED CURVILINEAR RESULT.
 !    IER=0 ON SUCCESS, IER=1 WHEN AN INPUT GRID IS TOO SMALL.
-subroutine drgrid2rcm(ngrd, nyi, nxi, yi, xi, fi, nyo, nxo, yo, xo, fo, xmsg, ncrit, opt, ier)
+subroutine drgrid2rcm_impl(ngrd, nyi, nxi, yi, xi, fi, nyo, nxo, yo, xo, fo, xmsg, ncrit, opt, ier)
     use rcm2rgrid_kernels_core, only : real64, is_strictly_increasing, lower_bracket_increasing, &
         find_exact_regular_local, find_exact_regular_full, find_regular_cell_full, interpolate_regular_cell
     implicit none
@@ -692,4 +692,50 @@ subroutine drgrid2rcm(ngrd, nyi, nxi, yi, xi, fi, nyo, nxo, yo, xo, fo, xmsg, nc
             end if
         end do
     end do
+end subroutine drgrid2rcm_impl
+
+
+subroutine drcm2rgrid(ngrd, nyi, nxi, yi, xi, fi, nyo, yo, nxo, xo, fo, xmsg, ncrit, opt, ier) &
+        bind(C, name="drcm2rgrid")
+    use iso_c_binding
+    implicit none
+
+    integer(c_int), value :: ngrd, nyi, nxi, nyo, nxo, ncrit, opt
+    integer(c_int) :: ier
+    real(c_double), value :: xmsg
+    type(c_ptr), value :: yi, xi, fi, yo, xo, fo
+    real(c_double), pointer :: yi_f(:,:), xi_f(:,:), fi_f(:,:,:)
+    real(c_double), pointer :: yo_f(:), xo_f(:), fo_f(:,:,:)
+
+    call c_f_pointer(yi, yi_f, [nxi, nyi])
+    call c_f_pointer(xi, xi_f, [nxi, nyi])
+    call c_f_pointer(fi, fi_f, [nxi, nyi, ngrd])
+    call c_f_pointer(yo, yo_f, [nyo])
+    call c_f_pointer(xo, xo_f, [nxo])
+    call c_f_pointer(fo, fo_f, [nxo, nyo, ngrd])
+
+    call drcm2rgrid_impl(ngrd, nyi, nxi, yi_f, xi_f, fi_f, nyo, yo_f, nxo, xo_f, fo_f, xmsg, ncrit, opt, ier)
+end subroutine drcm2rgrid
+
+
+subroutine drgrid2rcm(ngrd, nyi, nxi, yi, xi, fi, nyo, nxo, yo, xo, fo, xmsg, ncrit, opt, ier) &
+        bind(C, name="drgrid2rcm")
+    use iso_c_binding
+    implicit none
+
+    integer(c_int), value :: ngrd, nyi, nxi, nyo, nxo, ncrit, opt
+    integer(c_int) :: ier
+    real(c_double), value :: xmsg
+    type(c_ptr), value :: yi, xi, fi, yo, xo, fo
+    real(c_double), pointer :: yi_f(:), xi_f(:), fi_f(:,:,:)
+    real(c_double), pointer :: yo_f(:,:), xo_f(:,:), fo_f(:,:,:)
+
+    call c_f_pointer(yi, yi_f, [nyi])
+    call c_f_pointer(xi, xi_f, [nxi])
+    call c_f_pointer(fi, fi_f, [nxi, nyi, ngrd])
+    call c_f_pointer(yo, yo_f, [nxo, nyo])
+    call c_f_pointer(xo, xo_f, [nxo, nyo])
+    call c_f_pointer(fo, fo_f, [nxo, nyo, ngrd])
+
+    call drgrid2rcm_impl(ngrd, nyi, nxi, yi_f, xi_f, fi_f, nyo, nxo, yo_f, xo_f, fo_f, xmsg, ncrit, opt, ier)
 end subroutine drgrid2rcm
