@@ -91,9 +91,225 @@
 ! IMPORTANT: Pressure levels must be in ascending order
 ! (from low pressure/high altitude to high pressure/low altitude)
 
-subroutine TROPOPAUSE_GRID_3D(NLAT, NLON, NLEV, NLEVM, &
-                             PFULL, TFULL, TMSG, LAPSEC, PUNIT, &
-                             PTROP_HPA, HTROP_M, ITROP, LAPSE_RATE, SUCCESS)
+module tropopause_height_mod
+    use, intrinsic :: iso_c_binding, only : c_double, c_f_pointer, c_int, c_ptr
+    implicit none
+
+contains
+
+subroutine tropopause_grid_3d( &
+    nlat, nlon, nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
+    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
+) bind(C)
+    integer(c_int), value, intent(in) :: nlat
+    integer(c_int), value, intent(in) :: nlon
+    integer(c_int), value, intent(in) :: nlev
+    integer(c_int), value, intent(in) :: nlevm
+    type(c_ptr), value, intent(in) :: pfull
+    type(c_ptr), value, intent(in) :: tfull
+    real(c_double), value, intent(in) :: tmsg
+    real(c_double), value, intent(in) :: lapsec
+    integer(c_int), value, intent(in) :: punit
+    type(c_ptr), value, intent(in) :: ptrop_hpa
+    type(c_ptr), value, intent(in) :: htrop_m
+    type(c_ptr), value, intent(in) :: itrop
+    type(c_ptr), value, intent(in) :: lapse_rate
+    type(c_ptr), value, intent(in) :: success
+
+    integer :: nlat_f, nlon_f, nlev_f, nlevm_f
+    real(c_double), pointer :: pfull_view(:)
+    real(c_double), pointer :: tfull_view(:, :, :)
+    real(c_double), pointer :: ptrop_hpa_view(:, :)
+    real(c_double), pointer :: htrop_m_view(:, :)
+    integer(c_int), pointer :: itrop_view(:, :)
+    real(c_double), pointer :: lapse_rate_view(:, :)
+    integer(c_int), pointer :: success_view(:, :)
+
+    nlat_f = int(nlat)
+    nlon_f = int(nlon)
+    nlev_f = int(nlev)
+    nlevm_f = int(nlevm)
+
+    call c_f_pointer(pfull, pfull_view, [nlev_f])
+    call c_f_pointer(tfull, tfull_view, [nlat_f, nlon_f, nlev_f])
+    call c_f_pointer(ptrop_hpa, ptrop_hpa_view, [nlat_f, nlon_f])
+    call c_f_pointer(htrop_m, htrop_m_view, [nlat_f, nlon_f])
+    call c_f_pointer(itrop, itrop_view, [nlat_f, nlon_f])
+    call c_f_pointer(lapse_rate, lapse_rate_view, [nlat_f, nlon_f])
+    call c_f_pointer(success, success_view, [nlat_f, nlon_f])
+
+    call tropopause_grid_3d_impl( &
+        nlat_f, nlon_f, nlev_f, nlevm_f, pfull_view, tfull_view, tmsg, lapsec, int(punit), &
+        ptrop_hpa_view, htrop_m_view, itrop_view, lapse_rate_view, success_view &
+    )
+end subroutine tropopause_grid_3d
+
+subroutine tropopause_grid_4d( &
+    nlat, nlon, nlev, ntime, nlevm, pfull, tfull, tmsg, lapsec, punit, &
+    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
+) bind(C)
+    integer(c_int), value, intent(in) :: nlat
+    integer(c_int), value, intent(in) :: nlon
+    integer(c_int), value, intent(in) :: nlev
+    integer(c_int), value, intent(in) :: ntime
+    integer(c_int), value, intent(in) :: nlevm
+    type(c_ptr), value, intent(in) :: pfull
+    type(c_ptr), value, intent(in) :: tfull
+    real(c_double), value, intent(in) :: tmsg
+    real(c_double), value, intent(in) :: lapsec
+    integer(c_int), value, intent(in) :: punit
+    type(c_ptr), value, intent(in) :: ptrop_hpa
+    type(c_ptr), value, intent(in) :: htrop_m
+    type(c_ptr), value, intent(in) :: itrop
+    type(c_ptr), value, intent(in) :: lapse_rate
+    type(c_ptr), value, intent(in) :: success
+
+    integer :: nlat_f, nlon_f, nlev_f, ntime_f, nlevm_f
+    real(c_double), pointer :: pfull_view(:)
+    real(c_double), pointer :: tfull_view(:, :, :, :)
+    real(c_double), pointer :: ptrop_hpa_view(:, :, :)
+    real(c_double), pointer :: htrop_m_view(:, :, :)
+    integer(c_int), pointer :: itrop_view(:, :, :)
+    real(c_double), pointer :: lapse_rate_view(:, :, :)
+    integer(c_int), pointer :: success_view(:, :, :)
+
+    nlat_f = int(nlat)
+    nlon_f = int(nlon)
+    nlev_f = int(nlev)
+    ntime_f = int(ntime)
+    nlevm_f = int(nlevm)
+
+    call c_f_pointer(pfull, pfull_view, [nlev_f])
+    call c_f_pointer(tfull, tfull_view, [nlat_f, nlon_f, nlev_f, ntime_f])
+    call c_f_pointer(ptrop_hpa, ptrop_hpa_view, [nlat_f, nlon_f, ntime_f])
+    call c_f_pointer(htrop_m, htrop_m_view, [nlat_f, nlon_f, ntime_f])
+    call c_f_pointer(itrop, itrop_view, [nlat_f, nlon_f, ntime_f])
+    call c_f_pointer(lapse_rate, lapse_rate_view, [nlat_f, nlon_f, ntime_f])
+    call c_f_pointer(success, success_view, [nlat_f, nlon_f, ntime_f])
+
+    call tropopause_grid_4d_impl( &
+        nlat_f, nlon_f, nlev_f, ntime_f, nlevm_f, pfull_view, tfull_view, tmsg, lapsec, int(punit), &
+        ptrop_hpa_view, htrop_m_view, itrop_view, lapse_rate_view, success_view &
+    )
+end subroutine tropopause_grid_4d
+
+subroutine tropopause_grid_2d( &
+    nspatial, nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
+    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
+) bind(C)
+    integer(c_int), value, intent(in) :: nspatial
+    integer(c_int), value, intent(in) :: nlev
+    integer(c_int), value, intent(in) :: nlevm
+    type(c_ptr), value, intent(in) :: pfull
+    type(c_ptr), value, intent(in) :: tfull
+    real(c_double), value, intent(in) :: tmsg
+    real(c_double), value, intent(in) :: lapsec
+    integer(c_int), value, intent(in) :: punit
+    type(c_ptr), value, intent(in) :: ptrop_hpa
+    type(c_ptr), value, intent(in) :: htrop_m
+    type(c_ptr), value, intent(in) :: itrop
+    type(c_ptr), value, intent(in) :: lapse_rate
+    type(c_ptr), value, intent(in) :: success
+
+    integer :: nspatial_f, nlev_f, nlevm_f
+    real(c_double), pointer :: pfull_view(:)
+    real(c_double), pointer :: tfull_view(:, :)
+    real(c_double), pointer :: ptrop_hpa_view(:)
+    real(c_double), pointer :: htrop_m_view(:)
+    integer(c_int), pointer :: itrop_view(:)
+    real(c_double), pointer :: lapse_rate_view(:)
+    integer(c_int), pointer :: success_view(:)
+
+    nspatial_f = int(nspatial)
+    nlev_f = int(nlev)
+    nlevm_f = int(nlevm)
+
+    call c_f_pointer(pfull, pfull_view, [nlev_f])
+    call c_f_pointer(tfull, tfull_view, [nspatial_f, nlev_f])
+    call c_f_pointer(ptrop_hpa, ptrop_hpa_view, [nspatial_f])
+    call c_f_pointer(htrop_m, htrop_m_view, [nspatial_f])
+    call c_f_pointer(itrop, itrop_view, [nspatial_f])
+    call c_f_pointer(lapse_rate, lapse_rate_view, [nspatial_f])
+    call c_f_pointer(success, success_view, [nspatial_f])
+
+    call tropopause_grid_2d_impl( &
+        nspatial_f, nlev_f, nlevm_f, pfull_view, tfull_view, tmsg, lapsec, int(punit), &
+        ptrop_hpa_view, htrop_m_view, itrop_view, lapse_rate_view, success_view &
+    )
+end subroutine tropopause_grid_2d
+
+subroutine tropopause_profile_1d( &
+    nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
+    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
+) bind(C)
+    integer(c_int), value, intent(in) :: nlev
+    integer(c_int), value, intent(in) :: nlevm
+    type(c_ptr), value, intent(in) :: pfull
+    type(c_ptr), value, intent(in) :: tfull
+    real(c_double), value, intent(in) :: tmsg
+    real(c_double), value, intent(in) :: lapsec
+    integer(c_int), value, intent(in) :: punit
+    type(c_ptr), value, intent(in) :: ptrop_hpa
+    type(c_ptr), value, intent(in) :: htrop_m
+    type(c_ptr), value, intent(in) :: itrop
+    type(c_ptr), value, intent(in) :: lapse_rate
+    type(c_ptr), value, intent(in) :: success
+
+    integer :: nlev_f, nlevm_f
+    real(c_double), pointer :: pfull_view(:)
+    real(c_double), pointer :: tfull_view(:)
+    real(c_double), pointer :: ptrop_hpa_view
+    real(c_double), pointer :: htrop_m_view
+    integer(c_int), pointer :: itrop_view
+    real(c_double), pointer :: lapse_rate_view
+    integer(c_int), pointer :: success_view
+
+    nlev_f = int(nlev)
+    nlevm_f = int(nlevm)
+
+    call c_f_pointer(pfull, pfull_view, [nlev_f])
+    call c_f_pointer(tfull, tfull_view, [nlev_f])
+    call c_f_pointer(ptrop_hpa, ptrop_hpa_view)
+    call c_f_pointer(htrop_m, htrop_m_view)
+    call c_f_pointer(itrop, itrop_view)
+    call c_f_pointer(lapse_rate, lapse_rate_view)
+    call c_f_pointer(success, success_view)
+
+    call tropopause_profile_1d_impl( &
+        nlev_f, nlevm_f, pfull_view, tfull_view, tmsg, lapsec, int(punit), &
+        ptrop_hpa_view, htrop_m_view, itrop_view, lapse_rate_view, success_view &
+    )
+end subroutine tropopause_profile_1d
+
+subroutine tropopause_grid_3d_impl( &
+    nlat, nlon, nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
+    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
+)
+    integer, parameter :: dp = selected_real_kind(15, 307)
+
+    ! INPUT DIMENSIONS
+    integer, intent(in) :: nlat, nlon, nlev, nlevm, punit
+
+    ! INPUT ARRAYS
+    real(c_double), intent(in) :: pfull(nlev)                ! 1D pressure levels [hPa or Pa]
+    real(c_double), intent(in) :: tfull(nlat, nlon, nlev)    ! Temperature [K]
+    real(c_double), intent(in) :: tmsg, lapsec               ! Missing value, lapse criterion
+
+    ! OUTPUT ARRAYS
+    real(c_double), intent(out) :: ptrop_hpa(nlat, nlon)     ! Tropopause pressure [hPa]
+    real(c_double), intent(out) :: htrop_m(nlat, nlon)       ! Tropopause height [m]
+    integer(c_int), intent(out) :: itrop(nlat, nlon)         ! Tropopause level index
+    real(c_double), intent(out) :: lapse_rate(nlat, nlon)    ! Tropopause lapse rate [K/km]
+    integer(c_int), intent(out) :: success(nlat, nlon)       ! Success flag
+
+    ! LOCAL VARIABLES
+    integer :: i, j, k
+    integer :: itrop_temp
+    real(c_double) :: profile_t(nlev)
+    real(c_double) :: work_lapse(nlevm), work_phalf(nlevm), work_pmb(nlev)
+    real(c_double) :: ptrop_temp, temp_p(1), temp_t(1), temp_d(1), temp_h(1)
+    logical :: valid_profile
+
     !
     ! Calculate WMO tropopause properties for 3D gridded atmospheric data
     !
@@ -138,53 +354,26 @@ subroutine TROPOPAUSE_GRID_3D(NLAT, NLON, NLEV, NLEVM, &
     !
     ! OpenMP parallelization over grid points for performance
     !
-    implicit none
-
-    integer, parameter :: dp = selected_real_kind(15, 307)
-
-    ! INPUT DIMENSIONS
-    integer, intent(in) :: NLAT, NLON, NLEV, NLEVM, PUNIT
-
-    ! INPUT ARRAYS
-    real(dp), intent(in) :: PFULL(NLEV)                ! 1D pressure levels [hPa or Pa]
-    real(dp), intent(in) :: TFULL(NLAT, NLON, NLEV)    ! Temperature [K]
-    real(dp), intent(in) :: TMSG, LAPSEC               ! Missing value, lapse criterion
-
-    ! OUTPUT ARRAYS
-    real(dp), intent(out) :: PTROP_HPA(NLAT, NLON)     ! Tropopause pressure [hPa]
-    real(dp), intent(out) :: HTROP_M(NLAT, NLON)       ! Tropopause height [m]
-    integer, intent(out) :: ITROP(NLAT, NLON)          ! Tropopause level index
-    real(dp), intent(out) :: LAPSE_RATE(NLAT, NLON)    ! Tropopause lapse rate [K/km]
-    logical, intent(out) :: SUCCESS(NLAT, NLON)        ! Success flag
-
-    ! LOCAL VARIABLES
-    integer :: i, j, k
-    real(dp) :: profile_t(NLEV)
-    real(dp) :: work_lapse(NLEVM), work_phalf(NLEVM), work_pmb(NLEV)
-    real(dp) :: ptrop_temp, temp_p(1), temp_t(1), temp_d(1), temp_h(1)
-    logical :: valid_profile
-
     ! Initialize output arrays
-    PTROP_HPA = TMSG
-    HTROP_M = TMSG
-    ITROP = -999
-    LAPSE_RATE = TMSG
-    SUCCESS = .false.
+    ptrop_hpa = tmsg
+    htrop_m = tmsg
+    itrop = -999_c_int
+    lapse_rate = tmsg
+    success = 0_c_int
 
-    !$OMP PARALLEL DO PRIVATE(i, j, k, profile_t, work_lapse, &
+    !$OMP PARALLEL DO PRIVATE(i, j, k, itrop_temp, profile_t, work_lapse, &
     !$OMP work_phalf, work_pmb, ptrop_temp, temp_p, temp_t, temp_d, temp_h, valid_profile) &
-    !$OMP SHARED(NLAT, NLON, NLEV, NLEVM, PFULL, TFULL, TMSG, LAPSEC, PUNIT, &
-    !$OMP PTROP_HPA, HTROP_M, ITROP, LAPSE_RATE, SUCCESS) COLLAPSE(2)
-    do j = 1, NLON
-        do i = 1, NLAT
+    !$OMP SHARED(nlat, nlon, nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
+    !$OMP ptrop_hpa, htrop_m, itrop, lapse_rate, success) COLLAPSE(2)
+    do j = 1, nlon
+        do i = 1, nlat
             ! Extract vertical temperature profile for this grid point
             ! No need to copy PFULL since it's the same 1D array for all grid points (isobaric data)
             valid_profile = .true.
-            do k = 1, NLEV
-                profile_t(k) = TFULL(i, j, k)
-
+            do k = 1, nlev
+                profile_t(k) = tfull(i, j, k)
                 ! Check for missing values (pressure check done once outside loop for efficiency)
-                if (abs(profile_t(k) - TMSG) < 1e-10_dp) then
+                if (abs(profile_t(k) - tmsg) < 1.0d-10) then
                     valid_profile = .false.
                     exit
                 end if
@@ -192,8 +381,8 @@ subroutine TROPOPAUSE_GRID_3D(NLAT, NLON, NLEV, NLEVM, &
 
             ! Check pressure levels for missing values (done once per grid point)
             if (valid_profile) then
-                do k = 1, NLEV
-                    if (abs(PFULL(k) - TMSG) < 1e-10_dp) then
+                do k = 1, nlev
+                    if (abs(pfull(k) - tmsg) < 1.0d-10) then
                         valid_profile = .false.
                         exit
                     end if
@@ -204,41 +393,45 @@ subroutine TROPOPAUSE_GRID_3D(NLAT, NLON, NLEV, NLEVM, &
             if (valid_profile) then
                 ! Calculate tropopause pressure and level
                 ! Pass PFULL directly (1D isobaric levels, same for all grid points)
-                call STATTROPX(NLEV, NLEVM, PFULL, profile_t, TMSG, LAPSEC, PUNIT, &
-                              ptrop_temp, ITROP(i,j), work_lapse, work_phalf, work_pmb)
+                itrop_temp = -999
+                call STATTROPX( &
+                    nlev, nlevm, pfull, profile_t, tmsg, lapsec, punit, &
+                    ptrop_temp, itrop_temp, work_lapse, work_phalf, work_pmb &
+                )
 
                 ! Check if tropopause was found
-                if (abs(ptrop_temp - TMSG) > 1e-10_dp) then
+                if (abs(ptrop_temp - tmsg) > 1.0d-10) then
                     ! Convert pressure units if needed
-                    if (PUNIT == 0) then
-                        PTROP_HPA(i,j) = ptrop_temp  ! Already in hPa
+                    if (punit == 0) then
+                        ptrop_hpa(i, j) = ptrop_temp
                     else
-                        PTROP_HPA(i,j) = ptrop_temp * 0.01_dp  ! Pa to hPa
+                        ptrop_hpa(i, j) = ptrop_temp * 0.01d0
                     end if
 
                     ! Calculate height using US Standard Atmosphere 1976
                     ! DSTDATMP expects array inputs, so we use temporary variables
-                    temp_p(1) = PTROP_HPA(i,j)
+                    temp_p(1) = ptrop_hpa(i, j)
                     call DSTDATMP(1, temp_p, temp_t, temp_d, temp_h)
-                    HTROP_M(i,j) = temp_h(1)
+                    htrop_m(i, j) = temp_h(1)
+                    itrop(i, j) = int(itrop_temp, c_int)
 
                     ! Calculate lapse rate at tropopause level
-                    if (ITROP(i,j) >= 1 .and. ITROP(i,j) < NLEV-1) then
-                        LAPSE_RATE(i,j) = work_lapse(ITROP(i,j)+1)  ! Convert from 0-based to 1-based
+                    if (itrop_temp >= 1 .and. itrop_temp < nlev - 1) then
+                        lapse_rate(i, j) = work_lapse(itrop_temp + 1)
                     end if
 
-                    SUCCESS(i,j) = .true.
+                    success(i, j) = 1_c_int
                 end if
             end if
         end do
     end do
     !$OMP END PARALLEL DO
+end subroutine tropopause_grid_3d_impl
 
-end subroutine TROPOPAUSE_GRID_3D
-
-subroutine TROPOPAUSE_GRID_4D(NLAT, NLON, NLEV, NTIME, NLEVM, &
-                             PFULL, TFULL, TMSG, LAPSEC, PUNIT, &
-                             PTROP_HPA, HTROP_M, ITROP, LAPSE_RATE, SUCCESS)
+subroutine tropopause_grid_4d_impl( &
+    nlat, nlon, nlev, ntime, nlevm, pfull, tfull, tmsg, lapsec, punit, &
+    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
+)
     !
     ! Calculate WMO tropopause properties for 4D gridded atmospheric time series
     !
@@ -270,40 +463,30 @@ subroutine TROPOPAUSE_GRID_4D(NLAT, NLON, NLEV, NTIME, NLEVM, &
     !
     implicit none
 
-    integer, parameter :: dp = selected_real_kind(15, 307)
+    integer, intent(in) :: nlat, nlon, nlev, ntime, nlevm, punit
+    real(c_double), intent(in) :: pfull(nlev)
+    real(c_double), intent(in) :: tfull(nlat, nlon, nlev, ntime)
+    real(c_double), intent(in) :: tmsg, lapsec
+    real(c_double), intent(out) :: ptrop_hpa(nlat, nlon, ntime)
+    real(c_double), intent(out) :: htrop_m(nlat, nlon, ntime)
+    integer(c_int), intent(out) :: itrop(nlat, nlon, ntime)
+    real(c_double), intent(out) :: lapse_rate(nlat, nlon, ntime)
+    integer(c_int), intent(out) :: success(nlat, nlon, ntime)
 
-    ! INPUT DIMENSIONS
-    integer, intent(in) :: NLAT, NLON, NLEV, NTIME, NLEVM, PUNIT
-
-    ! INPUT ARRAYS
-    real(dp), intent(in) :: PFULL(NLEV)                     ! 1D pressure levels [hPa or Pa]
-    real(dp), intent(in) :: TFULL(NLAT, NLON, NLEV, NTIME)  ! Temperature
-    real(dp), intent(in) :: TMSG, LAPSEC
-
-    ! OUTPUT ARRAYS
-    real(dp), intent(out) :: PTROP_HPA(NLAT, NLON, NTIME)
-    real(dp), intent(out) :: HTROP_M(NLAT, NLON, NTIME)
-    integer, intent(out) :: ITROP(NLAT, NLON, NTIME)
-    real(dp), intent(out) :: LAPSE_RATE(NLAT, NLON, NTIME)
-    logical, intent(out) :: SUCCESS(NLAT, NLON, NTIME)
-
-    ! LOCAL VARIABLES
     integer :: t
 
-    ! Process each time step
-    do t = 1, NTIME
-        call TROPOPAUSE_GRID_3D(NLAT, NLON, NLEV, NLEVM, &
-                               PFULL, TFULL(:,:,:,t), &
-                               TMSG, LAPSEC, PUNIT, &
-                               PTROP_HPA(:,:,t), HTROP_M(:,:,t), ITROP(:,:,t), &
-                               LAPSE_RATE(:,:,t), SUCCESS(:,:,t))
+    do t = 1, ntime
+        call tropopause_grid_3d_impl( &
+            nlat, nlon, nlev, nlevm, pfull, tfull(:, :, :, t), tmsg, lapsec, punit, &
+            ptrop_hpa(:, :, t), htrop_m(:, :, t), itrop(:, :, t), lapse_rate(:, :, t), success(:, :, t) &
+        )
     end do
+end subroutine tropopause_grid_4d_impl
 
-end subroutine TROPOPAUSE_GRID_4D
-
-subroutine TROPOPAUSE_GRID_2D(NSPATIAL, NLEV, NLEVM, &
-                             PFULL, TFULL, TMSG, LAPSEC, PUNIT, &
-                             PTROP_HPA, HTROP_M, ITROP, LAPSE_RATE, SUCCESS)
+subroutine tropopause_grid_2d_impl( &
+    nspatial, nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
+    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
+)
     !
     ! Calculate WMO tropopause properties for 2D atmospheric cross-sections
     !
@@ -335,139 +518,152 @@ subroutine TROPOPAUSE_GRID_2D(NSPATIAL, NLEV, NLEVM, &
     !
     implicit none
 
-    integer, parameter :: dp = selected_real_kind(15, 307)
+    integer, intent(in) :: nspatial, nlev, nlevm, punit
+    real(c_double), intent(in) :: pfull(nlev)
+    real(c_double), intent(in) :: tfull(nspatial, nlev)
+    real(c_double), intent(in) :: tmsg, lapsec
+    real(c_double), intent(out) :: ptrop_hpa(nspatial)
+    real(c_double), intent(out) :: htrop_m(nspatial)
+    integer(c_int), intent(out) :: itrop(nspatial)
+    real(c_double), intent(out) :: lapse_rate(nspatial)
+    integer(c_int), intent(out) :: success(nspatial)
 
-    ! INPUT DIMENSIONS
-    integer, intent(in) :: NSPATIAL, NLEV, NLEVM, PUNIT
-
-    ! INPUT ARRAYS
-    real(dp), intent(in) :: PFULL(NLEV)              ! 1D pressure levels [hPa or Pa]
-    real(dp), intent(in) :: TFULL(NSPATIAL, NLEV)    ! Temperature [K]
-    real(dp), intent(in) :: TMSG, LAPSEC             ! Missing value, lapse criterion
-
-    ! OUTPUT ARRAYS
-    real(dp), intent(out) :: PTROP_HPA(NSPATIAL)     ! Tropopause pressure [hPa]
-    real(dp), intent(out) :: HTROP_M(NSPATIAL)       ! Tropopause height [m]
-    integer, intent(out) :: ITROP(NSPATIAL)          ! Tropopause level index
-    real(dp), intent(out) :: LAPSE_RATE(NSPATIAL)    ! Tropopause lapse rate [K/km]
-    logical, intent(out) :: SUCCESS(NSPATIAL)        ! Success flag
-
-    ! LOCAL VARIABLES
-    integer :: i, k
-    real(dp) :: profile_t(NLEV)
-    real(dp) :: work_lapse(NLEVM), work_phalf(NLEVM), work_pmb(NLEV)
-    real(dp) :: ptrop_temp, temp_p(1), temp_t(1), temp_d(1), temp_h(1)
+    integer :: i, k, itrop_temp
+    real(c_double) :: profile_t(nlev)
+    real(c_double) :: work_lapse(nlevm), work_phalf(nlevm), work_pmb(nlev)
+    real(c_double) :: ptrop_temp, temp_p(1), temp_t(1), temp_d(1), temp_h(1)
     logical :: valid_profile
 
-    ! Initialize output arrays
-    PTROP_HPA = TMSG
-    HTROP_M = TMSG
-    ITROP = -999
-    LAPSE_RATE = TMSG
-    SUCCESS = .false.
+    ptrop_hpa = tmsg
+    htrop_m = tmsg
+    itrop = -999_c_int
+    lapse_rate = tmsg
+    success = 0_c_int
 
-    !$OMP PARALLEL DO PRIVATE(i, k, profile_t, work_lapse, &
+    !$OMP PARALLEL DO PRIVATE(i, k, itrop_temp, profile_t, work_lapse, &
     !$OMP work_phalf, work_pmb, ptrop_temp, temp_p, temp_t, temp_d, temp_h, valid_profile) &
-    !$OMP SHARED(NSPATIAL, NLEV, NLEVM, PFULL, TFULL, TMSG, LAPSEC, PUNIT, &
-    !$OMP PTROP_HPA, HTROP_M, ITROP, LAPSE_RATE, SUCCESS)
-    do i = 1, NSPATIAL
-        ! Extract vertical temperature profile for this spatial point
-        ! No need to copy PFULL since it's the same 1D array for all spatial points (isobaric data)
+    !$OMP SHARED(nspatial, nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
+    !$OMP ptrop_hpa, htrop_m, itrop, lapse_rate, success)
+    do i = 1, nspatial
         valid_profile = .true.
-        do k = 1, NLEV
-            profile_t(k) = TFULL(i, k)
-
-            ! Check for missing values (pressure check done once outside loop for efficiency)
-            if (abs(profile_t(k) - TMSG) < 1e-10_dp) then
+        do k = 1, nlev
+            profile_t(k) = tfull(i, k)
+            if (abs(profile_t(k) - tmsg) < 1.0d-10) then
                 valid_profile = .false.
                 exit
             end if
         end do
 
-        ! Check pressure levels for missing values (done once per spatial point)
         if (valid_profile) then
-            do k = 1, NLEV
-                if (abs(PFULL(k) - TMSG) < 1e-10_dp) then
+            do k = 1, nlev
+                if (abs(pfull(k) - tmsg) < 1.0d-10) then
                     valid_profile = .false.
                     exit
                 end if
             end do
         end if
 
-        ! Process valid profiles only
         if (valid_profile) then
-            ! Calculate tropopause pressure and level
-            ! Pass PFULL directly (1D isobaric levels, same for all spatial points)
-            call STATTROPX(NLEV, NLEVM, PFULL, profile_t, TMSG, LAPSEC, PUNIT, &
-                          ptrop_temp, ITROP(i), work_lapse, work_phalf, work_pmb)
+            itrop_temp = -999
+            call STATTROPX( &
+                nlev, nlevm, pfull, profile_t, tmsg, lapsec, punit, &
+                ptrop_temp, itrop_temp, work_lapse, work_phalf, work_pmb &
+            )
 
-            ! Check if tropopause was found
-            if (abs(ptrop_temp - TMSG) > 1e-10_dp) then
-                ! Convert pressure units if needed
-                if (PUNIT == 0) then
-                    PTROP_HPA(i) = ptrop_temp  ! Already in hPa
+            if (abs(ptrop_temp - tmsg) > 1.0d-10) then
+                if (punit == 0) then
+                    ptrop_hpa(i) = ptrop_temp
                 else
-                    PTROP_HPA(i) = ptrop_temp * 0.01_dp  ! Pa to hPa
+                    ptrop_hpa(i) = ptrop_temp * 0.01d0
                 end if
 
-                ! Calculate height using US Standard Atmosphere 1976
-                temp_p(1) = PTROP_HPA(i)
+                temp_p(1) = ptrop_hpa(i)
                 call DSTDATMP(1, temp_p, temp_t, temp_d, temp_h)
-                HTROP_M(i) = temp_h(1)
+                htrop_m(i) = temp_h(1)
+                itrop(i) = int(itrop_temp, c_int)
 
-                ! Calculate lapse rate at tropopause level
-                if (ITROP(i) >= 1 .and. ITROP(i) < NLEV-1) then
-                    LAPSE_RATE(i) = work_lapse(ITROP(i)+1)  ! Convert from 0-based to 1-based
+                if (itrop_temp >= 1 .and. itrop_temp < nlev - 1) then
+                    lapse_rate(i) = work_lapse(itrop_temp + 1)
                 end if
 
-                SUCCESS(i) = .true.
+                success(i) = 1_c_int
             end if
         end if
     end do
     !$OMP END PARALLEL DO
+end subroutine tropopause_grid_2d_impl
 
-end subroutine TROPOPAUSE_GRID_2D
-
-subroutine TROPOPAUSE_PROFILE_1D(NLEV, NLEVM, &
-                                PFULL, TFULL, TMSG, LAPSEC, PUNIT, &
-                                PTROP_HPA, HTROP_M, ITROP, LAPSE_RATE, SUCCESS)
+subroutine tropopause_profile_1d_impl( &
+    nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
+    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
+)
+    !
+    ! Calculate WMO tropopause properties for a single 1D vertical profile.
+    !
+    ! Input Parameters:
+    ! ================
+    ! NLEV          : Number of vertical pressure levels
+    ! NLEVM         : NLEV + 1 (for work arrays)
+    ! PFULL(NLEV)   : 1D array of pressure levels [hPa or Pa]
+    ! TFULL(NLEV)    : Temperature profile [K]
+    ! TMSG          : Missing value for invalid data (typically -999.0)
+    ! LAPSEC        : WMO lapse rate criterion [K/km] (typically 2.0)
+    ! PUNIT         : Pressure unit flag (0=hPa, 1=Pa)
+    !
+    ! Output Parameters:
+    ! =================
+    ! PTROP_HPA     : Tropopause pressure [hPa]
+    ! HTROP_M       : Tropopause height [m]
+    ! ITROP         : Tropopause level index
+    ! LAPSE_RATE    : Tropopause lapse rate [K/km]
+    ! SUCCESS       : Success flag
+    !
+    ! Algorithm:
+    ! ==========
+    ! 1. Check the profile for missing values
+    ! 2. Call STATTROPX to compute tropopause pressure and level
+    ! 3. Convert pressure to hPa if needed
+    ! 4. Convert pressure to height using DSTDATMP
+    ! 5. Extract the lapse rate at the detected tropopause level
+    !
     implicit none
 
     integer, parameter :: dp = selected_real_kind(15, 307)
 
     ! INPUT DIMENSIONS
-    integer, intent(in) :: NLEV, NLEVM, PUNIT
+    integer, intent(in) :: nlev, nlevm, punit
 
     ! INPUT ARRAYS - vertical profile
-    real(dp), intent(in) :: PFULL(NLEV)      ! Pressure [hPa or Pa]
-    real(dp), intent(in) :: TFULL(NLEV)      ! Temperature [K]
-    real(dp), intent(in) :: TMSG, LAPSEC     ! Missing value, lapse criterion
+    real(c_double), intent(in) :: pfull(nlev)      ! Pressure [hPa or Pa]
+    real(c_double), intent(in) :: tfull(nlev)      ! Temperature [K]
+    real(c_double), intent(in) :: tmsg, lapsec     ! Missing value, lapse criterion
 
     ! OUTPUT SCALARS
-    real(dp), intent(out) :: PTROP_HPA       ! Tropopause pressure [hPa]
-    real(dp), intent(out) :: HTROP_M         ! Tropopause height [m]
-    integer, intent(out) :: ITROP            ! Tropopause level index
-    real(dp), intent(out) :: LAPSE_RATE      ! Tropopause lapse rate [K/km]
-    logical, intent(out) :: SUCCESS          ! Success flag
+    real(c_double), intent(out) :: ptrop_hpa       ! Tropopause pressure [hPa]
+    real(c_double), intent(out) :: htrop_m         ! Tropopause height [m]
+    integer(c_int), intent(out) :: itrop           ! Tropopause level index
+    real(c_double), intent(out) :: lapse_rate      ! Tropopause lapse rate [K/km]
+    integer(c_int), intent(out) :: success         ! Success flag
 
     ! LOCAL VARIABLES
     integer :: k
-    real(dp) :: work_lapse(NLEVM), work_phalf(NLEVM), work_pmb(NLEV)
-    real(dp) :: ptrop_temp, temp_p(1), temp_t(1), temp_d(1), temp_h(1)
+    integer :: itrop_temp
+    real(c_double) :: work_lapse(nlevm), work_phalf(nlevm), work_pmb(nlev)
+    real(c_double) :: ptrop_temp, temp_p(1), temp_t(1), temp_d(1), temp_h(1)
     logical :: valid_profile
 
     ! Initialize outputs
-    PTROP_HPA = TMSG
-    HTROP_M = TMSG
-    ITROP = -999
-    LAPSE_RATE = TMSG
-    SUCCESS = .false.
+    ptrop_hpa = tmsg
+    htrop_m = tmsg
+    itrop = -999_c_int
+    lapse_rate = tmsg
+    success = 0_c_int
 
     ! Check for missing values in profile
     valid_profile = .true.
-    do k = 1, NLEV
-        if (abs(PFULL(k) - TMSG) < 1e-10_dp .or. &
-            abs(TFULL(k) - TMSG) < 1e-10_dp) then
+    do k = 1, nlev
+        if (abs(pfull(k) - tmsg) < 1e-10_dp .or. &
+            abs(tfull(k) - tmsg) < 1e-10_dp) then
             valid_profile = .false.
             exit
         end if
@@ -476,30 +672,33 @@ subroutine TROPOPAUSE_PROFILE_1D(NLEV, NLEVM, &
     ! Process valid profile only
     if (valid_profile) then
         ! Calculate tropopause pressure and level
-        call STATTROPX(NLEV, NLEVM, PFULL, TFULL, TMSG, LAPSEC, PUNIT, &
-                      ptrop_temp, ITROP, work_lapse, work_phalf, work_pmb)
+        call STATTROPX(nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
+                      ptrop_temp, itrop_temp, work_lapse, work_phalf, work_pmb)
 
         ! Check if tropopause was found
-        if (abs(ptrop_temp - TMSG) > 1e-10_dp) then
+        if (abs(ptrop_temp - tmsg) > 1e-10_dp) then
             ! Convert pressure units if needed
-            if (PUNIT == 0) then
-                PTROP_HPA = ptrop_temp  ! Already in hPa
+            if (punit == 0) then
+                ptrop_hpa = ptrop_temp  ! Already in hPa
             else
-                PTROP_HPA = ptrop_temp * 0.01_dp  ! Pa to hPa
+                ptrop_hpa = ptrop_temp * 0.01_dp  ! Pa to hPa
             end if
 
             ! Calculate height using US Standard Atmosphere 1976
-            temp_p(1) = PTROP_HPA
+            temp_p(1) = ptrop_hpa
             call DSTDATMP(1, temp_p, temp_t, temp_d, temp_h)
-            HTROP_M = temp_h(1)
+            htrop_m = temp_h(1)
+            itrop = int(itrop_temp, c_int)
 
             ! Calculate lapse rate at tropopause level
-            if (ITROP >= 1 .and. ITROP < NLEV-1) then
-                LAPSE_RATE = work_lapse(ITROP+1)  ! Convert from 0-based to 1-based
+            if (itrop_temp >= 1 .and. itrop_temp < nlev-1) then
+                lapse_rate = work_lapse(itrop_temp+1)  ! Convert from 0-based to 1-based
             end if
 
-            SUCCESS = .true.
+            success = 1_c_int
         end if
     end if
 
-end subroutine TROPOPAUSE_PROFILE_1D
+end subroutine tropopause_profile_1d_impl
+
+end module tropopause_height_mod
