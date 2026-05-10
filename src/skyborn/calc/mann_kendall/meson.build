@@ -1,26 +1,34 @@
 # Skyborn private Mann-Kendall kernels
-project('skyborn-mann-kendall-core', 'c', 'fortran',
-  version : '1.0.0',
-  default_options : ['warning_level=2', 'buildtype=release', 'b_lto=true'])
+project(
+    'skyborn-mann-kendall-core',
+    ['c', 'fortran'],
+    version: '1.0.0',
+    default_options: ['warning_level=2', 'buildtype=release', 'b_lto=true'],
+)
 
 py_mod = import('python')
 py = py_mod.find_installation('python', pure: false)
 py_dep = py.dependency()
 
-py.install_sources([
-    '__init__.py',
-    'core.py',
-], subdir: 'skyborn/calc/mann_kendall')
+py.install_sources(
+    [
+        '__init__.py',
+        'core.py',
+    ],
+    subdir: 'skyborn/calc/mann_kendall',
+)
 
 incdir_numpy_cmd = run_command(
     py,
-    ['-c', '''
+    [
+        '-c',
+        '''
 import numpy
 import os
 paths = [
     numpy.get_include(),
     os.path.join(numpy.__path__[0], "core", "include"),
-    os.path.join(numpy.__path__[0], "_core", "include")
+    os.path.join(numpy.__path__[0], "_core", "include"),
 ]
 for path in paths:
     if os.path.exists(os.path.join(path, "numpy", "npy_os.h")):
@@ -28,32 +36,13 @@ for path in paths:
         break
 else:
     print(numpy.get_include())
-'''],
+''',
+    ],
     check: true,
 )
 incdir_numpy = incdir_numpy_cmd.stdout().strip()
 
-incdir_f2py_cmd = run_command(
-    py,
-    ['-c', '''
-import numpy
-import os
-try:
-    import numpy.f2py
-    f2py_path = numpy.f2py.get_include()
-    if os.path.exists(f2py_path):
-        print(f2py_path)
-    else:
-        print(numpy.get_include())
-except:
-    print(numpy.get_include())
-'''],
-    check: true,
-)
-incdir_f2py = incdir_f2py_cmd.stdout().strip()
-
 message('NumPy include directory: ' + incdir_numpy)
-message('F2PY include directory: ' + incdir_f2py)
 
 host_system = host_machine.system()
 host_cpu = host_machine.cpu_family()
@@ -73,7 +62,7 @@ fortran_args = [
 ]
 
 c_args = [
-    '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',
+    '-DNPY_NO_DEPRECATED_API=NPY_1_19_API_VERSION',
     '-fPIC',
     '-fno-trapping-math',
 ]
@@ -92,112 +81,29 @@ endif
 message('Fortran args: ' + ' '.join(fortran_args))
 message('C args: ' + ' '.join(c_args))
 
-try_f2py = run_command(py, '-c', 'import numpy.f2py; print("OK")', check: false)
+mk_ext = py.extension_module(
+    'mann_kendall_core',
+    [
+        'mann_kendall_core_module.c',
+        'fortran/mann_kendall_core.f90',
+    ],
+    include_directories: include_directories(incdir_numpy),
+    dependencies: [py_dep],
+    fortran_args: fortran_args,
+    c_args: c_args,
+    install: true,
+    install_dir: get_option('python.purelibdir') / 'skyborn' / 'calc' / 'mann_kendall',
+    build_by_default: true,
+)
 
-if try_f2py.returncode() == 0
-    inc_np = include_directories(incdir_numpy, incdir_f2py)
-
-    fortranobject_cmd = run_command(
+copy_to_source = custom_target(
+    'copy_to_source_for_inplace',
+    input: mk_ext,
+    output: 'inplace_copy_marker.txt',
+    command: [
         py,
-        ['-c', '''
-import numpy.f2py
-import numpy
-import os
-
-candidates = []
-
-try:
-    fo_path = os.path.join(numpy.f2py.get_include(), "fortranobject.c")
-    candidates.append(fo_path)
-except:
-    pass
-
-numpy_base = numpy.__path__[0]
-candidates.extend([
-    os.path.join(numpy_base, "f2py", "src", "fortranobject.c"),
-    os.path.join(numpy_base, "f2py", "fortranobject.c"),
-    os.path.join(numpy_base, "_core", "src", "fortranobject.c"),
-])
-
-for candidate in candidates:
-    if os.path.exists(candidate):
-        print(candidate)
-        break
-else:
-    print("")
-'''],
-        check: true,
-    )
-    fortranobject_c = fortranobject_cmd.stdout().strip()
-
-    mk_sources = []
-    mk_source = custom_target(
-        'mann_kendall_coremodule.c',
-        input: ['fortran/mann_kendall_core.pyf'],
-        output: ['mann_kendall_coremodule.c', 'mann_kendall_core-f2pywrappers.f'],
-        command: [
-            py,
-            '-c',
-            '''
-import builtins
-import sys
-from numpy.f2py import f2py2e
-from numpy.f2py import crackfortran
-
-def _patched_openhook(filename, mode):
-    return builtins.open(filename, mode, encoding="utf-8")
-
-crackfortran.openhook = _patched_openhook
-f2py2e.run_main(["--lower", sys.argv[1], "--build-dir", sys.argv[2]])
-''',
-            '@INPUT@',
-            '@OUTDIR@',
-        ],
-        build_by_default: true,
-        install: false,
-    )
-    mk_sources += mk_source
-
-    if fortranobject_c != ''
-        message('Found fortranobject.c: ' + fortranobject_c)
-        fortran_obj_check = run_command(
-            py,
-            '-c', 'import os; import sys; sys.exit(0 if os.path.exists(r"' + fortranobject_c + '") else 1)',
-            check: false,
-        )
-        if fortran_obj_check.returncode() == 0
-            mk_sources += files(fortranobject_c)
-            message('Added fortranobject.c to build')
-        else
-            warning('fortranobject.c path found but file does not exist: ' + fortranobject_c)
-        endif
-    else
-        warning('fortranobject.c not found - trying to build without it')
-    endif
-
-    mk_ext = py.extension_module(
-        'mann_kendall_core',
-        [
-            'fortran/mann_kendall_core.f90',
-            mk_sources,
-        ],
-        include_directories: inc_np,
-        dependencies: [py_dep],
-        fortran_args: fortran_args,
-        c_args: c_args,
-        install: true,
-        install_dir: get_option('python.purelibdir') / 'skyborn' / 'calc' / 'mann_kendall',
-        build_by_default: true,
-    )
-
-    copy_to_source = custom_target(
-        'copy_to_source_for_inplace',
-        input: mk_ext,
-        output: 'inplace_copy_marker.txt',
-        command: [
-            py,
-            '-c',
-            '''
+        '-c',
+        '''
 import glob
 import shutil
 from pathlib import Path
@@ -244,18 +150,14 @@ if built_files:
 else:
     print("No compiled extension files found")
 
-with open("''' + '@OUTPUT@' + '''", "w") as f:
+with open("''' + '@OUTPUT@' + '''", "w", encoding="utf-8") as f:
     f.write("Source copy check completed\\n")
 
 print("=== Extension source copy check completed ===")
-'''
-        ],
-        build_by_default: true,
-        console: true,
-    )
+''',
+    ],
+    build_by_default: true,
+    console: true,
+)
 
-    message('mann_kendall_core submodule configured successfully with Mann-Kendall extensions')
-else
-    warning('f2py not available, skipping mann_kendall_core interface generation')
-    message('Installing Python-only mann_kendall_core module (without Fortran extensions)')
-endif
+message('mann_kendall_core submodule configured successfully with direct Fortran/C extension')
