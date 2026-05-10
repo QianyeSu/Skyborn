@@ -48,7 +48,7 @@
 !   - Pre-computed constants avoid repeated division operations
 !   - Early exit for invalid SST conditions
 !
-subroutine calculate_pi_gridded_data(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+subroutine calculate_pi_gridded_data_impl(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
                                     nlat, nlon, num_levels, min_pressure, max_wind, error_flag)
     implicit none
 
@@ -109,7 +109,7 @@ subroutine calculate_pi_gridded_data(sst_in, psl_in, pressure_levels, temp_in, m
         end do
     end do
 
-end subroutine calculate_pi_gridded_data
+end subroutine calculate_pi_gridded_data_impl
 
 !
 ! Calculate potential intensity for gridded data with missing value handling
@@ -129,7 +129,7 @@ end subroutine calculate_pi_gridded_data
 !   - Dynamic vertical level adjustment for partial profiles
 !   - Avoids unnecessary unit conversions for invalid data
 !
-subroutine calculate_pi_gridded_with_missing(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+subroutine calculate_pi_gridded_with_missing_impl(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
                                            nlat, nlon, num_levels, min_pressure, max_wind, error_flag)
     implicit none
 
@@ -216,9 +216,9 @@ subroutine calculate_pi_gridded_with_missing(sst_in, psl_in, pressure_levels, te
         end do
     end do
 
-end subroutine calculate_pi_gridded_with_missing
+end subroutine calculate_pi_gridded_with_missing_impl
 
-subroutine calculate_pi_gridded_diagnostics(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+subroutine calculate_pi_gridded_diagnostics_impl(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
                                            nlat, nlon, num_levels, min_pressure, max_wind, error_flag, &
                                            outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd, &
                                            outflow_source_flag, ckcd_in)
@@ -231,8 +231,8 @@ subroutine calculate_pi_gridded_diagnostics(sst_in, psl_in, pressure_levels, tem
     real, intent(in) :: pressure_levels(num_levels)  ! Pressure levels (mb)
     real, intent(in) :: temp_in(num_levels, nlat, nlon)      ! Temperature (K)
     real, intent(in) :: mixing_ratio_in(num_levels, nlat, nlon) ! Mixing ratio (kg/kg)
-    integer, intent(in), optional :: outflow_source_flag ! 0=cape_star, 1=cape_env
-    real, intent(in), optional :: ckcd_in           ! Optional decomposition Ck/Cd ratio
+    integer, intent(in) :: outflow_source_flag ! 0=cape_star, 1=cape_env
+    real, intent(in) :: ckcd_in           ! Optional decomposition Ck/Cd ratio
 
     ! Output parameters
     real, intent(out) :: min_pressure(nlat, nlon)    ! Minimum central pressure (mb)
@@ -257,10 +257,9 @@ subroutine calculate_pi_gridded_diagnostics(sst_in, psl_in, pressure_levels, tem
     real :: dummy_lnckcd
     integer :: ilat, ilon, k, outflow_flag, local_error_flag
 
-    outflow_flag = 0
-    if (present(outflow_source_flag)) outflow_flag = outflow_source_flag
+    outflow_flag = outflow_source_flag
     ckcd_value = 0.9
-    if (present(ckcd_in) .and. ckcd_in > 0.0) ckcd_value = ckcd_in
+    if (ckcd_in > 0.0) ckcd_value = ckcd_in
 
     error_flag = 1
     lnckcd = UNDEF
@@ -301,9 +300,9 @@ subroutine calculate_pi_gridded_diagnostics(sst_in, psl_in, pressure_levels, tem
     end do
     !$omp end parallel do
 
-end subroutine calculate_pi_gridded_diagnostics
+end subroutine calculate_pi_gridded_diagnostics_impl
 
-subroutine calculate_pi_gridded_diagnostics_with_missing(sst_in, psl_in, pressure_levels, temp_in, &
+subroutine calculate_pi_gridded_diagnostics_with_missing_impl(sst_in, psl_in, pressure_levels, temp_in, &
                                                         mixing_ratio_in, nlat, nlon, num_levels, &
                                                         min_pressure, max_wind, error_flag, &
                                                         outflow_temp, outflow_level, lnpi, lneff, &
@@ -317,8 +316,8 @@ subroutine calculate_pi_gridded_diagnostics_with_missing(sst_in, psl_in, pressur
     real, intent(in) :: pressure_levels(num_levels)  ! Pressure levels (mb)
     real, intent(in) :: temp_in(num_levels, nlat, nlon)      ! Temperature (K)
     real, intent(in) :: mixing_ratio_in(num_levels, nlat, nlon) ! Mixing ratio (kg/kg)
-    integer, intent(in), optional :: outflow_source_flag ! 0=cape_star, 1=cape_env
-    real, intent(in), optional :: ckcd_in           ! Optional decomposition Ck/Cd ratio
+    integer, intent(in) :: outflow_source_flag ! 0=cape_star, 1=cape_env
+    real, intent(in) :: ckcd_in           ! Optional decomposition Ck/Cd ratio
 
     ! Output parameters
     real, intent(out) :: min_pressure(nlat, nlon)    ! Minimum central pressure (mb)
@@ -343,10 +342,9 @@ subroutine calculate_pi_gridded_diagnostics_with_missing(sst_in, psl_in, pressur
     real :: dummy_lnckcd
     integer :: ilat, ilon, k, valid_start_level, outflow_flag, local_error_flag
 
-    outflow_flag = 0
-    if (present(outflow_source_flag)) outflow_flag = outflow_source_flag
+    outflow_flag = outflow_source_flag
     ckcd_value = 0.9
-    if (present(ckcd_in)) ckcd_value = ckcd_in
+    ckcd_value = ckcd_in
 
     error_flag = 1
     lnckcd = UNDEF
@@ -416,7 +414,7 @@ subroutine calculate_pi_gridded_diagnostics_with_missing(sst_in, psl_in, pressur
     end do
     !$omp end parallel do
 
-end subroutine calculate_pi_gridded_diagnostics_with_missing
+end subroutine calculate_pi_gridded_diagnostics_with_missing_impl
 
 !
 ! Calculate potential intensity for a single atmospheric profile
@@ -435,7 +433,7 @@ end subroutine calculate_pi_gridded_diagnostics_with_missing
 !   - Single grid point analysis
 !   - Validation against radiosonde profiles
 !
-subroutine calculate_pi_single_profile(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+subroutine calculate_pi_single_profile_impl(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
                                      num_levels, actual_levels, min_pressure, max_wind, error_flag)
     implicit none
 
@@ -491,9 +489,9 @@ subroutine calculate_pi_single_profile(sst_in, psl_in, pressure_levels, temp_in,
                          dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd, &
                          error_flag, 0, 0.9)
 
-end subroutine calculate_pi_single_profile
+end subroutine calculate_pi_single_profile_impl
 
-subroutine calculate_pi_profile_diagnostics(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+subroutine calculate_pi_profile_diagnostics_impl(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
                                            num_levels, actual_levels, min_pressure, max_wind, error_flag, &
                                            outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd, &
                                            outflow_source_flag, ckcd_in)
@@ -506,8 +504,8 @@ subroutine calculate_pi_profile_diagnostics(sst_in, psl_in, pressure_levels, tem
     real, intent(in) :: pressure_levels(num_levels) ! Pressure levels (mb)
     real, intent(in) :: temp_in(num_levels)         ! Temperature (K)
     real, intent(in) :: mixing_ratio_in(num_levels) ! Mixing ratio (kg/kg)
-    integer, intent(in), optional :: outflow_source_flag ! 0=cape_star, 1=cape_env
-    real, intent(in), optional :: ckcd_in           ! Optional decomposition Ck/Cd ratio
+    integer, intent(in) :: outflow_source_flag ! 0=cape_star, 1=cape_env
+    real, intent(in) :: ckcd_in           ! Optional decomposition Ck/Cd ratio
 
     ! Output parameters
     real, intent(out) :: min_pressure
@@ -530,10 +528,9 @@ subroutine calculate_pi_profile_diagnostics(sst_in, psl_in, pressure_levels, tem
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
     integer :: k, levels_to_use, outflow_flag
 
-    outflow_flag = 0
-    if (present(outflow_source_flag)) outflow_flag = outflow_source_flag
+    outflow_flag = outflow_source_flag
     ckcd_value = 0.9
-    if (present(ckcd_in)) ckcd_value = ckcd_in
+    ckcd_value = ckcd_in
 
     min_pressure = UNDEF
     max_wind = UNDEF
@@ -566,7 +563,7 @@ subroutine calculate_pi_profile_diagnostics(sst_in, psl_in, pressure_levels, tem
         num_levels, levels_to_use, min_pressure, max_wind, outflow_temp, &
         outflow_level, lnpi, lneff, lndiseq, lnckcd, error_flag, outflow_flag, ckcd_value)
 
-end subroutine calculate_pi_profile_diagnostics
+end subroutine calculate_pi_profile_diagnostics_impl
 
 !
 ! Core potential intensity calculation algorithm
@@ -849,7 +846,7 @@ end subroutine calculate_pi_core
 !   - Seasonal PI variability analysis
 !   - Hurricane season monitoring
 !
-subroutine calculate_pi_4d_data(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+subroutine calculate_pi_4d_data_impl(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
                                nlat, nlon, num_levels, num_times, min_pressure, max_wind, error_flag)
     implicit none
 
@@ -919,9 +916,9 @@ subroutine calculate_pi_4d_data(sst_in, psl_in, pressure_levels, temp_in, mixing
     end do
     !$omp end parallel do
 
-end subroutine calculate_pi_4d_data
+end subroutine calculate_pi_4d_data_impl
 
-subroutine calculate_pi_4d_diagnostics(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+subroutine calculate_pi_4d_diagnostics_impl(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
                                       nlat, nlon, num_levels, num_times, min_pressure, max_wind, &
                                       error_flag, outflow_temp, outflow_level, lnpi, lneff, lndiseq, &
                                       lnckcd, outflow_source_flag, ckcd_in)
@@ -933,8 +930,8 @@ subroutine calculate_pi_4d_diagnostics(sst_in, psl_in, pressure_levels, temp_in,
     real, intent(in) :: pressure_levels(num_levels)
     real, intent(in) :: temp_in(num_times, num_levels, nlat, nlon)
     real, intent(in) :: mixing_ratio_in(num_times, num_levels, nlat, nlon)
-    integer, intent(in), optional :: outflow_source_flag
-    real, intent(in), optional :: ckcd_in
+    integer, intent(in) :: outflow_source_flag
+    real, intent(in) :: ckcd_in
 
     real, intent(out) :: min_pressure(num_times, nlat, nlon)
     real, intent(out) :: max_wind(num_times, nlat, nlon)
@@ -956,10 +953,9 @@ subroutine calculate_pi_4d_diagnostics(sst_in, psl_in, pressure_levels, temp_in,
     real :: dummy_lnckcd
     integer :: ilat, ilon, k, t, outflow_flag, local_error_flag
 
-    outflow_flag = 0
-    if (present(outflow_source_flag)) outflow_flag = outflow_source_flag
+    outflow_flag = outflow_source_flag
     ckcd_value = 0.9
-    if (present(ckcd_in)) ckcd_value = ckcd_in
+    ckcd_value = ckcd_in
 
     error_flag = 1
     lnckcd = UNDEF
@@ -1002,7 +998,7 @@ subroutine calculate_pi_4d_diagnostics(sst_in, psl_in, pressure_levels, temp_in,
     end do
     !$omp end parallel do
 
-end subroutine calculate_pi_4d_diagnostics
+end subroutine calculate_pi_4d_diagnostics_impl
 
 !
 ! Calculate potential intensity for 4D gridded data with missing value handling
@@ -1027,7 +1023,7 @@ end subroutine calculate_pi_4d_diagnostics
 !   - Regional model output with complex coastlines
 !   - Datasets with temporal data gaps
 !
-subroutine calculate_pi_4d_with_missing(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+subroutine calculate_pi_4d_with_missing_impl(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
                                        nlat, nlon, num_levels, num_times, min_pressure, max_wind, error_flag)
     implicit none
 
@@ -1121,9 +1117,9 @@ subroutine calculate_pi_4d_with_missing(sst_in, psl_in, pressure_levels, temp_in
     end do
     !$omp end parallel do
 
-end subroutine calculate_pi_4d_with_missing
+end subroutine calculate_pi_4d_with_missing_impl
 
-subroutine calculate_pi_4d_diagnostics_with_missing(sst_in, psl_in, pressure_levels, temp_in, &
+subroutine calculate_pi_4d_diagnostics_with_missing_impl(sst_in, psl_in, pressure_levels, temp_in, &
                                                     mixing_ratio_in, nlat, nlon, num_levels, num_times, &
                                                     min_pressure, max_wind, error_flag, outflow_temp, &
                                                     outflow_level, lnpi, lneff, lndiseq, lnckcd, &
@@ -1136,8 +1132,8 @@ subroutine calculate_pi_4d_diagnostics_with_missing(sst_in, psl_in, pressure_lev
     real, intent(in) :: pressure_levels(num_levels)
     real, intent(in) :: temp_in(num_times, num_levels, nlat, nlon)
     real, intent(in) :: mixing_ratio_in(num_times, num_levels, nlat, nlon)
-    integer, intent(in), optional :: outflow_source_flag
-    real, intent(in), optional :: ckcd_in
+    integer, intent(in) :: outflow_source_flag
+    real, intent(in) :: ckcd_in
 
     real, intent(out) :: min_pressure(num_times, nlat, nlon)
     real, intent(out) :: max_wind(num_times, nlat, nlon)
@@ -1159,10 +1155,9 @@ subroutine calculate_pi_4d_diagnostics_with_missing(sst_in, psl_in, pressure_lev
     real :: dummy_lnckcd
     integer :: ilat, ilon, k, t, valid_start_level, outflow_flag, local_error_flag
 
-    outflow_flag = 0
-    if (present(outflow_source_flag)) outflow_flag = outflow_source_flag
+    outflow_flag = outflow_source_flag
     ckcd_value = 0.9
-    if (present(ckcd_in)) ckcd_value = ckcd_in
+    ckcd_value = ckcd_in
 
     error_flag = 1
     lnckcd = UNDEF
@@ -1234,7 +1229,7 @@ subroutine calculate_pi_4d_diagnostics_with_missing(sst_in, psl_in, pressure_lev
     end do
     !$omp end parallel do
 
-end subroutine calculate_pi_4d_diagnostics_with_missing
+end subroutine calculate_pi_4d_diagnostics_with_missing_impl
 
 !
 ! Calculate Convective Available Potential Energy (CAPE) for a given parcel
@@ -1332,11 +1327,11 @@ subroutine prepare_cape_environment(temp_profile, mixing_ratio_profile, pressure
     !$omp end simd
 end subroutine prepare_cape_environment
 
-subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
+subroutine CAPE_impl(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
                        temp_profile, mixing_ratio_profile, pressure_profile, &
                        array_size, num_points, buoyancy_param, &
                        cape_value, outflow_temp, outflow_level, error_flag)
-    !$omp declare simd(CAPE) uniform(array_size, num_points, buoyancy_param)
+    !$omp declare simd(CAPE_impl) uniform(array_size, num_points, buoyancy_param)
     implicit none
 
     real, intent(in) :: parcel_temp
@@ -1366,7 +1361,7 @@ subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
         temp_profile_dp, pressure_profile_dp, env_virtual_temp, &
         saturation_pressure_profile, pressure_layer_factor, array_size, num_points, &
         buoyancy_param, cape_value, outflow_temp, outflow_level, error_flag)
-end subroutine CAPE
+end subroutine CAPE_impl
 
 subroutine cape_from_cached_environment(parcel_temp, parcel_mixing_ratio, parcel_pressure, &
                        temp_profile_dp, pressure_profile_dp, &
@@ -1598,3 +1593,462 @@ subroutine cape_from_cached_environment(parcel_temp, parcel_mixing_ratio, parcel
         outflow_level = real(outflow_level_dp, kind(outflow_level))
     end if
 end subroutine cape_from_cached_environment
+
+subroutine calculate_pi_gridded_data(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+                                     min_pressure, max_wind, error_flag, nlat, nlon, num_levels) &
+                                     bind(C, name="calculate_pi_gridded_data")
+    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_float, c_int, c_ptr
+    implicit none
+
+    type(c_ptr), value, intent(in) :: sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in
+    type(c_ptr), value, intent(in) :: min_pressure, max_wind, error_flag
+    integer(c_int), value, intent(in) :: nlat, nlon, num_levels
+
+    real(c_float), pointer :: sst_view(:, :), psl_view(:, :), pressure_view(:)
+    real(c_float), pointer :: temp_view(:, :, :), mixing_ratio_view(:, :, :)
+    real(c_float), pointer :: min_pressure_view(:, :), max_wind_view(:, :)
+    integer(c_int), pointer :: error_flag_view
+    integer :: nlat_f, nlon_f, num_levels_f
+
+    nlat_f = int(nlat)
+    nlon_f = int(nlon)
+    num_levels_f = int(num_levels)
+
+    call c_f_pointer(sst_in, sst_view, [nlat_f, nlon_f])
+    call c_f_pointer(psl_in, psl_view, [nlat_f, nlon_f])
+    call c_f_pointer(pressure_levels, pressure_view, [num_levels_f])
+    call c_f_pointer(temp_in, temp_view, [num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(mixing_ratio_in, mixing_ratio_view, [num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(min_pressure, min_pressure_view, [nlat_f, nlon_f])
+    call c_f_pointer(max_wind, max_wind_view, [nlat_f, nlon_f])
+    call c_f_pointer(error_flag, error_flag_view)
+
+    call calculate_pi_gridded_data_impl( &
+        sst_view, psl_view, pressure_view, temp_view, mixing_ratio_view, &
+        nlat_f, nlon_f, num_levels_f, min_pressure_view, max_wind_view, error_flag_view &
+    )
+end subroutine calculate_pi_gridded_data
+
+subroutine calculate_pi_gridded_with_missing(sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+                                             min_pressure, max_wind, error_flag, nlat, nlon, num_levels) &
+                                             bind(C, name="calculate_pi_gridded_with_missing")
+    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_float, c_int, c_ptr
+    implicit none
+
+    type(c_ptr), value, intent(in) :: sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in
+    type(c_ptr), value, intent(in) :: min_pressure, max_wind, error_flag
+    integer(c_int), value, intent(in) :: nlat, nlon, num_levels
+
+    real(c_float), pointer :: sst_view(:, :), psl_view(:, :), pressure_view(:)
+    real(c_float), pointer :: temp_view(:, :, :), mixing_ratio_view(:, :, :)
+    real(c_float), pointer :: min_pressure_view(:, :), max_wind_view(:, :)
+    integer(c_int), pointer :: error_flag_view
+    integer :: nlat_f, nlon_f, num_levels_f
+
+    nlat_f = int(nlat)
+    nlon_f = int(nlon)
+    num_levels_f = int(num_levels)
+
+    call c_f_pointer(sst_in, sst_view, [nlat_f, nlon_f])
+    call c_f_pointer(psl_in, psl_view, [nlat_f, nlon_f])
+    call c_f_pointer(pressure_levels, pressure_view, [num_levels_f])
+    call c_f_pointer(temp_in, temp_view, [num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(mixing_ratio_in, mixing_ratio_view, [num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(min_pressure, min_pressure_view, [nlat_f, nlon_f])
+    call c_f_pointer(max_wind, max_wind_view, [nlat_f, nlon_f])
+    call c_f_pointer(error_flag, error_flag_view)
+
+    call calculate_pi_gridded_with_missing_impl( &
+        sst_view, psl_view, pressure_view, temp_view, mixing_ratio_view, &
+        nlat_f, nlon_f, num_levels_f, min_pressure_view, max_wind_view, error_flag_view &
+    )
+end subroutine calculate_pi_gridded_with_missing
+
+subroutine calculate_pi_gridded_diagnostics( &
+    sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+    min_pressure, max_wind, error_flag, outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd, &
+    outflow_source_flag, ckcd_in, nlat, nlon, num_levels &
+) bind(C, name="calculate_pi_gridded_diagnostics")
+    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_float, c_int, c_ptr
+    implicit none
+
+    type(c_ptr), value, intent(in) :: sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in
+    type(c_ptr), value, intent(in) :: min_pressure, max_wind, error_flag
+    type(c_ptr), value, intent(in) :: outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd
+    integer(c_int), value, intent(in) :: outflow_source_flag, nlat, nlon, num_levels
+    real(c_float), value, intent(in) :: ckcd_in
+
+    real(c_float), pointer :: sst_view(:, :), psl_view(:, :), pressure_view(:)
+    real(c_float), pointer :: temp_view(:, :, :), mixing_ratio_view(:, :, :)
+    real(c_float), pointer :: min_pressure_view(:, :), max_wind_view(:, :)
+    real(c_float), pointer :: outflow_temp_view(:, :), outflow_level_view(:, :)
+    real(c_float), pointer :: lnpi_view(:, :), lneff_view(:, :), lndiseq_view(:, :), lnckcd_view
+    integer(c_int), pointer :: error_flag_view
+    integer :: nlat_f, nlon_f, num_levels_f, outflow_flag_f
+
+    nlat_f = int(nlat)
+    nlon_f = int(nlon)
+    num_levels_f = int(num_levels)
+    outflow_flag_f = int(outflow_source_flag)
+
+    call c_f_pointer(sst_in, sst_view, [nlat_f, nlon_f])
+    call c_f_pointer(psl_in, psl_view, [nlat_f, nlon_f])
+    call c_f_pointer(pressure_levels, pressure_view, [num_levels_f])
+    call c_f_pointer(temp_in, temp_view, [num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(mixing_ratio_in, mixing_ratio_view, [num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(min_pressure, min_pressure_view, [nlat_f, nlon_f])
+    call c_f_pointer(max_wind, max_wind_view, [nlat_f, nlon_f])
+    call c_f_pointer(error_flag, error_flag_view)
+    call c_f_pointer(outflow_temp, outflow_temp_view, [nlat_f, nlon_f])
+    call c_f_pointer(outflow_level, outflow_level_view, [nlat_f, nlon_f])
+    call c_f_pointer(lnpi, lnpi_view, [nlat_f, nlon_f])
+    call c_f_pointer(lneff, lneff_view, [nlat_f, nlon_f])
+    call c_f_pointer(lndiseq, lndiseq_view, [nlat_f, nlon_f])
+    call c_f_pointer(lnckcd, lnckcd_view)
+
+    call calculate_pi_gridded_diagnostics_impl( &
+        sst_view, psl_view, pressure_view, temp_view, mixing_ratio_view, &
+        nlat_f, nlon_f, num_levels_f, min_pressure_view, max_wind_view, error_flag_view, &
+        outflow_temp_view, outflow_level_view, lnpi_view, lneff_view, lndiseq_view, lnckcd_view, &
+        outflow_flag_f, ckcd_in &
+    )
+end subroutine calculate_pi_gridded_diagnostics
+
+subroutine calculate_pi_gridded_diagnostics_with_missing( &
+    sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+    min_pressure, max_wind, error_flag, outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd, &
+    outflow_source_flag, ckcd_in, nlat, nlon, num_levels &
+) bind(C, name="calculate_pi_gridded_diagnostics_with_missing")
+    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_float, c_int, c_ptr
+    implicit none
+
+    type(c_ptr), value, intent(in) :: sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in
+    type(c_ptr), value, intent(in) :: min_pressure, max_wind, error_flag
+    type(c_ptr), value, intent(in) :: outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd
+    integer(c_int), value, intent(in) :: outflow_source_flag, nlat, nlon, num_levels
+    real(c_float), value, intent(in) :: ckcd_in
+
+    real(c_float), pointer :: sst_view(:, :), psl_view(:, :), pressure_view(:)
+    real(c_float), pointer :: temp_view(:, :, :), mixing_ratio_view(:, :, :)
+    real(c_float), pointer :: min_pressure_view(:, :), max_wind_view(:, :)
+    real(c_float), pointer :: outflow_temp_view(:, :), outflow_level_view(:, :)
+    real(c_float), pointer :: lnpi_view(:, :), lneff_view(:, :), lndiseq_view(:, :), lnckcd_view
+    integer(c_int), pointer :: error_flag_view
+    integer :: nlat_f, nlon_f, num_levels_f, outflow_flag_f
+
+    nlat_f = int(nlat)
+    nlon_f = int(nlon)
+    num_levels_f = int(num_levels)
+    outflow_flag_f = int(outflow_source_flag)
+
+    call c_f_pointer(sst_in, sst_view, [nlat_f, nlon_f])
+    call c_f_pointer(psl_in, psl_view, [nlat_f, nlon_f])
+    call c_f_pointer(pressure_levels, pressure_view, [num_levels_f])
+    call c_f_pointer(temp_in, temp_view, [num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(mixing_ratio_in, mixing_ratio_view, [num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(min_pressure, min_pressure_view, [nlat_f, nlon_f])
+    call c_f_pointer(max_wind, max_wind_view, [nlat_f, nlon_f])
+    call c_f_pointer(error_flag, error_flag_view)
+    call c_f_pointer(outflow_temp, outflow_temp_view, [nlat_f, nlon_f])
+    call c_f_pointer(outflow_level, outflow_level_view, [nlat_f, nlon_f])
+    call c_f_pointer(lnpi, lnpi_view, [nlat_f, nlon_f])
+    call c_f_pointer(lneff, lneff_view, [nlat_f, nlon_f])
+    call c_f_pointer(lndiseq, lndiseq_view, [nlat_f, nlon_f])
+    call c_f_pointer(lnckcd, lnckcd_view)
+
+    call calculate_pi_gridded_diagnostics_with_missing_impl( &
+        sst_view, psl_view, pressure_view, temp_view, mixing_ratio_view, &
+        nlat_f, nlon_f, num_levels_f, min_pressure_view, max_wind_view, error_flag_view, &
+        outflow_temp_view, outflow_level_view, lnpi_view, lneff_view, lndiseq_view, lnckcd_view, &
+        outflow_flag_f, ckcd_in &
+    )
+end subroutine calculate_pi_gridded_diagnostics_with_missing
+
+subroutine calculate_pi_single_profile( &
+    sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, actual_levels, &
+    min_pressure, max_wind, error_flag, num_levels &
+) bind(C, name="calculate_pi_single_profile")
+    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_float, c_int, c_ptr
+    implicit none
+
+    real(c_float), value, intent(in) :: sst_in, psl_in
+    type(c_ptr), value, intent(in) :: pressure_levels, temp_in, mixing_ratio_in
+    type(c_ptr), value, intent(in) :: min_pressure, max_wind, error_flag
+    integer(c_int), value, intent(in) :: actual_levels, num_levels
+
+    real(c_float), pointer :: pressure_view(:), temp_view(:), mixing_ratio_view(:)
+    real(c_float), pointer :: min_pressure_view, max_wind_view
+    integer(c_int), pointer :: error_flag_view
+    integer :: actual_levels_f, num_levels_f
+
+    actual_levels_f = int(actual_levels)
+    num_levels_f = int(num_levels)
+
+    call c_f_pointer(pressure_levels, pressure_view, [num_levels_f])
+    call c_f_pointer(temp_in, temp_view, [num_levels_f])
+    call c_f_pointer(mixing_ratio_in, mixing_ratio_view, [num_levels_f])
+    call c_f_pointer(min_pressure, min_pressure_view)
+    call c_f_pointer(max_wind, max_wind_view)
+    call c_f_pointer(error_flag, error_flag_view)
+
+    call calculate_pi_single_profile_impl( &
+        sst_in, psl_in, pressure_view, temp_view, mixing_ratio_view, &
+        num_levels_f, actual_levels_f, min_pressure_view, max_wind_view, error_flag_view &
+    )
+end subroutine calculate_pi_single_profile
+
+subroutine calculate_pi_profile_diagnostics( &
+    sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, actual_levels, &
+    min_pressure, max_wind, error_flag, outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd, &
+    outflow_source_flag, ckcd_in, num_levels &
+) bind(C, name="calculate_pi_profile_diagnostics")
+    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_float, c_int, c_ptr
+    implicit none
+
+    real(c_float), value, intent(in) :: sst_in, psl_in, ckcd_in
+    type(c_ptr), value, intent(in) :: pressure_levels, temp_in, mixing_ratio_in
+    type(c_ptr), value, intent(in) :: min_pressure, max_wind, error_flag
+    type(c_ptr), value, intent(in) :: outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd
+    integer(c_int), value, intent(in) :: actual_levels, outflow_source_flag, num_levels
+
+    real(c_float), pointer :: pressure_view(:), temp_view(:), mixing_ratio_view(:)
+    real(c_float), pointer :: min_pressure_view, max_wind_view
+    real(c_float), pointer :: outflow_temp_view, outflow_level_view, lnpi_view, lneff_view, lndiseq_view, lnckcd_view
+    integer(c_int), pointer :: error_flag_view
+    integer :: actual_levels_f, outflow_flag_f, num_levels_f
+
+    actual_levels_f = int(actual_levels)
+    outflow_flag_f = int(outflow_source_flag)
+    num_levels_f = int(num_levels)
+
+    call c_f_pointer(pressure_levels, pressure_view, [num_levels_f])
+    call c_f_pointer(temp_in, temp_view, [num_levels_f])
+    call c_f_pointer(mixing_ratio_in, mixing_ratio_view, [num_levels_f])
+    call c_f_pointer(min_pressure, min_pressure_view)
+    call c_f_pointer(max_wind, max_wind_view)
+    call c_f_pointer(error_flag, error_flag_view)
+    call c_f_pointer(outflow_temp, outflow_temp_view)
+    call c_f_pointer(outflow_level, outflow_level_view)
+    call c_f_pointer(lnpi, lnpi_view)
+    call c_f_pointer(lneff, lneff_view)
+    call c_f_pointer(lndiseq, lndiseq_view)
+    call c_f_pointer(lnckcd, lnckcd_view)
+
+    call calculate_pi_profile_diagnostics_impl( &
+        sst_in, psl_in, pressure_view, temp_view, mixing_ratio_view, &
+        num_levels_f, actual_levels_f, min_pressure_view, max_wind_view, error_flag_view, &
+        outflow_temp_view, outflow_level_view, lnpi_view, lneff_view, lndiseq_view, lnckcd_view, &
+        outflow_flag_f, ckcd_in &
+    )
+end subroutine calculate_pi_profile_diagnostics
+
+subroutine calculate_pi_4d_data( &
+    sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+    min_pressure, max_wind, error_flag, nlat, nlon, num_levels, num_times &
+) bind(C, name="calculate_pi_4d_data")
+    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_float, c_int, c_ptr
+    implicit none
+
+    type(c_ptr), value, intent(in) :: sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in
+    type(c_ptr), value, intent(in) :: min_pressure, max_wind, error_flag
+    integer(c_int), value, intent(in) :: nlat, nlon, num_levels, num_times
+
+    real(c_float), pointer :: sst_view(:, :, :), psl_view(:, :, :), pressure_view(:)
+    real(c_float), pointer :: temp_view(:, :, :, :), mixing_ratio_view(:, :, :, :)
+    real(c_float), pointer :: min_pressure_view(:, :, :), max_wind_view(:, :, :)
+    integer(c_int), pointer :: error_flag_view
+    integer :: nlat_f, nlon_f, num_levels_f, num_times_f
+
+    nlat_f = int(nlat)
+    nlon_f = int(nlon)
+    num_levels_f = int(num_levels)
+    num_times_f = int(num_times)
+
+    call c_f_pointer(sst_in, sst_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(psl_in, psl_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(pressure_levels, pressure_view, [num_levels_f])
+    call c_f_pointer(temp_in, temp_view, [num_times_f, num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(mixing_ratio_in, mixing_ratio_view, [num_times_f, num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(min_pressure, min_pressure_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(max_wind, max_wind_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(error_flag, error_flag_view)
+
+    call calculate_pi_4d_data_impl( &
+        sst_view, psl_view, pressure_view, temp_view, mixing_ratio_view, &
+        nlat_f, nlon_f, num_levels_f, num_times_f, min_pressure_view, max_wind_view, error_flag_view &
+    )
+end subroutine calculate_pi_4d_data
+
+subroutine calculate_pi_4d_with_missing( &
+    sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+    min_pressure, max_wind, error_flag, nlat, nlon, num_levels, num_times &
+) bind(C, name="calculate_pi_4d_with_missing")
+    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_float, c_int, c_ptr
+    implicit none
+
+    type(c_ptr), value, intent(in) :: sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in
+    type(c_ptr), value, intent(in) :: min_pressure, max_wind, error_flag
+    integer(c_int), value, intent(in) :: nlat, nlon, num_levels, num_times
+
+    real(c_float), pointer :: sst_view(:, :, :), psl_view(:, :, :), pressure_view(:)
+    real(c_float), pointer :: temp_view(:, :, :, :), mixing_ratio_view(:, :, :, :)
+    real(c_float), pointer :: min_pressure_view(:, :, :), max_wind_view(:, :, :)
+    integer(c_int), pointer :: error_flag_view
+    integer :: nlat_f, nlon_f, num_levels_f, num_times_f
+
+    nlat_f = int(nlat)
+    nlon_f = int(nlon)
+    num_levels_f = int(num_levels)
+    num_times_f = int(num_times)
+
+    call c_f_pointer(sst_in, sst_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(psl_in, psl_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(pressure_levels, pressure_view, [num_levels_f])
+    call c_f_pointer(temp_in, temp_view, [num_times_f, num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(mixing_ratio_in, mixing_ratio_view, [num_times_f, num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(min_pressure, min_pressure_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(max_wind, max_wind_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(error_flag, error_flag_view)
+
+    call calculate_pi_4d_with_missing_impl( &
+        sst_view, psl_view, pressure_view, temp_view, mixing_ratio_view, &
+        nlat_f, nlon_f, num_levels_f, num_times_f, min_pressure_view, max_wind_view, error_flag_view &
+    )
+end subroutine calculate_pi_4d_with_missing
+
+subroutine calculate_pi_4d_diagnostics( &
+    sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+    min_pressure, max_wind, error_flag, outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd, &
+    outflow_source_flag, ckcd_in, nlat, nlon, num_levels, num_times &
+) bind(C, name="calculate_pi_4d_diagnostics")
+    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_float, c_int, c_ptr
+    implicit none
+
+    type(c_ptr), value, intent(in) :: sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in
+    type(c_ptr), value, intent(in) :: min_pressure, max_wind, error_flag
+    type(c_ptr), value, intent(in) :: outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd
+    integer(c_int), value, intent(in) :: outflow_source_flag, nlat, nlon, num_levels, num_times
+    real(c_float), value, intent(in) :: ckcd_in
+
+    real(c_float), pointer :: sst_view(:, :, :), psl_view(:, :, :), pressure_view(:)
+    real(c_float), pointer :: temp_view(:, :, :, :), mixing_ratio_view(:, :, :, :)
+    real(c_float), pointer :: min_pressure_view(:, :, :), max_wind_view(:, :, :)
+    real(c_float), pointer :: outflow_temp_view(:, :, :), outflow_level_view(:, :, :)
+    real(c_float), pointer :: lnpi_view(:, :, :), lneff_view(:, :, :), lndiseq_view(:, :, :), lnckcd_view
+    integer(c_int), pointer :: error_flag_view
+    integer :: nlat_f, nlon_f, num_levels_f, num_times_f, outflow_flag_f
+
+    nlat_f = int(nlat)
+    nlon_f = int(nlon)
+    num_levels_f = int(num_levels)
+    num_times_f = int(num_times)
+    outflow_flag_f = int(outflow_source_flag)
+
+    call c_f_pointer(sst_in, sst_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(psl_in, psl_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(pressure_levels, pressure_view, [num_levels_f])
+    call c_f_pointer(temp_in, temp_view, [num_times_f, num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(mixing_ratio_in, mixing_ratio_view, [num_times_f, num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(min_pressure, min_pressure_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(max_wind, max_wind_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(error_flag, error_flag_view)
+    call c_f_pointer(outflow_temp, outflow_temp_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(outflow_level, outflow_level_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(lnpi, lnpi_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(lneff, lneff_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(lndiseq, lndiseq_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(lnckcd, lnckcd_view)
+
+    call calculate_pi_4d_diagnostics_impl( &
+        sst_view, psl_view, pressure_view, temp_view, mixing_ratio_view, &
+        nlat_f, nlon_f, num_levels_f, num_times_f, min_pressure_view, max_wind_view, error_flag_view, &
+        outflow_temp_view, outflow_level_view, lnpi_view, lneff_view, lndiseq_view, lnckcd_view, &
+        outflow_flag_f, ckcd_in &
+    )
+end subroutine calculate_pi_4d_diagnostics
+
+subroutine calculate_pi_4d_diagnostics_with_missing( &
+    sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in, &
+    min_pressure, max_wind, error_flag, outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd, &
+    outflow_source_flag, ckcd_in, nlat, nlon, num_levels, num_times &
+) bind(C, name="calculate_pi_4d_diagnostics_with_missing")
+    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_float, c_int, c_ptr
+    implicit none
+
+    type(c_ptr), value, intent(in) :: sst_in, psl_in, pressure_levels, temp_in, mixing_ratio_in
+    type(c_ptr), value, intent(in) :: min_pressure, max_wind, error_flag
+    type(c_ptr), value, intent(in) :: outflow_temp, outflow_level, lnpi, lneff, lndiseq, lnckcd
+    integer(c_int), value, intent(in) :: outflow_source_flag, nlat, nlon, num_levels, num_times
+    real(c_float), value, intent(in) :: ckcd_in
+
+    real(c_float), pointer :: sst_view(:, :, :), psl_view(:, :, :), pressure_view(:)
+    real(c_float), pointer :: temp_view(:, :, :, :), mixing_ratio_view(:, :, :, :)
+    real(c_float), pointer :: min_pressure_view(:, :, :), max_wind_view(:, :, :)
+    real(c_float), pointer :: outflow_temp_view(:, :, :), outflow_level_view(:, :, :)
+    real(c_float), pointer :: lnpi_view(:, :, :), lneff_view(:, :, :), lndiseq_view(:, :, :), lnckcd_view
+    integer(c_int), pointer :: error_flag_view
+    integer :: nlat_f, nlon_f, num_levels_f, num_times_f, outflow_flag_f
+
+    nlat_f = int(nlat)
+    nlon_f = int(nlon)
+    num_levels_f = int(num_levels)
+    num_times_f = int(num_times)
+    outflow_flag_f = int(outflow_source_flag)
+
+    call c_f_pointer(sst_in, sst_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(psl_in, psl_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(pressure_levels, pressure_view, [num_levels_f])
+    call c_f_pointer(temp_in, temp_view, [num_times_f, num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(mixing_ratio_in, mixing_ratio_view, [num_times_f, num_levels_f, nlat_f, nlon_f])
+    call c_f_pointer(min_pressure, min_pressure_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(max_wind, max_wind_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(error_flag, error_flag_view)
+    call c_f_pointer(outflow_temp, outflow_temp_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(outflow_level, outflow_level_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(lnpi, lnpi_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(lneff, lneff_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(lndiseq, lndiseq_view, [num_times_f, nlat_f, nlon_f])
+    call c_f_pointer(lnckcd, lnckcd_view)
+
+    call calculate_pi_4d_diagnostics_with_missing_impl( &
+        sst_view, psl_view, pressure_view, temp_view, mixing_ratio_view, &
+        nlat_f, nlon_f, num_levels_f, num_times_f, min_pressure_view, max_wind_view, error_flag_view, &
+        outflow_temp_view, outflow_level_view, lnpi_view, lneff_view, lndiseq_view, lnckcd_view, &
+        outflow_flag_f, ckcd_in &
+    )
+end subroutine calculate_pi_4d_diagnostics_with_missing
+
+subroutine CAPE(parcel_temp, parcel_mixing_ratio, parcel_pressure, temp_profile, mixing_ratio_profile, &
+                pressure_profile, num_points, buoyancy_param, cape_value, outflow_temp, outflow_level, &
+                error_flag, array_size) bind(C, name="cape")
+    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_float, c_int, c_ptr
+    implicit none
+
+    real(c_float), value, intent(in) :: parcel_temp, parcel_mixing_ratio, parcel_pressure, buoyancy_param
+    type(c_ptr), value, intent(in) :: temp_profile, mixing_ratio_profile, pressure_profile
+    type(c_ptr), value, intent(in) :: cape_value, outflow_temp, outflow_level, error_flag
+    integer(c_int), value, intent(in) :: array_size, num_points
+
+    real(c_float), pointer :: temp_profile_view(:), mixing_ratio_profile_view(:), pressure_profile_view(:)
+    real(c_float), pointer :: cape_value_view, outflow_temp_view, outflow_level_view
+    integer(c_int), pointer :: error_flag_view
+    integer :: array_size_f, num_points_f
+
+    array_size_f = int(array_size)
+    num_points_f = int(num_points)
+
+    call c_f_pointer(temp_profile, temp_profile_view, [array_size_f])
+    call c_f_pointer(mixing_ratio_profile, mixing_ratio_profile_view, [array_size_f])
+    call c_f_pointer(pressure_profile, pressure_profile_view, [array_size_f])
+    call c_f_pointer(cape_value, cape_value_view)
+    call c_f_pointer(outflow_temp, outflow_temp_view)
+    call c_f_pointer(outflow_level, outflow_level_view)
+    call c_f_pointer(error_flag, error_flag_view)
+
+    call CAPE_impl( &
+        parcel_temp, parcel_mixing_ratio, parcel_pressure, &
+        temp_profile_view, mixing_ratio_profile_view, pressure_profile_view, &
+        array_size_f, num_points_f, buoyancy_param, &
+        cape_value_view, outflow_temp_view, outflow_level_view, error_flag_view &
+    )
+end subroutine CAPE
