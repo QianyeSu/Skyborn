@@ -34,6 +34,30 @@ static PyArrayObject *to_double_1d(PyObject *obj) {
     return (PyArrayObject *) PyArray_FROM_OTF(obj, NPY_FLOAT64, NPY_ARRAY_ALIGNED | NPY_ARRAY_C_CONTIGUOUS);
 }
 
+static int parse_optional_double(PyObject *obj, double *value) {
+    if (obj == NULL || obj == Py_None) {
+        return 1;
+    }
+    *value = PyFloat_AsDouble(obj);
+    if (PyErr_Occurred()) {
+        return 0;
+    }
+    return 1;
+}
+
+static int parse_optional_int(PyObject *obj, int *value) {
+    long parsed = 0;
+    if (obj == NULL || obj == Py_None) {
+        return 1;
+    }
+    parsed = PyLong_AsLong(obj);
+    if (PyErr_Occurred()) {
+        return 0;
+    }
+    *value = (int) parsed;
+    return 1;
+}
+
 static PyObject *py_triple2grid1(PyObject *self, PyObject *args, PyObject *kwargs) {
     static char *kwlist[] = {"xi", "yi", "zi", "gx", "gy", "zmsg", "domain", "method", "distmx", NULL};
     PyObject *xi_obj = NULL;
@@ -41,6 +65,10 @@ static PyObject *py_triple2grid1(PyObject *self, PyObject *args, PyObject *kwarg
     PyObject *zi_obj = NULL;
     PyObject *gx_obj = NULL;
     PyObject *gy_obj = NULL;
+    PyObject *zmsg_obj = NULL;
+    PyObject *domain_obj = NULL;
+    PyObject *method_obj = NULL;
+    PyObject *distmx_obj = NULL;
     PyArrayObject *xi_arr = NULL;
     PyArrayObject *yi_arr = NULL;
     PyArrayObject *zi_arr = NULL;
@@ -74,19 +102,26 @@ static PyObject *py_triple2grid1(PyObject *self, PyObject *args, PyObject *kwarg
     if (!PyArg_ParseTupleAndKeywords(
             args,
             kwargs,
-            "OOOOO|ddid",
+            "OOOOO|OOOO",
             kwlist,
             &xi_obj,
             &yi_obj,
             &zi_obj,
             &gx_obj,
             &gy_obj,
-            &zmsg,
-            &domain,
-            &method,
-            &distmx
+            &zmsg_obj,
+            &domain_obj,
+            &method_obj,
+            &distmx_obj
         )) {
         return NULL;
+    }
+
+    if (!parse_optional_double(zmsg_obj, &zmsg) ||
+        !parse_optional_double(domain_obj, &domain) ||
+        !parse_optional_int(method_obj, &method) ||
+        !parse_optional_double(distmx_obj, &distmx)) {
+        goto fail;
     }
 
     xi_arr = to_double_1d(xi_obj);
@@ -198,7 +233,7 @@ fail:
 }
 
 static PyMethodDef module_methods[] = {
-    {"triple2grid1", (PyCFunction) py_triple2grid1, METH_VARARGS | METH_KEYWORDS, "Map a triple list onto a target rectilinear grid."},
+    {"triple2grid1", (PyCFunction) (void (*)(void)) py_triple2grid1, METH_VARARGS | METH_KEYWORDS, "Map a triple list onto a target rectilinear grid."},
     {NULL, NULL, 0, NULL}
 };
 
