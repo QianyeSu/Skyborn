@@ -216,8 +216,8 @@ python module _spherepack ! in
             real dimension(ngptot,nt) :: vgrid
             integer dimension(nlat) :: pl
             real dimension(nlat) :: weights
-            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: basis
-            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: dbasis
+            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: basis
+            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: dbasis
             real dimension(nlat) :: sin_theta
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
             integer optional,check(shape(ugrid,0)==ngptot),depend(ugrid) :: ngptot=shape(ugrid,0)
@@ -232,8 +232,8 @@ python module _spherepack ! in
             real dimension(ngptot,nt) :: vgrid
             integer dimension(nlat) :: pl
             real dimension(nlat) :: weights
-            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: basis
-            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: dbasis
+            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: basis
+            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: dbasis
             real dimension(nlat) :: sin_theta
             complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
             integer optional,check(shape(ugrid,0)==ngptot),depend(ugrid) :: ngptot=shape(ugrid,0)
