@@ -467,8 +467,8 @@ else:
     triple2grid_ext = py.extension_module(
         'triple2grid',
         [
+            'triple2grid_module.c',
             'fortran/triple2grid.f90',
-            triple2grid_sources,
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
@@ -483,8 +483,8 @@ else:
     grid2triple_ext = py.extension_module(
         'grid2triple',
         [
+            'grid2triple_module.c',
             'fortran/grid2triple.f90',
-            grid2triple_sources,
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
@@ -515,8 +515,8 @@ else:
     int2p_kernels_ext = py.extension_module(
         'int2p_kernels',
         [
+            'int2p_kernels_module.c',
             'fortran/int2p_kernels.f90',
-            int2p_kernels_sources,
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
@@ -531,8 +531,8 @@ else:
     isentropic_kernels_ext = py.extension_module(
         'isentropic_kernels',
         [
+            'isentropic_kernels_module.c',
             'fortran/isentropic_kernels.f90',
-            isentropic_kernels_sources,
         ],
         include_directories: inc_np,
         dependencies: [py_dep],

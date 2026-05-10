@@ -109,10 +109,10 @@ subroutine triple2grid1_impl(kz, xi, yi, zi, zmsg, mx, ny, gx, gy, grid, domain,
     ! direct F2PY interface exposes both paths.
     if (kout == 0) then
         if (loop == 0) then
-            call trip2grd2(kpts, x, y, z, zmsg, mx, ny, gx, gy, grid, &
+            call trip2grd2_impl(kpts, x, y, z, zmsg, mx, ny, gx, gy, grid, &
                            mflag, nflag, method, ddcrit, ier)
         else
-            call trip2grd3(kpts, x, y, z, zmsg, mx, ny, gx, gy, grid, &
+            call trip2grd3_impl(kpts, x, y, z, zmsg, mx, ny, gx, gy, grid, &
                            mflag, nflag, method, ddcrit, ier)
         end if
     else
@@ -132,10 +132,10 @@ subroutine triple2grid1_impl(kz, xi, yi, zi, zmsg, mx, ny, gx, gy, grid, domain,
         gbigx(mx2) = gx(mx) + domain * (gx(mx) - gx(mx - 1))
 
         if (loop == 0) then
-            call trip2grd2(kpts, x, y, z, zmsg, mx2, ny2, gbigx, gbigy, gbigxy, &
+            call trip2grd2_impl(kpts, x, y, z, zmsg, mx2, ny2, gbigx, gbigy, gbigxy, &
                            mflag, nflag, method, ddcrit, ier)
         else
-            call trip2grd3(kpts, x, y, z, zmsg, mx2, ny2, gbigx, gbigy, gbigxy, &
+            call trip2grd3_impl(kpts, x, y, z, zmsg, mx2, ny2, gbigx, gbigy, gbigxy, &
                            mflag, nflag, method, ddcrit, ier)
         end if
 
