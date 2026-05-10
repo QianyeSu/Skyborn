@@ -349,23 +349,6 @@ else:
         build_by_default: true,
     )
 
-    regular_pyf = custom_target(
-        '_spherepack_regular.pyf',
-        input: ['src/_spherepack.pyf', 'build_split_pyf.py'],
-        output: '_spherepack_regular.pyf',
-        command: [
-            py,
-            '@INPUT1@',
-            'regular',
-            '@INPUT0@',
-            '@OUTPUT@',
-            '_spherepack_f2py',
-        ],
-        build_by_default: true,
-        build_always_stale: true,
-        install: false,
-    )
-
     reduced_source = custom_target(
         '_spherepack_reducedmodule.c',
         input: custom_target(
@@ -443,7 +426,11 @@ else:
         dependencies: dependencies,
         link_with: common_fortran_lib,
         fortran_args: fortran_args,
-        c_args: c_args,
+        c_args: c_args + [
+            '-Wno-cast-function-type',
+            '-Wno-unused-parameter',
+            '-Wno-missing-field-initializers',
+        ],
         install: true,
         install_dir: get_option('python.purelibdir') / 'skyborn' / 'spharm',
         build_by_default: true,
