@@ -71,8 +71,7 @@ __all__ = [
 supported_types = typing.Union[xr.DataArray, np.ndarray]
 coordinate_types = typing.Union[xr.DataArray, np.ndarray, typing.Sequence[float]]
 _PRESSURE_INTERP_SPVL = np.float64(np.finfo(np.float64).max)
-_VINTH2P_SPVL = np.float64(-9.96921e36)
-_ISENTROPIC_SPVL = np.float64(-9.96921e36)
+_SPVL = np.float64(-9.96921e36)
 _RD_OVER_CP = 0.2854
 
 __pres_lev_mandatory__ = np.array(
@@ -1596,7 +1595,7 @@ def _interp_hybrid_to_pressure_corder(
             new_level_values,
             intyp,
             ps_flat,
-            _VINTH2P_SPVL,
+            _SPVL,
             1,
             nouter,
             ninner,
@@ -1614,13 +1613,13 @@ def _interp_hybrid_to_pressure_corder(
             new_level_values,
             intyp,
             ps_flat,
-            _VINTH2P_SPVL,
+            _SPVL,
             0,
             nouter,
             ninner,
         )
 
-    output_values[output_values == _VINTH2P_SPVL] = np.nan
+    output_values[output_values == _SPVL] = np.nan
     return _build_vinth2p_output(
         data=data,
         interp_axis=interp_axis,
@@ -1680,7 +1679,7 @@ def _interp_hybrid_to_pressure(
     ps_columns = _compiled_float64_flat(
         ps.broadcast_like(base_template).transpose(*lead_dims).data
     )
-    ps_columns = np.where(np.isfinite(ps_columns), ps_columns, _VINTH2P_SPVL)
+    ps_columns = np.where(np.isfinite(ps_columns), ps_columns, _SPVL)
 
     hyam_values = _compiled_float64_vector(hyam.data)
     hybm_values = _compiled_float64_vector(hybm.data)
@@ -1710,7 +1709,7 @@ def _interp_hybrid_to_pressure(
                 new_level_values,
                 intyp,
                 ps_columns,
-                _VINTH2P_SPVL,
+                _SPVL,
                 1,
                 varflg,
                 t_bot_columns,
@@ -1725,7 +1724,7 @@ def _interp_hybrid_to_pressure(
                 new_level_values,
                 intyp,
                 ps_columns,
-                _VINTH2P_SPVL,
+                _SPVL,
                 1,
                 varflg,
                 t_bot_columns,
@@ -1742,7 +1741,7 @@ def _interp_hybrid_to_pressure(
                 new_level_values,
                 intyp,
                 ps_columns,
-                _VINTH2P_SPVL,
+                _SPVL,
                 0,
             )
         else:
@@ -1754,12 +1753,12 @@ def _interp_hybrid_to_pressure(
                 new_level_values,
                 intyp,
                 ps_columns,
-                _VINTH2P_SPVL,
+                _SPVL,
                 0,
             )
 
     output_values = output_columns.T.reshape((*lead_shape, nlevo))
-    output_values[output_values == _VINTH2P_SPVL] = np.nan
+    output_values[output_values == _SPVL] = np.nan
     output_values = _restore_compiled_interp_output_dtype(output_values, data)
 
     coords = {k: v for k, v in base_template.coords.items()}
@@ -1844,7 +1843,7 @@ def _interp_sigma_to_hybrid(
             sigma_source_values,
             sigma_target_columns,
             intyp,
-            _VINTH2P_SPVL,
+            _SPVL,
             nlevo,
             nlevi=nlevi,
             ncol=ncol,
@@ -1855,14 +1854,14 @@ def _interp_sigma_to_hybrid(
             sigma_source_values,
             sigma_target_columns,
             intyp,
-            _VINTH2P_SPVL,
+            _SPVL,
             nlevo,
             nlevi=nlevi,
             ncol=ncol,
         )
 
     output_values = output_columns.T.reshape((*lead_shape, nlevo))
-    output_values[output_values == _VINTH2P_SPVL] = np.nan
+    output_values[output_values == _SPVL] = np.nan
     output_values = _restore_compiled_interp_output_dtype(output_values, data)
 
     coords = {k: v for k, v in base_template.coords.items()}
@@ -1941,14 +1940,14 @@ def _interp_sigma_to_hybrid_corder(
         float(p0),
         ps_flat,
         intyp,
-        _VINTH2P_SPVL,
+        _SPVL,
         nouter,
         ninner,
         nlevo,
         nlevi=nlevi,
     )
 
-    output_values[output_values == _VINTH2P_SPVL] = np.nan
+    output_values[output_values == _SPVL] = np.nan
     output_values = _restore_compiled_interp_output_dtype(output_values, data)
     coords = {k: v for k, v in base_template.coords.items()}
     coords["hlev"] = _dimension_coord_or_default(hyam, hyam.dims[0], output_dim="hlev")
@@ -2234,9 +2233,7 @@ def interp_to_isentropic(
     temperature, pressure = xr.align(temperature, pressure, join="exact")
     data, temperature = xr.align(data, temperature, join="exact")
 
-    spvl = (
-        float(missing_value) if not np.isnan(missing_value) else float(_ISENTROPIC_SPVL)
-    )
+    spvl = float(missing_value) if not np.isnan(missing_value) else float(_SPVL)
     result = _interp_to_isentropic(
         data,
         temperature,

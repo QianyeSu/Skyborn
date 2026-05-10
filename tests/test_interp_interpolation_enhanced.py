@@ -239,7 +239,7 @@ class TestInterpolationEdgeCases:
             plevo,
             3,
             psfc,
-            interpolation_mod._VINTH2P_SPVL,
+            interpolation_mod._SPVL,
             0,
             1,
             2,
@@ -253,7 +253,7 @@ class TestInterpolationEdgeCases:
             plevo,
             3,
             psfc,
-            interpolation_mod._VINTH2P_SPVL,
+            interpolation_mod._SPVL,
             0,
         )
 
@@ -2414,6 +2414,39 @@ class TestInterpolationHelperCoverage:
 
         assert_array_equal(out, np.array([42.0, -9999.0]))
 
+    def test_target_level_dataarray_branches(self):
+        """Target-level helper should handle DataArray and ndarray inputs."""
+
+        target = xr.DataArray([300.0, 320.0], dims=("theta_in",), attrs={"a": 1})
+        out = interpolation_mod._target_level_dataarray(
+            target,
+            default_dim="theta",
+            units="K",
+            long_name="potential temperature",
+        )
+        assert out.dims == ("theta_in",)
+        assert out.attrs["a"] == 1
+
+        out2 = interpolation_mod._target_level_dataarray(
+            [300.0, 320.0],
+            default_dim="theta",
+            units="K",
+            long_name="potential temperature",
+        )
+        assert out2.dims == ("theta",)
+        assert_array_equal(out2.values, np.array([300.0, 320.0]))
+
+    def test_target_level_dataarray_rejects_non_1d_inputs(self):
+        """Target-level helper should reject higher-dimensional targets."""
+
+        with pytest.raises(ValueError, match="one-dimensional"):
+            interpolation_mod._target_level_dataarray(
+                xr.DataArray(np.ones((2, 2)), dims=("a", "b")),
+                default_dim="theta",
+                units="K",
+                long_name="potential temperature",
+            )
+
     def test_pressure_at_hybrid_levels_flat_requires_backend(self, monkeypatch):
         """Private pressure helper should fail clearly when no backend exists."""
 
@@ -3744,6 +3777,89 @@ class TestIsentropicInterpolation:
 
         with pytest.raises(ValueError, match="temperature"):
             interp_to_isentropic(data, temperature, pressure, [300.0], lev_dim="lev")
+
+    def test_rejects_non_dataarray_inputs(self):
+        """Isentropic interpolation should require xarray inputs."""
+
+        with pytest.raises(TypeError, match="must be xarray DataArray objects"):
+            interp_to_isentropic(np.ones((2,)), np.ones((2,)), np.ones((2,)), [300.0])
+
+    def test_infers_vertical_dimension(self):
+        """Vertical dimension inference should work when lev_dim is omitted."""
+
+        data = xr.DataArray(np.ones((2,)), dims=("lev",))
+        temperature = xr.DataArray(np.ones((2,)), dims=("lev",))
+        pressure = xr.DataArray(np.ones((2,)), dims=("lev",))
+
+        with pytest.raises(ValueError, match="target levels must be one-dimensional"):
+            interpolation_mod._target_level_dataarray(
+                np.ones((2, 2)),
+                default_dim="theta",
+                units="K",
+                long_name="potential temperature",
+            )
+
+        with pytest.raises(
+            ValueError, match="`lev_dim` 'lev' is not a dimension of data"
+        ):
+            interp_to_isentropic(
+                xr.DataArray(np.ones((2,)), dims=("x",)),
+                temperature,
+                pressure,
+                [300.0],
+                lev_dim="lev",
+            )
+
+    def test_infers_vertical_dimension_failure_path(self):
+        """Missing canonical vertical dimension names should raise a clear error."""
+
+        data = xr.DataArray(np.ones((2,)), dims=("x",))
+        temperature = xr.DataArray(np.ones((2,)), dims=("x",))
+        pressure = xr.DataArray(np.ones((2,)), dims=("x",))
+
+        with pytest.raises(
+            ValueError, match="Unable to determine vertical dimension name"
+        ):
+            interp_to_isentropic(data, temperature, pressure, [300.0], lev_dim=None)
+
+    def test_rejects_mismatched_vertical_dimensions(self):
+        """lev_dim validation should point at the offending input."""
+
+        data = xr.DataArray(np.ones((2,)), dims=("lev",))
+        temperature = xr.DataArray(np.ones((2,)), dims=("level",))
+        pressure = xr.DataArray(np.ones((2,)), dims=("lev",))
+
+        with pytest.raises(ValueError, match="dimension of temperature"):
+            interp_to_isentropic(data, temperature, pressure, [300.0], lev_dim="lev")
+
+        temperature = xr.DataArray(np.ones((2,)), dims=("lev",))
+        pressure = xr.DataArray(np.ones((2,)), dims=("pressure",))
+        with pytest.raises(ValueError, match="dimension of pressure"):
+            interp_to_isentropic(data, temperature, pressure, [300.0], lev_dim="lev")
+
+    def test_isentropic_backend_missing(self, monkeypatch):
+        """The isentropic flat fast path should fail clearly without the backend."""
+
+        monkeypatch.setattr(
+            interpolation_mod, "_dinterp_to_isentropic_corder_into", None
+        )
+
+        data = xr.DataArray(np.ones((2,)), dims=("lev",))
+        temperature = xr.DataArray(np.ones((2,)), dims=("lev",))
+        pressure = xr.DataArray(np.ones((2,)), dims=("lev",))
+
+        with pytest.raises(RuntimeError, match="backend is not available"):
+            interpolation_mod._interp_to_isentropic_fortran_corder(
+                data,
+                temperature,
+                pressure,
+                np.array([300.0], dtype=np.float64),
+                lev_dim="lev",
+                p0=100000.0,
+                kappa=0.2854,
+                spvl=-9.96921e36,
+                extrapolate=False,
+            )
 
 
 # Performance and stress tests
