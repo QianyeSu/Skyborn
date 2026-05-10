@@ -1,5 +1,4 @@
 #define PY_SSIZE_T_CLEAN
-#define NPY_NO_DEPRECATED_API NPY_1_19_API_VERSION
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
@@ -1002,24 +1001,7 @@ static PyObject *py_vhsgci(PyObject *self, PyObject *args) {
     return build_init_array_result(ierror, w_arr);
 }
 
-static int parse_optional_ityp(PyObject *kwargs, int default_ityp, int *ityp_out) {
-    PyObject *ityp_obj = NULL;
-    *ityp_out = default_ityp;
-    if (kwargs == NULL) {
-        return 0;
-    }
-    ityp_obj = PyDict_GetItemString(kwargs, "ityp");
-    if (ityp_obj == NULL) {
-        return 0;
-    }
-    *ityp_out = (int)PyLong_AsLong(ityp_obj);
-    if (PyErr_Occurred()) {
-        return -1;
-    }
-    return 0;
-}
-
-static PyObject *py_vha_like(PyObject *args, PyObject *kwargs, int default_ityp,
+static PyObject *py_vha_like(PyObject *args, int default_ityp,
                              void (*func)(void *, void *, int, int, int, int, void *, int, int, void *, void *, void *, void *, int *)) {
     PyObject *v_obj = NULL, *w_obj = NULL, *wvha_obj = NULL;
     PyArrayObject *v_arr = NULL, *w_arr = NULL, *wvha_arr = NULL;
@@ -1029,8 +1011,7 @@ static PyObject *py_vha_like(PyObject *args, PyObject *kwargs, int default_ityp,
     int lwork, ityp = default_ityp, ierror = 0;
     npy_intp dims[3];
 
-    if (!PyArg_ParseTuple(args, "OOOi", &v_obj, &w_obj, &wvha_obj, &lwork)) return NULL;
-    if (parse_optional_ityp(kwargs, default_ityp, &ityp) != 0) return NULL;
+    if (!PyArg_ParseTuple(args, "OOOii", &v_obj, &w_obj, &wvha_obj, &lwork, &ityp)) return NULL;
     if (as_real32_3d_fortran(v_obj, &v_arr, &nlat_v, &nlon_v, &nt_v) != 0) return NULL;
     if (as_real32_3d_fortran(w_obj, &w_arr, &nlat_w, &nlon_w, &nt_w) != 0) goto fail;
     if (nlat_v != nlat_w || nlon_v != nlon_w || nt_v != nt_w) {
@@ -1066,24 +1047,24 @@ fail:
     return NULL;
 }
 
-static PyObject *py_vhaes(PyObject *self, PyObject *args, PyObject *kwargs) {
+static PyObject *py_vhaes(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vha_like(args, kwargs, 0, vhaes_c);
+    return py_vha_like(args, 0, vhaes_c);
 }
 
-static PyObject *py_vhags(PyObject *self, PyObject *args, PyObject *kwargs) {
+static PyObject *py_vhags(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vha_like(args, kwargs, 0, vhags_c);
+    return py_vha_like(args, 0, vhags_c);
 }
 
-static PyObject *py_vhaec(PyObject *self, PyObject *args, PyObject *kwargs) {
+static PyObject *py_vhaec(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vha_like(args, kwargs, 0, vhaec_c);
+    return py_vha_like(args, 0, vhaec_c);
 }
 
-static PyObject *py_vhagc(PyObject *self, PyObject *args, PyObject *kwargs) {
+static PyObject *py_vhagc(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vha_like(args, kwargs, 0, vhagc_c);
+    return py_vha_like(args, 0, vhagc_c);
 }
 
 static PyObject *py_vha_component_like(PyObject *args, int ityp, int needs_special_lwork,
@@ -1196,7 +1177,7 @@ static PyObject *py_vhagcvrt(PyObject *self, PyObject *args) {
     return py_vha_component_like(args, 2, 0, vhagc_c, 0);
 }
 
-static PyObject *py_vhs_like(PyObject *args, PyObject *kwargs, int default_ityp,
+static PyObject *py_vhs_like(PyObject *args, int default_ityp,
                              void (*func)(int, void *, void *, void *, void *, int, int, int, void *, int, int, void *, void *, int *)) {
     int nlon, lwork, ityp = default_ityp;
     PyObject *br_obj = NULL, *bi_obj = NULL, *cr_obj = NULL, *ci_obj = NULL, *wvh_obj = NULL;
@@ -1209,8 +1190,7 @@ static PyObject *py_vhs_like(PyObject *args, PyObject *kwargs, int default_ityp,
     int ierror = 0;
     npy_intp dims[3];
 
-    if (!PyArg_ParseTuple(args, "iOOOOOi", &nlon, &br_obj, &bi_obj, &cr_obj, &ci_obj, &wvh_obj, &lwork)) return NULL;
-    if (parse_optional_ityp(kwargs, default_ityp, &ityp) != 0) return NULL;
+    if (!PyArg_ParseTuple(args, "iOOOOOii", &nlon, &br_obj, &bi_obj, &cr_obj, &ci_obj, &wvh_obj, &lwork, &ityp)) return NULL;
     if (as_real32_3d_fortran(br_obj, &br_arr, &nlat_br, &nlat2_br, &nt_br) != 0) return NULL;
     if (as_real32_3d_fortran(bi_obj, &bi_arr, &nlat_bi, &nlat2_bi, &nt_bi) != 0) goto fail;
     if (as_real32_3d_fortran(cr_obj, &cr_arr, &nlat_cr, &nlat2_cr, &nt_cr) != 0) goto fail;
@@ -1250,24 +1230,24 @@ fail:
     return NULL;
 }
 
-static PyObject *py_vhses(PyObject *self, PyObject *args, PyObject *kwargs) {
+static PyObject *py_vhses(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vhs_like(args, kwargs, 0, vhses_c);
+    return py_vhs_like(args, 0, vhses_c);
 }
 
-static PyObject *py_vhsgs(PyObject *self, PyObject *args, PyObject *kwargs) {
+static PyObject *py_vhsgs(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vhs_like(args, kwargs, 0, vhsgs_c);
+    return py_vhs_like(args, 0, vhsgs_c);
 }
 
-static PyObject *py_vhsec(PyObject *self, PyObject *args, PyObject *kwargs) {
+static PyObject *py_vhsec(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vhs_like(args, kwargs, 0, vhsec_c);
+    return py_vhs_like(args, 0, vhsec_c);
 }
 
-static PyObject *py_vhsgc(PyObject *self, PyObject *args, PyObject *kwargs) {
+static PyObject *py_vhsgc(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vhs_like(args, kwargs, 0, vhsgc_c);
+    return py_vhs_like(args, 0, vhsgc_c);
 }
 
 static PyObject *py_vhs_component_like(PyObject *args, int ityp,
@@ -1407,10 +1387,10 @@ static PyMethodDef module_methods[] = {
     {"shags", py_shags, METH_VARARGS, "Gaussian stored scalar harmonic analysis."},
     {"shaec", py_shaec, METH_VARARGS, "Regular computed scalar harmonic analysis."},
     {"shagc", py_shagc, METH_VARARGS, "Gaussian computed scalar harmonic analysis."},
-    {"vhaes", (PyCFunction)py_vhaes, METH_VARARGS | METH_KEYWORDS, "Regular stored vector harmonic analysis."},
-    {"vhags", (PyCFunction)py_vhags, METH_VARARGS | METH_KEYWORDS, "Gaussian stored vector harmonic analysis."},
-    {"vhaec", (PyCFunction)py_vhaec, METH_VARARGS | METH_KEYWORDS, "Regular computed vector harmonic analysis."},
-    {"vhagc", (PyCFunction)py_vhagc, METH_VARARGS | METH_KEYWORDS, "Gaussian computed vector harmonic analysis."},
+    {"vhaes", py_vhaes, METH_VARARGS, "Regular stored vector harmonic analysis."},
+    {"vhags", py_vhags, METH_VARARGS, "Gaussian stored vector harmonic analysis."},
+    {"vhaec", py_vhaec, METH_VARARGS, "Regular computed vector harmonic analysis."},
+    {"vhagc", py_vhagc, METH_VARARGS, "Gaussian computed vector harmonic analysis."},
     {"vhaesdiv", py_vhaesdiv, METH_VARARGS, "Regular stored vector divergence-only analysis."},
     {"vhaesvrt", py_vhaesvrt, METH_VARARGS, "Regular stored vector vorticity-only analysis."},
     {"vhagsdiv", py_vhagsdiv, METH_VARARGS, "Gaussian stored vector divergence-only analysis."},
@@ -1423,10 +1403,10 @@ static PyMethodDef module_methods[] = {
     {"shsgs", py_shsgs, METH_VARARGS, "Gaussian stored scalar harmonic synthesis."},
     {"shsec", py_shsec, METH_VARARGS, "Regular computed scalar harmonic synthesis."},
     {"shsgc", py_shsgc, METH_VARARGS, "Gaussian computed scalar harmonic synthesis."},
-    {"vhses", (PyCFunction)py_vhses, METH_VARARGS | METH_KEYWORDS, "Regular stored vector harmonic synthesis."},
-    {"vhsgs", (PyCFunction)py_vhsgs, METH_VARARGS | METH_KEYWORDS, "Gaussian stored vector harmonic synthesis."},
-    {"vhsec", (PyCFunction)py_vhsec, METH_VARARGS | METH_KEYWORDS, "Regular computed vector harmonic synthesis."},
-    {"vhsgc", (PyCFunction)py_vhsgc, METH_VARARGS | METH_KEYWORDS, "Gaussian computed vector harmonic synthesis."},
+    {"vhses", py_vhses, METH_VARARGS, "Regular stored vector harmonic synthesis."},
+    {"vhsgs", py_vhsgs, METH_VARARGS, "Gaussian stored vector harmonic synthesis."},
+    {"vhsec", py_vhsec, METH_VARARGS, "Regular computed vector harmonic synthesis."},
+    {"vhsgc", py_vhsgc, METH_VARARGS, "Gaussian computed vector harmonic synthesis."},
     {"vhsesdiv", py_vhsesdiv, METH_VARARGS, "Regular stored vector divergence-only synthesis."},
     {"vhsesvrt", py_vhsesvrt, METH_VARARGS, "Regular stored vector vorticity-only synthesis."},
     {"vhsgsdiv", py_vhsgsdiv, METH_VARARGS, "Gaussian stored vector divergence-only synthesis."},
