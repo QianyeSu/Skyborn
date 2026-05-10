@@ -765,7 +765,7 @@ class Spharmt:
                     w,
                     self.wvhaes,
                     (2 * nt + 1) * self.nlat * self.nlon,
-                    ityp=ityp,
+                    ityp,
                     operation_name="vhaes transform",
                 )
             ),
@@ -776,7 +776,7 @@ class Spharmt:
                     w,
                     self.wvhaec,
                     self.nlat * (2 * nt * self.nlon + max(6 * self._n2, self.nlon)),
-                    ityp=ityp,
+                    ityp,
                     operation_name="vhaec transform",
                 )
             ),
@@ -787,7 +787,7 @@ class Spharmt:
                     w,
                     self.wvhags,
                     (2 * nt + 1) * self.nlat * self.nlon,
-                    ityp=ityp,
+                    ityp,
                     operation_name="vhags transform",
                 )
             ),
@@ -798,7 +798,7 @@ class Spharmt:
                     w,
                     self.wvhagc,
                     2 * self.nlat * (2 * self.nlon * nt + 3 * self._n2),
-                    ityp=ityp,
+                    ityp,
                     operation_name="vhagc transform",
                 )
             ),
@@ -1203,7 +1203,7 @@ class Spharmt:
                     ci,
                     self.wvhses,
                     (2 * nt + 1) * self.nlat * self.nlon,
-                    ityp=ityp,
+                    ityp,
                     operation_name="vhses transform",
                 )
             ),
@@ -1217,7 +1217,7 @@ class Spharmt:
                     ci,
                     self.wvhsec,
                     self.nlat * (2 * nt * self.nlon + max(6 * self._n2, self.nlon)),
-                    ityp=ityp,
+                    ityp,
                     operation_name="vhsec transform",
                 )
             ),
@@ -1231,7 +1231,7 @@ class Spharmt:
                     ci,
                     self.wvhsgs,
                     (2 * nt + 1) * self.nlat * self.nlon,
-                    ityp=ityp,
+                    ityp,
                     operation_name="vhsgs transform",
                 )
             ),
@@ -1245,7 +1245,7 @@ class Spharmt:
                     ci,
                     self.wvhsgc,
                     self.nlat * (2 * nt * self.nlon + max(6 * self._n2, self.nlon)),
-                    ityp=ityp,
+                    ityp,
                     operation_name="vhsgc transform",
                 )
             ),
