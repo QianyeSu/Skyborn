@@ -401,7 +401,7 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
     integer :: offsets(nlat + 1)
     logical :: symmetric_pl
     double precision :: scrm_real, scrm_imag, scrm_real_s, scrm_imag_s
-    double precision :: term_real, term_imag, pval, parity
+    double precision :: term_real, term_imag, pval, spec_real, spec_imag
     real, allocatable :: fft_rows(:, :), fft_work(:, :)
 
     external :: hrfftb
@@ -444,24 +444,62 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
 
 !$omp parallel private(j, js, i, k, m, n, nm, offset, offset_s, &
 !$omp& row_nlon, mlimit, scrm_real, scrm_imag, scrm_real_s, &
-!$omp& scrm_imag_s, term_real, term_imag, pval, parity, &
+!$omp& scrm_imag_s, term_real, term_imag, pval, spec_real, spec_imag, &
 !$omp& fft_rows, fft_work)
     allocate(fft_rows(2 * nt, max_nlon), fft_work(2 * nt, max_nlon))
     if (symmetric_pl) then
 !$omp do schedule(static)
-    do j = 1, half_nlat
+    do j = 1, pair_count
         offset = offsets(j)
-        if (j <= pair_count) then
-            js = nlat - j + 1
-            offset_s = offsets(js)
-        else
-            js = j
-            offset_s = offset
-        end if
+        js = nlat - j + 1
+        offset_s = offsets(js)
         row_nlon = pl(j)
         mlimit = min(ntrunc, row_nlon / 2)
         do k = 1, nt
-            do m = 0, mlimit
+            scrm_real = 0.0d0
+            scrm_imag = 0.0d0
+            scrm_real_s = 0.0d0
+            scrm_imag_s = 0.0d0
+            nm = spectral_offset(0, ntrunc)
+            do n = 0, ntrunc - 1, 2
+                nm = nm + 1
+                pval = dble(basis(nm, j))
+                spec_real = dble(real(dataspec(nm, k)))
+                spec_imag = dble(aimag(dataspec(nm, k)))
+                term_real = spec_real * pval
+                term_imag = spec_imag * pval
+                scrm_real = scrm_real + term_real
+                scrm_imag = scrm_imag + term_imag
+                scrm_real_s = scrm_real_s + term_real
+                scrm_imag_s = scrm_imag_s + term_imag
+
+                nm = nm + 1
+                pval = dble(basis(nm, j))
+                spec_real = dble(real(dataspec(nm, k)))
+                spec_imag = dble(aimag(dataspec(nm, k)))
+                term_real = spec_real * pval
+                term_imag = spec_imag * pval
+                scrm_real = scrm_real + term_real
+                scrm_imag = scrm_imag + term_imag
+                scrm_real_s = scrm_real_s - term_real
+                scrm_imag_s = scrm_imag_s - term_imag
+            end do
+            if (mod(ntrunc, 2) == 0) then
+                nm = nm + 1
+                pval = dble(basis(nm, j))
+                spec_real = dble(real(dataspec(nm, k)))
+                spec_imag = dble(aimag(dataspec(nm, k)))
+                term_real = spec_real * pval
+                term_imag = spec_imag * pval
+                scrm_real = scrm_real + term_real
+                scrm_imag = scrm_imag + term_imag
+                scrm_real_s = scrm_real_s + term_real
+                scrm_imag_s = scrm_imag_s + term_imag
+            end if
+            fft_rows(k, 1) = real(2.0d0 * scrm_real)
+            fft_rows(nt + k, 1) = real(2.0d0 * scrm_real_s)
+
+            do m = 1, mlimit
                 scrm_real = 0.0d0
                 scrm_imag = 0.0d0
                 scrm_real_s = 0.0d0
@@ -470,8 +508,10 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
                 do n = m, ntrunc - 1, 2
                     nm = nm + 1
                     pval = dble(basis(nm, j))
-                    term_real = dble(real(dataspec(nm, k))) * pval
-                    term_imag = dble(aimag(dataspec(nm, k))) * pval
+                    spec_real = dble(real(dataspec(nm, k)))
+                    spec_imag = dble(aimag(dataspec(nm, k)))
+                    term_real = spec_real * pval
+                    term_imag = spec_imag * pval
                     scrm_real = scrm_real + term_real
                     scrm_imag = scrm_imag + term_imag
                     scrm_real_s = scrm_real_s + term_real
@@ -479,8 +519,10 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
 
                     nm = nm + 1
                     pval = dble(basis(nm, j))
-                    term_real = dble(real(dataspec(nm, k))) * pval
-                    term_imag = dble(aimag(dataspec(nm, k))) * pval
+                    spec_real = dble(real(dataspec(nm, k)))
+                    spec_imag = dble(aimag(dataspec(nm, k)))
+                    term_real = spec_real * pval
+                    term_imag = spec_imag * pval
                     scrm_real = scrm_real + term_real
                     scrm_imag = scrm_imag + term_imag
                     scrm_real_s = scrm_real_s - term_real
@@ -489,31 +531,21 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
                 if (mod(ntrunc - m, 2) == 0) then
                     nm = nm + 1
                     pval = dble(basis(nm, j))
-                    term_real = dble(real(dataspec(nm, k))) * pval
-                    term_imag = dble(aimag(dataspec(nm, k))) * pval
+                    spec_real = dble(real(dataspec(nm, k)))
+                    spec_imag = dble(aimag(dataspec(nm, k)))
+                    term_real = spec_real * pval
+                    term_imag = spec_imag * pval
                     scrm_real = scrm_real + term_real
                     scrm_imag = scrm_imag + term_imag
                     scrm_real_s = scrm_real_s + term_real
                     scrm_imag_s = scrm_imag_s + term_imag
                 end if
 
-                if (m == 0) then
-                    fft_rows(k, 1) = real(2.0d0 * scrm_real)
-                    if (j <= pair_count) then
-                        fft_rows(nt + k, 1) = real(2.0d0 * scrm_real_s)
-                    end if
-                else
-                    fft_rows(k, 2 * m) = real(2.0d0 * scrm_real)
-                    if (j <= pair_count) then
-                        fft_rows(nt + k, 2 * m) = real(2.0d0 * scrm_real_s)
-                    end if
-                    if (2 * m < row_nlon) then
-                        fft_rows(k, 2 * m + 1) = real(2.0d0 * scrm_imag)
-                        if (j <= pair_count) then
-                            fft_rows(nt + k, 2 * m + 1) = &
-                                real(2.0d0 * scrm_imag_s)
-                        end if
-                    end if
+                fft_rows(k, 2 * m) = real(2.0d0 * scrm_real)
+                fft_rows(nt + k, 2 * m) = real(2.0d0 * scrm_real_s)
+                if (2 * m < row_nlon) then
+                    fft_rows(k, 2 * m + 1) = real(2.0d0 * scrm_imag)
+                    fft_rows(nt + k, 2 * m + 1) = real(2.0d0 * scrm_imag_s)
                 end if
             end do
         end do
@@ -522,24 +554,61 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
             fft_rows(1:2 * nt, 2 * mlimit + 2:row_nlon) = 0.0
         end if
 
-        if (j <= pair_count) then
-            call hrfftb(2 * nt, row_nlon, fft_rows, 2 * nt, &
-                reduced_gaussian_fft_wsave(1, j), fft_work)
-        else
-            call hrfftb(nt, row_nlon, fft_rows, 2 * nt, &
-                reduced_gaussian_fft_wsave(1, j), fft_work)
-        end if
+        call hrfftb(2 * nt, row_nlon, fft_rows, 2 * nt, &
+            reduced_gaussian_fft_wsave(1, j), fft_work)
 
         do k = 1, nt
             do i = 1, row_nlon
                 datagrid(offset + i, k) = 0.5 * fft_rows(k, i)
-                if (j <= pair_count) then
-                    datagrid(offset_s + i, k) = 0.5 * fft_rows(nt + k, i)
-                end if
+                datagrid(offset_s + i, k) = 0.5 * fft_rows(nt + k, i)
             end do
         end do
     end do
 !$omp end do
+    if (half_nlat > pair_count) then
+!$omp do schedule(static)
+    do j = half_nlat, half_nlat
+        offset = offsets(j)
+        row_nlon = pl(j)
+        mlimit = min(ntrunc, row_nlon / 2)
+        do k = 1, nt
+            do m = 0, mlimit
+                scrm_real = 0.0d0
+                scrm_imag = 0.0d0
+                nm = spectral_offset(m, ntrunc)
+                do n = m, ntrunc
+                    nm = nm + 1
+                    pval = dble(basis(nm, j))
+                    scrm_real = scrm_real + dble(real(dataspec(nm, k))) * pval
+                    scrm_imag = scrm_imag + dble(aimag(dataspec(nm, k))) * pval
+                end do
+
+                if (m == 0) then
+                    fft_rows(k, 1) = real(2.0d0 * scrm_real)
+                else
+                    fft_rows(k, 2 * m) = real(2.0d0 * scrm_real)
+                    if (2 * m < row_nlon) then
+                        fft_rows(k, 2 * m + 1) = real(2.0d0 * scrm_imag)
+                    end if
+                end if
+            end do
+        end do
+
+        if (2 * mlimit + 2 <= row_nlon) then
+            fft_rows(1:nt, 2 * mlimit + 2:row_nlon) = 0.0
+        end if
+
+        call hrfftb(nt, row_nlon, fft_rows, 2 * nt, &
+            reduced_gaussian_fft_wsave(1, j), fft_work)
+
+        do k = 1, nt
+            do i = 1, row_nlon
+                datagrid(offset + i, k) = 0.5 * fft_rows(k, i)
+            end do
+        end do
+    end do
+!$omp end do
+    end if
     else
 !$omp do schedule(static)
     do j = 1, nlat
