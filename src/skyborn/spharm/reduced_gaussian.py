@@ -20,7 +20,15 @@ from .spherical_harmonics import (
 
 IntArray = NDArray[np.integer]
 
-_private_vars = ("pl", "nlat", "npoints", "rsphere", "gridtype", "legfunc")
+_private_vars = (
+    "pl",
+    "nlat",
+    "npoints",
+    "rsphere",
+    "gridtype",
+    "legfunc",
+    "precision",
+)
 _GLOBAL_BASIS_CACHE: Dict[Tuple[int, int], FloatArray] = {}
 _GLOBAL_DBASIS_CACHE: Dict[Tuple[int, int], FloatArray] = {}
 _GLOBAL_BASIS_TRANSPOSED_CACHE: Dict[Tuple[int, int], FloatArray] = {}
@@ -58,6 +66,7 @@ class ReducedGaussianSpharmt:
         pl: IntArray,
         rsphere: float = DEFAULT_EARTH_RADIUS,
         legfunc: str = "stored",
+        precision: str = "auto",
     ) -> None:
         self.pl = self._validate_pl(pl)
         self.nlat = int(self.pl.size)
@@ -65,6 +74,7 @@ class ReducedGaussianSpharmt:
         self.rsphere = float(rsphere)
         self.gridtype = "reduced_gaussian"
         self.legfunc = self._validate_legfunc(legfunc)
+        self.precision = self._validate_precision(precision)
 
         if self.rsphere <= 0.0:
             raise ValidationError(f"rsphere must be positive, got {rsphere}")
@@ -98,6 +108,32 @@ class ReducedGaussianSpharmt:
             )
         return legfunc
 
+    @staticmethod
+    def _validate_precision(precision: str) -> str:
+        if precision not in ("auto", "single", "double"):
+            raise ValidationError(
+                f'precision must be "auto", "single", or "double", got "{precision}"'
+            )
+        return precision
+
+    def _public_real_dtype(self, *arrays: np.ndarray) -> np.dtype:
+        if self.precision == "single":
+            return np.dtype(np.float32)
+        if self.precision == "double":
+            return np.dtype(np.float64)
+        for array in arrays:
+            dtype = np.dtype(np.asarray(array).dtype)
+            if dtype in (np.dtype(np.float64), np.dtype(np.complex128)):
+                return np.dtype(np.float64)
+        return np.dtype(np.float32)
+
+    def _public_complex_dtype(self, *arrays: np.ndarray) -> np.dtype:
+        return (
+            np.dtype(np.complex128)
+            if self._public_real_dtype(*arrays) == np.dtype(np.float64)
+            else np.dtype(np.complex64)
+        )
+
     def __setattr__(self, key: str, val) -> None:
         if key in self.__dict__ and key in _private_vars:
             raise AttributeError(f"Attempt to rebind read-only instance variable {key}")
@@ -111,7 +147,8 @@ class ReducedGaussianSpharmt:
     def __repr__(self) -> str:
         return (
             f"ReducedGaussianSpharmt(nlat={self.nlat:d}, "
-            f"npoints={self.npoints:d}, rsphere={self.rsphere:e})"
+            f"npoints={self.npoints:d}, rsphere={self.rsphere:e}, "
+            f"precision='{self.precision}')"
         )
 
     def close(self) -> None:
@@ -296,20 +333,43 @@ class ReducedGaussianSpharmt:
             extra_shape,
         )
 
-    @staticmethod
     def _restore_spectral_shape(
-        dataspec: ComplexArray, extra_shape: Tuple[int, ...]
+        self,
+        dataspec: ComplexArray,
+        extra_shape: Tuple[int, ...],
+        output_dtype: Optional[np.dtype] = None,
     ) -> ComplexArray:
         if not extra_shape:
-            return dataspec[:, 0]
-        return dataspec.reshape((dataspec.shape[0],) + extra_shape)
+            result = dataspec[:, 0]
+        else:
+            result = dataspec.reshape((dataspec.shape[0],) + extra_shape)
+        if output_dtype is None:
+            if self.precision == "double":
+                output_dtype = np.complex128
+            elif self.precision == "single":
+                output_dtype = np.complex64
+        if output_dtype is None:
+            return result
+        return np.asarray(result).astype(np.dtype(output_dtype), copy=False)
 
     def _restore_grid_shape(
-        self, datagrid: FloatArray, extra_shape: Tuple[int, ...]
+        self,
+        datagrid: FloatArray,
+        extra_shape: Tuple[int, ...],
+        output_dtype: Optional[np.dtype] = None,
     ) -> FloatArray:
         if not extra_shape:
-            return datagrid[:, 0]
-        return datagrid.reshape((self.npoints,) + extra_shape)
+            result = datagrid[:, 0]
+        else:
+            result = datagrid.reshape((self.npoints,) + extra_shape)
+        if output_dtype is None:
+            if self.precision == "double":
+                output_dtype = np.float64
+            elif self.precision == "single":
+                output_dtype = np.float32
+        if output_dtype is None:
+            return result
+        return np.asarray(result).astype(np.dtype(output_dtype), copy=False)
 
     def grdtospec(
         self, datagrid: FloatArray, ntrunc: Optional[int] = None
@@ -344,7 +404,9 @@ class ReducedGaussianSpharmt:
                 f"reduced Gaussian grdtospec failed with error code {ierror}"
             )
 
-        return self._restore_spectral_shape(dataspec, extra_shape)
+        return self._restore_spectral_shape(
+            dataspec, extra_shape, self._public_complex_dtype(datagrid)
+        )
 
     def spectogrd(self, dataspec: ComplexArray) -> FloatArray:
         """
@@ -371,7 +433,9 @@ class ReducedGaussianSpharmt:
                 f"reduced Gaussian spectogrd failed with error code {ierror}"
             )
 
-        return self._restore_grid_shape(datagrid, extra_shape)
+        return self._restore_grid_shape(
+            datagrid, extra_shape, self._public_real_dtype(dataspec)
+        )
 
     def _spectogrd_pair(
         self, spec_a: ComplexArray, spec_b: ComplexArray
@@ -412,8 +476,12 @@ class ReducedGaussianSpharmt:
                 )
 
             return (
-                self._restore_grid_shape(grid_a, extra_shape),
-                self._restore_grid_shape(grid_b, extra_shape),
+                self._restore_grid_shape(
+                    grid_a, extra_shape, self._public_real_dtype(spec_a, spec_b)
+                ),
+                self._restore_grid_shape(
+                    grid_b, extra_shape, self._public_real_dtype(spec_a, spec_b)
+                ),
             )
 
         paired_specs = np.stack((spec_a, spec_b), axis=-1)
@@ -522,7 +590,9 @@ class ReducedGaussianSpharmt:
                 f"error code {ierror}"
             )
 
-        return self._restore_spectral_shape(vrtspec, extra_shape)
+        return self._restore_spectral_shape(
+            vrtspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
+        )
 
     def getdivspec(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
@@ -558,7 +628,9 @@ class ReducedGaussianSpharmt:
                 f"error code {ierror}"
             )
 
-        return self._restore_spectral_shape(divspec, extra_shape)
+        return self._restore_spectral_shape(
+            divspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
+        )
 
     def getuv(
         self, vrtspec: ComplexArray, divspec: ComplexArray
@@ -673,11 +745,12 @@ class ReducedGaussianSpharmt:
                 f"error code {ierror}"
             )
 
+        public_dtype = self._public_real_dtype(spec_a, spec_b)
         return (
-            self._restore_grid_shape(a_ugrad, extra_shape),
-            self._restore_grid_shape(a_vgrad, extra_shape),
-            self._restore_grid_shape(b_ugrad, extra_shape),
-            self._restore_grid_shape(b_vgrad, extra_shape),
+            self._restore_grid_shape(a_ugrad, extra_shape, public_dtype),
+            self._restore_grid_shape(a_vgrad, extra_shape, public_dtype),
+            self._restore_grid_shape(b_ugrad, extra_shape, public_dtype),
+            self._restore_grid_shape(b_vgrad, extra_shape, public_dtype),
         )
 
     def _invlapspec(

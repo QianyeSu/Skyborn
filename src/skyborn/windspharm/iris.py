@@ -26,7 +26,7 @@ Example:
 
 from __future__ import annotations
 
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Literal, Optional, Tuple, Union
 
 __all__ = ["VectorWind"]
 
@@ -106,6 +106,7 @@ class VectorWind:
         v: IrisCube,
         rsphere: float = 6.3712e6,
         legfunc: LegFunc = "stored",
+        precision: str = "auto",
     ) -> None:
         """
         Initialize VectorWind instance with comprehensive validation.
@@ -169,7 +170,12 @@ class VectorWind:
         v_data = to3d(v.data)
 
         self._api = standard.VectorWind(
-            u_data, v_data, gridtype=gridtype, rsphere=rsphere, legfunc=legfunc
+            u_data,
+            v_data,
+            gridtype=gridtype,
+            rsphere=rsphere,
+            legfunc=legfunc,
+            precision=precision,
         )
 
     def _validate_cube_compatibility(self, u: IrisCube, v: IrisCube) -> None:

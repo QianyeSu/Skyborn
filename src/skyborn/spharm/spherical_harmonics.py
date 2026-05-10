@@ -151,7 +151,7 @@ ComplexArray = NDArray[np.complexfloating]
 IntArray = NDArray[np.integer]
 
 # define a list of instance variables that cannot be rebound or unbound.
-_private_vars = ["nlon", "nlat", "gridtype", "legfunc", "rsphere"]
+_private_vars = ["nlon", "nlat", "gridtype", "legfunc", "rsphere", "precision"]
 
 # Constants for better code clarity
 DEFAULT_EARTH_RADIUS = 6.3712e6
@@ -192,6 +192,7 @@ class Spharmt:
         rsphere: float = DEFAULT_EARTH_RADIUS,
         gridtype: GridType = "regular",
         legfunc: LegendreFunc = "stored",
+        precision: Literal["auto", "single", "double"] = "auto",
     ) -> None:
         """
         Create a Spharmt class instance with input validation and optimization.
@@ -216,6 +217,7 @@ class Spharmt:
         self.rsphere = rsphere
         self.gridtype = gridtype
         self.legfunc = legfunc
+        self.precision = self._validate_precision(precision)
 
         # Pre-compute common values to avoid repeated calculations
         self._n1, self._n2 = self._compute_transform_sizes()
@@ -244,6 +246,43 @@ class Spharmt:
         for condition, error_msg in validators:
             if not condition:
                 raise ValidationError(error_msg)
+
+    @staticmethod
+    def _validate_precision(precision: str) -> str:
+        """Validate the requested public-output precision mode."""
+        if precision not in ("auto", "single", "double"):
+            raise ValidationError(
+                f'precision must be "auto", "single", or "double", got "{precision}"'
+            )
+        return precision
+
+    @staticmethod
+    def _input_public_real_dtype(array: np.ndarray) -> np.dtype:
+        """Map an input array dtype to the matching public real dtype."""
+        dtype = np.dtype(np.asarray(array).dtype)
+        if dtype == np.float32 or dtype == np.complex64:
+            return np.dtype(np.float32)
+        return np.dtype(np.float64)
+
+    def _public_real_dtype(self, *arrays: np.ndarray) -> np.dtype:
+        """Resolve the public real output dtype for this instance."""
+        if self.precision == "single":
+            return np.dtype(np.float32)
+        if self.precision == "double":
+            return np.dtype(np.float64)
+
+        dtype = np.dtype(np.float32)
+        for array in arrays:
+            dtype = np.result_type(dtype, self._input_public_real_dtype(array))
+        return np.dtype(np.float64 if dtype == np.float64 else np.float32)
+
+    def _public_complex_dtype(self, *arrays: np.ndarray) -> np.dtype:
+        """Resolve the public complex output dtype for this instance."""
+        return (
+            np.dtype(np.complex128)
+            if self._public_real_dtype(*arrays) == np.dtype(np.float64)
+            else np.dtype(np.complex64)
+        )
 
     def _compute_transform_sizes(self) -> Tuple[int, int]:
         """Pre-compute transform sizes to avoid repeated calculations."""
@@ -589,20 +628,42 @@ class Spharmt:
         return nt, ntrunc, normalized_data, extra_shape
 
     def _restore_grid_shape(
-        self, datagrid: FloatArray, extra_shape: Tuple[int, ...]
+        self,
+        datagrid: FloatArray,
+        extra_shape: Tuple[int, ...],
+        output_dtype: Optional[np.dtype] = None,
     ) -> FloatArray:
         """Restore flattened grid fields to their original extra dimensions."""
+        array = np.asarray(datagrid)
+        if output_dtype is None:
+            if self.precision == "double":
+                output_dtype = np.float64
+            elif self.precision == "single":
+                output_dtype = np.float32
+        if output_dtype is not None:
+            array = array.astype(np.dtype(output_dtype), copy=False)
         if not extra_shape:
-            return datagrid[:, :, 0]
-        return datagrid.reshape((self.nlat, self.nlon) + extra_shape)
+            return array[:, :, 0]
+        return array.reshape((self.nlat, self.nlon) + extra_shape)
 
     def _restore_spectral_shape(
-        self, dataspec: ComplexArray, extra_shape: Tuple[int, ...]
+        self,
+        dataspec: ComplexArray,
+        extra_shape: Tuple[int, ...],
+        output_dtype: Optional[np.dtype] = None,
     ) -> ComplexArray:
         """Restore flattened spectral fields to their original extra dimensions."""
+        array = np.asarray(dataspec)
+        if output_dtype is None:
+            if self.precision == "double":
+                output_dtype = np.complex128
+            elif self.precision == "single":
+                output_dtype = np.complex64
+        if output_dtype is not None:
+            array = array.astype(np.dtype(output_dtype), copy=False)
         if not extra_shape:
-            return dataspec[:, 0]
-        return dataspec.reshape((dataspec.shape[0],) + extra_shape)
+            return array[:, 0]
+        return array.reshape((array.shape[0],) + extra_shape)
 
     def _spectogrd_pair(
         self, spec_a: ComplexArray, spec_b: ComplexArray
@@ -975,7 +1036,9 @@ class Spharmt:
         # Convert 2D real and imaginary arrays to 1D complex array
         dataspec = _spherepack.twodtooned(a, b, ntrunc)
 
-        return self._restore_spectral_shape(dataspec, extra_shape)
+        return self._restore_spectral_shape(
+            dataspec, extra_shape, self._public_complex_dtype(datagrid)
+        )
 
     def spectogrd(self, dataspec: ComplexArray) -> FloatArray:
         """
@@ -1050,7 +1113,9 @@ class Spharmt:
         transform_func = transform_functions[(self.gridtype, self.legfunc)]
         datagrid = transform_func()
 
-        return self._restore_grid_shape(datagrid, extra_shape)
+        return self._restore_grid_shape(
+            datagrid, extra_shape, self._public_real_dtype(dataspec)
+        )
 
     def getvrtdivspec(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
@@ -1078,8 +1143,12 @@ class Spharmt:
         )
 
         return (
-            self._restore_spectral_shape(vrtspec, extra_shape),
-            self._restore_spectral_shape(divspec, extra_shape),
+            self._restore_spectral_shape(
+                vrtspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
+            ),
+            self._restore_spectral_shape(
+                divspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
+            ),
         )
 
     def getvrtspec(
@@ -1090,7 +1159,9 @@ class Spharmt:
             ugrid, vgrid, ntrunc, "getvrtspec", component="vrt"
         )
         vrtspec = _spherepack.twodtooned_vrt(cr, ci, ntrunc, self.rsphere)
-        return self._restore_spectral_shape(vrtspec, extra_shape)
+        return self._restore_spectral_shape(
+            vrtspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
+        )
 
     def getdivspec(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
@@ -1100,7 +1171,9 @@ class Spharmt:
             ugrid, vgrid, ntrunc, "getdivspec", component="div"
         )
         divspec = _spherepack.twodtooned_div(br, bi, ntrunc, self.rsphere)
-        return self._restore_spectral_shape(divspec, extra_shape)
+        return self._restore_spectral_shape(
+            divspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
+        )
 
     def _synthesize_vector_harmonics(
         self,
@@ -1180,9 +1253,10 @@ class Spharmt:
 
         vhs_func = vhs_functions[(self.gridtype, self.legfunc)]
         v, w = vhs_func()
-        return self._restore_grid_shape(w, extra_shape), -self._restore_grid_shape(
-            v, extra_shape
-        )
+        public_dtype = self._public_real_dtype(vrtspec, divspec)
+        return self._restore_grid_shape(
+            w, extra_shape, public_dtype
+        ), -self._restore_grid_shape(v, extra_shape, public_dtype)
 
     def _getuv_spec_component(
         self, dataspec: ComplexArray, component: str, operation_name: str
@@ -1248,9 +1322,10 @@ class Spharmt:
                 ),
             }
             v, w = synthesis_functions[(self.gridtype, self.legfunc)]()
-            return self._restore_grid_shape(w, extra_shape), -self._restore_grid_shape(
-                v, extra_shape
-            )
+            public_dtype = self._public_real_dtype(normalized_spec)
+            return self._restore_grid_shape(
+                w, extra_shape, public_dtype
+            ), -self._restore_grid_shape(v, extra_shape, public_dtype)
 
         if component == "vrt":
             cr, ci = _spherepack.onedtotwod_vrt(
@@ -1303,9 +1378,10 @@ class Spharmt:
                 ),
             }
             v, w = synthesis_functions[(self.gridtype, self.legfunc)]()
-            return self._restore_grid_shape(w, extra_shape), -self._restore_grid_shape(
-                v, extra_shape
-            )
+            public_dtype = self._public_real_dtype(normalized_spec)
+            return self._restore_grid_shape(
+                w, extra_shape, public_dtype
+            ), -self._restore_grid_shape(v, extra_shape, public_dtype)
 
         raise ValidationError(
             f'{operation_name} invalid component "{component}"; expected "div" or "vrt"'

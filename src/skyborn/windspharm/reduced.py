@@ -35,9 +35,11 @@ class ReducedVectorWind:
         pl: ArrayLike,
         rsphere: float = 6.3712e6,
         legfunc: str = "stored",
+        precision: str = "auto",
     ) -> None:
         self.pl = self._validate_pl(pl)
         self._output_dtype = self._infer_output_dtype(u, v)
+        self._precision = precision
         self.u = self._process_input_array(u, "u")
         self.v = self._process_input_array(v, "v")
         self._validate_input_data()
@@ -46,6 +48,7 @@ class ReducedVectorWind:
             self.pl,
             rsphere=rsphere,
             legfunc=legfunc,
+            precision=precision,
         )
         self.gridtype = self.s.gridtype
         self.rsphere = self.s.rsphere
@@ -86,9 +89,14 @@ class ReducedVectorWind:
         self, data: np.ndarray, output_dtype: Optional[np.dtype] = None
     ) -> np.ndarray:
         array = np.asarray(data)
-        target_dtype = (
-            self._output_dtype if output_dtype is None else np.dtype(output_dtype)
-        )
+        if self._precision == "double":
+            target_dtype = np.float64
+        elif self._precision == "single":
+            target_dtype = np.float32
+        else:
+            target_dtype = (
+                self._output_dtype if output_dtype is None else np.dtype(output_dtype)
+            )
         if array.dtype == target_dtype:
             return array
         return array.astype(target_dtype, copy=False)
