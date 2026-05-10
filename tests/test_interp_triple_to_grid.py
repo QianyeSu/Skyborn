@@ -403,6 +403,21 @@ class TestChunking:
 class TestMetaAndWrappers:
     """Metadata warnings and backward compatible wrappers."""
 
+    def test_xarray_input_non_dask_returns_computed_dataarray(self, small_rect_grid):
+        x_out, y_out, da = small_rect_grid
+        X, Y = np.meshgrid(x_out, y_out, indexing="xy")
+        x_in = X.ravel()
+        y_in = Y.ravel()
+        z_np = da.values.ravel()
+        z_xr = xr.DataArray(z_np, dims=("points",))
+
+        expected = triple_to_grid(z_np, x_in, y_in, x_out, y_out, method=1)
+        grid = triple_to_grid(z_xr, x_in, y_in, x_out, y_out, method=1)
+
+        assert isinstance(grid, xr.DataArray)
+        assert grid.shape == da.shape
+        np.testing.assert_allclose(grid.values, expected, rtol=0.0, atol=1e-12)
+
     def test_meta_warning(self, small_rect_grid):
         x_out, y_out, da = small_rect_grid
         X, Y = np.meshgrid(x_out, y_out, indexing="xy")
