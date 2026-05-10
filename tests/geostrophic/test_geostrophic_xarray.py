@@ -1113,3 +1113,28 @@ class TestIntegrationScenarios:
         assert gw.geopotential_height.identical(z)
         np.testing.assert_array_equal(gw.longitude, np.array(z.lon.values))
         np.testing.assert_array_equal(gw.latitude, np.array(z.lat.values))
+
+    @patch("skyborn.calc.geostrophic.xarray.interface.geostrophic_wind")
+    def test_output_skips_dimensions_without_coordinates(self, mock_interface):
+        """Only dimensions with explicit coordinates should be copied to the output."""
+
+        mock_interface.return_value = (
+            np.random.rand(2, 3, 4).astype(np.float32),
+            np.random.rand(2, 3, 4).astype(np.float32),
+        )
+
+        z = xr.DataArray(
+            np.random.rand(2, 3, 4).astype(np.float32),
+            dims=("time", "lat", "lon"),
+            coords={
+                "lat": np.linspace(-30.0, 30.0, 3),
+                "lon": np.linspace(0.0, 270.0, 4),
+            },
+        )
+
+        result = geostrophic_wind(z, keep_attrs=True)
+
+        assert "time" not in result.coords
+        assert "lat" in result.coords
+        assert "lon" in result.coords
+        assert result.ug.dims == ("time", "lat", "lon")
