@@ -1253,7 +1253,7 @@ class Spharmt:
 
         vhs_func = vhs_functions[(self.gridtype, self.legfunc)]
         v, w = vhs_func()
-        public_dtype = self._public_real_dtype(vrtspec, divspec)
+        public_dtype = self._public_real_dtype(br, bi, cr, ci)
         return self._restore_grid_shape(
             w, extra_shape, public_dtype
         ), -self._restore_grid_shape(v, extra_shape, public_dtype)
