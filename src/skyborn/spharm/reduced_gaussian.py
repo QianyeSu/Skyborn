@@ -381,6 +381,14 @@ class ReducedGaussianSpharmt:
             self._validate_paired_spectral_data(spec_a, spec_b, "_spectogrd_pair")
         )
 
+        # On the user's O320 single-layer workload (nt=1), the current native
+        # paired scalar synthesis kernel is slower than two independent
+        # single-field syntheses. Keep the paired kernel for multi-field
+        # workloads, but prefer the simpler path for a single slice until the
+        # Fortran paired kernel is reworked.
+        if normalized_a.shape[1] == 1:
+            return self.spectogrd(spec_a), self.spectogrd(spec_b)
+
         if hasattr(_spherepack, "reduced_gaussian_spectogrd_pair"):
             basis = self._basis_transposed(ntrunc)
             try:
@@ -584,11 +592,9 @@ class ReducedGaussianSpharmt:
         dbasis = self._dbasis_transposed(ntrunc)
 
         try:
-            if hasattr(_spherepack, "reduced_gaussian_getgrad_pair"):
-                zero_spec = np.zeros_like(normalized_spec)
-                ugrad, vgrad, _, _, ierror = _spherepack.reduced_gaussian_getgrad_pair(
+            if hasattr(_spherepack, "reduced_gaussian_getgrad"):
+                ugrad, vgrad, ierror = _spherepack.reduced_gaussian_getgrad(
                     normalized_spec,
-                    zero_spec,
                     self.pl,
                     basis,
                     dbasis,
@@ -598,8 +604,10 @@ class ReducedGaussianSpharmt:
                     self.rsphere,
                 )
             else:
-                ugrad, vgrad, ierror = _spherepack.reduced_gaussian_getgrad(
+                zero_spec = np.zeros_like(normalized_spec)
+                ugrad, vgrad, _, _, ierror = _spherepack.reduced_gaussian_getgrad_pair(
                     normalized_spec,
+                    zero_spec,
                     self.pl,
                     basis,
                     dbasis,

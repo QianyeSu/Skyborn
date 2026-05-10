@@ -910,6 +910,8 @@ end subroutine reduced_gaussian_spectogrd_pair
 subroutine reduced_gaussian_getgrad(dataspec, pl, basis, dbasis, sin_theta, &
                                     ugrad, vgrad, nmdim, nlat, ntrunc, nt, &
                                     ngptot, rsphere, ierror)
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
+        reduced_gaussian_fft_wsave
     implicit none
 
     integer, intent(in) :: nmdim, nlat, ntrunc, nt, ngptot
@@ -923,17 +925,25 @@ subroutine reduced_gaussian_getgrad(dataspec, pl, basis, dbasis, sin_theta, &
     real, intent(out) :: vgrad(ngptot, nt)
     integer, intent(out) :: ierror
 
-    integer :: j, i, k, m, n, nm, offset, row_nlon, total, mlimit
+    integer :: j, js, i, k, m, n, nm, offset, offset_s, row_nlon, total
+    integer :: max_nlon, mlimit, alloc_status, pair_count, half_nlat
     integer :: offsets(nlat + 1)
-    double precision :: angle_step, inv_r, two_inv_r, two_inv_r_sin
-    double precision :: cos_angle, sin_angle, cos_step, sin_step, cos_next
-    double precision :: spec_real, spec_imag, pval, dpval
-    double precision :: uvalue, vvalue
+    logical :: symmetric_pl
+    double precision :: inv_r, two_inv_r, two_inv_r_sin
+    double precision :: spec_real, spec_imag, p_real, p_imag, dp_real, dp_imag
+    double precision :: pval, dpval
     double precision :: sum_p_real, sum_p_imag, sum_dp_real, sum_dp_imag
+    double precision :: sum_p_real_s, sum_p_imag_s
+    double precision :: sum_dp_real_s, sum_dp_imag_s
     double precision :: m_grad_scale, dp_grad_scale
+    double precision :: parity
     double precision :: u_cos(0:ntrunc, nt), u_sin(0:ntrunc, nt)
     double precision :: v_cos(0:ntrunc, nt), v_sin(0:ntrunc, nt)
-    double precision, parameter :: twopi = 6.283185307179586476925286766559d0
+    double precision :: u_cos_s(0:ntrunc, nt), u_sin_s(0:ntrunc, nt)
+    double precision :: v_cos_s(0:ntrunc, nt), v_sin_s(0:ntrunc, nt)
+    real, allocatable :: fft_rows(:, :), fft_work(:, :)
+
+    external :: hrfftb
 
     ierror = 1
     if (nlat < 3) return
@@ -951,30 +961,241 @@ subroutine reduced_gaussian_getgrad(dataspec, pl, basis, dbasis, sin_theta, &
     if (rsphere <= 0.0) return
 
     total = 0
+    max_nlon = 0
     offsets(1) = 0
     do j = 1, nlat
         if (pl(j) < 1) return
         if (sin_theta(j) <= 0.0) return
         total = total + pl(j)
+        if (pl(j) > max_nlon) max_nlon = pl(j)
         offsets(j + 1) = total
     end do
 
     ierror = 6
     if (total /= ngptot) return
 
+    pair_count = nlat / 2
+    half_nlat = (nlat + 1) / 2
+    symmetric_pl = .true.
+    do j = 1, pair_count
+        if (pl(j) /= pl(nlat - j + 1)) symmetric_pl = .false.
+    end do
+
+    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    ierror = 7
+    if (alloc_status /= 0) return
+
     inv_r = 1.0d0 / dble(rsphere)
     two_inv_r = 2.0d0 * inv_r
-!$omp parallel do schedule(static) private(j, i, k, m, n, nm, offset, &
-!$omp& row_nlon, angle_step, two_inv_r_sin, cos_angle, &
-!$omp& sin_angle, cos_step, sin_step, cos_next, spec_real, spec_imag, &
-!$omp& pval, dpval, uvalue, vvalue, sum_p_real, sum_p_imag, &
-!$omp& sum_dp_real, sum_dp_imag, mlimit, m_grad_scale, dp_grad_scale, &
-!$omp& u_cos, u_sin, v_cos, v_sin)
+!$omp parallel private(j, js, i, k, m, n, nm, offset, offset_s, row_nlon, mlimit, &
+!$omp& alloc_status, two_inv_r_sin, spec_real, spec_imag, p_real, p_imag, &
+!$omp& dp_real, dp_imag, pval, dpval, sum_p_real, sum_p_imag, sum_dp_real, &
+!$omp& sum_dp_imag, sum_p_real_s, sum_p_imag_s, sum_dp_real_s, &
+!$omp& sum_dp_imag_s, m_grad_scale, dp_grad_scale, parity, u_cos, u_sin, &
+!$omp& v_cos, v_sin, u_cos_s, u_sin_s, v_cos_s, v_sin_s, fft_rows, fft_work)
+    allocate(fft_rows(4, max_nlon), fft_work(4, max_nlon), stat=alloc_status)
+    if (alloc_status == 0) then
+    if (symmetric_pl) then
+!$omp do schedule(static)
+    do j = 1, half_nlat
+        if (j <= pair_count) then
+            js = nlat - j + 1
+            offset = offsets(j)
+            offset_s = offsets(js)
+            row_nlon = pl(j)
+            two_inv_r_sin = two_inv_r / dble(sin_theta(j))
+            mlimit = min(ntrunc, row_nlon / 2)
+
+            do k = 1, nt
+                do m = 0, mlimit
+                    sum_p_real = 0.0d0
+                    sum_p_imag = 0.0d0
+                    sum_dp_real = 0.0d0
+                    sum_dp_imag = 0.0d0
+                    sum_p_real_s = 0.0d0
+                    sum_p_imag_s = 0.0d0
+                    sum_dp_real_s = 0.0d0
+                    sum_dp_imag_s = 0.0d0
+                    nm = spectral_offset(m, ntrunc)
+                    do n = m, ntrunc - 1, 2
+                        nm = nm + 1
+                        spec_real = dble(real(dataspec(nm, k)))
+                        spec_imag = dble(aimag(dataspec(nm, k)))
+                        pval = dble(basis(nm, j))
+                        dpval = dble(dbasis(nm, j))
+                        p_real = spec_real * pval
+                        p_imag = spec_imag * pval
+                        dp_real = spec_real * dpval
+                        dp_imag = spec_imag * dpval
+                        sum_p_real = sum_p_real + p_real
+                        sum_p_imag = sum_p_imag + p_imag
+                        sum_dp_real = sum_dp_real + dp_real
+                        sum_dp_imag = sum_dp_imag + dp_imag
+                        sum_p_real_s = sum_p_real_s + p_real
+                        sum_p_imag_s = sum_p_imag_s + p_imag
+                        sum_dp_real_s = sum_dp_real_s - dp_real
+                        sum_dp_imag_s = sum_dp_imag_s - dp_imag
+
+                        nm = nm + 1
+                        spec_real = dble(real(dataspec(nm, k)))
+                        spec_imag = dble(aimag(dataspec(nm, k)))
+                        pval = dble(basis(nm, j))
+                        dpval = dble(dbasis(nm, j))
+                        p_real = spec_real * pval
+                        p_imag = spec_imag * pval
+                        dp_real = spec_real * dpval
+                        dp_imag = spec_imag * dpval
+                        sum_p_real = sum_p_real + p_real
+                        sum_p_imag = sum_p_imag + p_imag
+                        sum_dp_real = sum_dp_real + dp_real
+                        sum_dp_imag = sum_dp_imag + dp_imag
+                        sum_p_real_s = sum_p_real_s - p_real
+                        sum_p_imag_s = sum_p_imag_s - p_imag
+                        sum_dp_real_s = sum_dp_real_s + dp_real
+                        sum_dp_imag_s = sum_dp_imag_s + dp_imag
+                    end do
+                    if (mod(ntrunc - m, 2) == 0) then
+                        nm = nm + 1
+                        spec_real = dble(real(dataspec(nm, k)))
+                        spec_imag = dble(aimag(dataspec(nm, k)))
+                        pval = dble(basis(nm, j))
+                        dpval = dble(dbasis(nm, j))
+                        p_real = spec_real * pval
+                        p_imag = spec_imag * pval
+                        dp_real = spec_real * dpval
+                        dp_imag = spec_imag * dpval
+                        sum_p_real = sum_p_real + p_real
+                        sum_p_imag = sum_p_imag + p_imag
+                        sum_dp_real = sum_dp_real + dp_real
+                        sum_dp_imag = sum_dp_imag + dp_imag
+                        sum_p_real_s = sum_p_real_s + p_real
+                        sum_p_imag_s = sum_p_imag_s + p_imag
+                        sum_dp_real_s = sum_dp_real_s - dp_real
+                        sum_dp_imag_s = sum_dp_imag_s - dp_imag
+                    end if
+
+                    if (m == 0) then
+                        v_cos(m, k) = -sum_dp_real * inv_r
+                        v_cos_s(m, k) = -sum_dp_real_s * inv_r
+                    else
+                        m_grad_scale = dble(m) * two_inv_r_sin
+                        dp_grad_scale = two_inv_r
+                        u_cos(m, k) = -m_grad_scale * sum_p_imag
+                        u_sin(m, k) = -m_grad_scale * sum_p_real
+                        v_cos(m, k) = -dp_grad_scale * sum_dp_real
+                        v_sin(m, k) = dp_grad_scale * sum_dp_imag
+                        u_cos_s(m, k) = -m_grad_scale * sum_p_imag_s
+                        u_sin_s(m, k) = -m_grad_scale * sum_p_real_s
+                        v_cos_s(m, k) = -dp_grad_scale * sum_dp_real_s
+                        v_sin_s(m, k) = dp_grad_scale * sum_dp_imag_s
+                    end if
+                end do
+            end do
+
+            do k = 1, nt
+                fft_rows(1, 1) = 0.0
+                fft_rows(2, 1) = 2.0 * real(v_cos(0, k))
+                fft_rows(3, 1) = 0.0
+                fft_rows(4, 1) = 2.0 * real(v_cos_s(0, k))
+
+                do m = 1, mlimit
+                    fft_rows(1, 2 * m) = real(u_cos(m, k))
+                    fft_rows(2, 2 * m) = real(v_cos(m, k))
+                    fft_rows(3, 2 * m) = real(u_cos_s(m, k))
+                    fft_rows(4, 2 * m) = real(v_cos_s(m, k))
+                    if (2 * m < row_nlon) then
+                        fft_rows(1, 2 * m + 1) = -real(u_sin(m, k))
+                        fft_rows(2, 2 * m + 1) = -real(v_sin(m, k))
+                        fft_rows(3, 2 * m + 1) = -real(u_sin_s(m, k))
+                        fft_rows(4, 2 * m + 1) = -real(v_sin_s(m, k))
+                    end if
+                end do
+                if (2 * mlimit + 2 <= row_nlon) then
+                    fft_rows(:, 2 * mlimit + 2:row_nlon) = 0.0
+                end if
+
+                call hrfftb(4, row_nlon, fft_rows, 4, &
+                    reduced_gaussian_fft_wsave(1, j), fft_work)
+
+                do i = 1, row_nlon
+                    ugrad(offset + i, k) = 0.5 * fft_rows(1, i)
+                    vgrad(offset + i, k) = 0.5 * fft_rows(2, i)
+                    ugrad(offset_s + i, k) = 0.5 * fft_rows(3, i)
+                    vgrad(offset_s + i, k) = 0.5 * fft_rows(4, i)
+                end do
+            end do
+        else
+            offset = offsets(j)
+            row_nlon = pl(j)
+            two_inv_r_sin = two_inv_r / dble(sin_theta(j))
+            mlimit = min(ntrunc, row_nlon / 2)
+
+            do k = 1, nt
+                do m = 0, mlimit
+                    sum_p_real = 0.0d0
+                    sum_p_imag = 0.0d0
+                    sum_dp_real = 0.0d0
+                    sum_dp_imag = 0.0d0
+                    nm = spectral_offset(m, ntrunc)
+                    do n = m, ntrunc
+                        nm = nm + 1
+                        spec_real = dble(real(dataspec(nm, k)))
+                        spec_imag = dble(aimag(dataspec(nm, k)))
+                        pval = dble(basis(nm, j))
+                        dpval = dble(dbasis(nm, j))
+                        sum_p_real = sum_p_real + spec_real * pval
+                        sum_p_imag = sum_p_imag + spec_imag * pval
+                        sum_dp_real = sum_dp_real + spec_real * dpval
+                        sum_dp_imag = sum_dp_imag + spec_imag * dpval
+                    end do
+
+                    if (m == 0) then
+                        v_cos(m, k) = -sum_dp_real * inv_r
+                    else
+                        m_grad_scale = dble(m) * two_inv_r_sin
+                        dp_grad_scale = two_inv_r
+                        u_cos(m, k) = -m_grad_scale * sum_p_imag
+                        u_sin(m, k) = -m_grad_scale * sum_p_real
+                        v_cos(m, k) = -dp_grad_scale * sum_dp_real
+                        v_sin(m, k) = dp_grad_scale * sum_dp_imag
+                    end if
+                end do
+            end do
+
+            do k = 1, nt
+                fft_rows(1, 1) = 0.0
+                fft_rows(2, 1) = 2.0 * real(v_cos(0, k))
+
+                do m = 1, mlimit
+                    fft_rows(1, 2 * m) = real(u_cos(m, k))
+                    fft_rows(2, 2 * m) = real(v_cos(m, k))
+                    if (2 * m < row_nlon) then
+                        fft_rows(1, 2 * m + 1) = -real(u_sin(m, k))
+                        fft_rows(2, 2 * m + 1) = -real(v_sin(m, k))
+                    end if
+                end do
+                if (2 * mlimit + 2 <= row_nlon) then
+                    fft_rows(1:2, 2 * mlimit + 2:row_nlon) = 0.0
+                end if
+
+                call hrfftb(2, row_nlon, fft_rows, 4, &
+                    reduced_gaussian_fft_wsave(1, j), fft_work)
+
+                do i = 1, row_nlon
+                    ugrad(offset + i, k) = 0.5 * fft_rows(1, i)
+                    vgrad(offset + i, k) = 0.5 * fft_rows(2, i)
+                end do
+            end do
+        end if
+    end do
+!$omp end do
+    else
+!$omp do schedule(static)
     do j = 1, nlat
         offset = offsets(j)
         row_nlon = pl(j)
-        mlimit = min(ntrunc, row_nlon / 2)
         two_inv_r_sin = two_inv_r / dble(sin_theta(j))
+        mlimit = min(ntrunc, row_nlon / 2)
 
         do k = 1, nt
             do m = 0, mlimit
@@ -1009,32 +1230,35 @@ subroutine reduced_gaussian_getgrad(dataspec, pl, basis, dbasis, sin_theta, &
         end do
 
         do k = 1, nt
-            do i = 1, row_nlon
-                ugrad(offset + i, k) = 0.0
-                vgrad(offset + i, k) = real(v_cos(0, k))
-            end do
+            fft_rows(1, 1) = 0.0
+            fft_rows(2, 1) = 2.0 * real(v_cos(0, k))
 
             do m = 1, mlimit
-                angle_step = twopi * dble(m) / dble(row_nlon)
-                cos_step = cos(angle_step)
-                sin_step = sin(angle_step)
-                cos_angle = 1.0d0
-                sin_angle = 0.0d0
-                do i = 1, row_nlon
-                    uvalue = u_cos(m, k) * cos_angle + &
-                        u_sin(m, k) * sin_angle
-                    vvalue = v_cos(m, k) * cos_angle + &
-                        v_sin(m, k) * sin_angle
-                    ugrad(offset + i, k) = ugrad(offset + i, k) + real(uvalue)
-                    vgrad(offset + i, k) = vgrad(offset + i, k) + real(vvalue)
-                    cos_next = cos_angle * cos_step - sin_angle * sin_step
-                    sin_angle = sin_angle * cos_step + cos_angle * sin_step
-                    cos_angle = cos_next
-                end do
+                fft_rows(1, 2 * m) = real(u_cos(m, k))
+                fft_rows(2, 2 * m) = real(v_cos(m, k))
+                if (2 * m < row_nlon) then
+                    fft_rows(1, 2 * m + 1) = -real(u_sin(m, k))
+                    fft_rows(2, 2 * m + 1) = -real(v_sin(m, k))
+                end if
+            end do
+            if (2 * mlimit + 2 <= row_nlon) then
+                fft_rows(1:2, 2 * mlimit + 2:row_nlon) = 0.0
+            end if
+
+            call hrfftb(2, row_nlon, fft_rows, 4, &
+                reduced_gaussian_fft_wsave(1, j), fft_work)
+
+            do i = 1, row_nlon
+                ugrad(offset + i, k) = 0.5 * fft_rows(1, i)
+                vgrad(offset + i, k) = 0.5 * fft_rows(2, i)
             end do
         end do
     end do
-!$omp end parallel do
+!$omp end do
+    end if
+    end if
+    if (allocated(fft_rows)) deallocate(fft_rows, fft_work)
+!$omp end parallel
 
     ierror = 0
 
