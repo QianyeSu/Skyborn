@@ -110,7 +110,7 @@ if host_system == 'darwin' and host_cpu == 'aarch64'
         '-std=legacy',
     ]
     c_args = [
-        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',
+        '-DNPY_NO_DEPRECATED_API=NPY_1_19_API_VERSION',
         '-march=armv8-a',
         '-mtune=apple-m1',
         '-fPIC',
@@ -139,7 +139,7 @@ else
         '-std=legacy',
     ]
     c_args = [
-        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',
+        '-DNPY_NO_DEPRECATED_API=NPY_1_19_API_VERSION',
         '-march=x86-64',
         '-mtune=generic',
         '-fPIC',
@@ -433,7 +433,7 @@ else:
         [
             'fortran/rcm2points.f90',
             rcm2points_support_sources,
-            rcm2points_sources,
+            'rcm2points_module.c',
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
@@ -451,7 +451,7 @@ else:
         [
             'fortran/rcm2rgrid.f90',
             rcm2rgrid_support_sources,
-            rcm2rgrid_sources,
+            'rcm2rgrid_module.c',
         ],
         include_directories: inc_np,
         dependencies: [py_dep],

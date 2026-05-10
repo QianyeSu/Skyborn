@@ -145,11 +145,7 @@ static PyObject *py_drcm2points(PyObject *self, PyObject *args, PyObject *kwargs
         return NULL;
     }
 
-    {
-        PyObject *result = PyArray_Return(fo_arr);
-        Py_DECREF(fo_arr);
-        return result;
-    }
+    return PyArray_Return(fo_arr);
 
 fail:
     Py_XDECREF(lat2d_arr);

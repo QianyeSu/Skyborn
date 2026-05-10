@@ -173,11 +173,7 @@ static PyObject *py_drcm2rgrid(PyObject *self, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    {
-        PyObject *result = PyArray_Return(fo_arr);
-        Py_DECREF(fo_arr);
-        return result;
-    }
+    return PyArray_Return(fo_arr);
 
 fail:
     Py_XDECREF(lat2d_arr);
@@ -309,11 +305,7 @@ static PyObject *py_drgrid2rcm(PyObject *self, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    {
-        PyObject *result = PyArray_Return(fo_arr);
-        Py_DECREF(fo_arr);
-        return result;
-    }
+    return PyArray_Return(fo_arr);
 
 fail:
     Py_XDECREF(lat1d_arr);
