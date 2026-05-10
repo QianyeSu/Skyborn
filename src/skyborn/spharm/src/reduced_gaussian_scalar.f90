@@ -11,8 +11,14 @@ module reduced_gaussian_fft_cache_mod
 
     integer, save :: reduced_gaussian_fft_cache_nlat = 0
     integer, save :: reduced_gaussian_fft_cache_max_wsave = 0
+    integer, save :: reduced_gaussian_vector_fft_cache_nlat = 0
+    integer, save :: reduced_gaussian_vector_fft_cache_ntrunc = -1
     integer, allocatable, save :: reduced_gaussian_fft_cache_pl(:)
     real, allocatable, save :: reduced_gaussian_fft_wsave(:, :)
+    double precision, allocatable, save :: reduced_gaussian_u_cos_fft(:, :)
+    double precision, allocatable, save :: reduced_gaussian_u_sin_fft(:, :)
+    double precision, allocatable, save :: reduced_gaussian_v_cos_fft(:, :)
+    double precision, allocatable, save :: reduced_gaussian_v_sin_fft(:, :)
 
 contains
 
@@ -91,6 +97,71 @@ contains
 !$omp end critical
 
     end subroutine reduced_gaussian_prepare_fft_cache
+
+    subroutine reduced_gaussian_prepare_vector_fft_cache(nlat, ntrunc, ierror)
+        implicit none
+
+        integer, intent(in) :: nlat, ntrunc
+        integer, intent(out) :: ierror
+
+        integer :: alloc_status
+        logical :: cache_matches
+
+        ierror = 1
+        if (nlat < 1 .or. ntrunc < 0) return
+
+        cache_matches = allocated(reduced_gaussian_u_cos_fft) .and. &
+            allocated(reduced_gaussian_u_sin_fft) .and. &
+            allocated(reduced_gaussian_v_cos_fft) .and. &
+            allocated(reduced_gaussian_v_sin_fft) .and. &
+            reduced_gaussian_vector_fft_cache_nlat == nlat .and. &
+            reduced_gaussian_vector_fft_cache_ntrunc >= ntrunc
+        if (cache_matches) then
+            ierror = 0
+            return
+        end if
+
+!$omp critical
+        cache_matches = allocated(reduced_gaussian_u_cos_fft) .and. &
+            allocated(reduced_gaussian_u_sin_fft) .and. &
+            allocated(reduced_gaussian_v_cos_fft) .and. &
+            allocated(reduced_gaussian_v_sin_fft) .and. &
+            reduced_gaussian_vector_fft_cache_nlat == nlat .and. &
+            reduced_gaussian_vector_fft_cache_ntrunc >= ntrunc
+        if (cache_matches) then
+            ierror = 0
+        else
+            if (allocated(reduced_gaussian_u_cos_fft)) then
+                deallocate(reduced_gaussian_u_cos_fft)
+            end if
+            if (allocated(reduced_gaussian_u_sin_fft)) then
+                deallocate(reduced_gaussian_u_sin_fft)
+            end if
+            if (allocated(reduced_gaussian_v_cos_fft)) then
+                deallocate(reduced_gaussian_v_cos_fft)
+            end if
+            if (allocated(reduced_gaussian_v_sin_fft)) then
+                deallocate(reduced_gaussian_v_sin_fft)
+            end if
+
+            allocate(reduced_gaussian_u_cos_fft(nlat, 0:ntrunc), &
+                     reduced_gaussian_u_sin_fft(nlat, 0:ntrunc), &
+                     reduced_gaussian_v_cos_fft(nlat, 0:ntrunc), &
+                     reduced_gaussian_v_sin_fft(nlat, 0:ntrunc), &
+                     stat=alloc_status)
+            if (alloc_status /= 0) then
+                reduced_gaussian_vector_fft_cache_nlat = 0
+                reduced_gaussian_vector_fft_cache_ntrunc = -1
+                ierror = 2
+            else
+                reduced_gaussian_vector_fft_cache_nlat = nlat
+                reduced_gaussian_vector_fft_cache_ntrunc = ntrunc
+                ierror = 0
+            end if
+        end if
+!$omp end critical
+
+    end subroutine reduced_gaussian_prepare_vector_fft_cache
 
 end module reduced_gaussian_fft_cache_mod
 
@@ -1871,7 +1942,9 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                                           ngptot, nlat, ntrunc, nt, rsphere, &
                                           ierror)
     use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
-        reduced_gaussian_fft_wsave
+        reduced_gaussian_prepare_vector_fft_cache, reduced_gaussian_fft_wsave, &
+        reduced_gaussian_u_cos_fft, reduced_gaussian_u_sin_fft, &
+        reduced_gaussian_v_cos_fft, reduced_gaussian_v_sin_fft
     implicit none
 
     integer, intent(in) :: ngptot, nlat, ntrunc, nt
@@ -1903,8 +1976,6 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
     double precision :: div_real_acc(0:ntrunc), div_imag_acc(0:ntrunc)
     double precision :: vrt_real_acc(0:ntrunc), vrt_imag_acc(0:ntrunc)
     double precision :: weight_inv_r(nlat), weight_inv_r_sin(nlat)
-    double precision, allocatable :: u_cos_fft(:, :), u_sin_fft(:, :)
-    double precision, allocatable :: v_cos_fft(:, :), v_sin_fft(:, :)
     real, allocatable :: fft_rows(:, :), fft_work(:, :)
 
     external :: hrfftf
@@ -1946,9 +2017,7 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
     ierror = 6
     if (alloc_status /= 0) return
 
-    allocate(u_cos_fft(nlat, 0:ntrunc), u_sin_fft(nlat, 0:ntrunc), &
-             v_cos_fft(nlat, 0:ntrunc), v_sin_fft(nlat, 0:ntrunc), &
-             stat=alloc_status)
+    call reduced_gaussian_prepare_vector_fft_cache(nlat, ntrunc, alloc_status)
     ierror = 7
     if (alloc_status /= 0) return
 
@@ -1984,18 +2053,18 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
             call hrfftf(2, row_nlon, fft_rows, 2, &
                 reduced_gaussian_fft_wsave(1, j), fft_work)
 
-            u_cos_fft(j, 0) = dble(fft_rows(1, 1)) * inv_nlon
-            v_cos_fft(j, 0) = dble(fft_rows(2, 1)) * inv_nlon
+            reduced_gaussian_u_cos_fft(j, 0) = dble(fft_rows(1, 1)) * inv_nlon
+            reduced_gaussian_v_cos_fft(j, 0) = dble(fft_rows(2, 1)) * inv_nlon
             do m = 1, mlimit
                 twom = 2 * m
-                u_cos_fft(j, m) = dble(fft_rows(1, twom)) * inv_nlon
-                v_cos_fft(j, m) = dble(fft_rows(2, twom)) * inv_nlon
+                reduced_gaussian_u_cos_fft(j, m) = dble(fft_rows(1, twom)) * inv_nlon
+                reduced_gaussian_v_cos_fft(j, m) = dble(fft_rows(2, twom)) * inv_nlon
                 if (twom < row_nlon) then
-                    u_sin_fft(j, m) = -dble(fft_rows(1, twom + 1)) * inv_nlon
-                    v_sin_fft(j, m) = -dble(fft_rows(2, twom + 1)) * inv_nlon
+                    reduced_gaussian_u_sin_fft(j, m) = -dble(fft_rows(1, twom + 1)) * inv_nlon
+                    reduced_gaussian_v_sin_fft(j, m) = -dble(fft_rows(2, twom + 1)) * inv_nlon
                 else
-                    u_sin_fft(j, m) = 0.0d0
-                    v_sin_fft(j, m) = 0.0d0
+                    reduced_gaussian_u_sin_fft(j, m) = 0.0d0
+                    reduced_gaussian_v_sin_fft(j, m) = 0.0d0
                 end if
             end do
         end do
@@ -2022,10 +2091,10 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
             if (m == 0) then
                 do j = 1, pair_count
                     js = nlat - j + 1
-                    u_mean = u_cos_fft(j, 0)
-                    v_mean = v_cos_fft(j, 0)
-                    u_mean_s = u_cos_fft(js, 0)
-                    v_mean_s = v_cos_fft(js, 0)
+                    u_mean = reduced_gaussian_u_cos_fft(j, 0)
+                    v_mean = reduced_gaussian_v_cos_fft(j, 0)
+                    u_mean_s = reduced_gaussian_u_cos_fft(js, 0)
+                    v_mean_s = reduced_gaussian_v_cos_fft(js, 0)
 
                     dp_scale = weight_inv_r(j)
                     nm_base = spectral_offset(m, ntrunc)
@@ -2060,8 +2129,8 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
 
                 if (half_nlat > pair_count) then
                     j = half_nlat
-                    u_mean = u_cos_fft(j, 0)
-                    v_mean = v_cos_fft(j, 0)
+                    u_mean = reduced_gaussian_u_cos_fft(j, 0)
+                    v_mean = reduced_gaussian_v_cos_fft(j, 0)
 
                     nm = spectral_offset(m, ntrunc)
                     dp_scale = weight_inv_r(j)
@@ -2080,14 +2149,14 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                 do j = first_j, pair_count
                     row_nlon = pl(j)
                     js = nlat - j + 1
-                    u_cos = u_cos_fft(j, m)
-                    u_sin = u_sin_fft(j, m)
-                    v_cos = v_cos_fft(j, m)
-                    v_sin = v_sin_fft(j, m)
-                    u_cos_s = u_cos_fft(js, m)
-                    u_sin_s = u_sin_fft(js, m)
-                    v_cos_s = v_cos_fft(js, m)
-                    v_sin_s = v_sin_fft(js, m)
+                    u_cos = reduced_gaussian_u_cos_fft(j, m)
+                    u_sin = reduced_gaussian_u_sin_fft(j, m)
+                    v_cos = reduced_gaussian_v_cos_fft(j, m)
+                    v_sin = reduced_gaussian_v_sin_fft(j, m)
+                    u_cos_s = reduced_gaussian_u_cos_fft(js, m)
+                    u_sin_s = reduced_gaussian_u_sin_fft(js, m)
+                    v_cos_s = reduced_gaussian_v_cos_fft(js, m)
+                    v_sin_s = reduced_gaussian_v_sin_fft(js, m)
 
                     p_scale = dble(m) * weight_inv_r_sin(j)
                     dp_scale = weight_inv_r(j)
@@ -2157,10 +2226,10 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
 
                 if (center_active(m)) then
                     j = half_nlat
-                    u_cos = u_cos_fft(j, m)
-                    u_sin = u_sin_fft(j, m)
-                    v_cos = v_cos_fft(j, m)
-                    v_sin = v_sin_fft(j, m)
+                    u_cos = reduced_gaussian_u_cos_fft(j, m)
+                    u_sin = reduced_gaussian_u_sin_fft(j, m)
+                    v_cos = reduced_gaussian_v_cos_fft(j, m)
+                    v_sin = reduced_gaussian_v_sin_fft(j, m)
 
                     nm = spectral_offset(m, ntrunc)
                     p_scale = dble(m) * weight_inv_r_sin(j)
@@ -2205,8 +2274,8 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
             vrt_imag_acc(m:ntrunc) = 0.0d0
             if (m == 0) then
                 do j = 1, nlat
-                    u_mean = u_cos_fft(j, 0)
-                    v_mean = v_cos_fft(j, 0)
+                    u_mean = reduced_gaussian_u_cos_fft(j, 0)
+                    v_mean = reduced_gaussian_v_cos_fft(j, 0)
 
                     nm = spectral_offset(m, ntrunc)
                     dp_scale = weight_inv_r(j)
@@ -2224,10 +2293,10 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                 do j = 1, nlat
                     row_nlon = pl(j)
                     if (2 * m <= row_nlon) then
-                        u_cos = u_cos_fft(j, m)
-                        u_sin = u_sin_fft(j, m)
-                        v_cos = v_cos_fft(j, m)
-                        v_sin = v_sin_fft(j, m)
+                        u_cos = reduced_gaussian_u_cos_fft(j, m)
+                        u_sin = reduced_gaussian_u_sin_fft(j, m)
+                        v_cos = reduced_gaussian_v_cos_fft(j, m)
+                        v_sin = reduced_gaussian_v_sin_fft(j, m)
 
                         nm = spectral_offset(m, ntrunc)
                         p_scale = dble(m) * weight_inv_r_sin(j)
