@@ -208,7 +208,8 @@ class ReducedVectorWind:
         if full is not None:
             vrtspec = full[0]  # type: ignore[index]
         else:
-            vrtspec, _ = self._vector_analysis_spectral(truncation=key[1])
+            vrtspec = self.s.getvrtspec(self.u, self.v, ntrunc=key[1])
+        self._spectral_cache[key] = vrtspec
         return vrtspec
 
     def _divergence_spectral(self, truncation: Optional[int] = None) -> np.ndarray:
@@ -221,7 +222,8 @@ class ReducedVectorWind:
         if full is not None:
             divspec = full[1]  # type: ignore[index]
         else:
-            _, divspec = self._vector_analysis_spectral(truncation=key[1])
+            divspec = self.s.getdivspec(self.u, self.v, ntrunc=key[1])
+        self._spectral_cache[key] = divspec
         return divspec
 
     def magnitude(self) -> np.ndarray:
