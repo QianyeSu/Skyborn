@@ -98,6 +98,7 @@ class VectorWind:
         gridtype: GridType = "regular",
         rsphere: float = 6.3712e6,
         legfunc: LegFunc = "stored",
+        precision: Literal["auto", "single", "double"] = "auto",
     ) -> None:
         """
         Initialize VectorWind instance with comprehensive data validation.
@@ -108,6 +109,7 @@ class VectorWind:
         """
         # Step 1: Handle masked arrays and create copies
         self._output_dtype = self._infer_output_dtype(u, v)
+        self._precision = precision
         self.u = self._process_input_array(u, "u")
         self.v = self._process_input_array(v, "v")
 
@@ -119,7 +121,7 @@ class VectorWind:
 
         # Step 4: Initialize spherical harmonic transform
         nlat, nlon = self.u.shape[0], self.u.shape[1]
-        self._initialize_spharmt(nlon, nlat, gridtype, rsphere, legfunc)
+        self._initialize_spharmt(nlon, nlat, gridtype, rsphere, legfunc, precision)
         self._setup_cached_arrays()
 
         # Step 5: Create method aliases for backward compatibility
@@ -133,16 +135,18 @@ class VectorWind:
         gridtype: GridType = "regular",
         rsphere: float = 6.3712e6,
         legfunc: LegFunc = "stored",
+        precision: Literal["auto", "single", "double"] = "auto",
     ) -> "VectorWind":
         """Create an instance from validated wrapper-owned arrays."""
         self = cls.__new__(cls)
         self._output_dtype = self._infer_output_dtype(u, v)
+        self._precision = precision
         self.u = self._process_input_array(u, "u", copy=False)
         self.v = self._process_input_array(v, "v", copy=False)
         self._validate_input_data()
         self._validate_dimensions()
         nlat, nlon = self.u.shape[0], self.u.shape[1]
-        self._initialize_spharmt(nlon, nlat, gridtype, rsphere, legfunc)
+        self._initialize_spharmt(nlon, nlat, gridtype, rsphere, legfunc, precision)
         self._setup_cached_arrays()
         self._setup_method_aliases()
         return self
@@ -173,9 +177,14 @@ class VectorWind:
     ) -> np.ndarray:
         """Cast grid-space public outputs back to the input precision."""
         array = np.asarray(data)
-        target_dtype = (
-            self._output_dtype if output_dtype is None else np.dtype(output_dtype)
-        )
+        if self._precision == "double":
+            target_dtype = np.float64
+        elif self._precision == "single":
+            target_dtype = np.float32
+        else:
+            target_dtype = (
+                self._output_dtype if output_dtype is None else np.dtype(output_dtype)
+            )
         if array.dtype == target_dtype:
             return array
         return array.astype(target_dtype, copy=False)
@@ -323,7 +332,13 @@ class VectorWind:
     # ------------------------------------------------------------------
 
     def _initialize_spharmt(
-        self, nlon: int, nlat: int, gridtype: str, rsphere: float, legfunc: str
+        self,
+        nlon: int,
+        nlat: int,
+        gridtype: str,
+        rsphere: float,
+        legfunc: str,
+        precision: Literal["auto", "single", "double"] = "auto",
     ) -> None:
         """
         Initialize spherical harmonic transform object with validation.
@@ -373,6 +388,7 @@ class VectorWind:
                 gridtype=self.gridtype,
                 rsphere=rsphere,
                 legfunc=legfunc,
+                precision=precision,
             )
         except Exception as e:
             # Provide more informative error messages

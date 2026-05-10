@@ -27,7 +27,7 @@ Example:
 from __future__ import annotations
 
 import warnings
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import xarray as xr
@@ -104,6 +104,7 @@ class VectorWind:
         rsphere: float = 6.3712e6,
         legfunc: LegFunc = "stored",
         gridtype: Optional[str] = None,
+        precision: Literal["auto", "single", "double"] = "auto",
     ) -> None:
         """Initialize VectorWind instance with comprehensive validation."""
         # Validate input types
@@ -163,6 +164,7 @@ class VectorWind:
             gridtype=gridtype,
             rsphere=rsphere,
             legfunc=legfunc,
+            precision=precision,
         )
 
     def _validate_coordinates(self, u: DataArray, v: DataArray) -> None:
