@@ -1993,8 +1993,8 @@ subroutine reduced_gaussian_getvrtspec(ugrid, vgrid, pl, weights, basis, &
     real, intent(in) :: vgrid(ngptot, nt)
     integer, intent(in) :: pl(nlat)
     real, intent(in) :: weights(nlat)
-    real, intent(in) :: basis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
-    real, intent(in) :: dbasis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    real, intent(in) :: basis((ntrunc + 1) * (ntrunc + 2) / 2, nlat)
+    real, intent(in) :: dbasis((ntrunc + 1) * (ntrunc + 2) / 2, nlat)
     real, intent(in) :: sin_theta(nlat)
     real, intent(in) :: rsphere
     complex, intent(out) :: vrtspec((ntrunc + 1) * (ntrunc + 2) / 2, nt)
@@ -2018,8 +2018,8 @@ subroutine reduced_gaussian_getdivspec(ugrid, vgrid, pl, weights, basis, &
     real, intent(in) :: vgrid(ngptot, nt)
     integer, intent(in) :: pl(nlat)
     real, intent(in) :: weights(nlat)
-    real, intent(in) :: basis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
-    real, intent(in) :: dbasis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    real, intent(in) :: basis((ntrunc + 1) * (ntrunc + 2) / 2, nlat)
+    real, intent(in) :: dbasis((ntrunc + 1) * (ntrunc + 2) / 2, nlat)
     real, intent(in) :: sin_theta(nlat)
     real, intent(in) :: rsphere
     complex, intent(out) :: divspec((ntrunc + 1) * (ntrunc + 2) / 2, nt)
@@ -2046,8 +2046,8 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
     real, intent(in) :: vgrid(ngptot, nt)
     integer, intent(in) :: pl(nlat)
     real, intent(in) :: weights(nlat)
-    real, intent(in) :: basis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
-    real, intent(in) :: dbasis(nlat, (ntrunc + 1) * (ntrunc + 2) / 2)
+    real, intent(in) :: basis((ntrunc + 1) * (ntrunc + 2) / 2, nlat)
+    real, intent(in) :: dbasis((ntrunc + 1) * (ntrunc + 2) / 2, nlat)
     real, intent(in) :: sin_theta(nlat)
     real, intent(in) :: rsphere
     complex, intent(out) :: outspec((ntrunc + 1) * (ntrunc + 2) / 2, nt)
@@ -2195,7 +2195,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
 !$omp simd private(nm, dpval, dp_weighted, value_real)
                         do n = m, ntrunc, 2
                             nm = nm_base + n - m + 1
-                            dpval = dble(dbasis(j, nm))
+                            dpval = dble(dbasis(nm, j))
                             dp_weighted = dp_scale * dpval
                             value_real = -dp_weighted * (u_mean - u_mean_s)
                             value_real_acc(n) = value_real_acc(n) + value_real
@@ -2203,7 +2203,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
 !$omp simd private(nm, dpval, dp_weighted, value_real)
                         do n = m + 1, ntrunc, 2
                             nm = nm_base + n - m + 1
-                            dpval = dble(dbasis(j, nm))
+                            dpval = dble(dbasis(nm, j))
                             dp_weighted = dp_scale * dpval
                             value_real = -dp_weighted * (u_mean + u_mean_s)
                             value_real_acc(n) = value_real_acc(n) + value_real
@@ -2212,7 +2212,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
 !$omp simd private(nm, dpval, dp_weighted, value_real)
                         do n = m, ntrunc, 2
                             nm = nm_base + n - m + 1
-                            dpval = dble(dbasis(j, nm))
+                            dpval = dble(dbasis(nm, j))
                             dp_weighted = dp_scale * dpval
                             value_real = dp_weighted * (v_mean - v_mean_s)
                             value_real_acc(n) = value_real_acc(n) + value_real
@@ -2220,7 +2220,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
 !$omp simd private(nm, dpval, dp_weighted, value_real)
                         do n = m + 1, ntrunc, 2
                             nm = nm_base + n - m + 1
-                            dpval = dble(dbasis(j, nm))
+                            dpval = dble(dbasis(nm, j))
                             dp_weighted = dp_scale * dpval
                             value_real = dp_weighted * (v_mean + v_mean_s)
                             value_real_acc(n) = value_real_acc(n) + value_real
@@ -2237,7 +2237,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                     dp_scale = weight_inv_r(j)
                     do n = m, ntrunc
                         nm = nm + 1
-                        dpval = dble(dbasis(j, nm))
+                        dpval = dble(dbasis(nm, j))
                         dp_weighted = dp_scale * dpval
                         if (component == 1) then
                             value_real = -dp_weighted * &
@@ -2274,8 +2274,8 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
 !$omp simd private(nm, pval, dpval, p_weighted, dp_weighted, value_real, value_imag)
                         do n = m, ntrunc, 2
                             nm = nm_base + n - m + 1
-                            pval = dble(basis(j, nm))
-                            dpval = dble(dbasis(j, nm))
+                            pval = dble(basis(nm, j))
+                            dpval = dble(dbasis(nm, j))
                             p_weighted = p_scale * pval
                             dp_weighted = dp_scale * dpval
                             value_real = -dp_weighted * dp_u_cos + &
@@ -2292,8 +2292,8 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
 !$omp simd private(nm, pval, dpval, p_weighted, dp_weighted, value_real, value_imag)
                         do n = m + 1, ntrunc, 2
                             nm = nm_base + n - m + 1
-                            pval = dble(basis(j, nm))
-                            dpval = dble(dbasis(j, nm))
+                            pval = dble(basis(nm, j))
+                            dpval = dble(dbasis(nm, j))
                             p_weighted = p_scale * pval
                             dp_weighted = dp_scale * dpval
                             value_real = -dp_weighted * dp_u_cos + &
@@ -2311,8 +2311,8 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
 !$omp simd private(nm, pval, dpval, p_weighted, dp_weighted, value_real, value_imag)
                         do n = m, ntrunc, 2
                             nm = nm_base + n - m + 1
-                            pval = dble(basis(j, nm))
-                            dpval = dble(dbasis(j, nm))
+                            pval = dble(basis(nm, j))
+                            dpval = dble(dbasis(nm, j))
                             p_weighted = p_scale * pval
                             dp_weighted = dp_scale * dpval
                             value_real = p_weighted * p_u_sin + &
@@ -2329,8 +2329,8 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
 !$omp simd private(nm, pval, dpval, p_weighted, dp_weighted, value_real, value_imag)
                         do n = m + 1, ntrunc, 2
                             nm = nm_base + n - m + 1
-                            pval = dble(basis(j, nm))
-                            dpval = dble(dbasis(j, nm))
+                            pval = dble(basis(nm, j))
+                            dpval = dble(dbasis(nm, j))
                             p_weighted = p_scale * pval
                             dp_weighted = dp_scale * dpval
                             value_real = p_weighted * p_u_sin + &
@@ -2355,8 +2355,8 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                     dp_scale = weight_inv_r(j)
                     do n = m, ntrunc
                         nm = nm + 1
-                        pval = dble(basis(j, nm))
-                        dpval = dble(dbasis(j, nm))
+                        pval = dble(basis(nm, j))
+                        dpval = dble(dbasis(nm, j))
                         p_weighted = p_scale * pval
                         dp_weighted = dp_scale * dpval
                         if (component == 1) then
@@ -2400,7 +2400,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                     dp_scale = weight_inv_r(j)
                     do n = m, ntrunc
                         nm = nm + 1
-                        dpval = dble(dbasis(j, nm))
+                        dpval = dble(dbasis(nm, j))
                         dp_weighted = dp_scale * dpval
                         if (component == 1) then
                             value_real = -dp_weighted * u_mean
@@ -2424,8 +2424,8 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                         dp_scale = weight_inv_r(j)
                         do n = m, ntrunc
                             nm = nm + 1
-                            pval = dble(basis(j, nm))
-                            dpval = dble(dbasis(j, nm))
+                            pval = dble(basis(nm, j))
+                            dpval = dble(dbasis(nm, j))
                             p_weighted = p_scale * pval
                             dp_weighted = dp_scale * dpval
                             if (component == 1) then
