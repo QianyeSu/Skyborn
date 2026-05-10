@@ -276,6 +276,8 @@ def trop_wmo(
 
     # Check if pressure length matches temperature level dimension
     temp_level_size = temperature.shape[levdim]
+    if temp_level_size == 0 or len(pressure) == 0:
+        raise ValueError("Pressure and temperature profiles must not be empty")
     if len(pressure) != temp_level_size:
         raise ValueError(
             f"Pressure length ({len(pressure)}) must match temperature "
@@ -516,6 +518,9 @@ def trop_wmo_profile(
 
     if pressure.ndim != 1 or temperature.ndim != 1:
         raise ValueError("Profile inputs must be 1D arrays")
+
+    if len(pressure) == 0 or len(temperature) == 0:
+        raise ValueError("Profile inputs must not be empty")
 
     if len(pressure) != len(temperature):
         raise ValueError("Pressure and temperature profiles must have same length")
