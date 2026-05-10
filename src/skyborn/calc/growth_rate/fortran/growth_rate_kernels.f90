@@ -368,7 +368,7 @@ end module growth_rate_kernels_core
 !                 wavenumbers.
 !    ier - status flag: 0 on success, 1 when nlat < 3, 200 when no finite
 !          sample exists.
-subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
+subroutine dbarot_growth_rate_1d_impl(lat, u, max_growth, ier, nlat)
     use growth_rate_kernels_core, only : &
         real64, nan_value, nwavenumbers, omega, radius, generalized_eig_max_imag, &
         wavenumber_step, finalize_barot_growth
@@ -454,7 +454,7 @@ subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat)
 
     deallocate(a_matrix, b_matrix, alfr, alfi, beta_eig)
     call finalize_barot_growth(growth, max_growth, ier)
-end subroutine dbarot_growth_rate_1d
+end subroutine dbarot_growth_rate_1d_impl
 
 
 ! quick reference
@@ -485,7 +485,7 @@ end subroutine dbarot_growth_rate_1d
 !          3 when wavenumber_count < 2, 4 when wavenumber_mode is invalid,
 !          5 when a low-resolution zonal length is not positive, 300 when no
 !          turning point is found, 301 when no valid sample remains after smoothing.
-subroutine dbaroc_growth_rate_1d( &
+subroutine dbaroc_growth_rate_1d_impl( &
     u, theta, pressure, temperature, f_cor, beta, smooth_window, &
     wavenumber_mode, wavenumber_count, zonal_length, max_growth, ier, nlev &
 )
@@ -607,7 +607,7 @@ subroutine dbaroc_growth_rate_1d( &
     deallocate(a_matrix, b_matrix, alfr, alfi, beta_eig)
     call finalize_baroc_growth(growth, smooth_window, max_growth, ier)
     deallocate(growth)
-end subroutine dbaroc_growth_rate_1d
+end subroutine dbaroc_growth_rate_1d_impl
 
 
 ! quick reference
@@ -633,7 +633,7 @@ end subroutine dbaroc_growth_rate_1d
 !    ier(nprofile) - profile status flag: 0 on success, 100 when interpolation
 !                    cannot be performed without extrapolation, otherwise the
 !                    dbaroc_growth_rate_1d status code.
-subroutine dbaroc_growth_rate_profiles( &
+subroutine dbaroc_growth_rate_profiles_impl( &
     u_input, temperature_input, source_pressure, target_pressure, f_cor, beta, &
     interp_kind, smooth_window, wavenumber_mode, wavenumber_count, zonal_length, &
     growth, ier, nlev_in, nprofile, nlev_out &
@@ -673,11 +673,133 @@ subroutine dbaroc_growth_rate_profiles( &
         end if
 
         theta_solver = temperature_solver * (reference_pressure_pa / target_pressure(:, col)) ** kappa
-        call dbaroc_growth_rate_1d( &
+        call dbaroc_growth_rate_1d_impl( &
             u_solver, theta_solver, target_pressure(:, col), temperature_solver, &
             f_cor(col), beta(col), smooth_window, wavenumber_mode, wavenumber_count, &
             zonal_length(col), growth(col), profile_ier, nlev_out &
         )
         ier(col) = profile_ier
     end do
+end subroutine dbaroc_growth_rate_profiles_impl
+
+
+! quick reference
+! purpose
+!    expose the barotropic growth-rate kernel through a C-interoperable
+!    wrapper while keeping the scientific implementation in Fortran.
+subroutine dbarot_growth_rate_1d(lat, u, max_growth, ier, nlat) bind(C, name="dbarot_growth_rate_1d")
+    use, intrinsic :: iso_c_binding, only : c_double, c_f_pointer, c_int, c_ptr
+    use growth_rate_kernels_core, only : real64
+    implicit none
+
+    type(c_ptr), value, intent(in) :: lat, u
+    integer(c_int), value, intent(in) :: nlat
+    real(c_double), intent(out) :: max_growth
+    integer(c_int), intent(out) :: ier
+
+    integer :: nlat_f
+    real(real64), pointer :: lat_view(:), u_view(:)
+    real(real64) :: max_growth_impl
+    integer :: ier_impl
+
+    nlat_f = int(nlat)
+    call c_f_pointer(lat, lat_view, [nlat_f])
+    call c_f_pointer(u, u_view, [nlat_f])
+
+    call dbarot_growth_rate_1d_impl(lat_view, u_view, max_growth_impl, ier_impl, nlat_f)
+    max_growth = max_growth_impl
+    ier = ier_impl
+end subroutine dbarot_growth_rate_1d
+
+
+! quick reference
+! purpose
+!    expose the baroclinic single-profile kernel through a C-interoperable
+!    wrapper while keeping the scientific implementation in Fortran.
+subroutine dbaroc_growth_rate_1d( &
+    u, theta, pressure, temperature, f_cor, beta, smooth_window, &
+    wavenumber_mode, wavenumber_count, zonal_length, max_growth, ier, nlev &
+) bind(C, name="dbaroc_growth_rate_1d")
+    use, intrinsic :: iso_c_binding, only : c_double, c_f_pointer, c_int, c_ptr
+    use growth_rate_kernels_core, only : real64
+    implicit none
+
+    type(c_ptr), value, intent(in) :: u, theta, pressure, temperature
+    real(c_double), value, intent(in) :: f_cor, beta, zonal_length
+    integer(c_int), value, intent(in) :: smooth_window, wavenumber_mode, wavenumber_count, nlev
+    real(c_double), intent(out) :: max_growth
+    integer(c_int), intent(out) :: ier
+
+    integer :: nlev_f, smooth_window_f, wavenumber_mode_f, wavenumber_count_f
+    real(real64), pointer :: u_view(:), theta_view(:), pressure_view(:), temperature_view(:)
+    real(real64) :: max_growth_impl
+    integer :: ier_impl
+
+    nlev_f = int(nlev)
+    smooth_window_f = int(smooth_window)
+    wavenumber_mode_f = int(wavenumber_mode)
+    wavenumber_count_f = int(wavenumber_count)
+
+    call c_f_pointer(u, u_view, [nlev_f])
+    call c_f_pointer(theta, theta_view, [nlev_f])
+    call c_f_pointer(pressure, pressure_view, [nlev_f])
+    call c_f_pointer(temperature, temperature_view, [nlev_f])
+
+    call dbaroc_growth_rate_1d_impl( &
+        u_view, theta_view, pressure_view, temperature_view, &
+        f_cor, beta, smooth_window_f, wavenumber_mode_f, wavenumber_count_f, zonal_length, &
+        max_growth_impl, ier_impl, nlev_f &
+    )
+    max_growth = max_growth_impl
+    ier = ier_impl
+end subroutine dbaroc_growth_rate_1d
+
+
+! quick reference
+! purpose
+!    expose the batched baroclinic kernel through a C-interoperable wrapper
+!    while keeping the scientific implementation in Fortran.
+subroutine dbaroc_growth_rate_profiles( &
+    u_input, temperature_input, source_pressure, target_pressure, f_cor, beta, &
+    interp_kind, smooth_window, wavenumber_mode, wavenumber_count, zonal_length, &
+    growth, ier, nlev_in, nprofile, nlev_out &
+) bind(C, name="dbaroc_growth_rate_profiles")
+    use, intrinsic :: iso_c_binding, only : c_double, c_f_pointer, c_int, c_ptr
+    use growth_rate_kernels_core, only : real64
+    implicit none
+
+    type(c_ptr), value, intent(in) :: u_input, temperature_input, source_pressure, target_pressure
+    type(c_ptr), value, intent(in) :: f_cor, beta, zonal_length, growth, ier
+    integer(c_int), value, intent(in) :: interp_kind, smooth_window, wavenumber_mode, wavenumber_count
+    integer(c_int), value, intent(in) :: nlev_in, nprofile, nlev_out
+
+    integer :: nlev_in_f, nprofile_f, nlev_out_f
+    integer :: interp_kind_f, smooth_window_f, wavenumber_mode_f, wavenumber_count_f
+    real(real64), pointer :: u_view(:, :), temperature_view(:, :), source_pressure_view(:)
+    real(real64), pointer :: target_pressure_view(:, :), f_cor_view(:), beta_view(:), zonal_length_view(:)
+    real(real64), pointer :: growth_view(:)
+    integer(c_int), pointer :: ier_view(:)
+
+    nlev_in_f = int(nlev_in)
+    nprofile_f = int(nprofile)
+    nlev_out_f = int(nlev_out)
+    interp_kind_f = int(interp_kind)
+    smooth_window_f = int(smooth_window)
+    wavenumber_mode_f = int(wavenumber_mode)
+    wavenumber_count_f = int(wavenumber_count)
+
+    call c_f_pointer(u_input, u_view, [nlev_in_f, nprofile_f])
+    call c_f_pointer(temperature_input, temperature_view, [nlev_in_f, nprofile_f])
+    call c_f_pointer(source_pressure, source_pressure_view, [nlev_in_f])
+    call c_f_pointer(target_pressure, target_pressure_view, [nlev_out_f, nprofile_f])
+    call c_f_pointer(f_cor, f_cor_view, [nprofile_f])
+    call c_f_pointer(beta, beta_view, [nprofile_f])
+    call c_f_pointer(zonal_length, zonal_length_view, [nprofile_f])
+    call c_f_pointer(growth, growth_view, [nprofile_f])
+    call c_f_pointer(ier, ier_view, [nprofile_f])
+    call dbaroc_growth_rate_profiles_impl( &
+        u_view, temperature_view, source_pressure_view, target_pressure_view, f_cor_view, beta_view, &
+        interp_kind_f, smooth_window_f, wavenumber_mode_f, wavenumber_count_f, zonal_length_view, &
+        growth_view, ier_view, nlev_in_f, nprofile_f, nlev_out_f &
+    )
 end subroutine dbaroc_growth_rate_profiles
