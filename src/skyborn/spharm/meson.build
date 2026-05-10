@@ -13,7 +13,7 @@ openmp_dep = dependency('openmp', required: false)
 
 # Install Python module files
 py.install_sources(
-    ['__init__.py', 'spherical_harmonics.py', 'reduced_gaussian.py'],
+    ['__init__.py', '_spherepack.py', 'spherical_harmonics.py', 'reduced_gaussian.py'],
     subdir: 'skyborn/spharm',
 )
 
@@ -275,24 +275,8 @@ else:
     )
     fortranobject_c = fortranobject_cmd.stdout().strip()
 
-    # Generate f2py interface files
-    spherepack_sources = []
-    spherepack_source = custom_target(
-        '_spherepackmodule.c',
-        input: ['src/_spherepack.pyf'],
-        output: ['_spherepackmodule.c', '_spherepack-f2pywrappers.f'],
-        command: [
-            py,
-            '-m', 'numpy.f2py',
-            '--lower', '@INPUT@',
-            '--build-dir', '@OUTDIR@',
-        ],
-        build_by_default: true,
-        install: false,
-    )
-    spherepack_sources += spherepack_source
-
     # Add fortranobject.c if found
+    fortranobject_sources = []
     if fortranobject_c != ''
         message('Found fortranobject.c: ' + fortranobject_c)
         fortran_obj_check = run_command(
@@ -301,7 +285,7 @@ else:
             check: false,
         )
         if fortran_obj_check.returncode() == 0
-            spherepack_sources += files(fortranobject_c)
+            fortranobject_sources += files(fortranobject_c)
             message('Added fortranobject.c to build')
         else
             warning('fortranobject.c path found but file does not exist: ' + fortranobject_c)
@@ -319,57 +303,157 @@ else:
         warning('OpenMP not found - building without parallel support')
     endif
 
-    # Build the spherepack extension module
-    # Use subdir parameter to install directly into the Python package structure
-    spherepack_ext = py.extension_module(
-        '_spherepack',
-        [
-            # Core SPHEREPACK Fortran sources
-            'src/lap.f90',
-            'src/invlap.f90',
-            'src/sphcom.f90',
-            'src/hrfft.f90',
-            'src/getlegfunc.f90',
-            'src/specintrp.f90',
-            'src/onedtotwod.f90',
-            'src/twodtooned.f90',
-            'src/reduced_gaussian_scalar.f90',
-            'src/multsmoothfact.f90',
-            'src/gaqd.f90',
-            'src/shses.f90',
-            'src/shaes.f90',
-            'src/vhaes.f90',
-            'src/vhses.f90',
-            'src/shsgs.f90',
-            'src/shags.f90',
-            'src/vhags.f90',
-            'src/vhsgs.f90',
-            'src/shaec.f90',
-            'src/shagc.f90',
-            'src/shsec.f90',
-            'src/shsgc.f90',
-            'src/vhaec.f90',
-            'src/vhagc.f90',
-            'src/vhsec.f90',
-            'src/vhsgc.f90',
-            'src/ihgeod.f90',
-            'src/alf.f90',
-            spherepack_sources,
-        ],
-        include_directories: inc_np,
+    common_fortran_sources = [
+        'src/lap.f90',
+        'src/invlap.f90',
+        'src/sphcom.f90',
+        'src/hrfft.f90',
+        'src/multsmoothfact.f90',
+        'src/gaqd.f90',
+        'src/shags.f90',
+    ]
+
+    regular_fortran_sources = [
+        'src/getlegfunc.f90',
+        'src/specintrp.f90',
+        'src/onedtotwod.f90',
+        'src/twodtooned.f90',
+        'src/shses.f90',
+        'src/shaes.f90',
+        'src/vhaes.f90',
+        'src/vhses.f90',
+        'src/shsgs.f90',
+        'src/vhags.f90',
+        'src/vhsgs.f90',
+        'src/shaec.f90',
+        'src/shagc.f90',
+        'src/shsec.f90',
+        'src/shsgc.f90',
+        'src/vhaec.f90',
+        'src/vhagc.f90',
+        'src/vhsec.f90',
+        'src/vhsgc.f90',
+        'src/ihgeod.f90',
+        'src/alf.f90',
+    ]
+
+    reduced_fortran_sources = [
+        'src/reduced_gaussian_scalar.f90',
+    ]
+
+    common_fortran_lib = static_library(
+        '_spherepack_common',
+        common_fortran_sources,
         dependencies: dependencies,
         fortran_args: fortran_args,
-        c_args: c_args,
-        install: true,   # Install to custom location if provided
-        install_dir: get_option('python.purelibdir') / 'skyborn' / 'spharm',  # Use setuptools path if available
         build_by_default: true,
     )
 
-    # Always create a copy target for source directory (for --inplace builds)
-    # This target will run after the main extension is built, but only copy if needed
+    regular_pyf = custom_target(
+        '_spherepack_regular.pyf',
+        input: ['src/_spherepack.pyf', 'build_split_pyf.py'],
+        output: '_spherepack_regular.pyf',
+        command: [
+            py,
+            '@INPUT1@',
+            'regular',
+            '@INPUT0@',
+            '@OUTPUT@',
+            '_spherepack_f2py',
+        ],
+        build_by_default: true,
+        build_always_stale: true,
+        install: false,
+    )
+
+    reduced_source = custom_target(
+        '_spherepack_reducedmodule.c',
+        input: custom_target(
+            '_spherepack_reduced.pyf',
+            input: ['src/_spherepack.pyf', 'build_split_pyf.py'],
+            output: '_spherepack_reduced.pyf',
+            command: [
+                py,
+                '@INPUT1@',
+                'reduced',
+                '@INPUT0@',
+                '@OUTPUT@',
+                '_spherepack_reduced',
+            ],
+            build_by_default: true,
+            build_always_stale: true,
+            install: false,
+        ),
+        output: ['_spherepack_reducedmodule.c', '_spherepack_reduced-f2pywrappers.f'],
+        command: [
+            py,
+            '-m', 'numpy.f2py',
+            '--lower', '@INPUT@',
+            '--build-dir', '@OUTDIR@',
+        ],
+        build_by_default: true,
+        build_always_stale: true,
+        install: false,
+    )
+
+    # Build the regular spherepack extension module
+    direct_fortran_sources = [
+        'src/spherepack_bindings.f90',
+        'src/onedtotwod.f90',
+        'src/twodtooned.f90',
+        'src/shaes.f90',
+        'src/vhaes.f90',
+        'src/shags.f90',
+        'src/vhags.f90',
+        'src/shses.f90',
+        'src/vhses.f90',
+        'src/shsgs.f90',
+        'src/vhsgs.f90',
+        'src/shaec.f90',
+        'src/vhaec.f90',
+        'src/shagc.f90',
+        'src/vhagc.f90',
+        'src/shsec.f90',
+        'src/vhsec.f90',
+        'src/shsgc.f90',
+        'src/vhsgc.f90',
+        'src/ihgeod.f90',
+        'src/getlegfunc.f90',
+        'src/specintrp.f90',
+        'src/alf.f90',
+    ]
+
+    spherepack_direct_ext = py.extension_module(
+        '_spherepack_direct',
+        ['_spherepack_module.c'] + direct_fortran_sources,
+        include_directories: inc_np,
+        dependencies: dependencies,
+        link_with: common_fortran_lib,
+        fortran_args: fortran_args,
+        c_args: c_args,
+        install: true,
+        install_dir: get_option('python.purelibdir') / 'skyborn' / 'spharm',
+        build_by_default: true,
+    )
+
+    spherepack_reduced_ext = py.extension_module(
+        '_spherepack_reduced',
+        [reduced_source] + fortranobject_sources + reduced_fortran_sources,
+        include_directories: inc_np,
+        dependencies: dependencies,
+        link_with: common_fortran_lib,
+        fortran_args: fortran_args,
+        c_args: c_args,
+        install: true,
+        install_dir: get_option('python.purelibdir') / 'skyborn' / 'spharm',
+        build_by_default: true,
+    )
+
+    copy_targets = [spherepack_direct_ext, spherepack_reduced_ext]
+
     copy_to_source = custom_target(
         'copy_to_source_for_inplace',
-        input: spherepack_ext,
+        input: copy_targets,
         output: 'inplace_copy_marker.txt',
         command: [
             py,
@@ -389,7 +473,7 @@ print(f"Current dir (build): {current_dir}")
 print(f"Module dir (source): {module_dir}")
 
 # Search for compiled extension files in current build directory
-patterns = ["_spherepack*.so", "_spherepack*.pyd", "_spherepack*.dylib"]
+patterns = ["_spherepack*.so", "_spherepack*.pyd", "_spherepack*.dylib", "_spherepack_reduced*.so", "_spherepack_reduced*.pyd", "_spherepack_reduced*.dylib"]
 built_files = []
 
 # Search directly in the build directory (current directory)
@@ -407,6 +491,33 @@ built_files = list(set(built_files))
 
 if built_files:
     print(f"Found built files: {built_files}")
+
+    stale_patterns = [
+        "_spherepack.cp*-win_amd64.pyd",
+        "_spherepack*.so",
+        "_spherepack*.dylib",
+    ]
+    keep_names = {
+        "_spherepack.py",
+    }
+    for stale_pattern in stale_patterns:
+        for stale_file in module_dir.glob(stale_pattern):
+            if stale_file.name in keep_names:
+                continue
+            if stale_file.name.startswith("_spherepack_f2py") or stale_file.name.startswith("_spherepack_direct") or stale_file.name.startswith("_spherepack_reduced"):
+                continue
+            try:
+                stale_file.unlink()
+                print(f"Removed stale source artifact {stale_file.name}")
+            except Exception as e:
+                print(f"Failed to remove stale source artifact {stale_file.name}: {e}")
+
+    for stale_common in list(module_dir.glob("_spherepack_common*.dll")) + list(module_dir.glob("_spherepack_common*.so")) + list(module_dir.glob("_spherepack_common*.dylib")):
+        try:
+            stale_common.unlink()
+            print(f"Removed stale shared common artifact {stale_common.name}")
+        except Exception as e:
+            print(f"Failed to remove stale shared common artifact {stale_common.name}: {e}")
 
     # Check if we should copy to source directory
     for built_file_str in built_files:
