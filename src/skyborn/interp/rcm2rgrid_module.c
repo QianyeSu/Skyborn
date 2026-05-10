@@ -67,7 +67,7 @@ static PyObject *py_drcm2rgrid(PyObject *self, PyObject *args, PyObject *kwargs)
     int nxi = 0;
     int nyo = 0;
     int nxo = 0;
-    int ncrit = 4;
+    int ncrit = 1;
     int opt = 1;
     int ier = 0;
     double xmsg = -99.0;
@@ -112,9 +112,9 @@ static PyObject *py_drcm2rgrid(PyObject *self, PyObject *args, PyObject *kwargs)
         PyErr_SetString(PyExc_ValueError, "lat2d and lon2d must have the same shape");
         goto fail;
     }
-    if ((int) PyArray_DIM(fi_arr, PyArray_NDIM(fi_arr) - 2) != nxi ||
-        (int) PyArray_DIM(fi_arr, PyArray_NDIM(fi_arr) - 1) != nyi) {
-        PyErr_SetString(PyExc_ValueError, "fi rightmost dimensions must match lat2d/lon2d");
+    if ((int) PyArray_DIM(fi_arr, 0) != nxi ||
+        (int) PyArray_DIM(fi_arr, 1) != nyi) {
+        PyErr_SetString(PyExc_ValueError, "fi leading dimensions must match lat2d/lon2d after transpose");
         goto fail;
     }
 
@@ -127,19 +127,13 @@ static PyObject *py_drcm2rgrid(PyObject *self, PyObject *args, PyObject *kwargs)
 
     fo_dims[0] = nxo;
     fo_dims[1] = nyo;
-    fo_dims[2] = PyArray_NDIM(fi_arr) > 2 ? (int) PyArray_DIM(fi_arr, 0) : 1;
-    if (PyArray_NDIM(fi_arr) < 3) {
-        fo_dims[2] = 1;
-    }
+    fo_dims[2] = PyArray_NDIM(fi_arr) > 2 ? (int) PyArray_DIM(fi_arr, 2) : 1;
     fo_arr = (PyArrayObject *) PyArray_EMPTY(3, fo_dims, NPY_FLOAT64, 1);
     if (fo_arr == NULL) {
         goto fail;
     }
 
-    ngrd = (int) PyArray_DIM(fi_arr, 0);
-    if (PyArray_NDIM(fi_arr) == 2) {
-        ngrd = 1;
-    }
+    ngrd = PyArray_NDIM(fi_arr) > 2 ? (int) PyArray_DIM(fi_arr, 2) : 1;
 
     Py_BEGIN_ALLOW_THREADS
     drcm2rgrid(
@@ -204,7 +198,7 @@ static PyObject *py_drgrid2rcm(PyObject *self, PyObject *args, PyObject *kwargs)
     int nxi = 0;
     int nyo = 0;
     int nxo = 0;
-    int ncrit = 4;
+    int ncrit = 1;
     int opt = 1;
     int ier = 0;
     double xmsg = -99.0;
@@ -251,27 +245,21 @@ static PyObject *py_drgrid2rcm(PyObject *self, PyObject *args, PyObject *kwargs)
         PyErr_SetString(PyExc_ValueError, "lat2d and lon2d must have the same shape");
         goto fail;
     }
-    if ((int) PyArray_DIM(fi_arr, PyArray_NDIM(fi_arr) - 2) != nyi ||
-        (int) PyArray_DIM(fi_arr, PyArray_NDIM(fi_arr) - 1) != nxi) {
-        PyErr_SetString(PyExc_ValueError, "fi rightmost dimensions must match lat1d/lon1d");
+    if ((int) PyArray_DIM(fi_arr, 0) != nxi ||
+        (int) PyArray_DIM(fi_arr, 1) != nyi) {
+        PyErr_SetString(PyExc_ValueError, "fi leading dimensions must match lon1d/lat1d after transpose");
         goto fail;
     }
 
     fo_dims[0] = nxo;
     fo_dims[1] = nyo;
-    fo_dims[2] = PyArray_NDIM(fi_arr) > 2 ? (int) PyArray_DIM(fi_arr, 0) : 1;
-    if (PyArray_NDIM(fi_arr) < 3) {
-        fo_dims[2] = 1;
-    }
+    fo_dims[2] = PyArray_NDIM(fi_arr) > 2 ? (int) PyArray_DIM(fi_arr, 2) : 1;
     fo_arr = (PyArrayObject *) PyArray_EMPTY(3, fo_dims, NPY_FLOAT64, 1);
     if (fo_arr == NULL) {
         goto fail;
     }
 
-    ngrd = (int) PyArray_DIM(fi_arr, 0);
-    if (PyArray_NDIM(fi_arr) == 2) {
-        ngrd = 1;
-    }
+    ngrd = PyArray_NDIM(fi_arr) > 2 ? (int) PyArray_DIM(fi_arr, 2) : 1;
 
     Py_BEGIN_ALLOW_THREADS
     drgrid2rcm(

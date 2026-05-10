@@ -49,7 +49,7 @@ static PyObject *py_drcm2points(PyObject *self, PyObject *args, PyObject *kwargs
     int nxi = 0;
     int nxyo = 0;
     int opt = 0;
-    int ncrit = 4;
+    int ncrit = 1;
     int kval = 1;
     int ier = 0;
     double xmsg = -99.0;
@@ -93,9 +93,9 @@ static PyObject *py_drcm2points(PyObject *self, PyObject *args, PyObject *kwargs
         PyErr_SetString(PyExc_ValueError, "lat2d and lon2d must have the same shape");
         goto fail;
     }
-    if ((int) PyArray_DIM(fi_arr, PyArray_NDIM(fi_arr) - 2) != nxi ||
-        (int) PyArray_DIM(fi_arr, PyArray_NDIM(fi_arr) - 1) != nyi) {
-        PyErr_SetString(PyExc_ValueError, "fi rightmost dimensions must match lat2d/lon2d");
+    if ((int) PyArray_DIM(fi_arr, 0) != nxi ||
+        (int) PyArray_DIM(fi_arr, 1) != nyi) {
+        PyErr_SetString(PyExc_ValueError, "fi leading dimensions must match lat2d/lon2d after transpose");
         goto fail;
     }
 
@@ -104,7 +104,7 @@ static PyObject *py_drcm2points(PyObject *self, PyObject *args, PyObject *kwargs
         PyErr_SetString(PyExc_ValueError, "lat1d and lon1d must have the same length");
         goto fail;
     }
-    ngrd = (int) PyArray_DIM(fi_arr, 0);
+    ngrd = PyArray_NDIM(fi_arr) > 2 ? (int) PyArray_DIM(fi_arr, 2) : 1;
 
     fo_dims[0] = nxyo;
     fo_dims[1] = ngrd;

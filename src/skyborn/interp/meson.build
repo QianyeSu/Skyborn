@@ -500,7 +500,7 @@ else:
         'vinth2p_kernels',
         [
             'fortran/vinth2p_kernels.f90',
-            vinth2p_kernels_sources,
+            'vinth2p_kernels_module.c',
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
