@@ -2091,10 +2091,3 @@ subroutine dvinth2p_ecmwf_nodes_corder_pa_into( &
         end do
     end do
 end subroutine dvinth2p_ecmwf_nodes_corder_pa_into
-
-
-! QUICK REFERENCE
-! PURPOSE
-!    DIRECT C-ABI WRAPPERS FOR THE PUBLIC `vinth2p_kernels` ENTRY POINTS.
-!    THESE KEEP THE SCIENTIFIC KERNELS ABOVE UNCHANGED WHILE EXPOSING THEM
-!    THROUGH THE DIRECT `Fortran/C + Meson` BUILD PATH USED BY SKYBORN.
