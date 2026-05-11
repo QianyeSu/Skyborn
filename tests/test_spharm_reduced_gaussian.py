@@ -356,6 +356,17 @@ def test_reduced_gaussian_validation_cache_and_restore_branches(monkeypatch):
     )
     assert reduced_double._restore_spectral_shape(spec, (), None).dtype == np.complex128
     assert reduced_double._restore_grid_shape(grid, (), None).dtype == np.float64
+    assert reduced_double._public_real_dtype(np.ones(1, dtype=np.float32)) == np.dtype(
+        np.float64
+    )
+
+    reduced_auto = ReducedGaussianSpharmt(np.array([8, 10, 8], dtype=np.int32))
+    assert reduced_auto._public_real_dtype(np.ones(1, dtype=np.complex128)) == np.dtype(
+        np.float64
+    )
+    assert reduced_auto._public_complex_dtype(
+        np.ones(1, dtype=np.complex128)
+    ) == np.dtype(np.complex128)
 
     original_validate = reduced._validate_grid_data
 

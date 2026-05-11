@@ -377,6 +377,16 @@ def test_reduced_vectorwind_caches_planetary_vorticity_grid(monkeypatch):
     assert custom.dtype == np.float32
     assert calls["latitude"] == 2
 
+    coriolis = reduced._coriolis()
+    assert coriolis.shape == (npoints,)
+    assert coriolis.dtype == np.float32
+
+    materialized = reduced._planetary_vorticity()
+    shared = reduced._planetary_vorticity(materialize=False)
+    assert materialized.shape == u.shape
+    assert shared.shape == u.shape
+    assert materialized is not shared
+
 
 @pytest.mark.skipif(not WINDSPHARM_AVAILABLE, reason="windspharm module not available")
 def test_reduced_vectorwind_rossbywavesource_reuses_cached_planetary_spectrum(
