@@ -55,6 +55,7 @@ message('Host CPU family: ' + host_cpu)
 openmp_dependencies = []
 openmp_fortran_args = []
 openmp_c_args = []
+openmp_link_args = []
 if host_system == 'windows'
   message('Skipping OpenMP flags on Windows for troposphere build')
 else
@@ -67,6 +68,7 @@ else
   endif
   openmp_fortran_args += ['-fopenmp']
   openmp_c_args += ['-fopenmp']
+  openmp_link_args += ['-fopenmp']
 endif
 
 c_args = ['-DNPY_NO_DEPRECATED_API=NPY_1_19_API_VERSION']
@@ -118,6 +120,7 @@ tropopause_ext = py.extension_module(
   dependencies: [py_dep] + openmp_dependencies,
   c_args: c_args,
   fortran_args: fortran_args,
+  link_args: openmp_link_args,
   install: true,
   install_dir: get_option('python.purelibdir') / 'skyborn' / 'calc' / 'troposphere',
   build_by_default: true,
