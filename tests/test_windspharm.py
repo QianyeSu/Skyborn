@@ -85,6 +85,24 @@ class TestVectorWindInitialization:
     @pytest.mark.skipif(
         not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
     )
+    def test_vectorwind_precision_aliases(self):
+        """Precision aliases should normalize and preserve public output dtype."""
+        nlat, nlon = 19, 36
+        rng = np.random.default_rng(20260501)
+        u = rng.standard_normal((nlat, nlon)).astype(np.float64)
+        v = rng.standard_normal((nlat, nlon)).astype(np.float64)
+
+        vw = VectorWind(u, v, precision="float32")
+        assert vw.s.precision == "single"
+        assert vw.magnitude().dtype == np.float32
+
+        vw = VectorWind(u, v, precision="float64")
+        assert vw.s.precision == "double"
+        assert vw.magnitude().dtype == np.float64
+
+    @pytest.mark.skipif(
+        not WINDSPHARM_AVAILABLE, reason="windspharm module not available"
+    )
     def test_vectorwind_3d_data(self):
         """Test VectorWind initialization with 3D data (time series)."""
         nlat, nlon, nt = 37, 72, 10

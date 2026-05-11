@@ -64,6 +64,18 @@ def test_reduced_vectorwind_matches_full_gaussian_vectorwind():
 
 
 @pytest.mark.skipif(not WINDSPHARM_AVAILABLE, reason="windspharm module not available")
+def test_reduced_vectorwind_precision_aliases():
+    pl = np.array([16, 20, 24, 28, 32, 28, 24, 20, 16], dtype=np.int32)
+    rng = np.random.default_rng(20260512)
+    u = rng.standard_normal((int(pl.sum()), 2)).astype(np.float64)
+    v = rng.standard_normal((int(pl.sum()), 2)).astype(np.float64)
+
+    reduced = ReducedVectorWind(u, v, pl, precision="float64")
+    assert reduced.s.precision == "double"
+    assert reduced.magnitude().dtype == np.float64
+
+
+@pytest.mark.skipif(not WINDSPHARM_AVAILABLE, reason="windspharm module not available")
 def test_reduced_vectorwind_varying_pl_smoke():
     nlat = 9
     pl = np.array([16, 20, 24, 28, 32, 28, 24, 20, 16], dtype=np.int32)

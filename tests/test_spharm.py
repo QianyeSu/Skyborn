@@ -799,6 +799,21 @@ class TestSpharmtPerformance:
         assert np.all(np.isfinite(recovered_64))
         assert np.all(np.isfinite(recovered_32))
 
+    def test_precision_aliases_are_accepted(self):
+        """Precision aliases should normalize to the canonical modes."""
+        sht_single = Spharmt(nlon=72, nlat=37, precision="float32")
+        sht_double = Spharmt(nlon=72, nlat=37, precision="float64")
+
+        assert sht_single.precision == "single"
+        assert sht_double.precision == "double"
+
+        field = np.random.default_rng(0).standard_normal((37, 72)).astype(np.float64)
+        spec_single = sht_single.grdtospec(field)
+        spec_double = sht_double.grdtospec(field)
+
+        assert spec_single.dtype == np.complex64
+        assert spec_double.dtype == np.complex128
+
 
 @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
 class TestRegridAdvanced:
