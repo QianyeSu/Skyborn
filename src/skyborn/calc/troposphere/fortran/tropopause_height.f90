@@ -92,196 +92,12 @@
 ! (from low pressure/high altitude to high pressure/low altitude)
 
 module tropopause_height_mod
-    use, intrinsic :: iso_c_binding, only : c_double, c_f_pointer, c_int, c_ptr
+    use, intrinsic :: iso_c_binding, only : c_double, c_int
     implicit none
 
 contains
 
 subroutine tropopause_grid_3d( &
-    nlat, nlon, nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
-    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
-) bind(C)
-    integer(c_int), value, intent(in) :: nlat
-    integer(c_int), value, intent(in) :: nlon
-    integer(c_int), value, intent(in) :: nlev
-    integer(c_int), value, intent(in) :: nlevm
-    type(c_ptr), value, intent(in) :: pfull
-    type(c_ptr), value, intent(in) :: tfull
-    real(c_double), value, intent(in) :: tmsg
-    real(c_double), value, intent(in) :: lapsec
-    integer(c_int), value, intent(in) :: punit
-    type(c_ptr), value, intent(in) :: ptrop_hpa
-    type(c_ptr), value, intent(in) :: htrop_m
-    type(c_ptr), value, intent(in) :: itrop
-    type(c_ptr), value, intent(in) :: lapse_rate
-    type(c_ptr), value, intent(in) :: success
-
-    integer :: nlat_f, nlon_f, nlev_f, nlevm_f
-    real(c_double), pointer :: pfull_view(:)
-    real(c_double), pointer :: tfull_view(:, :, :)
-    real(c_double), pointer :: ptrop_hpa_view(:, :)
-    real(c_double), pointer :: htrop_m_view(:, :)
-    integer(c_int), pointer :: itrop_view(:, :)
-    real(c_double), pointer :: lapse_rate_view(:, :)
-    integer(c_int), pointer :: success_view(:, :)
-
-    nlat_f = int(nlat)
-    nlon_f = int(nlon)
-    nlev_f = int(nlev)
-    nlevm_f = int(nlevm)
-
-    call c_f_pointer(pfull, pfull_view, [nlev_f])
-    call c_f_pointer(tfull, tfull_view, [nlat_f, nlon_f, nlev_f])
-    call c_f_pointer(ptrop_hpa, ptrop_hpa_view, [nlat_f, nlon_f])
-    call c_f_pointer(htrop_m, htrop_m_view, [nlat_f, nlon_f])
-    call c_f_pointer(itrop, itrop_view, [nlat_f, nlon_f])
-    call c_f_pointer(lapse_rate, lapse_rate_view, [nlat_f, nlon_f])
-    call c_f_pointer(success, success_view, [nlat_f, nlon_f])
-
-    call tropopause_grid_3d_impl( &
-        nlat_f, nlon_f, nlev_f, nlevm_f, pfull_view, tfull_view, tmsg, lapsec, int(punit), &
-        ptrop_hpa_view, htrop_m_view, itrop_view, lapse_rate_view, success_view &
-    )
-end subroutine tropopause_grid_3d
-
-subroutine tropopause_grid_4d( &
-    nlat, nlon, nlev, ntime, nlevm, pfull, tfull, tmsg, lapsec, punit, &
-    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
-) bind(C)
-    integer(c_int), value, intent(in) :: nlat
-    integer(c_int), value, intent(in) :: nlon
-    integer(c_int), value, intent(in) :: nlev
-    integer(c_int), value, intent(in) :: ntime
-    integer(c_int), value, intent(in) :: nlevm
-    type(c_ptr), value, intent(in) :: pfull
-    type(c_ptr), value, intent(in) :: tfull
-    real(c_double), value, intent(in) :: tmsg
-    real(c_double), value, intent(in) :: lapsec
-    integer(c_int), value, intent(in) :: punit
-    type(c_ptr), value, intent(in) :: ptrop_hpa
-    type(c_ptr), value, intent(in) :: htrop_m
-    type(c_ptr), value, intent(in) :: itrop
-    type(c_ptr), value, intent(in) :: lapse_rate
-    type(c_ptr), value, intent(in) :: success
-
-    integer :: nlat_f, nlon_f, nlev_f, ntime_f, nlevm_f
-    real(c_double), pointer :: pfull_view(:)
-    real(c_double), pointer :: tfull_view(:, :, :, :)
-    real(c_double), pointer :: ptrop_hpa_view(:, :, :)
-    real(c_double), pointer :: htrop_m_view(:, :, :)
-    integer(c_int), pointer :: itrop_view(:, :, :)
-    real(c_double), pointer :: lapse_rate_view(:, :, :)
-    integer(c_int), pointer :: success_view(:, :, :)
-
-    nlat_f = int(nlat)
-    nlon_f = int(nlon)
-    nlev_f = int(nlev)
-    ntime_f = int(ntime)
-    nlevm_f = int(nlevm)
-
-    call c_f_pointer(pfull, pfull_view, [nlev_f])
-    call c_f_pointer(tfull, tfull_view, [nlat_f, nlon_f, nlev_f, ntime_f])
-    call c_f_pointer(ptrop_hpa, ptrop_hpa_view, [nlat_f, nlon_f, ntime_f])
-    call c_f_pointer(htrop_m, htrop_m_view, [nlat_f, nlon_f, ntime_f])
-    call c_f_pointer(itrop, itrop_view, [nlat_f, nlon_f, ntime_f])
-    call c_f_pointer(lapse_rate, lapse_rate_view, [nlat_f, nlon_f, ntime_f])
-    call c_f_pointer(success, success_view, [nlat_f, nlon_f, ntime_f])
-
-    call tropopause_grid_4d_impl( &
-        nlat_f, nlon_f, nlev_f, ntime_f, nlevm_f, pfull_view, tfull_view, tmsg, lapsec, int(punit), &
-        ptrop_hpa_view, htrop_m_view, itrop_view, lapse_rate_view, success_view &
-    )
-end subroutine tropopause_grid_4d
-
-subroutine tropopause_grid_2d( &
-    nspatial, nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
-    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
-) bind(C)
-    integer(c_int), value, intent(in) :: nspatial
-    integer(c_int), value, intent(in) :: nlev
-    integer(c_int), value, intent(in) :: nlevm
-    type(c_ptr), value, intent(in) :: pfull
-    type(c_ptr), value, intent(in) :: tfull
-    real(c_double), value, intent(in) :: tmsg
-    real(c_double), value, intent(in) :: lapsec
-    integer(c_int), value, intent(in) :: punit
-    type(c_ptr), value, intent(in) :: ptrop_hpa
-    type(c_ptr), value, intent(in) :: htrop_m
-    type(c_ptr), value, intent(in) :: itrop
-    type(c_ptr), value, intent(in) :: lapse_rate
-    type(c_ptr), value, intent(in) :: success
-
-    integer :: nspatial_f, nlev_f, nlevm_f
-    real(c_double), pointer :: pfull_view(:)
-    real(c_double), pointer :: tfull_view(:, :)
-    real(c_double), pointer :: ptrop_hpa_view(:)
-    real(c_double), pointer :: htrop_m_view(:)
-    integer(c_int), pointer :: itrop_view(:)
-    real(c_double), pointer :: lapse_rate_view(:)
-    integer(c_int), pointer :: success_view(:)
-
-    nspatial_f = int(nspatial)
-    nlev_f = int(nlev)
-    nlevm_f = int(nlevm)
-
-    call c_f_pointer(pfull, pfull_view, [nlev_f])
-    call c_f_pointer(tfull, tfull_view, [nspatial_f, nlev_f])
-    call c_f_pointer(ptrop_hpa, ptrop_hpa_view, [nspatial_f])
-    call c_f_pointer(htrop_m, htrop_m_view, [nspatial_f])
-    call c_f_pointer(itrop, itrop_view, [nspatial_f])
-    call c_f_pointer(lapse_rate, lapse_rate_view, [nspatial_f])
-    call c_f_pointer(success, success_view, [nspatial_f])
-
-    call tropopause_grid_2d_impl( &
-        nspatial_f, nlev_f, nlevm_f, pfull_view, tfull_view, tmsg, lapsec, int(punit), &
-        ptrop_hpa_view, htrop_m_view, itrop_view, lapse_rate_view, success_view &
-    )
-end subroutine tropopause_grid_2d
-
-subroutine tropopause_profile_1d( &
-    nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
-    ptrop_hpa, htrop_m, itrop, lapse_rate, success &
-) bind(C)
-    integer(c_int), value, intent(in) :: nlev
-    integer(c_int), value, intent(in) :: nlevm
-    type(c_ptr), value, intent(in) :: pfull
-    type(c_ptr), value, intent(in) :: tfull
-    real(c_double), value, intent(in) :: tmsg
-    real(c_double), value, intent(in) :: lapsec
-    integer(c_int), value, intent(in) :: punit
-    type(c_ptr), value, intent(in) :: ptrop_hpa
-    type(c_ptr), value, intent(in) :: htrop_m
-    type(c_ptr), value, intent(in) :: itrop
-    type(c_ptr), value, intent(in) :: lapse_rate
-    type(c_ptr), value, intent(in) :: success
-
-    integer :: nlev_f, nlevm_f
-    real(c_double), pointer :: pfull_view(:)
-    real(c_double), pointer :: tfull_view(:)
-    real(c_double), pointer :: ptrop_hpa_view
-    real(c_double), pointer :: htrop_m_view
-    integer(c_int), pointer :: itrop_view
-    real(c_double), pointer :: lapse_rate_view
-    integer(c_int), pointer :: success_view
-
-    nlev_f = int(nlev)
-    nlevm_f = int(nlevm)
-
-    call c_f_pointer(pfull, pfull_view, [nlev_f])
-    call c_f_pointer(tfull, tfull_view, [nlev_f])
-    call c_f_pointer(ptrop_hpa, ptrop_hpa_view)
-    call c_f_pointer(htrop_m, htrop_m_view)
-    call c_f_pointer(itrop, itrop_view)
-    call c_f_pointer(lapse_rate, lapse_rate_view)
-    call c_f_pointer(success, success_view)
-
-    call tropopause_profile_1d_impl( &
-        nlev_f, nlevm_f, pfull_view, tfull_view, tmsg, lapsec, int(punit), &
-        ptrop_hpa_view, htrop_m_view, itrop_view, lapse_rate_view, success_view &
-    )
-end subroutine tropopause_profile_1d
-
-subroutine tropopause_grid_3d_impl( &
     nlat, nlon, nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
     ptrop_hpa, htrop_m, itrop, lapse_rate, success &
 )
@@ -426,9 +242,9 @@ subroutine tropopause_grid_3d_impl( &
         end do
     end do
     !$OMP END PARALLEL DO
-end subroutine tropopause_grid_3d_impl
+end subroutine tropopause_grid_3d
 
-subroutine tropopause_grid_4d_impl( &
+subroutine tropopause_grid_4d( &
     nlat, nlon, nlev, ntime, nlevm, pfull, tfull, tmsg, lapsec, punit, &
     ptrop_hpa, htrop_m, itrop, lapse_rate, success &
 )
@@ -476,14 +292,14 @@ subroutine tropopause_grid_4d_impl( &
     integer :: t
 
     do t = 1, ntime
-        call tropopause_grid_3d_impl( &
+        call tropopause_grid_3d( &
             nlat, nlon, nlev, nlevm, pfull, tfull(:, :, :, t), tmsg, lapsec, punit, &
             ptrop_hpa(:, :, t), htrop_m(:, :, t), itrop(:, :, t), lapse_rate(:, :, t), success(:, :, t) &
         )
     end do
-end subroutine tropopause_grid_4d_impl
+end subroutine tropopause_grid_4d
 
-subroutine tropopause_grid_2d_impl( &
+subroutine tropopause_grid_2d( &
     nspatial, nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
     ptrop_hpa, htrop_m, itrop, lapse_rate, success &
 )
@@ -591,9 +407,9 @@ subroutine tropopause_grid_2d_impl( &
         end if
     end do
     !$OMP END PARALLEL DO
-end subroutine tropopause_grid_2d_impl
+end subroutine tropopause_grid_2d
 
-subroutine tropopause_profile_1d_impl( &
+subroutine tropopause_profile_1d( &
     nlev, nlevm, pfull, tfull, tmsg, lapsec, punit, &
     ptrop_hpa, htrop_m, itrop, lapse_rate, success &
 )
@@ -699,6 +515,6 @@ subroutine tropopause_profile_1d_impl( &
         end if
     end if
 
-end subroutine tropopause_profile_1d_impl
+end subroutine tropopause_profile_1d
 
 end module tropopause_height_mod

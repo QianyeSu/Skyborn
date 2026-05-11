@@ -112,6 +112,7 @@ tropopause_ext = py.extension_module(
     'fortran/stattrop_dp.f',
     'fortran/stndAtmUS76_dp.f',
     'fortran/tropopause_height.f90',
+    'fortran/tropopause_height_bindings.f90',
   ],
   include_directories: inc_np,
   dependencies: [py_dep] + openmp_dependencies,

@@ -4,7 +4,7 @@
 #include <Python.h>
 #include <numpy/arrayobject.h>
 
-void tropopause_grid_2d(
+void tropopause_grid_2d_c(
     int nspatial,
     int nlev,
     int nlevm,
@@ -19,7 +19,7 @@ void tropopause_grid_2d(
     void *lapse_rate,
     void *success
 );
-void tropopause_grid_3d(
+void tropopause_grid_3d_c(
     int nlat,
     int nlon,
     int nlev,
@@ -35,7 +35,7 @@ void tropopause_grid_3d(
     void *lapse_rate,
     void *success
 );
-void tropopause_grid_4d(
+void tropopause_grid_4d_c(
     int nlat,
     int nlon,
     int nlev,
@@ -52,7 +52,7 @@ void tropopause_grid_4d(
     void *lapse_rate,
     void *success
 );
-void tropopause_profile_1d(
+void tropopause_profile_1d_c(
     int nlev,
     int nlevm,
     void *pfull,
@@ -264,7 +264,7 @@ static PyObject *py_tropopause_grid_2d(PyObject *self, PyObject *args, PyObject 
     }
 
     Py_BEGIN_ALLOW_THREADS
-    tropopause_grid_2d(
+    tropopause_grid_2d_c(
         nspatial,
         nlev,
         nlevm,
@@ -379,7 +379,7 @@ static PyObject *py_tropopause_grid_3d(PyObject *self, PyObject *args, PyObject 
     }
 
     Py_BEGIN_ALLOW_THREADS
-    tropopause_grid_3d(
+    tropopause_grid_3d_c(
         nlat,
         nlon,
         nlev,
@@ -498,7 +498,7 @@ static PyObject *py_tropopause_grid_4d(PyObject *self, PyObject *args, PyObject 
     }
 
     Py_BEGIN_ALLOW_THREADS
-    tropopause_grid_4d(
+    tropopause_grid_4d_c(
         nlat,
         nlon,
         nlev,
@@ -592,7 +592,7 @@ static PyObject *py_tropopause_profile_1d(PyObject *self, PyObject *args, PyObje
     }
 
     Py_BEGIN_ALLOW_THREADS
-    tropopause_profile_1d(
+    tropopause_profile_1d_c(
         nlev,
         nlevm,
         PyArray_DATA(pfull_arr),
