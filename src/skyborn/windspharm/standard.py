@@ -135,7 +135,7 @@ class VectorWind:
         """
         # Step 1: Handle masked arrays and create copies
         self._output_dtype = self._infer_output_dtype(u, v)
-        self._precision = precision
+        self._precision = Spharmt._validate_precision(precision)
         self.u = self._process_input_array(u, "u")
         self.v = self._process_input_array(v, "v")
 
@@ -166,7 +166,7 @@ class VectorWind:
         """Create an instance from validated wrapper-owned arrays."""
         self = cls.__new__(cls)
         self._output_dtype = self._infer_output_dtype(u, v)
-        self._precision = precision
+        self._precision = Spharmt._validate_precision(precision)
         self.u = self._process_input_array(u, "u", copy=False)
         self.v = self._process_input_array(v, "v", copy=False)
         self._validate_input_data()

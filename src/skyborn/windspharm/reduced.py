@@ -77,7 +77,7 @@ class ReducedVectorWind:
         """
         self.pl = self._validate_pl(pl)
         self._output_dtype = self._infer_output_dtype(u, v)
-        self._precision = precision
+        self._precision = ReducedGaussianSpharmt._validate_precision(precision)
         self.u = self._process_input_array(u, "u")
         self.v = self._process_input_array(v, "v")
         self._validate_input_data()

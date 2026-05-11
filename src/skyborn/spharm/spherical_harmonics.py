@@ -158,6 +158,13 @@ MIN_NLON = 4
 MIN_NLAT = 3
 DEGREES_TO_RADIANS = math.pi / 180.0
 RADIANS_TO_DEGREES = 180.0 / math.pi
+PRECISION_ALIASES = {
+    "auto": "auto",
+    "single": "single",
+    "float32": "single",
+    "double": "double",
+    "float64": "double",
+}
 
 
 class SpheremackError(Exception):
@@ -253,11 +260,13 @@ class Spharmt:
     @staticmethod
     def _validate_precision(precision: str) -> str:
         """Validate the requested public-output precision mode."""
-        if precision not in ("auto", "single", "double"):
+        normalized = PRECISION_ALIASES.get(str(precision).lower())
+        if normalized is None:
             raise ValidationError(
-                f'precision must be "auto", "single", or "double", got "{precision}"'
+                'precision must be "auto", "single", "float32", "double", or "float64", '
+                f'got "{precision}"'
             )
-        return precision
+        return normalized
 
     @staticmethod
     def _input_public_real_dtype(array: np.ndarray) -> np.dtype:
@@ -599,7 +608,7 @@ class Spharmt:
             nt = int(np.prod(extra_shape, dtype=int))
             normalized_data = data.reshape(self.nlat, self.nlon, nt)
 
-        return nt, normalized_data, extra_shape
+        return nt, np.asfortranarray(normalized_data, dtype=np.float32), extra_shape
 
     def _validate_spectral_data(
         self, data: ComplexArray, operation_name: str
@@ -628,7 +637,12 @@ class Spharmt:
             nt = int(np.prod(extra_shape, dtype=int))
             normalized_data = data.reshape(data.shape[0], nt)
 
-        return nt, ntrunc, normalized_data, extra_shape
+        return (
+            nt,
+            ntrunc,
+            np.asfortranarray(normalized_data, dtype=np.complex64),
+            extra_shape,
+        )
 
     def _restore_grid_shape(
         self,
@@ -687,7 +701,9 @@ class Spharmt:
             dataspec, operation_name
         )
         invlap_spec = _spherepack.invlap(normalized_spec, self.rsphere)
-        return self._restore_spectral_shape(invlap_spec, extra_shape)
+        return self._restore_spectral_shape(
+            invlap_spec, extra_shape, self._public_complex_dtype(dataspec)
+        )
 
     def _analyze_vector_harmonics(
         self,
@@ -1188,6 +1204,7 @@ class Spharmt:
         extra_shape: Tuple[int, ...],
         operation_name: str,
         ityp: int = 0,
+        public_dtype: Optional[np.dtype] = None,
     ) -> Tuple[FloatArray, FloatArray]:
         """Run one vector harmonic synthesis and restore grid dimensions."""
         if ityp not in (0, 1, 2):
@@ -1256,7 +1273,8 @@ class Spharmt:
 
         vhs_func = vhs_functions[(self.gridtype, self.legfunc)]
         v, w = vhs_func()
-        public_dtype = self._public_real_dtype(br, bi, cr, ci)
+        if public_dtype is None:
+            public_dtype = self._public_real_dtype(br, bi, cr, ci)
         return self._restore_grid_shape(
             w, extra_shape, public_dtype
         ), -self._restore_grid_shape(v, extra_shape, public_dtype)
@@ -1325,7 +1343,7 @@ class Spharmt:
                 ),
             }
             v, w = synthesis_functions[(self.gridtype, self.legfunc)]()
-            public_dtype = self._public_real_dtype(normalized_spec)
+            public_dtype = self._public_real_dtype(dataspec)
             return self._restore_grid_shape(
                 w, extra_shape, public_dtype
             ), -self._restore_grid_shape(v, extra_shape, public_dtype)
@@ -1381,7 +1399,7 @@ class Spharmt:
                 ),
             }
             v, w = synthesis_functions[(self.gridtype, self.legfunc)]()
-            public_dtype = self._public_real_dtype(normalized_spec)
+            public_dtype = self._public_real_dtype(dataspec)
             return self._restore_grid_shape(
                 w, extra_shape, public_dtype
             ), -self._restore_grid_shape(v, extra_shape, public_dtype)
@@ -1433,7 +1451,15 @@ class Spharmt:
             normalized_vrt, normalized_div, self.nlat, self.rsphere
         )
         return self._synthesize_vector_harmonics(
-            br, bi, cr, ci, nt_vrt, extra_shape, "getuv", ityp=0
+            br,
+            bi,
+            cr,
+            ci,
+            nt_vrt,
+            extra_shape,
+            "getuv",
+            ityp=0,
+            public_dtype=self._public_real_dtype(vrtspec, divspec),
         )
 
     def getpsichi_component(
@@ -1621,7 +1647,9 @@ class Spharmt:
         # Convert chispec to divergence spec using Laplacian
         divspec = _spherepack.lap(normalized_spec, self.rsphere)
         return self._getuv_spec_component(
-            self._restore_spectral_shape(divspec, extra_shape),
+            self._restore_spectral_shape(
+                divspec, extra_shape, self._public_complex_dtype(chispec)
+            ),
             component="div",
             operation_name="getgrad",
         )

@@ -19,6 +19,13 @@ from .spherical_harmonics import (
 )
 
 IntArray = NDArray[np.integer]
+PRECISION_ALIASES = {
+    "auto": "auto",
+    "single": "single",
+    "float32": "single",
+    "double": "double",
+    "float64": "double",
+}
 
 _private_vars = (
     "pl",
@@ -138,11 +145,13 @@ class ReducedGaussianSpharmt:
 
     @staticmethod
     def _validate_precision(precision: str) -> str:
-        if precision not in ("auto", "single", "double"):
+        normalized = PRECISION_ALIASES.get(str(precision).lower())
+        if normalized is None:
             raise ValidationError(
-                f'precision must be "auto", "single", or "double", got "{precision}"'
+                'precision must be "auto", "single", "float32", "double", or "float64", '
+                f'got "{precision}"'
             )
-        return precision
+        return normalized
 
     def _public_real_dtype(self, *arrays: np.ndarray) -> np.dtype:
         if self.precision == "single":
@@ -580,8 +589,12 @@ class ReducedGaussianSpharmt:
             )
 
         return (
-            self._restore_spectral_shape(vrtspec, extra_shape),
-            self._restore_spectral_shape(divspec, extra_shape),
+            self._restore_spectral_shape(
+                vrtspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
+            ),
+            self._restore_spectral_shape(
+                divspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
+            ),
         )
 
     def getvrtspec(
@@ -671,10 +684,14 @@ class ReducedGaussianSpharmt:
         )
 
         psispec = self._restore_spectral_shape(
-            _spherepack.invlap(normalized_vrt, self.rsphere), extra_shape
+            _spherepack.invlap(normalized_vrt, self.rsphere),
+            extra_shape,
+            self._public_complex_dtype(vrtspec),
         )
         chispec = self._restore_spectral_shape(
-            _spherepack.invlap(normalized_div, self.rsphere), extra_shape
+            _spherepack.invlap(normalized_div, self.rsphere),
+            extra_shape,
+            self._public_complex_dtype(divspec),
         )
         u_chi, v_chi, v_psi, u_psi = self.getgrad_pair(chispec, psispec)
 
@@ -728,8 +745,12 @@ class ReducedGaussianSpharmt:
             )
 
         return (
-            self._restore_grid_shape(ugrad, extra_shape),
-            self._restore_grid_shape(vgrad, extra_shape),
+            self._restore_grid_shape(
+                ugrad, extra_shape, self._public_real_dtype(dataspec)
+            ),
+            self._restore_grid_shape(
+                vgrad, extra_shape, self._public_real_dtype(dataspec)
+            ),
         )
 
     def getgrad_pair(
@@ -789,7 +810,9 @@ class ReducedGaussianSpharmt:
             dataspec, operation_name
         )
         invlap_spec = _spherepack.invlap(normalized, self.rsphere)
-        return self._restore_spectral_shape(invlap_spec, extra_shape)
+        return self._restore_spectral_shape(
+            invlap_spec, extra_shape, self._public_complex_dtype(dataspec)
+        )
 
     def specsmooth(self, datagrid: FloatArray, smooth: FloatArray) -> FloatArray:
         """Apply latitude-dependent spectral smoothing to a packed scalar field."""
