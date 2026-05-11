@@ -6,8 +6,10 @@ project('skyborn-spharm', 'c', 'fortran',
 py_mod = import('python')
 py = py_mod.find_installation('python', pure: false)
 py_dep = py.dependency()
-
-openmp_dep = dependency('openmp', required: false)
+build_py = find_program('build_python', required: false)
+if not build_py.found()
+    build_py = py
+endif
 
 py.install_sources(
     ['__init__.py', 'spherical_harmonics.py', 'reduced_gaussian.py'],
@@ -15,7 +17,7 @@ py.install_sources(
 )
 
 incdir_numpy_cmd = run_command(
-    py,
+    build_py,
     ['-c', '''
 import numpy
 import os
@@ -96,6 +98,34 @@ message('Host CPU family: ' + host_cpu)
 
 package_install_dir = get_option('python.purelibdir') / 'skyborn' / 'spharm'
 
+openmp_dependencies = []
+openmp_fortran_args = []
+openmp_c_args = []
+openmp_link_args = []
+fortran_compiler = meson.get_compiler('fortran')
+c_compiler = meson.get_compiler('c')
+is_gcc_toolchain = fortran_compiler.get_id() == 'gcc' and c_compiler.get_id() == 'gcc'
+if is_gcc_toolchain
+    openmp_dep = dependency('openmp', required: false)
+    if openmp_dep.found()
+        openmp_dependencies += openmp_dep
+        message('Using OpenMP dependency for parallel processing')
+    endif
+    openmp_fortran_args += ['-fopenmp']
+    openmp_c_args += ['-fopenmp']
+    openmp_link_args += ['-fopenmp']
+elif host_system != 'windows'
+    openmp_dep = dependency('openmp', required: false)
+    if openmp_dep.found()
+        openmp_dependencies += openmp_dep
+        message('Using OpenMP dependency for parallel processing')
+    else
+        warning('OpenMP not found - building without parallel support')
+    endif
+else
+    message('Skipping OpenMP flags on Windows for spharm build')
+endif
+
 fortran_args = []
 c_args = []
 
@@ -118,7 +148,6 @@ if host_system == 'darwin' and host_cpu == 'aarch64'
         '-falign-functions=32',
         '-falign-loops=32',
         '-std=legacy',
-        '-fopenmp',
     ]
     c_args = [
         '-DNPY_NO_DEPRECATED_API=NPY_1_19_API_VERSION',
@@ -127,7 +156,6 @@ if host_system == 'darwin' and host_cpu == 'aarch64'
         '-fPIC',
         '-fno-trapping-math',
         '-falign-functions=32',
-        '-fopenmp',
     ]
 else
     message('Configuring for x86-64 architecture')
@@ -148,7 +176,6 @@ else
         '-falign-functions=32',
         '-falign-loops=32',
         '-std=legacy',
-        '-fopenmp',
     ]
     c_args = [
         '-DNPY_NO_DEPRECATED_API=NPY_1_19_API_VERSION',
@@ -157,9 +184,11 @@ else
         '-fPIC',
         '-fno-trapping-math',
         '-falign-functions=32',
-        '-fopenmp',
     ]
 endif
+
+fortran_args += openmp_fortran_args
+c_args += openmp_c_args
 
 message('Fortran args: ' + ' '.join(fortran_args))
 message('C args: ' + ' '.join(c_args))
@@ -174,19 +203,13 @@ else
 endif
 
 numpy_header_check = run_command(
-    py,
+    build_py,
     ['-c', 'import os; import numpy; header_path = os.path.join(numpy.get_include(), "numpy", "npy_os.h"); print("OK" if os.path.exists(header_path) else "MISSING", header_path)'],
     check: false,
 )
 message('NumPy header check: ' + numpy_header_check.stdout().strip())
 
-dependencies = [py_dep]
-if openmp_dep.found()
-    dependencies += openmp_dep
-    message('Using OpenMP for parallel processing')
-else
-    warning('OpenMP not found - building without parallel support')
-endif
+dependencies = [py_dep] + openmp_dependencies
 
 common_fortran_sources = [
     'src/lap.f90',
@@ -203,6 +226,7 @@ common_fortran_lib = static_library(
     common_fortran_sources,
     dependencies: dependencies,
     fortran_args: fortran_args,
+    link_args: openmp_link_args,
     build_by_default: true,
 )
 
@@ -244,6 +268,7 @@ spherepack_direct_ext = py.extension_module(
     link_with: common_fortran_lib,
     fortran_args: fortran_args,
     c_args: c_args,
+    link_args: openmp_link_args,
     install: true,
     install_dir: package_install_dir,
     build_by_default: true,
