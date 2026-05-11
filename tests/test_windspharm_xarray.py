@@ -20,6 +20,7 @@ except ImportError:
 
 if XARRAY_AVAILABLE:
     from skyborn.windspharm import xarray as xarray_mod
+    from skyborn.windspharm.xarray import ReducedVectorWind as XarrayReducedVectorWind
     from skyborn.windspharm.xarray import VectorWind
 else:
     xarray_mod = None
@@ -976,3 +977,127 @@ class TestXarrayTargetedCoverage:
         vort = vw.vorticity()
         assert isinstance(vort, xr.DataArray)
         assert vort.dims == ("y", "x")
+
+
+@pytest.mark.skipif(not XARRAY_AVAILABLE, reason="xarray not available")
+class TestXarrayReducedVectorWind:
+    """Test packed reduced-Gaussian xarray wind analysis."""
+
+    @pytest.fixture
+    def reduced_xarray_data(self):
+        pl = np.array([16, 20, 24, 28, 32, 28, 24, 20, 16], dtype=np.int32)
+        npoints = int(pl.sum())
+        rng = np.random.default_rng(20260517)
+        point = xr.DataArray(
+            np.arange(npoints), dims=["point"], attrs={"long_name": "packed_point"}
+        )
+        time = xr.DataArray([0, 6], dims=["time"], attrs={"units": "hours"})
+        u = xr.DataArray(
+            rng.standard_normal((npoints, 2)).astype(np.float32),
+            dims=["point", "time"],
+            coords={"point": point, "time": time},
+            attrs={"units": "m/s"},
+        )
+        v = xr.DataArray(
+            rng.standard_normal((npoints, 2)).astype(np.float32),
+            dims=["point", "time"],
+            coords={"point": point, "time": time},
+            attrs={"units": "m/s"},
+        )
+        return u, v, pl
+
+    def test_reduced_xarray_operations_preserve_metadata(self, reduced_xarray_data):
+        u, v, pl = reduced_xarray_data
+        vw = XarrayReducedVectorWind(u, v, pl)
+
+        outputs = []
+        outputs.append(vw.u())
+        outputs.append(vw.v())
+        outputs.append(vw.magnitude())
+        outputs.extend(vw.vrtdiv(truncation=5))
+        outputs.append(vw.vorticity(truncation=5))
+        outputs.append(vw.divergence(truncation=5))
+        outputs.append(vw.planetaryvorticity())
+        outputs.append(vw.absolutevorticity(truncation=5))
+        outputs.extend(vw.sfvp(truncation=5))
+        outputs.append(vw.streamfunction(truncation=5))
+        outputs.append(vw.velocitypotential(truncation=5))
+        outputs.extend(vw.helmholtz(truncation=5))
+        outputs.extend(vw.irrotationalcomponent(truncation=5))
+        outputs.extend(vw.nondivergentcomponent(truncation=5))
+
+        scalar = xr.DataArray(
+            np.random.default_rng(20260518).standard_normal(u.shape).astype(np.float32),
+            dims=u.dims,
+            coords=u.coords,
+            name="temperature",
+            attrs={"units": "K"},
+        )
+        outputs.extend(vw.gradient(scalar, truncation=5))
+        outputs.append(vw.truncate(scalar, truncation=5))
+        outputs.append(vw.rossbywavesource(truncation=5))
+
+        for output in outputs:
+            assert isinstance(output, xr.DataArray)
+            assert output.dims == u.dims
+            assert output.shape == u.shape
+            np.testing.assert_array_equal(output.coords["point"], u.coords["point"])
+            np.testing.assert_array_equal(output.coords["time"], u.coords["time"])
+            assert np.isfinite(output.values).all()
+
+        assert vw.gridtype == "reduced_gaussian"
+        assert vw.u().attrs["standard_name"] == "eastward_wind"
+        assert vw.v().attrs["standard_name"] == "northward_wind"
+        assert vw.truncate(scalar).attrs["units"] == "K"
+
+    def test_reduced_xarray_matches_array_interface(self, reduced_xarray_data):
+        u, v, pl = reduced_xarray_data
+        xarray_vw = XarrayReducedVectorWind(u, v, pl, precision="single")
+
+        from skyborn.windspharm import ReducedVectorWind
+
+        array_vw = ReducedVectorWind(u.values, v.values, pl, precision="single")
+        np.testing.assert_allclose(
+            xarray_vw.vorticity(truncation=5).values,
+            array_vw.vorticity(truncation=5),
+            rtol=0,
+            atol=0,
+        )
+        assert xarray_vw.vorticity(truncation=5).dtype == np.float32
+
+    def test_reduced_xarray_validation_branches(self, reduced_xarray_data):
+        u, v, pl = reduced_xarray_data
+        with pytest.raises(TypeError, match="u must be xarray.DataArray"):
+            XarrayReducedVectorWind(u.values, v, pl)
+
+        with pytest.raises(TypeError, match="v must be xarray.DataArray"):
+            XarrayReducedVectorWind(u, v.values, pl)
+
+        with pytest.raises(ValueError, match="identical dimensions"):
+            XarrayReducedVectorWind(u, v.rename({"time": "forecast_hour"}), pl)
+
+        shifted = v.assign_coords(time=[1, 7])
+        with pytest.raises(ValueError, match="identical coordinate values"):
+            XarrayReducedVectorWind(u, shifted, pl)
+
+        vw = XarrayReducedVectorWind(u, v, pl)
+        with pytest.raises(TypeError, match="Scalar field must be xarray.DataArray"):
+            vw.gradient(u.values)
+        with pytest.raises(TypeError, match="Field must be xarray.DataArray"):
+            vw.truncate(u.values)
+
+    def test_reduced_xarray_coordinate_comparison_exception_branch(self):
+        class ExplodingValues:
+            def __eq__(self, other):
+                raise TypeError("coordinate comparison failed")
+
+        class FakeCoordinate:
+            values = ExplodingValues()
+
+        class FakeArray:
+            dims = ("point",)
+            coords = {"point": FakeCoordinate()}
+
+        vw = object.__new__(XarrayReducedVectorWind)
+        with pytest.raises(ValueError, match="Mismatched coordinates"):
+            vw._validate_coordinates(FakeArray(), FakeArray())

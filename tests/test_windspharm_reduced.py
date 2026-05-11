@@ -93,7 +93,11 @@ def test_reduced_vectorwind_varying_pl_smoke():
     outputs.append(reduced.planetaryvorticity())
     outputs.append(reduced.absolutevorticity(truncation=5))
     outputs.extend(reduced.sfvp(truncation=5))
+    outputs.append(reduced.streamfunction(truncation=5))
+    outputs.append(reduced.velocitypotential(truncation=5))
     outputs.extend(reduced.helmholtz(truncation=5))
+    outputs.extend(reduced.irrotationalcomponent(truncation=5))
+    outputs.extend(reduced.nondivergentcomponent(truncation=5))
     outputs.extend(reduced.gradient(outputs[2], truncation=5))
     outputs.append(reduced.truncate(outputs[2], truncation=5))
     outputs.append(reduced.rossbywavesource(truncation=5))
@@ -222,3 +226,121 @@ def test_reduced_vectorwind_single_component_uses_single_spectrum(monkeypatch):
     assert div.shape == u.shape
     assert np.isfinite(vrt).all()
     assert np.isfinite(div).all()
+
+
+@pytest.mark.skipif(not WINDSPHARM_AVAILABLE, reason="windspharm module not available")
+def test_reduced_vectorwind_validation_and_dtype_branches():
+    pl = np.array([8, 10, 12, 10, 8], dtype=np.int32)
+    npoints = int(pl.sum())
+
+    with pytest.raises(ValueError, match="pl must be rank 1"):
+        ReducedVectorWind(np.zeros(npoints), np.zeros(npoints), pl.reshape(1, -1))
+
+    with pytest.raises(ValueError, match="at least 3 rows"):
+        ReducedVectorWind(np.zeros(16), np.zeros(16), np.array([8, 8]))
+
+    with pytest.raises(ValueError, match=">= 4 points"):
+        ReducedVectorWind(np.zeros(20), np.zeros(20), np.array([6, 3, 6, 5]))
+
+    with pytest.raises(ValueError, match="identical shapes"):
+        ReducedVectorWind(np.zeros(npoints), np.zeros(npoints + 1), pl)
+
+    with pytest.raises(ValueError, match="at least 1D"):
+        ReducedVectorWind(0.0, 0.0, pl)
+
+    with pytest.raises(ValueError, match="sum\\(pl\\)"):
+        ReducedVectorWind(np.zeros(npoints - 1), np.zeros(npoints - 1), pl)
+
+    bad = np.zeros(npoints)
+    bad[0] = np.nan
+    with pytest.raises(ValueError, match="must be finite"):
+        ReducedVectorWind(bad, np.zeros(npoints), pl)
+
+    assert ReducedVectorWind._infer_output_dtype(
+        np.arange(4, dtype=np.int32)
+    ) == np.dtype(np.float64)
+
+    masked = np.ma.array(np.arange(npoints, dtype=np.int32))
+    processed = ReducedVectorWind._process_input_array(masked, "u")
+    assert processed.dtype == np.float64
+
+    processed_int = ReducedVectorWind._process_input_array(
+        np.arange(npoints, dtype=np.int32), "u"
+    )
+    assert processed_int.dtype == np.float64
+
+    class BadArray:
+        def __array__(self, dtype=None):
+            raise TypeError("cannot coerce")
+
+    with pytest.raises(ValueError, match="Cannot convert u"):
+        ReducedVectorWind._process_input_array(BadArray(), "u")
+
+    single = ReducedVectorWind(
+        np.ones(npoints, dtype=np.float64),
+        np.ones(npoints, dtype=np.float64),
+        pl,
+        precision="single",
+    )
+    assert single.magnitude().dtype == np.float32
+
+
+@pytest.mark.skipif(not WINDSPHARM_AVAILABLE, reason="windspharm module not available")
+def test_reduced_vectorwind_scalar_validation_and_cache_branches(monkeypatch):
+    pl = np.array([8, 10, 12, 10, 8], dtype=np.int32)
+    npoints = int(pl.sum())
+    rng = np.random.default_rng(20260516)
+    u = rng.standard_normal((npoints, 2)).astype(np.float32)
+    v = rng.standard_normal((npoints, 2)).astype(np.float32)
+    reduced = ReducedVectorWind(u, v, pl)
+
+    info = reduced.grid_info
+    assert info["gridtype"] == "reduced_gaussian"
+    assert info["npoints"] == npoints
+    np.testing.assert_array_equal(info["pl"], pl)
+
+    with pytest.raises(ValueError, match="chi is not compatible"):
+        reduced.gradient(np.zeros((npoints + 1, 2), dtype=np.float32))
+
+    bad_scalar = np.zeros((npoints, 2), dtype=np.float32)
+    bad_scalar[0, 0] = np.inf
+    with pytest.raises(ValueError, match="cannot contain missing or infinite"):
+        reduced.truncate(bad_scalar)
+
+    class FilledCallAttributeErrorArray(np.ndarray):
+        @property
+        def filled(self):
+            def _raise_attribute_error(fill_value=np.nan):
+                raise AttributeError("filled unavailable")
+
+            return _raise_attribute_error
+
+    fallback_field = (
+        rng.standard_normal((npoints, 2))
+        .astype(np.float32)
+        .view(FilledCallAttributeErrorArray)
+    )
+    grad_u, grad_v = reduced.gradient(fallback_field, truncation=4)
+    assert grad_u.shape == u.shape
+    assert grad_v.shape == u.shape
+
+    original_s = reduced.s
+    vrtspec, divspec = original_s.getvrtdivspec(u, v, ntrunc=4)
+    reduced._spectral_cache = {("vrtdiv", 4): (vrtspec, divspec)}
+    monkeypatch.setattr(
+        reduced.s,
+        "getvrtspec",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("vrtdiv cache should be reused")
+        ),
+    )
+    monkeypatch.setattr(
+        reduced.s,
+        "getdivspec",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("vrtdiv cache should be reused")
+        ),
+    )
+
+    assert reduced.streamfunction(truncation=4).shape == u.shape
+    assert reduced.velocitypotential(truncation=4).shape == u.shape
