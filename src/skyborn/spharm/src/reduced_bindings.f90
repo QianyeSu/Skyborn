@@ -1,8 +1,34 @@
 module spherepack_reduced_bindings_mod
-    use, intrinsic :: iso_c_binding, only : c_ptr, c_f_pointer, c_int, c_float, c_float_complex
+    use, intrinsic :: iso_c_binding, only : c_ptr, c_f_pointer, c_int, c_float, c_double, c_float_complex
     implicit none
 
 contains
+
+subroutine reduced_gaqd_c(nlat, theta, wts, ierror) bind(C, name="reduced_gaqd_c")
+    integer(c_int), value, intent(in) :: nlat
+    type(c_ptr), value, intent(in) :: theta
+    type(c_ptr), value, intent(in) :: wts
+    integer(c_int), intent(out) :: ierror
+
+    integer :: nlat_f
+    integer :: ldwork
+    integer :: ierror_f
+    real(c_double), pointer :: theta_view(:)
+    real(c_double), pointer :: wts_view(:)
+    real(c_double), allocatable :: dwork(:)
+
+    nlat_f = int(nlat)
+    ldwork = nlat_f * (nlat_f + 2)
+
+    call c_f_pointer(theta, theta_view, [nlat_f])
+    call c_f_pointer(wts, wts_view, [nlat_f])
+    allocate(dwork(ldwork))
+
+    call gaqd(nlat_f, theta_view, wts_view, dwork, ldwork, ierror_f)
+    ierror = int(ierror_f, kind=c_int)
+
+    deallocate(dwork)
+end subroutine reduced_gaqd_c
 
 subroutine reduced_lap_c(dataspec, dataspec_lap, nmdim, nt, rsphere) bind(C, name="reduced_lap_c")
     type(c_ptr), value, intent(in) :: dataspec
