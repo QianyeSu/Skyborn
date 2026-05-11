@@ -4,7 +4,7 @@
 #include <Python.h>
 #include <numpy/arrayobject.h>
 
-void z2geouv(
+void z2geouv_c(
     void *z,
     int nlat,
     int mlon,
@@ -15,7 +15,7 @@ void z2geouv(
     void *vg,
     int iopt
 );
-void z2geouv_3d(
+void z2geouv_3d_c(
     void *z,
     int nlat,
     int mlon,
@@ -27,7 +27,7 @@ void z2geouv_3d(
     void *vg,
     int iopt
 );
-void z2geouv_4d(
+void z2geouv_4d_c(
     void *z,
     int nlat,
     int mlon,
@@ -40,7 +40,7 @@ void z2geouv_4d(
     void *vg,
     int iopt
 );
-void zuvnew(
+void zuvnew_c(
     void *z,
     int nlat,
     int mlon,
@@ -51,7 +51,7 @@ void zuvnew(
     void *vg,
     int iopt
 );
-void z2guv(
+void z2guv_c(
     void *z,
     int nlat,
     int mlon,
@@ -867,27 +867,27 @@ static PyObject *call_4d_backend(
 
 static PyObject *py_z2geouv(PyObject *self, PyObject *args, PyObject *kwargs) {
     (void) self;
-    return call_2d_backend(args, kwargs, z2geouv);
+    return call_2d_backend(args, kwargs, z2geouv_c);
 }
 
 static PyObject *py_z2geouv_3d(PyObject *self, PyObject *args, PyObject *kwargs) {
     (void) self;
-    return call_3d_backend(args, kwargs, z2geouv_3d);
+    return call_3d_backend(args, kwargs, z2geouv_3d_c);
 }
 
 static PyObject *py_z2geouv_4d(PyObject *self, PyObject *args, PyObject *kwargs) {
     (void) self;
-    return call_4d_backend(args, kwargs, z2geouv_4d);
+    return call_4d_backend(args, kwargs, z2geouv_4d_c);
 }
 
 static PyObject *py_zuvnew(PyObject *self, PyObject *args, PyObject *kwargs) {
     (void) self;
-    return call_2d_backend(args, kwargs, zuvnew);
+    return call_2d_backend(args, kwargs, zuvnew_c);
 }
 
 static PyObject *py_z2guv(PyObject *self, PyObject *args, PyObject *kwargs) {
     (void) self;
-    return call_2d_backend(args, kwargs, z2guv);
+    return call_2d_backend(args, kwargs, z2guv_c);
 }
 
 static PyMethodDef module_methods[] = {

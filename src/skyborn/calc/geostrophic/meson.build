@@ -112,6 +112,7 @@ geostrophic_ext = py.extension_module(
   [
     'geostrophicwind_module.c',
     'fortran/z2geouv.f90',
+    'fortran/z2geouv_bindings.f90',
   ],
   include_directories: inc_np,
   dependencies: [py_dep] + openmp_dependencies,

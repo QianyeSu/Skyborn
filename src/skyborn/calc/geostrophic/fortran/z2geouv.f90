@@ -1,170 +1,10 @@
 module geostrophicwind_mod
-    use, intrinsic :: iso_c_binding, only : c_double, c_f_pointer, c_int, c_ptr
+    use, intrinsic :: iso_c_binding, only : c_double, c_int
     implicit none
 
 contains
 
-subroutine z2geouv(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt) bind(C)
-    type(c_ptr), value, intent(in) :: z
-    integer(c_int), value, intent(in) :: nlat
-    integer(c_int), value, intent(in) :: mlon
-    real(c_double), value, intent(in) :: zmsg
-    type(c_ptr), value, intent(in) :: glon
-    type(c_ptr), value, intent(in) :: glat
-    type(c_ptr), value, intent(in) :: ug
-    type(c_ptr), value, intent(in) :: vg
-    integer(c_int), value, intent(in) :: iopt
-
-    integer :: nlat_f, mlon_f
-    real(c_double), pointer :: z_view(:, :)
-    real(c_double), pointer :: glon_view(:)
-    real(c_double), pointer :: glat_view(:)
-    real(c_double), pointer :: ug_view(:, :)
-    real(c_double), pointer :: vg_view(:, :)
-
-    nlat_f = int(nlat)
-    mlon_f = int(mlon)
-
-    call c_f_pointer(z, z_view, [nlat_f, mlon_f])
-    call c_f_pointer(glon, glon_view, [mlon_f])
-    call c_f_pointer(glat, glat_view, [nlat_f])
-    call c_f_pointer(ug, ug_view, [nlat_f, mlon_f])
-    call c_f_pointer(vg, vg_view, [nlat_f, mlon_f])
-
-    call z2geouv_impl(z_view, nlat_f, mlon_f, zmsg, glon_view, glat_view, ug_view, vg_view, int(iopt))
-end subroutine z2geouv
-
-subroutine z2geouv_3d(z, nlat, mlon, n3rd, zmsg, glon, glat, ug, vg, iopt) bind(C)
-    type(c_ptr), value, intent(in) :: z
-    integer(c_int), value, intent(in) :: nlat
-    integer(c_int), value, intent(in) :: mlon
-    integer(c_int), value, intent(in) :: n3rd
-    real(c_double), value, intent(in) :: zmsg
-    type(c_ptr), value, intent(in) :: glon
-    type(c_ptr), value, intent(in) :: glat
-    type(c_ptr), value, intent(in) :: ug
-    type(c_ptr), value, intent(in) :: vg
-    integer(c_int), value, intent(in) :: iopt
-
-    integer :: nlat_f, mlon_f, n3rd_f
-    real(c_double), pointer :: z_view(:, :, :)
-    real(c_double), pointer :: glon_view(:)
-    real(c_double), pointer :: glat_view(:)
-    real(c_double), pointer :: ug_view(:, :, :)
-    real(c_double), pointer :: vg_view(:, :, :)
-
-    nlat_f = int(nlat)
-    mlon_f = int(mlon)
-    n3rd_f = int(n3rd)
-
-    call c_f_pointer(z, z_view, [nlat_f, mlon_f, n3rd_f])
-    call c_f_pointer(glon, glon_view, [mlon_f])
-    call c_f_pointer(glat, glat_view, [nlat_f])
-    call c_f_pointer(ug, ug_view, [nlat_f, mlon_f, n3rd_f])
-    call c_f_pointer(vg, vg_view, [nlat_f, mlon_f, n3rd_f])
-
-    call z2geouv_3d_impl( &
-        z_view, nlat_f, mlon_f, n3rd_f, zmsg, glon_view, glat_view, ug_view, vg_view, int(iopt) &
-    )
-end subroutine z2geouv_3d
-
-subroutine z2geouv_4d(z, nlat, mlon, n3rd, n4th, zmsg, glon, glat, ug, vg, iopt) bind(C)
-    type(c_ptr), value, intent(in) :: z
-    integer(c_int), value, intent(in) :: nlat
-    integer(c_int), value, intent(in) :: mlon
-    integer(c_int), value, intent(in) :: n3rd
-    integer(c_int), value, intent(in) :: n4th
-    real(c_double), value, intent(in) :: zmsg
-    type(c_ptr), value, intent(in) :: glon
-    type(c_ptr), value, intent(in) :: glat
-    type(c_ptr), value, intent(in) :: ug
-    type(c_ptr), value, intent(in) :: vg
-    integer(c_int), value, intent(in) :: iopt
-
-    integer :: nlat_f, mlon_f, n3rd_f, n4th_f
-    real(c_double), pointer :: z_view(:, :, :, :)
-    real(c_double), pointer :: glon_view(:)
-    real(c_double), pointer :: glat_view(:)
-    real(c_double), pointer :: ug_view(:, :, :, :)
-    real(c_double), pointer :: vg_view(:, :, :, :)
-
-    nlat_f = int(nlat)
-    mlon_f = int(mlon)
-    n3rd_f = int(n3rd)
-    n4th_f = int(n4th)
-
-    call c_f_pointer(z, z_view, [nlat_f, mlon_f, n3rd_f, n4th_f])
-    call c_f_pointer(glon, glon_view, [mlon_f])
-    call c_f_pointer(glat, glat_view, [nlat_f])
-    call c_f_pointer(ug, ug_view, [nlat_f, mlon_f, n3rd_f, n4th_f])
-    call c_f_pointer(vg, vg_view, [nlat_f, mlon_f, n3rd_f, n4th_f])
-
-    call z2geouv_4d_impl( &
-        z_view, nlat_f, mlon_f, n3rd_f, n4th_f, zmsg, glon_view, glat_view, ug_view, vg_view, int(iopt) &
-    )
-end subroutine z2geouv_4d
-
-subroutine zuvnew(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt) bind(C)
-    type(c_ptr), value, intent(in) :: z
-    integer(c_int), value, intent(in) :: nlat
-    integer(c_int), value, intent(in) :: mlon
-    real(c_double), value, intent(in) :: zmsg
-    type(c_ptr), value, intent(in) :: glon
-    type(c_ptr), value, intent(in) :: glat
-    type(c_ptr), value, intent(in) :: ug
-    type(c_ptr), value, intent(in) :: vg
-    integer(c_int), value, intent(in) :: iopt
-
-    integer :: nlat_f, mlon_f
-    real(c_double), pointer :: z_view(:, :)
-    real(c_double), pointer :: glon_view(:)
-    real(c_double), pointer :: glat_view(:)
-    real(c_double), pointer :: ug_view(:, :)
-    real(c_double), pointer :: vg_view(:, :)
-
-    nlat_f = int(nlat)
-    mlon_f = int(mlon)
-
-    call c_f_pointer(z, z_view, [nlat_f, mlon_f])
-    call c_f_pointer(glon, glon_view, [mlon_f])
-    call c_f_pointer(glat, glat_view, [nlat_f])
-    call c_f_pointer(ug, ug_view, [nlat_f, mlon_f])
-    call c_f_pointer(vg, vg_view, [nlat_f, mlon_f])
-
-    call zuvnew_impl(z_view, nlat_f, mlon_f, zmsg, glon_view, glat_view, ug_view, vg_view, int(iopt))
-end subroutine zuvnew
-
-subroutine z2guv(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt) bind(C)
-    type(c_ptr), value, intent(in) :: z
-    integer(c_int), value, intent(in) :: nlat
-    integer(c_int), value, intent(in) :: mlon
-    real(c_double), value, intent(in) :: zmsg
-    type(c_ptr), value, intent(in) :: glon
-    type(c_ptr), value, intent(in) :: glat
-    type(c_ptr), value, intent(in) :: ug
-    type(c_ptr), value, intent(in) :: vg
-    integer(c_int), value, intent(in) :: iopt
-
-    integer :: nlat_f, mlon_f
-    real(c_double), pointer :: z_view(:, :)
-    real(c_double), pointer :: glon_view(:)
-    real(c_double), pointer :: glat_view(:)
-    real(c_double), pointer :: ug_view(:, :)
-    real(c_double), pointer :: vg_view(:, :)
-
-    nlat_f = int(nlat)
-    mlon_f = int(mlon)
-
-    call c_f_pointer(z, z_view, [nlat_f, mlon_f])
-    call c_f_pointer(glon, glon_view, [mlon_f])
-    call c_f_pointer(glat, glat_view, [nlat_f])
-    call c_f_pointer(ug, ug_view, [nlat_f, mlon_f])
-    call c_f_pointer(vg, vg_view, [nlat_f, mlon_f])
-
-    call z2guv_impl(z_view, nlat_f, mlon_f, zmsg, glon_view, glat_view, ug_view, vg_view, int(iopt))
-end subroutine z2guv
-
-subroutine z2geouv_impl(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
+subroutine z2geouv(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
     implicit none
 
     integer, intent(in) :: nlat
@@ -184,13 +24,13 @@ subroutine z2geouv_impl(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
     end if
 
     if (glat(2) > glat(1)) then
-        call z2guv_impl(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
+        call z2guv(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
     else
-        call zuvnew_impl(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
+        call zuvnew(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
     end if
-end subroutine z2geouv_impl
+end subroutine z2geouv
 
-subroutine z2geouv_3d_impl(z, nlat, mlon, n3rd, zmsg, glon, glat, ug, vg, iopt)
+subroutine z2geouv_3d(z, nlat, mlon, n3rd, zmsg, glon, glat, ug, vg, iopt)
     implicit none
 
     integer, intent(in) :: nlat
@@ -208,12 +48,12 @@ subroutine z2geouv_3d_impl(z, nlat, mlon, n3rd, zmsg, glon, glat, ug, vg, iopt)
 
     !$omp parallel do private(k) if(n3rd > 4)
     do k = 1, n3rd
-        call z2geouv_impl(z(:, :, k), nlat, mlon, zmsg, glon, glat, ug(:, :, k), vg(:, :, k), iopt)
+        call z2geouv(z(:, :, k), nlat, mlon, zmsg, glon, glat, ug(:, :, k), vg(:, :, k), iopt)
     end do
     !$omp end parallel do
-end subroutine z2geouv_3d_impl
+end subroutine z2geouv_3d
 
-subroutine z2geouv_4d_impl(z, nlat, mlon, n3rd, n4th, zmsg, glon, glat, ug, vg, iopt)
+subroutine z2geouv_4d(z, nlat, mlon, n3rd, n4th, zmsg, glon, glat, ug, vg, iopt)
     implicit none
 
     integer, intent(in) :: nlat
@@ -233,15 +73,15 @@ subroutine z2geouv_4d_impl(z, nlat, mlon, n3rd, n4th, zmsg, glon, glat, ug, vg, 
     !$omp parallel do private(k, t) collapse(2) if(n3rd * n4th > 16)
     do t = 1, n4th
         do k = 1, n3rd
-            call z2geouv_impl( &
+            call z2geouv( &
                 z(:, :, k, t), nlat, mlon, zmsg, glon, glat, ug(:, :, k, t), vg(:, :, k, t), iopt &
             )
         end do
     end do
     !$omp end parallel do
-end subroutine z2geouv_4d_impl
+end subroutine z2geouv_4d
 
-subroutine zuvnew_impl(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
+subroutine zuvnew(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
     implicit none
 
     integer, intent(in) :: nlat
@@ -269,7 +109,7 @@ subroutine zuvnew_impl(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
         !$omp end simd
     end do
 
-    call z2guv_impl(ztmp, nlat, mlon, zmsg, glon, glattmp, ug, vg, iopt)
+    call z2guv(ztmp, nlat, mlon, zmsg, glon, glattmp, ug, vg, iopt)
 
     do ml = 1, mlon
         !$omp simd
@@ -285,9 +125,9 @@ subroutine zuvnew_impl(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
         end do
         !$omp end simd
     end do
-end subroutine zuvnew_impl
+end subroutine zuvnew
 
-subroutine z2guv_impl(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
+subroutine z2guv(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
     implicit none
 
     integer, intent(in) :: nlat
@@ -430,6 +270,6 @@ subroutine z2guv_impl(z, nlat, mlon, zmsg, glon, glat, ug, vg, iopt)
         end do
         !$omp end simd
     end if
-end subroutine z2guv_impl
+end subroutine z2guv
 
 end module geostrophicwind_mod
