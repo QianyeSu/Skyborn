@@ -222,9 +222,7 @@ class ReducedVectorWind:
     def _spectogrd_pair(
         self, spec_a: np.ndarray, spec_b: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray]:
-        if hasattr(self.s, "_spectogrd_pair"):
-            return self.s._spectogrd_pair(spec_a, spec_b)
-        return self.s.spectogrd(spec_a), self.s.spectogrd(spec_b)
+        return self.s._spectogrd_pair(spec_a, spec_b)
 
     def _spectral_cache_key(
         self, component: str, truncation: Optional[int]
