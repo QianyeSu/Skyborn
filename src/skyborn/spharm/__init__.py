@@ -15,8 +15,23 @@ Example:
     >>> data_back = sht.spectogrd(spec)  # Spectral to grid transform
 """
 
-from .reduced_gaussian import ReducedGaussianSpharmt
 from .spherical_harmonics import *
+from .spherical_harmonics import __all__ as _spherical_harmonics_all
+
+__all__ = [*_spherical_harmonics_all, "ReducedGaussianSpharmt"]
+
+
+def __getattr__(name):
+    if name == "ReducedGaussianSpharmt":
+        from .reduced_gaussian import ReducedGaussianSpharmt
+
+        return ReducedGaussianSpharmt
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(__all__)
+
 
 __author__ = "Qianye Su"
 __license__ = "BSD-3-Clause"
