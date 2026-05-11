@@ -65,7 +65,8 @@ python module _spherepack ! in
             real :: rsphere
         end subroutine onedtotwod_div
         subroutine twodtooned(dataspec,a,b,nlat,ntrunc,nt) ! in :_spherepack:twodtooned.f90
-            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: dataspec
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: dataspec
             real dimension(nlat,nlat,nt) :: a
             real dimension(nlat,nlat,nt) :: b
             integer optional,check(shape(a,0)==nlat),depend(a) :: nlat=shape(a,0)
@@ -73,7 +74,8 @@ python module _spherepack ! in
             integer :: ntrunc
         end subroutine twodtooned
         subroutine twodtooned_vrt(vrtspec,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned.f90
-            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: vrtspec
             real dimension(nlat,nlat,nt) :: cr
             real dimension(nlat,nlat,nt) :: ci
             integer optional,check(shape(cr,0)==nlat),depend(cr) :: nlat=shape(cr,0)
@@ -82,7 +84,8 @@ python module _spherepack ! in
             real :: rsphere
         end subroutine twodtooned_vrt
         subroutine twodtooned_div(divspec,br,bi,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned.f90
-            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: divspec
             real dimension(nlat,nlat,nt) :: br
             real dimension(nlat,nlat,nt) :: bi
             integer optional,check(shape(br,0)==nlat),depend(br) :: nlat=shape(br,0)
@@ -91,8 +94,9 @@ python module _spherepack ! in
             real :: rsphere
         end subroutine twodtooned_div
         subroutine twodtooned_vrtdiv(vrtspec,divspec,br,bi,cr,ci,nlat,ntrunc,nt,rsphere) ! in :_spherepack:twodtooned.f90
-            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
-            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: vrtspec
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: divspec
             real dimension(nlat,nlat,nt) :: br
             real dimension(nlat,nlat,nt) :: bi
             real dimension(nlat,nlat,nt) :: cr
@@ -105,12 +109,14 @@ python module _spherepack ! in
         subroutine reduced_gaussian_legendre_basis(basis,nlat,ntrunc,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
             integer, required, intent(in) :: nlat
             integer, required, intent(in) :: ntrunc
-            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2),depend(nlat,ntrunc),intent(out) :: basis
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            real dimension(nlat,nmdim),depend(nlat,nmdim),intent(out) :: basis
             integer, intent(out) :: ierror
         end subroutine reduced_gaussian_legendre_basis
         subroutine reduced_gaussian_legendre_derivative_from_basis(basis,dbasis,nlat,ntrunc,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
-            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: basis
-            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2),depend(nlat,ntrunc),intent(out) :: dbasis
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            real dimension(nlat,nmdim) :: basis
+            real dimension(nlat,nmdim),depend(nlat,nmdim),intent(out) :: dbasis
             integer optional,check(shape(basis,0)==nlat),depend(basis) :: nlat=shape(basis,0)
             integer, required, intent(in) :: ntrunc
             integer, intent(out) :: ierror
@@ -118,15 +124,17 @@ python module _spherepack ! in
         subroutine reduced_gaussian_legendre_derivative_basis(dbasis,nlat,ntrunc,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
             integer, required, intent(in) :: nlat
             integer, required, intent(in) :: ntrunc
-            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2),depend(nlat,ntrunc),intent(out) :: dbasis
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            real dimension(nlat,nmdim),depend(nlat,nmdim),intent(out) :: dbasis
             integer, intent(out) :: ierror
         end subroutine reduced_gaussian_legendre_derivative_basis
         subroutine reduced_gaussian_grdtospec(datagrid,pl,weights,basis,dataspec,ngptot,nlat,ntrunc,nt,ierror) ! in :_spherepack:reduced_gaussian_scalar.f90
             real dimension(ngptot,nt) :: datagrid
             integer dimension(nlat) :: pl
             real dimension(nlat) :: weights
-            real dimension(nlat,(ntrunc+1)*(ntrunc+2)/2) :: basis
-            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: dataspec
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            real dimension(nlat,nmdim) :: basis
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: dataspec
             integer optional,check(shape(datagrid,0)==ngptot),depend(datagrid) :: ngptot=shape(datagrid,0)
             integer optional,check(shape(datagrid,1)==nt),depend(datagrid) :: nt=shape(datagrid,1)
             integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
@@ -199,11 +207,12 @@ python module _spherepack ! in
             real dimension(ngptot,nt) :: vgrid
             integer dimension(nlat) :: pl
             real dimension(nlat) :: weights
-            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: basis
-            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: dbasis
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            real dimension(nmdim,nlat) :: basis
+            real dimension(nmdim,nlat) :: dbasis
             real dimension(nlat) :: sin_theta
-            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
-            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: vrtspec
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: divspec
             integer optional,check(shape(ugrid,0)==ngptot),depend(ugrid) :: ngptot=shape(ugrid,0)
             integer optional,check(shape(ugrid,1)==nt),depend(ugrid) :: nt=shape(ugrid,1)
             integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
@@ -216,10 +225,11 @@ python module _spherepack ! in
             real dimension(ngptot,nt) :: vgrid
             integer dimension(nlat) :: pl
             real dimension(nlat) :: weights
-            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: basis
-            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: dbasis
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            real dimension(nmdim,nlat) :: basis
+            real dimension(nmdim,nlat) :: dbasis
             real dimension(nlat) :: sin_theta
-            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: vrtspec
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: vrtspec
             integer optional,check(shape(ugrid,0)==ngptot),depend(ugrid) :: ngptot=shape(ugrid,0)
             integer optional,check(shape(ugrid,1)==nt),depend(ugrid) :: nt=shape(ugrid,1)
             integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
@@ -232,10 +242,11 @@ python module _spherepack ! in
             real dimension(ngptot,nt) :: vgrid
             integer dimension(nlat) :: pl
             real dimension(nlat) :: weights
-            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: basis
-            real dimension((ntrunc+1)*(ntrunc+2)/2,nlat) :: dbasis
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            real dimension(nmdim,nlat) :: basis
+            real dimension(nmdim,nlat) :: dbasis
             real dimension(nlat) :: sin_theta
-            complex dimension((ntrunc+1)*(ntrunc+2)/2,nt),depend(ntrunc,nt),intent(out) :: divspec
+            complex dimension(nmdim,nt),depend(nmdim,nt),intent(out) :: divspec
             integer optional,check(shape(ugrid,0)==ngptot),depend(ugrid) :: ngptot=shape(ugrid,0)
             integer optional,check(shape(ugrid,1)==nt),depend(ugrid) :: nt=shape(ugrid,1)
             integer optional,check(len(pl)==nlat),depend(pl) :: nlat=len(pl)
@@ -1088,13 +1099,15 @@ python module _spherepack ! in
         subroutine getlegfunc(legfunc,lat,ntrunc) ! in :_spherepack:getlegfunc.f90
             integer, intent(in), required :: ntrunc
             real, intent(in), required :: lat
-            real, intent(out), dimension((ntrunc+1)*(ntrunc+2)/2), depend(ntrunc) :: legfunc
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            real, intent(out), dimension(nmdim), depend(nmdim) :: legfunc
         end subroutine getlegfunc
         subroutine specintrp(rlon,ntrunc,datnm,scrm,pnm,ob) ! in :_spherepack:specintrp.f90
             integer, intent(in), required :: ntrunc
             real, intent(in), required :: rlon
-            real, intent(in), dimension((ntrunc+1)*(ntrunc+2)/2), depend(ntrunc) :: pnm
-            complex, intent(in), dimension((ntrunc+1)*(ntrunc+2)/2), depend(ntrunc) :: datnm
+            integer intent(aux),depend(ntrunc) :: nmdim=(ntrunc+1)*(ntrunc+2)/2
+            real, intent(in), dimension(nmdim), depend(nmdim) :: pnm
+            complex, intent(in), dimension(nmdim), depend(nmdim) :: datnm
 	    complex, intent(cache,hide), depend(ntrunc) :: scrm(ntrunc+1)
 	    real, intent(out) :: ob
         end subroutine specintrp
