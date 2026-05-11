@@ -148,19 +148,15 @@ class MesonBuildExt(build_ext):
         if os.name == "nt":
             shim_path = (build_dir / "build_python.bat").resolve()
             python_executable = str(Path(sys.executable).resolve())
-            shim_path.write_text(
-                "@echo off\r\n" f'"{python_executable}" %*\r\n',
-                encoding="utf-8",
-                newline="\r\n",
-            )
+            with shim_path.open("w", encoding="utf-8", newline="\r\n") as handle:
+                handle.write("@echo off\r\n")
+                handle.write(f'"{python_executable}" %*\r\n')
         else:
             shim_path = (build_dir / "build_python").resolve()
             python_executable = Path(sys.executable).resolve().as_posix()
-            shim_path.write_text(
-                "#!/bin/sh\n" f'exec "{python_executable}" "$@"\n',
-                encoding="utf-8",
-                newline="\n",
-            )
+            with shim_path.open("w", encoding="utf-8", newline="\n") as handle:
+                handle.write("#!/bin/sh\n")
+                handle.write(f'exec "{python_executable}" "$@"\n')
             shim_path.chmod(0o755)
 
         return shim_path
