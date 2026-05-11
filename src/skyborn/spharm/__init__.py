@@ -17,9 +17,30 @@ Example:
 """
 
 from .reduced_gaussian import ReducedGaussianSpharmt
-from .spherical_harmonics import __all__ as _spherical_harmonics_all
+from .spherical_harmonics import (
+    Spharmt,
+    SpheremackError,
+    ValidationError,
+    gaussian_lats_wts,
+    getgeodesicpts,
+    getspecindx,
+    legendre,
+    regrid,
+    specintrp,
+)
 
-__all__ = [*_spherical_harmonics_all, "ReducedGaussianSpharmt"]
+__all__ = [
+    "Spharmt",
+    "SpheremackError",
+    "ValidationError",
+    "regrid",
+    "gaussian_lats_wts",
+    "getspecindx",
+    "getgeodesicpts",
+    "legendre",
+    "specintrp",
+    "ReducedGaussianSpharmt",
+]
 
 
 __author__ = "Qianye Su"
