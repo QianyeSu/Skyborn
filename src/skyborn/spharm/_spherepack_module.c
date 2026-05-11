@@ -1429,7 +1429,7 @@ static PyMethodDef module_methods[] = {
 
 static struct PyModuleDef moduledef = {
     PyModuleDef_HEAD_INIT,
-    "_spherepack_direct",
+    "_spherepack",
     NULL,
     -1,
     module_methods,
@@ -1439,7 +1439,7 @@ static struct PyModuleDef moduledef = {
     NULL,
 };
 
-PyMODINIT_FUNC PyInit__spherepack_direct(void) {
+PyMODINIT_FUNC PyInit__spherepack(void) {
     import_array();
     return PyModule_Create(&moduledef);
 }

@@ -3,27 +3,22 @@ project('skyborn-spharm', 'c', 'fortran',
   version : '1.0.0',
   default_options : ['warning_level=2', 'buildtype=release', 'b_lto=true'])
 
-# Get Python installation
 py_mod = import('python')
 py = py_mod.find_installation('python', pure: false)
 py_dep = py.dependency()
 
-# Find OpenMP dependency
 openmp_dep = dependency('openmp', required: false)
 
-# Install Python module files
 py.install_sources(
-    ['__init__.py', '_spherepack.py', 'spherical_harmonics.py', 'reduced_gaussian.py'],
+    ['__init__.py', 'spherical_harmonics.py', 'reduced_gaussian.py'],
     subdir: 'skyborn/spharm',
 )
 
-# Get numpy include directories with robust fallbacks
 incdir_numpy_cmd = run_command(
     py,
     ['-c', '''
 import numpy
 import os
-# Try multiple potential paths
 paths = [
     numpy.get_include(),
     os.path.join(numpy.__path__[0], "core", "include"),
@@ -34,31 +29,11 @@ for path in paths:
         print(path)
         break
 else:
-    print(numpy.get_include())  # fallback
-'''],
-    check: true,
-)
-incdir_numpy = incdir_numpy_cmd.stdout().strip()
-
-# Try to get f2py include, with multiple fallbacks
-incdir_f2py_cmd = run_command(
-    py,
-    ['-c', '''
-import numpy
-import os
-try:
-    import numpy.f2py
-    f2py_path = numpy.f2py.get_include()
-    if os.path.exists(f2py_path):
-        print(f2py_path)
-    else:
-        print(numpy.get_include())
-except:
     print(numpy.get_include())
 '''],
     check: true,
 )
-incdir_f2py = incdir_f2py_cmd.stdout().strip()
+incdir_numpy = incdir_numpy_cmd.stdout().strip()
 
 python_include_dirs_cmd = run_command(
     py,
@@ -111,82 +86,75 @@ if python_include_dirs_text != ''
 endif
 
 message('NumPy include directory: ' + incdir_numpy)
-message('F2PY include directory: ' + incdir_f2py)
 message('Python include directories: ' + python_include_dirs_text)
 
-# Detect platform and architecture for optimization flags
 host_system = host_machine.system()
 host_cpu = host_machine.cpu_family()
 
 message('Host system: ' + host_system)
 message('Host CPU family: ' + host_cpu)
 
-# Cross-platform optimization flags based on setup.py configuration
 fortran_args = []
 c_args = []
 
 if host_system == 'darwin' and host_cpu == 'aarch64'
-    # Apple Silicon (arm64) optimized flags
     message('Configuring for Apple Silicon (arm64)')
     fortran_args = [
-        '-O3',                      # Maximum optimization
-        '-fPIC',                    # Position independent code
-        '-fno-second-underscore',   # Fortran symbol naming convention
-        '-funroll-loops',           # Loop unrolling optimization
-        '-finline-functions',       # Inline small functions
-        '-ftree-vectorize',         # Auto-vectorization for SIMD
-        '-ffinite-math-only',       # Assume no NaN/Inf values
-        '-ffree-line-length-none',  # Allow arbitrarily long free-form source lines
-        '-march=armv8-a',           # ARM64 architecture
-        '-mtune=apple-m1',          # Tune for Apple Silicon
-        '-fno-common',              # Don't use common blocks
-        '-ftree-loop-im',           # Loop invariant motion
-        '-ftree-loop-distribution', # Loop distribution
-        '-falign-functions=32',     # Function alignment
-        '-falign-loops=32',         # Loop alignment optimization
-        '-std=legacy',              # Legacy Fortran standard
+        '-O3',
+        '-fPIC',
+        '-fno-second-underscore',
+        '-funroll-loops',
+        '-finline-functions',
+        '-ftree-vectorize',
+        '-ffinite-math-only',
+        '-ffree-line-length-none',
+        '-march=armv8-a',
+        '-mtune=apple-m1',
+        '-fno-common',
+        '-ftree-loop-im',
+        '-ftree-loop-distribution',
+        '-falign-functions=32',
+        '-falign-loops=32',
+        '-std=legacy',
         '-fopenmp',
     ]
     c_args = [
-        # '-O3',                                        # Maximum optimization
-        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION', # NumPy API compatibility
-        '-march=armv8-a',                             # ARM64 architecture
-        '-mtune=apple-m1',                            # Tune for Apple Silicon
-        '-fPIC',                                      # Position independent code
-        '-fno-trapping-math',                         # Disable floating-point traps
-        '-falign-functions=32',                       # Function alignment
+        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',
+        '-march=armv8-a',
+        '-mtune=apple-m1',
+        '-fPIC',
+        '-fno-trapping-math',
+        '-falign-functions=32',
         '-fopenmp',
     ]
 else
-    # x86-64 optimized flags (Linux/Windows/Intel macOS)
     message('Configuring for x86-64 architecture')
     fortran_args = [
-        '-O3',                      # Maximum optimization
-        '-fPIC',                    # Position independent code
-        '-fno-second-underscore',   # Fortran symbol naming convention
-        '-funroll-loops',           # Loop unrolling optimization
-        '-finline-functions',       # Inline small functions
-        '-ftree-vectorize',         # Auto-vectorization for SIMD
-        '-ffinite-math-only',       # Assume no NaN/Inf values
-        '-ffree-line-length-none',  # Allow arbitrarily long free-form source lines
-        '-march=x86-64',            # x86-64 architecture
-        '-mtune=generic',           # Generic tuning (portable)
-        '-fno-common',              # Don't use common blocks
-        '-ftree-loop-im',           # Loop invariant motion
-        '-ftree-loop-distribution', # Loop distribution
-        '-falign-functions=32',     # Function alignment
-        '-falign-loops=32',         # Loop alignment optimization
-        '-std=legacy',              # Legacy Fortran standard
+        '-O3',
+        '-fPIC',
+        '-fno-second-underscore',
+        '-funroll-loops',
+        '-finline-functions',
+        '-ftree-vectorize',
+        '-ffinite-math-only',
+        '-ffree-line-length-none',
+        '-march=x86-64',
+        '-mtune=generic',
+        '-fno-common',
+        '-ftree-loop-im',
+        '-ftree-loop-distribution',
+        '-falign-functions=32',
+        '-falign-loops=32',
+        '-std=legacy',
         '-fopenmp',
     ]
     c_args = [
-        # '-O3',                                        # Maximum optimization
-        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',# NumPy API compatibility
-        '-march=x86-64',                              # x86-64 architecture
-        '-mtune=generic',                             # Generic tuning (portable)
-        '-fPIC',                                      # Position independent code
-        '-fno-trapping-math',                         # Disable floating-point traps
-        '-falign-functions=32',                       # Function alignment
+        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',
+        '-march=x86-64',
+        '-mtune=generic',
+        '-fPIC',
+        '-fno-trapping-math',
+        '-falign-functions=32',
         '-fopenmp',
     ]
 endif
@@ -194,258 +162,115 @@ endif
 message('Fortran args: ' + ' '.join(fortran_args))
 message('C args: ' + ' '.join(c_args))
 
-# Generate Fortran-Python interface with f2py
-try_f2py = run_command(py, '-c', 'import numpy.f2py; print("OK")', check: false)
+if python_include_dirs.length() == 1
+    inc_np = include_directories(
+        incdir_numpy,
+        python_include_dirs[0],
+    )
+else
+    inc_np = include_directories(incdir_numpy)
+endif
 
-if try_f2py.returncode() == 0
-    if python_include_dirs.length() == 1
-        inc_np = include_directories(
-            incdir_numpy,
-            incdir_f2py,
-            python_include_dirs[0],
-        )
-    else
-        inc_np = include_directories(incdir_numpy, incdir_f2py)
-    endif
+numpy_header_check = run_command(
+    py,
+    ['-c', 'import os; import numpy; header_path = os.path.join(numpy.get_include(), "numpy", "npy_os.h"); print("OK" if os.path.exists(header_path) else "MISSING", header_path)'],
+    check: false,
+)
+message('NumPy header check: ' + numpy_header_check.stdout().strip())
 
-    # Verify numpy headers exist
-    numpy_header_check = run_command(
+dependencies = [py_dep]
+if openmp_dep.found()
+    dependencies += openmp_dep
+    message('Using OpenMP for parallel processing')
+else
+    warning('OpenMP not found - building without parallel support')
+endif
+
+common_fortran_sources = [
+    'src/lap.f90',
+    'src/invlap.f90',
+    'src/sphcom.f90',
+    'src/hrfft.f90',
+    'src/multsmoothfact.f90',
+    'src/gaqd.f90',
+    'src/shags.f90',
+]
+
+common_fortran_lib = static_library(
+    '_spherepack_common',
+    common_fortran_sources,
+    dependencies: dependencies,
+    fortran_args: fortran_args,
+    build_by_default: true,
+)
+
+direct_fortran_sources = [
+    'src/spherepack_bindings.f90',
+    'src/onedtotwod.f90',
+    'src/twodtooned.f90',
+    'src/shaes.f90',
+    'src/vhaes.f90',
+    'src/shags.f90',
+    'src/vhags.f90',
+    'src/shses.f90',
+    'src/vhses.f90',
+    'src/shsgs.f90',
+    'src/vhsgs.f90',
+    'src/shaec.f90',
+    'src/vhaec.f90',
+    'src/shagc.f90',
+    'src/vhagc.f90',
+    'src/shsec.f90',
+    'src/vhsec.f90',
+    'src/shsgc.f90',
+    'src/vhsgc.f90',
+    'src/ihgeod.f90',
+    'src/getlegfunc.f90',
+    'src/specintrp.f90',
+    'src/alf.f90',
+]
+
+reduced_direct_fortran_sources = [
+    'src/reduced_bindings.f90',
+    'src/reduced_gaussian_scalar.f90',
+]
+
+spherepack_direct_ext = py.extension_module(
+    '_spherepack',
+    ['_spherepack_module.c'] + direct_fortran_sources,
+    include_directories: inc_np,
+    dependencies: dependencies,
+    link_with: common_fortran_lib,
+    fortran_args: fortran_args,
+    c_args: c_args,
+    install: true,
+    install_dir: get_option('python.purelibdir') / 'skyborn' / 'spharm',
+    build_by_default: true,
+)
+
+spherepack_reduced_ext = py.extension_module(
+    '_spherepack_reduced',
+    ['_spherepack_reduced_module.c'] + reduced_direct_fortran_sources,
+    include_directories: inc_np,
+    dependencies: dependencies,
+    link_with: common_fortran_lib,
+    fortran_args: fortran_args,
+    c_args: c_args,
+    install: true,
+    install_dir: get_option('python.purelibdir') / 'skyborn' / 'spharm',
+    build_by_default: true,
+)
+
+copy_targets = [spherepack_direct_ext, spherepack_reduced_ext]
+
+copy_to_source = custom_target(
+    'copy_to_source_for_inplace',
+    input: copy_targets,
+    output: 'inplace_copy_marker.txt',
+    command: [
         py,
-        ['-c', 'import os; import numpy; header_path = os.path.join(numpy.get_include(), "numpy", "npy_os.h"); print("✓" if os.path.exists(header_path) else "✗", header_path)'],
-        check: false,
-    )
-    message('NumPy header check: ' + numpy_header_check.stdout().strip())
-
-    # Get fortranobject.c path with extensive fallbacks
-    fortranobject_cmd = run_command(
-        py,
-        ['-c', '''
-import numpy.f2py
-import numpy
-import os
-import sys
-
-# Try multiple potential paths for fortranobject.c
-candidates = []
-
-# Method 1: f2py.get_include()
-try:
-    fo_path = os.path.join(numpy.f2py.get_include(), "fortranobject.c")
-    candidates.append(fo_path)
-except:
-    pass
-
-# Method 2: numpy package paths
-numpy_base = numpy.__path__[0]
-candidates.extend([
-    os.path.join(numpy_base, "f2py", "src", "fortranobject.c"),
-    os.path.join(numpy_base, "f2py", "fortranobject.c"),
-    os.path.join(numpy_base, "_core", "src", "fortranobject.c"),
-])
-
-# Method 3: site-packages paths
-try:
-    import site
-    for site_dir in site.getsitepackages() + [site.getusersitepackages()]:
-        if site_dir:
-            candidates.extend([
-                os.path.join(site_dir, "numpy", "f2py", "src", "fortranobject.c"),
-                os.path.join(site_dir, "numpy", "f2py", "fortranobject.c"),
-            ])
-except:
-    pass
-
-# Method 4: sys.path based search
-for path in sys.path:
-    if path and "numpy" in path:
-        candidates.extend([
-            os.path.join(path, "numpy", "f2py", "src", "fortranobject.c"),
-            os.path.join(path, "numpy", "f2py", "fortranobject.c"),
-        ])
-
-# Find first existing file
-for candidate in candidates:
-    if os.path.exists(candidate):
-        print(candidate)
-        break
-else:
-    print("")  # empty if not found
-'''],
-        check: true,
-    )
-    fortranobject_c = fortranobject_cmd.stdout().strip()
-
-    # Add fortranobject.c if found
-    fortranobject_sources = []
-    if fortranobject_c != ''
-        message('Found fortranobject.c: ' + fortranobject_c)
-        fortran_obj_check = run_command(
-            py,
-            '-c', 'import os; import sys; sys.exit(0 if os.path.exists(r"' + fortranobject_c + '") else 1)',
-            check: false,
-        )
-        if fortran_obj_check.returncode() == 0
-            fortranobject_sources += files(fortranobject_c)
-            message('Added fortranobject.c to build')
-        else
-            warning('fortranobject.c path found but file does not exist: ' + fortranobject_c)
-        endif
-    else
-        warning('fortranobject.c not found - trying to build without it (may cause issues)')
-    endif
-
-    # Build dependency list
-    dependencies = [py_dep]
-    if openmp_dep.found()
-        dependencies += openmp_dep
-        message('Using OpenMP for parallel processing')
-    else
-        warning('OpenMP not found - building without parallel support')
-    endif
-
-    common_fortran_sources = [
-        'src/lap.f90',
-        'src/invlap.f90',
-        'src/sphcom.f90',
-        'src/hrfft.f90',
-        'src/multsmoothfact.f90',
-        'src/gaqd.f90',
-        'src/shags.f90',
-    ]
-
-    regular_fortran_sources = [
-        'src/getlegfunc.f90',
-        'src/specintrp.f90',
-        'src/onedtotwod.f90',
-        'src/twodtooned.f90',
-        'src/shses.f90',
-        'src/shaes.f90',
-        'src/vhaes.f90',
-        'src/vhses.f90',
-        'src/shsgs.f90',
-        'src/vhags.f90',
-        'src/vhsgs.f90',
-        'src/shaec.f90',
-        'src/shagc.f90',
-        'src/shsec.f90',
-        'src/shsgc.f90',
-        'src/vhaec.f90',
-        'src/vhagc.f90',
-        'src/vhsec.f90',
-        'src/vhsgc.f90',
-        'src/ihgeod.f90',
-        'src/alf.f90',
-    ]
-
-    reduced_fortran_sources = [
-        'src/reduced_gaussian_scalar.f90',
-    ]
-
-    common_fortran_lib = static_library(
-        '_spherepack_common',
-        common_fortran_sources,
-        dependencies: dependencies,
-        fortran_args: fortran_args,
-        build_by_default: true,
-    )
-
-    reduced_source = custom_target(
-        '_spherepack_reducedmodule.c',
-        input: custom_target(
-            '_spherepack_reduced.pyf',
-            input: ['src/_spherepack.pyf', 'build_split_pyf.py'],
-            output: '_spherepack_reduced.pyf',
-            command: [
-                py,
-                '@INPUT1@',
-                'reduced',
-                '@INPUT0@',
-                '@OUTPUT@',
-                '_spherepack_reduced',
-            ],
-            build_by_default: true,
-            build_always_stale: true,
-            install: false,
-        ),
-        output: ['_spherepack_reducedmodule.c', '_spherepack_reduced-f2pywrappers.f'],
-        command: [
-            py,
-            '-m', 'numpy.f2py',
-            '--lower', '@INPUT@',
-            '--build-dir', '@OUTDIR@',
-        ],
-        build_by_default: true,
-        build_always_stale: true,
-        install: false,
-    )
-
-    # Build the regular spherepack extension module
-    direct_fortran_sources = [
-        'src/spherepack_bindings.f90',
-        'src/onedtotwod.f90',
-        'src/twodtooned.f90',
-        'src/shaes.f90',
-        'src/vhaes.f90',
-        'src/shags.f90',
-        'src/vhags.f90',
-        'src/shses.f90',
-        'src/vhses.f90',
-        'src/shsgs.f90',
-        'src/vhsgs.f90',
-        'src/shaec.f90',
-        'src/vhaec.f90',
-        'src/shagc.f90',
-        'src/vhagc.f90',
-        'src/shsec.f90',
-        'src/vhsec.f90',
-        'src/shsgc.f90',
-        'src/vhsgc.f90',
-        'src/ihgeod.f90',
-        'src/getlegfunc.f90',
-        'src/specintrp.f90',
-        'src/alf.f90',
-    ]
-
-    spherepack_direct_ext = py.extension_module(
-        '_spherepack_direct',
-        ['_spherepack_module.c'] + direct_fortran_sources,
-        include_directories: inc_np,
-        dependencies: dependencies,
-        link_with: common_fortran_lib,
-        fortran_args: fortran_args,
-        c_args: c_args,
-        install: true,
-        install_dir: get_option('python.purelibdir') / 'skyborn' / 'spharm',
-        build_by_default: true,
-    )
-
-    spherepack_reduced_ext = py.extension_module(
-        '_spherepack_reduced',
-        [reduced_source] + fortranobject_sources + reduced_fortran_sources,
-        include_directories: inc_np,
-        dependencies: dependencies,
-        link_with: common_fortran_lib,
-        fortran_args: fortran_args,
-        c_args: c_args + [
-            '-Wno-cast-function-type',
-            '-Wno-unused-parameter',
-            '-Wno-missing-field-initializers',
-        ],
-        install: true,
-        install_dir: get_option('python.purelibdir') / 'skyborn' / 'spharm',
-        build_by_default: true,
-    )
-
-    copy_targets = [spherepack_direct_ext, spherepack_reduced_ext]
-
-    copy_to_source = custom_target(
-        'copy_to_source_for_inplace',
-        input: copy_targets,
-        output: 'inplace_copy_marker.txt',
-        command: [
-            py,
-            '-c',
-            '''
+        '-c',
+        '''
 import os
 import shutil
 import glob
@@ -454,26 +279,22 @@ from pathlib import Path
 
 print("=== Extension source copy check ===")
 
-current_dir = Path.cwd()  # This is the build directory itself
-module_dir = current_dir.parent  # This is the module source directory
+current_dir = Path.cwd()
+module_dir = current_dir.parent
 print(f"Current dir (build): {current_dir}")
 print(f"Module dir (source): {module_dir}")
 
-# Search for compiled extension files in current build directory
 patterns = ["_spherepack*.so", "_spherepack*.pyd", "_spherepack*.dylib", "_spherepack_reduced*.so", "_spherepack_reduced*.pyd", "_spherepack_reduced*.dylib"]
 built_files = []
 
-# Search directly in the build directory (current directory)
 for pattern in patterns:
     found_files = glob.glob(str(current_dir / pattern), recursive=False)
     built_files.extend(found_files)
 
-# Also search recursively in case files are in subdirectories
 for pattern in patterns:
     found_files = glob.glob(str(current_dir / "**" / pattern), recursive=True)
     built_files.extend(found_files)
 
-# Remove duplicates
 built_files = list(set(built_files))
 
 if built_files:
@@ -481,17 +302,16 @@ if built_files:
 
     stale_patterns = [
         "_spherepack.cp*-win_amd64.pyd",
+        "_spherepack_direct.cp*-win_amd64.pyd",
         "_spherepack*.so",
         "_spherepack*.dylib",
     ]
-    keep_names = {
-        "_spherepack.py",
-    }
+    keep_names = set()
     for stale_pattern in stale_patterns:
         for stale_file in module_dir.glob(stale_pattern):
             if stale_file.name in keep_names:
                 continue
-            if stale_file.name.startswith("_spherepack_f2py") or stale_file.name.startswith("_spherepack_direct") or stale_file.name.startswith("_spherepack_reduced"):
+            if stale_file.name.startswith("_spherepack_f2py") or stale_file.name.startswith("_spherepack_reduced"):
                 continue
             try:
                 stale_file.unlink()
@@ -506,12 +326,10 @@ if built_files:
         except Exception as e:
             print(f"Failed to remove stale shared common artifact {stale_common.name}: {e}")
 
-    # Check if we should copy to source directory
     for built_file_str in built_files:
         built_file = Path(built_file_str)
         source_file = module_dir / built_file.name
 
-        # Copy if source doesn't exist or is older
         should_copy = False
         if not source_file.exists():
             should_copy = True
@@ -538,19 +356,14 @@ else:
     else:
         print("  Current directory does not exist")
 
-# Create marker
 with open("''' + '@OUTPUT@' + '''", "w") as f:
     f.write("Source copy check completed\\n")
 
 print("=== Extension source copy check completed ===")
 '''
-        ],
-        build_by_default: true,  # Always run this check
-        console: true
-    )
+    ],
+    build_by_default: true,
+    console: true
+)
 
-    message('spharm submodule configured successfully with cross-platform optimizations')
-else
-    warning('f2py not available, skipping spharm interface generation')
-    message('Installing Python-only spharm module (without Fortran extensions)')
-endif
+message('spharm submodule configured successfully with cross-platform optimizations')
