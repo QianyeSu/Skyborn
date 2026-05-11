@@ -59,6 +59,16 @@ class ReducedGaussianSpharmt:
     triangular layout as :class:`skyborn.spharm.Spharmt`, so scalar spectra can
     be passed through the existing ``spharm`` spectral utilities without first
     interpolating the reduced grid to a rectangular Gaussian grid.
+
+    Attributes:
+        pl: Reduced Gaussian row lengths ordered north-to-south.
+        nlat: Number of latitude rows.
+        npoints: Total packed grid-point count, equal to ``sum(pl)``.
+        rsphere: Sphere radius in meters.
+        gridtype: Fixed grid type label ``"reduced_gaussian"``.
+        legfunc: Legendre function handling mode - ``"stored"`` or ``"computed"``.
+        precision: Public output precision mode - ``"auto"``, ``"single"``, or
+            ``"double"``.
     """
 
     def __init__(
@@ -68,6 +78,24 @@ class ReducedGaussianSpharmt:
         legfunc: str = "stored",
         precision: str = "auto",
     ) -> None:
+        """
+        Create a reduced-Gaussian scalar transform backend.
+
+        Args:
+            pl: Reduced Gaussian row lengths ordered north-to-south. Each entry
+                gives the number of longitude points on that latitude row.
+            rsphere: Sphere radius in meters.
+            legfunc: Legendre function handling mode - ``"stored"`` or
+                ``"computed"``.
+            precision: Public output precision mode. ``"auto"`` follows the
+                highest precision seen in relevant inputs, ``"single"`` returns
+                float32/complex64 outputs, and ``"double"`` returns
+                float64/complex128 outputs.
+
+        Raises:
+            ValidationError: If ``pl``, ``rsphere``, ``legfunc``, or
+                ``precision`` is invalid.
+        """
         self.pl = self._validate_pl(pl)
         self.nlat = int(self.pl.size)
         self.npoints = int(self.pl.sum())

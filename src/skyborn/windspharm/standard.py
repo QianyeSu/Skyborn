@@ -52,6 +52,10 @@ class VectorWind:
         Legendre function computation method:
         - 'stored': precompute and store (faster, more memory)
         - 'computed': compute on-the-fly (slower, less memory)
+    precision : {'auto', 'single', 'double'}, default 'auto'
+        Public output precision mode. 'auto' preserves the promoted input
+        floating precision, 'single' returns float32/complex64 outputs, and
+        'double' returns float64/complex128 outputs.
 
     Attributes
     ----------
@@ -61,6 +65,12 @@ class VectorWind:
         Meridional wind component
     gridtype : str
         Grid type used
+    rsphere : float
+        Sphere radius in meters used by the underlying transform
+    legfunc : str
+        Legendre function handling mode used by the underlying transform
+    precision : str
+        Public output precision mode
     s : Spharmt
         Spherical harmonic transform object
 
@@ -106,6 +116,22 @@ class VectorWind:
         This method performs thorough validation of input wind components including
         checks for missing values, infinite values, shape compatibility, and
         dimensional requirements.
+
+        Args:
+            u: Zonal wind component with latitude on axis 0 and longitude on
+                axis 1.
+            v: Meridional wind component with the same shape as ``u``.
+            gridtype: Grid type - ``"regular"`` or ``"gaussian"``.
+            rsphere: Sphere radius in meters.
+            legfunc: Legendre function handling mode - ``"stored"`` or
+                ``"computed"``.
+            precision: Public output precision mode. ``"auto"`` preserves the
+                promoted input floating precision, ``"single"`` returns
+                float32 outputs, and ``"double"`` returns float64 outputs.
+
+        Raises:
+            ValueError: If the input arrays fail shape, dimensional, or finite
+                value validation.
         """
         # Step 1: Handle masked arrays and create copies
         self._output_dtype = self._infer_output_dtype(u, v)

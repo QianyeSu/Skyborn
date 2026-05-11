@@ -26,6 +26,27 @@ class ReducedVectorWind:
         Sphere radius in meters.
     legfunc:
         Legendre function mode passed to grouped Gaussian ``Spharmt`` backends.
+    precision:
+        Public output precision mode. ``"auto"`` preserves the promoted input
+        floating precision, ``"single"`` returns float32 outputs, and
+        ``"double"`` returns float64 outputs.
+
+    Attributes
+    ----------
+    u, v:
+        Packed zonal and meridional wind components.
+    pl:
+        Reduced Gaussian row lengths ordered north-to-south.
+    gridtype:
+        Fixed grid type label ``"reduced_gaussian"``.
+    rsphere:
+        Sphere radius in meters.
+    legfunc:
+        Legendre function handling mode used by the underlying transform.
+    precision:
+        Public output precision mode.
+    s:
+        Underlying :class:`skyborn.spharm.ReducedGaussianSpharmt` instance.
     """
 
     def __init__(
@@ -37,6 +58,23 @@ class ReducedVectorWind:
         legfunc: str = "stored",
         precision: str = "auto",
     ) -> None:
+        """
+        Create a reduced-Gaussian vector wind analysis wrapper.
+
+        Args:
+            u: Packed zonal wind component with shape ``(sum(pl), ...)``.
+            v: Packed meridional wind component with the same shape as ``u``.
+            pl: Reduced Gaussian row lengths ordered north-to-south.
+            rsphere: Sphere radius in meters.
+            legfunc: Legendre function handling mode - ``"stored"`` or
+                ``"computed"``.
+            precision: Public output precision mode. ``"auto"`` preserves the
+                promoted input floating precision, ``"single"`` returns
+                float32 outputs, and ``"double"`` returns float64 outputs.
+
+        Raises:
+            ValueError: If ``u``, ``v``, or ``pl`` fails validation.
+        """
         self.pl = self._validate_pl(pl)
         self._output_dtype = self._infer_output_dtype(u, v)
         self._precision = precision
