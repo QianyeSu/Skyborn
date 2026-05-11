@@ -8,7 +8,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 from numpy.typing import NDArray
 
-from . import _spherepack_reduced as _spherepack
+from . import _spherepack
 from .spherical_harmonics import (
     DEFAULT_EARTH_RADIUS,
     ComplexArray,

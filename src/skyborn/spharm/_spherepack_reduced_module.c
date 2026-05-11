@@ -3,6 +3,11 @@
 #include <Python.h>
 #include <numpy/arrayobject.h>
 
+int reduced_import_array(void) {
+    import_array1(-1);
+    return 0;
+}
+
 void reduced_gaqd_c(int nlat, void *theta, void *wts, int *ierror);
 void reduced_lap_c(void *dataspec, void *dataspec_lap, int nmdim, int nt, float rsphere);
 void reduced_invlap_c(void *dataspec, void *dataspec_ilap, int nmdim, int nt, float rsphere);
@@ -686,7 +691,7 @@ fail:
     return NULL;
 }
 
-static PyMethodDef module_methods[] = {
+PyMethodDef reduced_module_methods[] = {
     {"gaqd", py_reduced_gaqd, METH_VARARGS, "Compute Gaussian latitudes and weights."},
     {"lap", py_reduced_lap, METH_VARARGS, "Apply the spherical Laplacian to reduced spectra."},
     {"invlap", py_reduced_invlap, METH_VARARGS, "Apply the inverse spherical Laplacian to reduced spectra."},
@@ -704,20 +709,3 @@ static PyMethodDef module_methods[] = {
     {"reduced_gaussian_getdivspec", py_reduced_gaussian_getdivspec, METH_VARARGS, "Analyze packed reduced Gaussian winds to divergence spectra."},
     {NULL, NULL, 0, NULL},
 };
-
-static struct PyModuleDef moduledef = {
-    PyModuleDef_HEAD_INIT,
-    "_spherepack_reduced",
-    NULL,
-    -1,
-    module_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-};
-
-PyMODINIT_FUNC PyInit__spherepack_reduced(void) {
-    import_array();
-    return PyModule_Create(&moduledef);
-}

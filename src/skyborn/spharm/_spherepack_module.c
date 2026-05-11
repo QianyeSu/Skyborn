@@ -2,6 +2,10 @@
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
+#include <string.h>
+
+extern PyMethodDef reduced_module_methods[];
+int reduced_import_array(void);
 
 void gaqd_c(int nlat, void *theta, void *wts, int *ierror);
 void getlegfunc_c(void *legfunc, float lat, int ntrunc);
@@ -1439,7 +1443,38 @@ static struct PyModuleDef moduledef = {
     NULL,
 };
 
+static int add_reduced_methods(PyObject *module) {
+    PyMethodDef *method = reduced_module_methods;
+    for (; method->ml_name != NULL; method++) {
+        PyObject *func;
+        if (strncmp(method->ml_name, "reduced_gaussian_", 17) != 0) {
+            continue;
+        }
+        func = PyCFunction_NewEx(method, NULL, NULL);
+        if (func == NULL) {
+            return -1;
+        }
+        if (PyModule_AddObject(module, method->ml_name, func) < 0) {
+            Py_DECREF(func);
+            return -1;
+        }
+    }
+    return 0;
+}
+
 PyMODINIT_FUNC PyInit__spherepack(void) {
+    PyObject *module;
     import_array();
-    return PyModule_Create(&moduledef);
+    if (reduced_import_array() != 0) {
+        return NULL;
+    }
+    module = PyModule_Create(&moduledef);
+    if (module == NULL) {
+        return NULL;
+    }
+    if (add_reduced_methods(module) != 0) {
+        Py_DECREF(module);
+        return NULL;
+    }
+    return module;
 }

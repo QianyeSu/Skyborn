@@ -94,6 +94,8 @@ host_cpu = host_machine.cpu_family()
 message('Host system: ' + host_system)
 message('Host CPU family: ' + host_cpu)
 
+package_install_dir = get_option('python.purelibdir') / 'skyborn' / 'spharm'
+
 fortran_args = []
 c_args = []
 
@@ -236,31 +238,18 @@ reduced_direct_fortran_sources = [
 
 spherepack_direct_ext = py.extension_module(
     '_spherepack',
-    ['_spherepack_module.c'] + direct_fortran_sources,
+    ['_spherepack_module.c', '_spherepack_reduced_module.c'] + direct_fortran_sources + reduced_direct_fortran_sources,
     include_directories: inc_np,
     dependencies: dependencies,
     link_with: common_fortran_lib,
     fortran_args: fortran_args,
     c_args: c_args,
     install: true,
-    install_dir: get_option('python.purelibdir') / 'skyborn' / 'spharm',
+    install_dir: package_install_dir,
     build_by_default: true,
 )
 
-spherepack_reduced_ext = py.extension_module(
-    '_spherepack_reduced',
-    ['_spherepack_reduced_module.c'] + reduced_direct_fortran_sources,
-    include_directories: inc_np,
-    dependencies: dependencies,
-    link_with: common_fortran_lib,
-    fortran_args: fortran_args,
-    c_args: c_args,
-    install: true,
-    install_dir: get_option('python.purelibdir') / 'skyborn' / 'spharm',
-    build_by_default: true,
-)
-
-copy_targets = [spherepack_direct_ext, spherepack_reduced_ext]
+copy_targets = [spherepack_direct_ext]
 
 copy_to_source = custom_target(
     'copy_to_source_for_inplace',
@@ -283,7 +272,20 @@ module_dir = current_dir.parent
 print(f"Current dir (build): {current_dir}")
 print(f"Module dir (source): {module_dir}")
 
-patterns = ["_spherepack*.so", "_spherepack*.pyd", "_spherepack*.dylib", "_spherepack_reduced*.so", "_spherepack_reduced*.pyd", "_spherepack_reduced*.dylib"]
+patterns = [
+    "_spherepack*.so",
+    "_spherepack*.pyd",
+    "_spherepack*.dylib",
+    "_spherepack_reduced*.so",
+    "_spherepack_reduced*.pyd",
+    "_spherepack_reduced*.dylib",
+    "lib_spherepack_common*.so",
+    "lib_spherepack_common*.dll",
+    "lib_spherepack_common*.dylib",
+    "_spherepack_common*.so",
+    "_spherepack_common*.dll",
+    "_spherepack_common*.dylib",
+]
 built_files = []
 
 for pattern in patterns:
@@ -302,6 +304,7 @@ if built_files:
     stale_patterns = [
         "_spherepack.cp*-win_amd64.pyd",
         "_spherepack_direct.cp*-win_amd64.pyd",
+        "_spherepack_reduced.cp*-win_amd64.pyd",
         "_spherepack*.so",
         "_spherepack*.dylib",
     ]
@@ -310,15 +313,20 @@ if built_files:
         for stale_file in module_dir.glob(stale_pattern):
             if stale_file.name in keep_names:
                 continue
-            if stale_file.name.startswith("_spherepack_reduced"):
-                continue
             try:
                 stale_file.unlink()
                 print(f"Removed stale source artifact {stale_file.name}")
             except Exception as e:
                 print(f"Failed to remove stale source artifact {stale_file.name}: {e}")
 
-    for stale_common in list(module_dir.glob("_spherepack_common*.dll")) + list(module_dir.glob("_spherepack_common*.so")) + list(module_dir.glob("_spherepack_common*.dylib")):
+    for stale_common in (
+        list(module_dir.glob("_spherepack_common*.dll"))
+        + list(module_dir.glob("_spherepack_common*.so"))
+        + list(module_dir.glob("_spherepack_common*.dylib"))
+        + list(module_dir.glob("lib_spherepack_common*.dll"))
+        + list(module_dir.glob("lib_spherepack_common*.so"))
+        + list(module_dir.glob("lib_spherepack_common*.dylib"))
+    ):
         try:
             stale_common.unlink()
             print(f"Removed stale shared common artifact {stale_common.name}")
@@ -327,6 +335,8 @@ if built_files:
 
     for built_file_str in built_files:
         built_file = Path(built_file_str)
+        if built_file.name.startswith("_spherepack_reduced"):
+            continue
         source_file = module_dir / built_file.name
 
         should_copy = False
