@@ -33,11 +33,36 @@ Notes:
 
 from __future__ import absolute_import
 
-from . import reduced, standard, tools, xarray
+import importlib
+
+from . import standard, tools, xarray
 
 # Import main class for easier access
-from .reduced import ReducedVectorWind
 from .standard import VectorWind
+
+__all__ = [
+    "VectorWind",
+    "ReducedVectorWind",
+    "standard",
+    "reduced",
+    "tools",
+    "xarray",
+]
+
+
+def __getattr__(name):
+    if name == "ReducedVectorWind":
+        from .reduced import ReducedVectorWind
+
+        return ReducedVectorWind
+    if name == "reduced":
+        return importlib.import_module(f"{__name__}.reduced")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(__all__)
+
 
 __author__ = "Qianye Su"
 __license__ = "BSD-3-Clause"
