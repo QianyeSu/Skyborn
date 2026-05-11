@@ -5,6 +5,8 @@ This module tests the statistical and mathematical calculation functions
 in the skyborn.calc.calculations module.
 """
 
+import importlib
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -33,6 +35,39 @@ from skyborn.calc.emergent_constraints import (  # Legacy functions for backward
     find_std_from_PDF,
     gaussian_pdf,
 )
+
+
+class TestCalcPackageLazyExports:
+    """Test lazy compatibility exports from ``skyborn.calc``."""
+
+    def test_calc_package_resolves_submodule_exports_lazily(self):
+        """Accessing a calc submodule export should use ``__getattr__`` and cache it."""
+        calc_module = importlib.reload(importlib.import_module("skyborn.calc"))
+        calc_module.__dict__.pop("geostrophic", None)
+
+        geostrophic_module = calc_module.geostrophic
+
+        assert geostrophic_module is importlib.import_module("skyborn.calc.geostrophic")
+        assert calc_module.__dict__["geostrophic"] is geostrophic_module
+
+    def test_calc_package_unknown_attribute_raises_attribute_error(self):
+        """Unknown lazy exports should raise the compatibility ``AttributeError``."""
+        calc_module = importlib.reload(importlib.import_module("skyborn.calc"))
+
+        with pytest.raises(
+            AttributeError, match="has no attribute 'definitely_missing_calc_export'"
+        ):
+            getattr(calc_module, "definitely_missing_calc_export")
+
+    def test_calc_package_dir_includes_lazy_exports(self):
+        """Interactive introspection should include both lazy objects and submodules."""
+        calc_module = importlib.reload(importlib.import_module("skyborn.calc"))
+
+        names = dir(calc_module)
+
+        assert "geostrophic" in names
+        assert "potential_intensity" in names
+        assert "trop_wmo_profile" in names
 
 
 class TestLinearRegression:
