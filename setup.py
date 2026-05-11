@@ -728,7 +728,9 @@ class CustomInstallLib(install_lib):
         Path("spharm") / "src",
         Path("gridfill") / "tests",
     }
-    _PRUNE_RELATIVE_FILES = set()
+    _PRUNE_RELATIVE_FILES = {
+        Path("spharm") / "build_split_pyf.py",
+    }
 
     def run(self):
         super().run()
@@ -750,7 +752,9 @@ class CustomInstallLib(install_lib):
         for path in sorted(
             package_root.rglob("*"), key=lambda item: len(item.parts), reverse=True
         ):
-            if path.is_dir() and path.name in self._PRUNE_DIR_NAMES:
+            if path.is_dir() and (
+                path.name in self._PRUNE_DIR_NAMES or path.name.startswith("build_")
+            ):
                 shutil.rmtree(path, ignore_errors=True)
                 pruned_dirs.append(path)
 

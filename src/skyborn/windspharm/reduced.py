@@ -98,8 +98,9 @@ class ReducedVectorWind:
         self.rsphere = self.s.rsphere
         self.legfunc = self.s.legfunc
         self._latitude_cache: Optional[np.ndarray] = None
-        self._coriolis_cache: Dict[Tuple[float, str], np.ndarray] = {}
-        self._planetary_vorticity_backend_cache: Dict[float, np.ndarray] = {}
+        self._planetary_vorticity_cache: Dict[
+            Tuple[float, str, Tuple[int, ...]], np.ndarray
+        ] = {}
         self._planetary_vorticity_spec_cache: Dict[Tuple[float, int], np.ndarray] = {}
         self._spectral_cache: Dict[
             Tuple[str, int], Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]
@@ -229,49 +230,53 @@ class ReducedVectorWind:
             self._latitude_cache = np.repeat(lat, self.pl)
         return self._latitude_cache
 
-    def _coriolis_values(
-        self, omega: Optional[float], dtype: Optional[np.dtype] = None
+    def _planetary_vorticity_values(
+        self,
+        omega: Optional[float] = None,
+        dtype: Optional[np.dtype] = None,
+        shape: Optional[Tuple[int, ...]] = None,
     ) -> np.ndarray:
         omega_value = 7.292e-05 if omega is None else float(omega)
         target_dtype = self._u_backend.dtype if dtype is None else np.dtype(dtype)
-        key = (omega_value, target_dtype.str)
-        cached = self._coriolis_cache.get(key)
+        target_shape = self.u.shape if shape is None else tuple(shape)
+        key = (omega_value, target_dtype.str, target_shape)
+        cached = self._planetary_vorticity_cache.get(key)
         if cached is not None:
             return cached
 
-        coriolis = np.asarray(
+        values = np.asarray(
             2.0 * omega_value * np.sin(np.deg2rad(self._latitude_values())),
             dtype=target_dtype,
         )
-        self._coriolis_cache[key] = coriolis
-        return coriolis
+        if len(target_shape) == 1:
+            broadcast = np.broadcast_to(values, target_shape)
+            result = np.array(broadcast, copy=True)
+        else:
+            row = values.reshape(target_shape[0], *([1] * (len(target_shape) - 1)))
+            result = np.broadcast_to(row, target_shape)
+        self._planetary_vorticity_cache[key] = result
+        return result
 
     def _planetary_vorticity(
         self, omega: Optional[float] = None, materialize: bool = True
     ) -> np.ndarray:
-        coriolis = self._coriolis_values(
-            omega, dtype=self._output_dtype if materialize else self._u_backend.dtype
+        data = self._planetary_vorticity_values(
+            omega=omega,
+            dtype=self._output_dtype if materialize else self._u_backend.dtype,
+            shape=self.u.shape,
         )
-        indices = [slice(None)] + [np.newaxis] * (self.u.ndim - 1)
-        broadcast = np.broadcast_to(coriolis[tuple(indices)], self.u.shape)
         if materialize:
-            return np.array(broadcast, copy=True)
-        return broadcast
+            return np.array(data, copy=True)
+        return data
 
-    def _planetary_vorticity_backend(self, omega: Optional[float] = None) -> np.ndarray:
-        omega_value = 7.292e-05 if omega is None else float(omega)
-        cached = self._planetary_vorticity_backend_cache.get(omega_value)
-        if cached is not None:
-            return cached
-
-        coriolis = self._coriolis_values(omega_value, dtype=self._u_backend.dtype)
-        broadcast = np.broadcast_to(
-            coriolis.reshape(self.u.shape[0], 1), self._u_backend.shape
+    def _planetary_vorticity_grid(self, omega: Optional[float] = None) -> np.ndarray:
+        return self._planetary_vorticity_values(
+            omega=omega,
+            dtype=self._u_backend.dtype,
+            shape=self._u_backend.shape,
         )
-        self._planetary_vorticity_backend_cache[omega_value] = broadcast
-        return broadcast
 
-    def _planetary_vorticity_spectral(
+    def _planetary_vorticity_spec(
         self, truncation: Optional[int] = None, omega: Optional[float] = None
     ) -> np.ndarray:
         ntrunc = self._ntrunc(truncation)
@@ -281,15 +286,12 @@ class ReducedVectorWind:
         if cached is not None:
             return cached
 
-        coriolis = self._coriolis_values(omega_value, dtype=self._u_backend.dtype)
-        grid = np.broadcast_to(
-            coriolis.reshape(self.u.shape[0], 1), self._u_backend.shape
-        )
-        f_spec = self.s._analyze_scalar(
-            np.asfortranarray(grid, dtype=np.float32), ntrunc
-        )
-        self._planetary_vorticity_spec_cache[key] = f_spec
-        return f_spec
+        dataspec = self.s._analyze_scalar(self._planetary_vorticity_grid(omega), ntrunc)
+        self._planetary_vorticity_spec_cache[key] = dataspec
+        return dataspec
+
+    def _coriolis(self, omega: Optional[float] = None) -> np.ndarray:
+        return self._planetary_vorticity_values(omega=omega, shape=(self.u.shape[0],))
 
     def _ntrunc(self, truncation: Optional[int]) -> int:
         return self.s._validate_ntrunc(truncation)
@@ -484,9 +486,9 @@ class ReducedVectorWind:
         """Return Rossby wave source on the packed reduced grid."""
         vrtspec, divspec = self._vector_analysis_spectral(truncation)
         vrt, div = self.s._synthesize_scalar_pair(vrtspec, divspec, truncation)
-        eta = vrt + self._planetary_vorticity_backend(omega=omega)
+        eta = vrt + self._planetary_vorticity_grid(omega=omega)
         uchi, vchi = self.s._synthesize_gradient(self.s._invlap(divspec), truncation)
-        etaspec = vrtspec + self._planetary_vorticity_spectral(truncation, omega=omega)
+        etaspec = vrtspec + self._planetary_vorticity_spec(truncation, omega=omega)
         etax, etay = self.s._synthesize_gradient(etaspec, truncation)
         rws = -eta * div - (uchi * etax + vchi * etay)
         return self._restore_grid(rws)

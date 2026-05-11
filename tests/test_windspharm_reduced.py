@@ -347,7 +347,7 @@ def test_reduced_vectorwind_scalar_validation_and_cache_branches(monkeypatch):
 
 
 @pytest.mark.skipif(not WINDSPHARM_AVAILABLE, reason="windspharm module not available")
-def test_reduced_vectorwind_caches_planetary_vorticity_backend(monkeypatch):
+def test_reduced_vectorwind_caches_planetary_vorticity_grid(monkeypatch):
     pl = np.array([8, 10, 12, 10, 8], dtype=np.int32)
     npoints = int(pl.sum())
     rng = np.random.default_rng(20260517)
@@ -364,10 +364,10 @@ def test_reduced_vectorwind_caches_planetary_vorticity_backend(monkeypatch):
 
     monkeypatch.setattr(reduced, "_latitude_values", counting_latitude_values)
 
-    first = reduced._planetary_vorticity_backend()
-    second = reduced._planetary_vorticity_backend()
-    custom = reduced._planetary_vorticity_backend(omega=7.2921150e-5)
-    custom_again = reduced._planetary_vorticity_backend(omega=7.2921150e-5)
+    first = reduced._planetary_vorticity_grid()
+    second = reduced._planetary_vorticity_grid()
+    custom = reduced._planetary_vorticity_grid(omega=7.2921150e-5)
+    custom_again = reduced._planetary_vorticity_grid(omega=7.2921150e-5)
 
     assert first is second
     assert custom is custom_again
