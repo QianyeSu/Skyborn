@@ -32,9 +32,9 @@ from typing import Any, Callable, List, Literal, Optional, Tuple, Union
 import numpy as np
 import xarray as xr
 
-__all__ = ["VectorWind"]
+__all__ = ["VectorWind", "ReducedVectorWind"]
 
-from . import standard
+from . import reduced, standard
 from ._common import get_apiorder, inspect_gridtype
 
 # Type aliases for better readability
@@ -977,6 +977,348 @@ class VectorWind:
         ).transpose(*reorder)
 
         return field
+
+
+class ReducedVectorWind:
+    """
+    Xarray interface for packed reduced-Gaussian vector wind analysis.
+
+    The first dimension of ``u`` and ``v`` is interpreted as the packed
+    reduced-Gaussian point dimension and must have length ``sum(pl)``. Any
+    remaining dimensions are carried through unchanged.
+    """
+
+    def __init__(
+        self,
+        u: DataArray,
+        v: DataArray,
+        pl: Any,
+        rsphere: float = 6.3712e6,
+        legfunc: LegFunc = "stored",
+        precision: Literal["auto", "single", "double"] = "auto",
+    ) -> None:
+        if not isinstance(u, xr.DataArray):
+            raise TypeError(f"u must be xarray.DataArray, got {type(u).__name__}")
+        if not isinstance(v, xr.DataArray):
+            raise TypeError(f"v must be xarray.DataArray, got {type(v).__name__}")
+
+        self._validate_coordinates(u, v)
+        self._reorder = u.dims
+        self._ishape = u.shape
+        self._coords = [u.coords[name] for name in u.dims]
+        self._u_component_dtype = reduced.ReducedVectorWind._infer_output_dtype(
+            u.values
+        )
+        self._v_component_dtype = reduced.ReducedVectorWind._infer_output_dtype(
+            v.values
+        )
+
+        self._api = reduced.ReducedVectorWind(
+            u.values,
+            v.values,
+            pl,
+            rsphere=rsphere,
+            legfunc=legfunc,
+            precision=precision,
+        )
+        self.pl = self._api.pl
+        self.gridtype = self._api.gridtype
+        self.rsphere = self._api.rsphere
+        self.legfunc = self._api.legfunc
+        self.s = self._api.s
+
+    def _validate_coordinates(self, u: DataArray, v: DataArray) -> None:
+        if u.dims != v.dims:
+            raise ValueError(
+                f"u and v must have identical dimensions. "
+                f"Got u: {u.dims}, v: {v.dims}"
+            )
+
+        mismatched_coords = []
+        for dim in u.dims:
+            try:
+                if not (u.coords[dim].values == v.coords[dim].values).all():
+                    mismatched_coords.append(dim)
+            except (ValueError, TypeError):
+                mismatched_coords.append(dim)
+
+        if mismatched_coords:
+            raise ValueError(
+                f"u and v must have identical coordinate values. "
+                f"Mismatched coordinates: {mismatched_coords}"
+            )
+
+    def _metadata(self, data: Any, name: str, **attributes: Any) -> DataArray:
+        result = xr.DataArray(
+            np.asarray(data).reshape(self._ishape), coords=self._coords, name=name
+        )
+        result = result.transpose(*self._reorder)
+        for attr, value in attributes.items():
+            result.attrs[attr] = value
+        return result
+
+    def _component_metadata(
+        self, data: Any, dtype: np.dtype, name: str, **attributes: Any
+    ) -> DataArray:
+        restored = self._api._restore_output_dtype(data, dtype)
+        return self._metadata(restored, name, **attributes)
+
+    def u(self) -> DataArray:
+        """Return the packed zonal wind component."""
+        return self._component_metadata(
+            self._api.u,
+            self._u_component_dtype,
+            "u",
+            units="m s**-1",
+            standard_name="eastward_wind",
+            long_name="eastward_component_of_wind",
+        )
+
+    def v(self) -> DataArray:
+        """Return the packed meridional wind component."""
+        return self._component_metadata(
+            self._api.v,
+            self._v_component_dtype,
+            "v",
+            units="m s**-1",
+            standard_name="northward_wind",
+            long_name="northward_component_of_wind",
+        )
+
+    def magnitude(self) -> DataArray:
+        """Return wind speed on the packed reduced grid."""
+        return self._metadata(
+            self._api.magnitude(),
+            "speed",
+            units="m s**-1",
+            standard_name="wind_speed",
+            long_name="wind_speed",
+        )
+
+    def vrtdiv(self, truncation: Optional[int] = None) -> Tuple[DataArray, DataArray]:
+        """Return relative vorticity and horizontal divergence."""
+        vrt, div = self._api.vrtdiv(truncation=truncation)
+        return (
+            self._metadata(
+                vrt,
+                "vorticity",
+                units="s**-1",
+                standard_name="atmosphere_relative_vorticity",
+                long_name="relative_vorticity",
+            ),
+            self._metadata(
+                div,
+                "divergence",
+                units="s**-1",
+                standard_name="divergence_of_wind",
+                long_name="horizontal_divergence",
+            ),
+        )
+
+    def vorticity(self, truncation: Optional[int] = None) -> DataArray:
+        """Return relative vorticity."""
+        return self._metadata(
+            self._api.vorticity(truncation=truncation),
+            "vorticity",
+            units="s**-1",
+            standard_name="atmosphere_relative_vorticity",
+            long_name="relative_vorticity",
+        )
+
+    def divergence(self, truncation: Optional[int] = None) -> DataArray:
+        """Return horizontal divergence."""
+        return self._metadata(
+            self._api.divergence(truncation=truncation),
+            "divergence",
+            units="s**-1",
+            standard_name="divergence_of_wind",
+            long_name="horizontal_divergence",
+        )
+
+    def planetaryvorticity(self, omega: Optional[float] = None) -> DataArray:
+        """Return planetary vorticity."""
+        return self._metadata(
+            self._api.planetaryvorticity(omega=omega),
+            "coriolis",
+            units="s**-1",
+            standard_name="coriolis_parameter",
+            long_name="planetary_vorticity",
+        )
+
+    def absolutevorticity(
+        self, omega: Optional[float] = None, truncation: Optional[int] = None
+    ) -> DataArray:
+        """Return absolute vorticity."""
+        return self._metadata(
+            self._api.absolutevorticity(omega=omega, truncation=truncation),
+            "absolute_vorticity",
+            units="s**-1",
+            standard_name="atmosphere_absolute_vorticity",
+            long_name="absolute_vorticity",
+        )
+
+    def sfvp(self, truncation: Optional[int] = None) -> Tuple[DataArray, DataArray]:
+        """Return streamfunction and velocity potential."""
+        sf, vp = self._api.sfvp(truncation=truncation)
+        return (
+            self._metadata(
+                sf,
+                "streamfunction",
+                units="m**2 s**-1",
+                standard_name="atmosphere_horizontal_streamfunction",
+                long_name="streamfunction",
+            ),
+            self._metadata(
+                vp,
+                "velocity_potential",
+                units="m**2 s**-1",
+                standard_name="atmosphere_horizontal_velocity_potential",
+                long_name="velocity potential",
+            ),
+        )
+
+    def streamfunction(self, truncation: Optional[int] = None) -> DataArray:
+        """Return streamfunction."""
+        return self._metadata(
+            self._api.streamfunction(truncation=truncation),
+            "streamfunction",
+            units="m**2 s**-1",
+            standard_name="atmosphere_horizontal_streamfunction",
+            long_name="streamfunction",
+        )
+
+    def velocitypotential(self, truncation: Optional[int] = None) -> DataArray:
+        """Return velocity potential."""
+        return self._metadata(
+            self._api.velocitypotential(truncation=truncation),
+            "velocity_potential",
+            units="m**2 s**-1",
+            standard_name="atmosphere_horizontal_velocity_potential",
+            long_name="velocity potential",
+        )
+
+    def helmholtz(
+        self, truncation: Optional[int] = None
+    ) -> Tuple[DataArray, DataArray, DataArray, DataArray]:
+        """Return irrotational and non-divergent wind components."""
+        uchi, vchi, upsi, vpsi = self._api.helmholtz(truncation=truncation)
+        return (
+            self._metadata(
+                uchi,
+                "u_chi",
+                units="m s**-1",
+                long_name="irrotational_eastward_wind",
+            ),
+            self._metadata(
+                vchi,
+                "v_chi",
+                units="m s**-1",
+                long_name="irrotational_northward_wind",
+            ),
+            self._metadata(
+                upsi,
+                "u_psi",
+                units="m s**-1",
+                long_name="non_divergent_eastward_wind",
+            ),
+            self._metadata(
+                vpsi,
+                "v_psi",
+                units="m s**-1",
+                long_name="non_divergent_northward_wind",
+            ),
+        )
+
+    def irrotationalcomponent(
+        self, truncation: Optional[int] = None
+    ) -> Tuple[DataArray, DataArray]:
+        """Return irrotational wind component."""
+        uchi, vchi = self._api.irrotationalcomponent(truncation=truncation)
+        return (
+            self._metadata(
+                uchi,
+                "u_chi",
+                units="m s**-1",
+                long_name="irrotational_eastward_wind",
+            ),
+            self._metadata(
+                vchi,
+                "v_chi",
+                units="m s**-1",
+                long_name="irrotational_northward_wind",
+            ),
+        )
+
+    def nondivergentcomponent(
+        self, truncation: Optional[int] = None
+    ) -> Tuple[DataArray, DataArray]:
+        """Return non-divergent wind component."""
+        upsi, vpsi = self._api.nondivergentcomponent(truncation=truncation)
+        return (
+            self._metadata(
+                upsi,
+                "u_psi",
+                units="m s**-1",
+                long_name="non_divergent_eastward_wind",
+            ),
+            self._metadata(
+                vpsi,
+                "v_psi",
+                units="m s**-1",
+                long_name="non_divergent_northward_wind",
+            ),
+        )
+
+    def gradient(
+        self, chi: DataArray, truncation: Optional[int] = None
+    ) -> Tuple[DataArray, DataArray]:
+        """Return vector gradient of a packed scalar field."""
+        if not isinstance(chi, xr.DataArray):
+            raise TypeError(
+                f"Scalar field must be xarray.DataArray, got {type(chi).__name__}"
+            )
+        name = chi.name or "field"
+        u_grad, v_grad = self._api.gradient(chi.values, truncation=truncation)
+        return (
+            self._metadata(
+                u_grad,
+                f"zonal_gradient_of_{name}",
+                long_name=f"zonal_gradient_of_{name}",
+            ),
+            self._metadata(
+                v_grad,
+                f"meridional_gradient_of_{name}",
+                long_name=f"meridional_gradient_of_{name}",
+            ),
+        )
+
+    def truncate(self, field: DataArray, truncation: Optional[int] = None) -> DataArray:
+        """Apply spectral truncation to a packed scalar field."""
+        if not isinstance(field, xr.DataArray):
+            raise TypeError(
+                f"Field must be xarray.DataArray, got {type(field).__name__}"
+            )
+        truncated = self._api.truncate(field.values, truncation=truncation)
+        result = xr.DataArray(
+            truncated.reshape(self._ishape),
+            coords=self._coords,
+            name=field.name,
+            attrs=field.attrs,
+        )
+        return result.transpose(*self._reorder)
+
+    def rossbywavesource(
+        self, truncation: Optional[int] = None, omega: Optional[float] = None
+    ) -> DataArray:
+        """Return Rossby wave source on the packed reduced grid."""
+        return self._metadata(
+            self._api.rossbywavesource(truncation=truncation, omega=omega),
+            "rossby_wave_source",
+            units="s**-2",
+            standard_name="rossby_wave_source",
+            long_name="rossby_wave_source_term",
+            description="Generation term for Rossby wave activity",
+        )
 
 
 def _reverse(array: DataArray, dim: int) -> DataArray:

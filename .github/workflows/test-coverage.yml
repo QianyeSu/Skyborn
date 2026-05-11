@@ -159,8 +159,8 @@ jobs:
           find . -name "*.mod" -delete
           # Keep committed C shim sources under src/.  The direct Fortran/C
           # Meson modules use files such as *_module.c as real source files.
-          find . -path "./src/*" -prune -o -name "*module.c" -type f -delete
-          find . -path "./src/*" -prune -o -name "*-f2pywrappers*.f" -type f -delete
+          find . -name "*module.c" -type f ! -path "./src/*" -delete
+          find . -name "*-f2pywrappers*.f" -type f ! -path "./src/*" -delete
 
           # Try building with maximum verbosity and error capture
           echo "=== Building with detailed f2py output ==="
