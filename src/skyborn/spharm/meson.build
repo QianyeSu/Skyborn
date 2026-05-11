@@ -119,7 +119,7 @@ if host_system == 'darwin' and host_cpu == 'aarch64'
         '-fopenmp',
     ]
     c_args = [
-        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',
+        '-DNPY_NO_DEPRECATED_API=NPY_1_19_API_VERSION',
         '-march=armv8-a',
         '-mtune=apple-m1',
         '-fPIC',
@@ -149,7 +149,7 @@ else
         '-fopenmp',
     ]
     c_args = [
-        '-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION',
+        '-DNPY_NO_DEPRECATED_API=NPY_1_19_API_VERSION',
         '-march=x86-64',
         '-mtune=generic',
         '-fPIC',
@@ -210,7 +210,6 @@ direct_fortran_sources = [
     'src/twodtooned.f90',
     'src/shaes.f90',
     'src/vhaes.f90',
-    'src/shags.f90',
     'src/vhags.f90',
     'src/shses.f90',
     'src/vhses.f90',
@@ -311,7 +310,7 @@ if built_files:
         for stale_file in module_dir.glob(stale_pattern):
             if stale_file.name in keep_names:
                 continue
-            if stale_file.name.startswith("_spherepack_f2py") or stale_file.name.startswith("_spherepack_reduced"):
+            if stale_file.name.startswith("_spherepack_reduced"):
                 continue
             try:
                 stale_file.unlink()

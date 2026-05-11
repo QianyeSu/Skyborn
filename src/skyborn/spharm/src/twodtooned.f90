@@ -16,6 +16,7 @@ subroutine twodtooned(dataspec, a, b, nlat, ntrunc, nt)
     real, parameter :: scale = 0.5
 
     ! Main computation loops - optimized for cache efficiency
+    dataspec(:, :) = (0.0, 0.0)
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -53,6 +54,9 @@ subroutine twodtooned_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
     scale = 0.5
     rsphere_inv = 1.0 / rsphere
 
+    vrtspec(:, :) = (0.0, 0.0)
+    divspec(:, :) = (0.0, 0.0)
+
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -87,6 +91,8 @@ subroutine twodtooned_vrt(vrtspec, cr, ci, nlat, ntrunc, nt, rsphere)
     scale = 0.5
     rsphere_inv = 1.0 / rsphere
 
+    vrtspec(:, :) = (0.0, 0.0)
+
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -119,6 +125,8 @@ subroutine twodtooned_div(divspec, br, bi, nlat, ntrunc, nt, rsphere)
 
     scale = 0.5
     rsphere_inv = 1.0 / rsphere
+
+    divspec(:, :) = (0.0, 0.0)
 
     do i = 1, nt
         nmstrt = 0

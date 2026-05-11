@@ -19,6 +19,11 @@ subroutine onedtotwod(dataspec, a, b, nlat, nmdim, nt)
     ! Calculate truncation from nmdim
     ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
+    ! The direct C wrapper allocates these arrays without zero-initialization.
+    ! SPHEREPACK synthesis expects the unused triangular slots to be zero.
+    a(:, :, :) = 0.0
+    b(:, :, :) = 0.0
+
     ! Pre-compute inverse scale factor
     scale_inv = 2.0  ! 1.0 / 0.5
 
@@ -64,6 +69,11 @@ subroutine onedtotwod_vrtdiv(vrtspec, divspec, br, bi, cr, ci, &
     scale = 0.5
     ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
+    br(:, :, :) = 0.0
+    bi(:, :, :) = 0.0
+    cr(:, :, :) = 0.0
+    ci(:, :, :) = 0.0
+
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -105,6 +115,9 @@ subroutine onedtotwod_vrt(vrtspec, cr, ci, nlat, nmdim, nt, rsphere)
     scale = 0.5
     ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
 
+    cr(:, :, :) = 0.0
+    ci(:, :, :) = 0.0
+
     do i = 1, nt
         nmstrt = 0
         do m = 1, ntrunc + 1
@@ -141,6 +154,9 @@ subroutine onedtotwod_div(divspec, br, bi, nlat, nmdim, nt, rsphere)
 
     scale = 0.5
     ntrunc = -1.5 + 0.5 * sqrt(9.0 - 8.0 * (1.0 - real(nmdim)))
+
+    br(:, :, :) = 0.0
+    bi(:, :, :) = 0.0
 
     do i = 1, nt
         nmstrt = 0
