@@ -7,7 +7,7 @@ project(
 )
 
 py_mod = import('python')
-py = py_mod.find_installation('python', pure: false)
+py = py_mod.find_installation(pure: false)
 py_dep = py.dependency()
 build_py = find_program('build_python', required: false)
 if not build_py.found()
