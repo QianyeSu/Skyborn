@@ -132,7 +132,11 @@ class MesonBuildExt(build_ext):
         """Pin Meson helper commands to the active build interpreter."""
 
         native_file = (build_dir / "meson-python-native.ini").resolve()
-        python_executable = Path(sys.executable).resolve().as_posix()
+        # Keep the virtualenv/front-end interpreter path itself instead of
+        # resolving symlinks to the base interpreter. cibuildwheel commonly
+        # exposes the build env Python as a symlink, and dereferencing it can
+        # drop Meson back onto a base interpreter that lacks wheel-build deps.
+        python_executable = Path(os.path.abspath(sys.executable)).as_posix()
         native_file.write_text(
             "[binaries]\n"
             f"python = '{python_executable}'\n"
@@ -147,7 +151,7 @@ class MesonBuildExt(build_ext):
 
         python_executable = shutil.which("python")
         if not python_executable:
-            python_executable = str(Path(sys.executable).resolve())
+            python_executable = os.path.abspath(sys.executable)
 
         if os.name == "nt":
             shim_path = (build_dir / "build_python.bat").resolve()
@@ -156,7 +160,7 @@ class MesonBuildExt(build_ext):
                 handle.write(f'"{python_executable}" %*\r\n')
         else:
             shim_path = (build_dir / "build_python").resolve()
-            python_executable = Path(python_executable).resolve().as_posix()
+            python_executable = Path(os.path.abspath(python_executable)).as_posix()
             with shim_path.open("w", encoding="utf-8", newline="\n") as handle:
                 handle.write("#!/bin/sh\n")
                 handle.write(f'exec "{python_executable}" "$@"\n')
