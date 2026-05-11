@@ -184,6 +184,16 @@ class TestRestoreDimsFromFortran:
 class TestTropWmoInputValidation:
     """Test input validation for trop_wmo function."""
 
+    def test_empty_pressure_and_temperature_profiles_raise(self):
+        """Test error when the level axis and pressure coordinate are empty."""
+        temperature = np.empty((0, 10, 15), dtype=np.float32)
+        pressure = np.empty((0,), dtype=np.float32)
+
+        with pytest.raises(
+            ValueError, match="Pressure and temperature profiles must not be empty"
+        ):
+            trop_wmo(temperature, pressure, xdim=2, ydim=1, levdim=0)
+
     def test_pressure_length_mismatch(self):
         """Test error when pressure length doesn't match temperature level dimension."""
         temperature = np.random.rand(12, 10, 180, 360)  # 4D array
