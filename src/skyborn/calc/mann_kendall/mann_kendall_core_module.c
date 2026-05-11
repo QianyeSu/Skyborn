@@ -4,7 +4,7 @@
 #include <Python.h>
 #include <numpy/arrayobject.h>
 
-void mk_score_var_batch(
+void mk_score_var_batch_c(
     void *data,
     void *s_values,
     void *var_values,
@@ -12,20 +12,20 @@ void mk_score_var_batch(
     int ntime,
     int nseries
 );
-void sen_slope_batch(
+void sen_slope_batch_c(
     void *data,
     void *slopes,
     int ntime,
     int nseries
 );
-void grouped_sen_slope_batch(
+void grouped_sen_slope_batch_c(
     void *data,
     void *slopes,
     int period,
     int ntime,
     int nseries
 );
-void grouped_correlated_stats_batch(
+void grouped_correlated_stats_batch_c(
     void *data,
     void *s_values,
     void *var_values,
@@ -34,7 +34,7 @@ void grouped_correlated_stats_batch(
     int ntime,
     int nseries
 );
-void partial_stats_batch(
+void partial_stats_batch_c(
     void *response,
     void *covariate,
     void *s_values,
@@ -43,7 +43,7 @@ void partial_stats_batch(
     int ntime,
     int nseries
 );
-void partial_stats_sen_batch(
+void partial_stats_sen_batch_c(
     void *response,
     void *covariate,
     void *s_values,
@@ -53,7 +53,7 @@ void partial_stats_sen_batch(
     int ntime,
     int nseries
 );
-void mk_score_var_sen_batch(
+void mk_score_var_sen_batch_c(
     void *data,
     void *s_values,
     void *var_values,
@@ -62,7 +62,7 @@ void mk_score_var_sen_batch(
     int ntime,
     int nseries
 );
-void mk_yue_wang_score_var_sen_batch(
+void mk_yue_wang_score_var_sen_batch_c(
     void *data,
     void *s_values,
     void *var_values,
@@ -71,7 +71,7 @@ void mk_yue_wang_score_var_sen_batch(
     int ntime,
     int nseries
 );
-void mk_hamed_rao_score_var_sen_batch(
+void mk_hamed_rao_score_var_sen_batch_c(
     void *data,
     void *s_values,
     void *var_values,
@@ -139,7 +139,7 @@ static PyObject *mk_score_var_batch_py(PyObject *self, PyObject *args) {
         goto fail;
     }
 
-    mk_score_var_batch(
+    mk_score_var_batch_c(
         PyArray_DATA(data_arr),
         PyArray_DATA(s_arr),
         PyArray_DATA(var_arr),
@@ -193,7 +193,7 @@ static PyObject *sen_slope_batch_py(PyObject *self, PyObject *args) {
         goto fail;
     }
 
-    sen_slope_batch(PyArray_DATA(data_arr), PyArray_DATA(slopes_arr), ntime, nseries);
+    sen_slope_batch_c(PyArray_DATA(data_arr), PyArray_DATA(slopes_arr), ntime, nseries);
 
     Py_DECREF(data_arr);
     return (PyObject *) slopes_arr;
@@ -235,7 +235,7 @@ static PyObject *grouped_sen_slope_batch_py(PyObject *self, PyObject *args) {
         goto fail;
     }
 
-    grouped_sen_slope_batch(
+    grouped_sen_slope_batch_c(
         PyArray_DATA(data_arr),
         PyArray_DATA(slopes_arr),
         period,
@@ -286,7 +286,7 @@ static PyObject *grouped_correlated_stats_batch_py(PyObject *self, PyObject *arg
         goto fail;
     }
 
-    grouped_correlated_stats_batch(
+    grouped_correlated_stats_batch_c(
         PyArray_DATA(data_arr),
         PyArray_DATA(s_arr),
         PyArray_DATA(var_arr),
@@ -350,7 +350,7 @@ static PyObject *partial_stats_batch_py(PyObject *self, PyObject *args) {
         goto fail;
     }
 
-    partial_stats_batch(
+    partial_stats_batch_c(
         PyArray_DATA(response_arr),
         PyArray_DATA(covariate_arr),
         PyArray_DATA(s_arr),
@@ -425,7 +425,7 @@ static PyObject *partial_stats_sen_batch_py(PyObject *self, PyObject *args) {
         goto fail;
     }
 
-    partial_stats_sen_batch(
+    partial_stats_sen_batch_c(
         PyArray_DATA(response_arr),
         PyArray_DATA(covariate_arr),
         PyArray_DATA(s_arr),
@@ -498,7 +498,7 @@ static PyObject *mk_score_var_sen_batch_py(PyObject *self, PyObject *args) {
         goto fail;
     }
 
-    mk_score_var_sen_batch(
+    mk_score_var_sen_batch_c(
         PyArray_DATA(data_arr),
         PyArray_DATA(s_arr),
         PyArray_DATA(var_arr),
@@ -565,7 +565,7 @@ static PyObject *mk_yue_wang_score_var_sen_batch_py(PyObject *self, PyObject *ar
         goto fail;
     }
 
-    mk_yue_wang_score_var_sen_batch(
+    mk_yue_wang_score_var_sen_batch_c(
         PyArray_DATA(data_arr),
         PyArray_DATA(s_arr),
         PyArray_DATA(var_arr),
@@ -633,7 +633,7 @@ static PyObject *mk_hamed_rao_score_var_sen_batch_py(PyObject *self, PyObject *a
         goto fail;
     }
 
-    mk_hamed_rao_score_var_sen_batch(
+    mk_hamed_rao_score_var_sen_batch_c(
         PyArray_DATA(data_arr),
         PyArray_DATA(s_arr),
         PyArray_DATA(var_arr),

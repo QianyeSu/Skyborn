@@ -1369,7 +1369,7 @@ end module mann_kendall_core_mod
 ! OUTPUT
 !    S_VALUES(NSERIES)   - ONE S STATISTIC PER COLUMN
 !    VAR_VALUES(NSERIES) - ONE VARIANCE VALUE PER COLUMN
-subroutine mk_score_var_batch_impl(data, s_values, var_values, modified, ntime, nseries)
+subroutine mk_score_var_batch(data, s_values, var_values, modified, ntime, nseries)
     use mann_kendall_core_mod, only : compute_base_variance, compute_modified_variance, compute_s_value, real64
     implicit none
 
@@ -1392,7 +1392,7 @@ subroutine mk_score_var_batch_impl(data, s_values, var_values, modified, ntime, 
             call compute_base_variance(data(:, col), sorted_work, var_values(col))
         end if
     end do
-end subroutine mk_score_var_batch_impl
+end subroutine mk_score_var_batch
 
 
 ! QUICK REFERENCE
@@ -1405,7 +1405,7 @@ end subroutine mk_score_var_batch_impl
 !
 ! OUTPUT
 !    SLOPES(NSERIES) - ONE EXACT SEN SLOPE PER COLUMN
-subroutine sen_slope_batch_impl(data, slopes, ntime, nseries)
+subroutine sen_slope_batch(data, slopes, ntime, nseries)
     use mann_kendall_core_mod, only : compute_sen_slope_with_inv_lag, real64
     implicit none
 
@@ -1424,7 +1424,7 @@ subroutine sen_slope_batch_impl(data, slopes, ntime, nseries)
     do col = 1, nseries
         call compute_sen_slope_with_inv_lag(data(:, col), inv_lag, slopes(col), slope_work)
     end do
-end subroutine sen_slope_batch_impl
+end subroutine sen_slope_batch
 
 
 ! QUICK REFERENCE
@@ -1440,7 +1440,7 @@ end subroutine sen_slope_batch_impl
 !
 ! OUTPUT
 !    SLOPES(NSERIES) - ONE EXACT GROUPED SEN SLOPE PER COLUMN
-subroutine grouped_sen_slope_batch_impl(data, slopes, period, ntime, nseries)
+subroutine grouped_sen_slope_batch(data, slopes, period, ntime, nseries)
     use mann_kendall_core_mod, only : compute_grouped_sen_slope_with_inv_lag, &
         compute_grouped_slope_count, real64
     implicit none
@@ -1467,7 +1467,7 @@ subroutine grouped_sen_slope_batch_impl(data, slopes, period, ntime, nseries)
             data(:, col), period, inv_lag, slopes(col), slope_work &
         )
     end do
-end subroutine grouped_sen_slope_batch_impl
+end subroutine grouped_sen_slope_batch
 
 
 ! QUICK REFERENCE
@@ -1484,7 +1484,7 @@ end subroutine grouped_sen_slope_batch_impl
 !    S_VALUES(NSERIES)   - ONE CORRELATED GROUPED S VALUE PER COLUMN
 !    VAR_VALUES(NSERIES) - ONE CORRELATED GROUPED VARIANCE PER COLUMN
 !    DENOM               - COMMON TAU DENOMINATOR FOR THE CLEAN BATCH
-subroutine grouped_correlated_stats_batch_impl(data, s_values, var_values, denom, period, ntime, nseries)
+subroutine grouped_correlated_stats_batch(data, s_values, var_values, denom, period, ntime, nseries)
     use mann_kendall_core_mod, only : compute_correlated_grouped_stats, real64
     implicit none
 
@@ -1507,7 +1507,7 @@ subroutine grouped_correlated_stats_batch_impl(data, s_values, var_values, denom
         )
         if (col == 1) denom = denom_value
     end do
-end subroutine grouped_correlated_stats_batch_impl
+end subroutine grouped_correlated_stats_batch
 
 
 ! QUICK REFERENCE
@@ -1522,7 +1522,7 @@ end subroutine grouped_correlated_stats_batch_impl
 !    S_VALUES(NSERIES)   - ONE PARTIAL MK S VALUE PER COLUMN
 !    VAR_VALUES(NSERIES) - ONE PARTIAL MK VARIANCE PER COLUMN
 !    TAU_VALUES(NSERIES) - RESPONSE-SERIES KENDALL TAU PER COLUMN
-subroutine partial_stats_batch_impl(response, covariate, s_values, var_values, tau_values, ntime, nseries)
+subroutine partial_stats_batch(response, covariate, s_values, var_values, tau_values, ntime, nseries)
     use mann_kendall_core_mod, only : compute_partial_stats, real64
     implicit none
 
@@ -1541,7 +1541,7 @@ subroutine partial_stats_batch_impl(response, covariate, s_values, var_values, t
             response(:, col), covariate(:, col), s_values(col), var_values(col), tau_values(col), rank_x, rank_y &
         )
     end do
-end subroutine partial_stats_batch_impl
+end subroutine partial_stats_batch
 
 
 ! QUICK REFERENCE
@@ -1558,7 +1558,7 @@ end subroutine partial_stats_batch_impl
 !    VAR_VALUES(NSERIES) - ONE PARTIAL MK VARIANCE PER COLUMN
 !    TAU_VALUES(NSERIES) - RESPONSE-SERIES KENDALL TAU PER COLUMN
 !    SLOPES(NSERIES)     - ONE EXACT SEN / THEIL-SEN SLOPE PER COLUMN
-subroutine partial_stats_sen_batch_impl(response, covariate, s_values, var_values, tau_values, slopes, ntime, nseries)
+subroutine partial_stats_sen_batch(response, covariate, s_values, var_values, tau_values, slopes, ntime, nseries)
     use mann_kendall_core_mod, only : compute_partial_stats_and_sen_slope_with_inv_lag, real64
     implicit none
 
@@ -1584,7 +1584,7 @@ subroutine partial_stats_sen_batch_impl(response, covariate, s_values, var_value
             slopes(col), rank_x, rank_y, slope_work &
         )
     end do
-end subroutine partial_stats_sen_batch_impl
+end subroutine partial_stats_sen_batch
 
 
 ! QUICK REFERENCE
@@ -1603,7 +1603,7 @@ end subroutine partial_stats_sen_batch_impl
 !    S_VALUES(NSERIES)   - ONE S STATISTIC PER COLUMN
 !    VAR_VALUES(NSERIES) - ONE VARIANCE VALUE PER COLUMN
 !    SLOPES(NSERIES)     - ONE EXACT SEN SLOPE PER COLUMN
-subroutine mk_score_var_sen_batch_impl( &
+subroutine mk_score_var_sen_batch( &
     data, s_values, var_values, slopes, modified, ntime, nseries &
 )
     use mann_kendall_core_mod, only : &
@@ -1638,7 +1638,7 @@ subroutine mk_score_var_sen_batch_impl( &
             call compute_base_variance(data(:, col), sorted_work, var_values(col))
         end if
     end do
-end subroutine mk_score_var_sen_batch_impl
+end subroutine mk_score_var_sen_batch
 
 
 ! QUICK REFERENCE
@@ -1656,7 +1656,7 @@ end subroutine mk_score_var_sen_batch_impl
 !    S_VALUES(NSERIES)   - ONE S STATISTIC PER COLUMN
 !    VAR_VALUES(NSERIES) - ONE YUE-WANG MODIFIED VARIANCE PER COLUMN
 !    SLOPES(NSERIES)     - ONE EXACT SEN SLOPE PER COLUMN
-subroutine mk_yue_wang_score_var_sen_batch_impl( &
+subroutine mk_yue_wang_score_var_sen_batch( &
     data, s_values, var_values, slopes, lag, ntime, nseries &
 )
     use mann_kendall_core_mod, only : &
@@ -1685,7 +1685,7 @@ subroutine mk_yue_wang_score_var_sen_batch_impl( &
             data(:, col), sorted_work, centered_work, detrended_work, slopes(col), lag, var_values(col) &
         )
     end do
-end subroutine mk_yue_wang_score_var_sen_batch_impl
+end subroutine mk_yue_wang_score_var_sen_batch
 
 
 ! QUICK REFERENCE
@@ -1704,7 +1704,7 @@ end subroutine mk_yue_wang_score_var_sen_batch_impl
 !    S_VALUES(NSERIES)   - ONE S STATISTIC PER COLUMN
 !    VAR_VALUES(NSERIES) - ONE HAMED-RAO MODIFIED VARIANCE PER COLUMN
 !    SLOPES(NSERIES)     - ONE EXACT SEN SLOPE PER COLUMN
-subroutine mk_hamed_rao_score_var_sen_batch_impl( &
+subroutine mk_hamed_rao_score_var_sen_batch( &
     data, s_values, var_values, slopes, interval, lag, ntime, nseries &
 )
     use mann_kendall_core_mod, only : &
@@ -1735,242 +1735,4 @@ subroutine mk_hamed_rao_score_var_sen_batch_impl( &
             slopes(col), interval, lag, var_values(col) &
         )
     end do
-end subroutine mk_hamed_rao_score_var_sen_batch_impl
-
-
-subroutine mk_score_var_batch(data, s_values, var_values, modified, ntime, nseries) bind(C, name="mk_score_var_batch")
-    use, intrinsic :: iso_c_binding, only : c_double, c_f_pointer, c_int, c_ptr
-    use mann_kendall_core_mod, only : real64
-    implicit none
-
-    type(c_ptr), value, intent(in) :: data, s_values, var_values
-    integer(c_int), value, intent(in) :: modified, ntime, nseries
-
-    integer :: ntime_f, nseries_f, modified_f
-    real(real64), pointer :: data_view(:, :), s_values_view(:), var_values_view(:)
-
-    ntime_f = int(ntime)
-    nseries_f = int(nseries)
-    modified_f = int(modified)
-
-    call c_f_pointer(data, data_view, [ntime_f, nseries_f])
-    call c_f_pointer(s_values, s_values_view, [nseries_f])
-    call c_f_pointer(var_values, var_values_view, [nseries_f])
-
-    call mk_score_var_batch_impl(data_view, s_values_view, var_values_view, modified_f, ntime_f, nseries_f)
-end subroutine mk_score_var_batch
-
-
-subroutine sen_slope_batch(data, slopes, ntime, nseries) bind(C, name="sen_slope_batch")
-    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_int, c_ptr
-    use mann_kendall_core_mod, only : real64
-    implicit none
-
-    type(c_ptr), value, intent(in) :: data, slopes
-    integer(c_int), value, intent(in) :: ntime, nseries
-
-    integer :: ntime_f, nseries_f
-    real(real64), pointer :: data_view(:, :), slopes_view(:)
-
-    ntime_f = int(ntime)
-    nseries_f = int(nseries)
-
-    call c_f_pointer(data, data_view, [ntime_f, nseries_f])
-    call c_f_pointer(slopes, slopes_view, [nseries_f])
-
-    call sen_slope_batch_impl(data_view, slopes_view, ntime_f, nseries_f)
-end subroutine sen_slope_batch
-
-
-subroutine grouped_sen_slope_batch(data, slopes, period, ntime, nseries) bind(C, name="grouped_sen_slope_batch")
-    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_int, c_ptr
-    use mann_kendall_core_mod, only : real64
-    implicit none
-
-    type(c_ptr), value, intent(in) :: data, slopes
-    integer(c_int), value, intent(in) :: period, ntime, nseries
-
-    integer :: period_f, ntime_f, nseries_f
-    real(real64), pointer :: data_view(:, :), slopes_view(:)
-
-    period_f = int(period)
-    ntime_f = int(ntime)
-    nseries_f = int(nseries)
-
-    call c_f_pointer(data, data_view, [ntime_f, nseries_f])
-    call c_f_pointer(slopes, slopes_view, [nseries_f])
-
-    call grouped_sen_slope_batch_impl(data_view, slopes_view, period_f, ntime_f, nseries_f)
-end subroutine grouped_sen_slope_batch
-
-
-subroutine grouped_correlated_stats_batch( &
-    data, s_values, var_values, denom, period, ntime, nseries &
-) bind(C, name="grouped_correlated_stats_batch")
-    use, intrinsic :: iso_c_binding, only : c_double, c_f_pointer, c_int, c_ptr
-    use mann_kendall_core_mod, only : real64
-    implicit none
-
-    type(c_ptr), value, intent(in) :: data, s_values, var_values, denom
-    integer(c_int), value, intent(in) :: period, ntime, nseries
-
-    integer :: period_f, ntime_f, nseries_f
-    real(real64), pointer :: data_view(:, :), s_values_view(:), var_values_view(:), denom_view
-
-    period_f = int(period)
-    ntime_f = int(ntime)
-    nseries_f = int(nseries)
-
-    call c_f_pointer(data, data_view, [ntime_f, nseries_f])
-    call c_f_pointer(s_values, s_values_view, [nseries_f])
-    call c_f_pointer(var_values, var_values_view, [nseries_f])
-    call c_f_pointer(denom, denom_view)
-
-    call grouped_correlated_stats_batch_impl( &
-        data_view, s_values_view, var_values_view, denom_view, period_f, ntime_f, nseries_f &
-    )
-end subroutine grouped_correlated_stats_batch
-
-
-subroutine partial_stats_batch( &
-    response, covariate, s_values, var_values, tau_values, ntime, nseries &
-) bind(C, name="partial_stats_batch")
-    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_int, c_ptr
-    use mann_kendall_core_mod, only : real64
-    implicit none
-
-    type(c_ptr), value, intent(in) :: response, covariate, s_values, var_values, tau_values
-    integer(c_int), value, intent(in) :: ntime, nseries
-
-    integer :: ntime_f, nseries_f
-    real(real64), pointer :: response_view(:, :), covariate_view(:, :)
-    real(real64), pointer :: s_values_view(:), var_values_view(:), tau_values_view(:)
-
-    ntime_f = int(ntime)
-    nseries_f = int(nseries)
-
-    call c_f_pointer(response, response_view, [ntime_f, nseries_f])
-    call c_f_pointer(covariate, covariate_view, [ntime_f, nseries_f])
-    call c_f_pointer(s_values, s_values_view, [nseries_f])
-    call c_f_pointer(var_values, var_values_view, [nseries_f])
-    call c_f_pointer(tau_values, tau_values_view, [nseries_f])
-
-    call partial_stats_batch_impl( &
-        response_view, covariate_view, s_values_view, var_values_view, tau_values_view, ntime_f, nseries_f &
-    )
-end subroutine partial_stats_batch
-
-
-subroutine partial_stats_sen_batch( &
-    response, covariate, s_values, var_values, tau_values, slopes, ntime, nseries &
-) bind(C, name="partial_stats_sen_batch")
-    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_int, c_ptr
-    use mann_kendall_core_mod, only : real64
-    implicit none
-
-    type(c_ptr), value, intent(in) :: response, covariate, s_values, var_values, tau_values, slopes
-    integer(c_int), value, intent(in) :: ntime, nseries
-
-    integer :: ntime_f, nseries_f
-    real(real64), pointer :: response_view(:, :), covariate_view(:, :)
-    real(real64), pointer :: s_values_view(:), var_values_view(:), tau_values_view(:), slopes_view(:)
-
-    ntime_f = int(ntime)
-    nseries_f = int(nseries)
-
-    call c_f_pointer(response, response_view, [ntime_f, nseries_f])
-    call c_f_pointer(covariate, covariate_view, [ntime_f, nseries_f])
-    call c_f_pointer(s_values, s_values_view, [nseries_f])
-    call c_f_pointer(var_values, var_values_view, [nseries_f])
-    call c_f_pointer(tau_values, tau_values_view, [nseries_f])
-    call c_f_pointer(slopes, slopes_view, [nseries_f])
-
-    call partial_stats_sen_batch_impl( &
-        response_view, covariate_view, s_values_view, var_values_view, tau_values_view, slopes_view, ntime_f, nseries_f &
-    )
-end subroutine partial_stats_sen_batch
-
-
-subroutine mk_score_var_sen_batch( &
-    data, s_values, var_values, slopes, modified, ntime, nseries &
-) bind(C, name="mk_score_var_sen_batch")
-    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_int, c_ptr
-    use mann_kendall_core_mod, only : real64
-    implicit none
-
-    type(c_ptr), value, intent(in) :: data, s_values, var_values, slopes
-    integer(c_int), value, intent(in) :: modified, ntime, nseries
-
-    integer :: modified_f, ntime_f, nseries_f
-    real(real64), pointer :: data_view(:, :), s_values_view(:), var_values_view(:), slopes_view(:)
-
-    modified_f = int(modified)
-    ntime_f = int(ntime)
-    nseries_f = int(nseries)
-
-    call c_f_pointer(data, data_view, [ntime_f, nseries_f])
-    call c_f_pointer(s_values, s_values_view, [nseries_f])
-    call c_f_pointer(var_values, var_values_view, [nseries_f])
-    call c_f_pointer(slopes, slopes_view, [nseries_f])
-
-    call mk_score_var_sen_batch_impl( &
-        data_view, s_values_view, var_values_view, slopes_view, modified_f, ntime_f, nseries_f &
-    )
-end subroutine mk_score_var_sen_batch
-
-
-subroutine mk_yue_wang_score_var_sen_batch( &
-    data, s_values, var_values, slopes, lag, ntime, nseries &
-) bind(C, name="mk_yue_wang_score_var_sen_batch")
-    use, intrinsic :: iso_c_binding, only : c_f_pointer, c_int, c_ptr
-    use mann_kendall_core_mod, only : real64
-    implicit none
-
-    type(c_ptr), value, intent(in) :: data, s_values, var_values, slopes
-    integer(c_int), value, intent(in) :: lag, ntime, nseries
-
-    integer :: lag_f, ntime_f, nseries_f
-    real(real64), pointer :: data_view(:, :), s_values_view(:), var_values_view(:), slopes_view(:)
-
-    lag_f = int(lag)
-    ntime_f = int(ntime)
-    nseries_f = int(nseries)
-
-    call c_f_pointer(data, data_view, [ntime_f, nseries_f])
-    call c_f_pointer(s_values, s_values_view, [nseries_f])
-    call c_f_pointer(var_values, var_values_view, [nseries_f])
-    call c_f_pointer(slopes, slopes_view, [nseries_f])
-
-    call mk_yue_wang_score_var_sen_batch_impl( &
-        data_view, s_values_view, var_values_view, slopes_view, lag_f, ntime_f, nseries_f &
-    )
-end subroutine mk_yue_wang_score_var_sen_batch
-
-
-subroutine mk_hamed_rao_score_var_sen_batch( &
-    data, s_values, var_values, slopes, interval, lag, ntime, nseries &
-) bind(C, name="mk_hamed_rao_score_var_sen_batch")
-    use, intrinsic :: iso_c_binding, only : c_double, c_f_pointer, c_int, c_ptr
-    use mann_kendall_core_mod, only : real64
-    implicit none
-
-    type(c_ptr), value, intent(in) :: data, s_values, var_values, slopes
-    real(c_double), value, intent(in) :: interval
-    integer(c_int), value, intent(in) :: lag, ntime, nseries
-
-    integer :: lag_f, ntime_f, nseries_f
-    real(real64), pointer :: data_view(:, :), s_values_view(:), var_values_view(:), slopes_view(:)
-
-    lag_f = int(lag)
-    ntime_f = int(ntime)
-    nseries_f = int(nseries)
-
-    call c_f_pointer(data, data_view, [ntime_f, nseries_f])
-    call c_f_pointer(s_values, s_values_view, [nseries_f])
-    call c_f_pointer(var_values, var_values_view, [nseries_f])
-    call c_f_pointer(slopes, slopes_view, [nseries_f])
-
-    call mk_hamed_rao_score_var_sen_batch_impl( &
-        data_view, s_values_view, var_values_view, slopes_view, interval, lag_f, ntime_f, nseries_f &
-    )
 end subroutine mk_hamed_rao_score_var_sen_batch

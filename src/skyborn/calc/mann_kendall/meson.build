@@ -86,6 +86,7 @@ mk_ext = py.extension_module(
     [
         'mann_kendall_core_module.c',
         'fortran/mann_kendall_core.f90',
+        'fortran/mann_kendall_core_bindings.f90',
     ],
     include_directories: include_directories(incdir_numpy),
     dependencies: [py_dep],
