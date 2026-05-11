@@ -23,6 +23,17 @@ prune src/skyborn/calc/growth_rate/build
 prune src/skyborn/calc/geostrophic/build
 prune src/skyborn/calc/troposphere/build
 prune src/skyborn/plot/nclcurly_native/build
+prune src/skyborn/*/build_*
+prune src/skyborn/*/*/build_*
+prune src/skyborn/*/*/*/build_*
+
+# Keep source distributions focused on the buildable implementation, not local
+# archives, old backups, or one-off helper scripts kept in the repository.
+prune src/skyborn/*/fortran/archive
+prune src/skyborn/*/*/fortran/archive
+prune src/skyborn/spharm/src/fortran
+exclude src/skyborn/spharm/build_split_pyf.py
+recursive-exclude src/skyborn *_backup.* *_old.*
 
 global-exclude __pycache__
 global-exclude *.py[cod]
