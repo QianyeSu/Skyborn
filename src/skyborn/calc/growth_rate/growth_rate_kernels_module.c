@@ -4,14 +4,14 @@
 #include <Python.h>
 #include <numpy/arrayobject.h>
 
-void dbarot_growth_rate_1d(
+void dbarot_growth_rate_1d_c(
     void *lat,
     void *u,
     void *max_growth,
     void *ier,
     int nlat
 );
-void dbaroc_growth_rate_1d(
+void dbaroc_growth_rate_1d_c(
     void *u,
     void *theta,
     void *pressure,
@@ -26,7 +26,7 @@ void dbaroc_growth_rate_1d(
     void *ier,
     int nlev
 );
-void dbaroc_growth_rate_profiles(
+void dbaroc_growth_rate_profiles_c(
     void *u_input,
     void *temperature_input,
     void *source_pressure,
@@ -86,7 +86,7 @@ static PyObject *py_dbarot_growth_rate_1d(PyObject *self, PyObject *args) {
         goto fail;
     }
 
-    dbarot_growth_rate_1d(
+    dbarot_growth_rate_1d_c(
         PyArray_DATA(lat_arr),
         PyArray_DATA(u_arr),
         &max_growth,
@@ -162,7 +162,7 @@ static PyObject *py_dbaroc_growth_rate_1d(PyObject *self, PyObject *args) {
         goto fail;
     }
 
-    dbaroc_growth_rate_1d(
+    dbaroc_growth_rate_1d_c(
         PyArray_DATA(u_arr),
         PyArray_DATA(theta_arr),
         PyArray_DATA(pressure_arr),
@@ -287,7 +287,7 @@ static PyObject *py_dbaroc_growth_rate_profiles(PyObject *self, PyObject *args) 
         goto fail;
     }
 
-    dbaroc_growth_rate_profiles(
+    dbaroc_growth_rate_profiles_c(
         PyArray_DATA(u_arr),
         PyArray_DATA(temperature_arr),
         PyArray_DATA(source_pressure_arr),

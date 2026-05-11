@@ -81,6 +81,7 @@ growth_rate_ext = py.extension_module(
     [
         'growth_rate_kernels_module.c',
         'fortran/growth_rate_kernels.f90',
+        'fortran/growth_rate_kernels_bindings.f90',
         'fortran/qzhes.f90',
         'fortran/qzit.f90',
         'fortran/qzval.f90',
