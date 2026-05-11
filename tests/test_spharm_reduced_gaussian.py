@@ -62,6 +62,20 @@ def test_reduced_gaussian_low_truncation_roundtrip_on_varying_pl():
 
 
 @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+def test_reduced_gaussian_precision_aliases_and_float64_inputs():
+    pl = np.array([8, 10, 12, 10, 8], dtype=np.int32)
+    reduced = ReducedGaussianSpharmt(pl, precision="float64")
+    field = np.random.default_rng(0).standard_normal(int(pl.sum())).astype(np.float64)
+
+    spec = reduced.grdtospec(field, ntrunc=2)
+    back = reduced.spectogrd(spec)
+
+    assert reduced.precision == "double"
+    assert spec.dtype == np.complex128
+    assert back.dtype == np.float64
+
+
+@pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
 def test_reduced_gaussian_matches_full_gaussian_vector_analysis_and_synthesis():
     nlat, nlon = 9, 24
     pl = np.full(nlat, nlon, dtype=np.int32)

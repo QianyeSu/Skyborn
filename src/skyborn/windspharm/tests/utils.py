@@ -5,10 +5,6 @@ from __future__ import absolute_import
 import numpy as np
 
 try:
-    from iris.cube import Cube
-except ImportError:
-    pass
-try:
     import xarray as xr
 except ImportError:
     try:
@@ -25,12 +21,6 @@ def __tomasked(*args):
     """
 
     def __asma(a):
-        try:
-            if isinstance(a, Cube):
-                # Retrieve the data from the cube.
-                a = a.data
-        except NameError:
-            pass
         try:
             if isinstance(a, xr.DataArray):
                 a = a.values

@@ -239,14 +239,6 @@ def pytest_configure(config):
 # Skip tests based on available dependencies
 def pytest_collection_modifyitems(config, items):
     """Modify test collection to add skip markers based on dependencies."""
-    # For now, skip iris tests due to package conflicts
-    skip_iris = pytest.mark.skip(
-        reason="iris package conflicts - SciTools iris not available"
-    )
-    for item in items:
-        if "iris" in str(item.fspath):
-            item.add_marker(skip_iris)
-
     try:
         import eccodes
     except ImportError:
