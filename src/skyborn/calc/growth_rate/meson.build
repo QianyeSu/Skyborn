@@ -9,6 +9,10 @@ project(
 py_mod = import('python')
 py = py_mod.find_installation('python', pure: false)
 py_dep = py.dependency()
+build_py = find_program('build_python', required: false)
+if not build_py.found()
+    build_py = py
+endif
 
 py.install_sources(
     ['__init__.py', 'core.py'],
@@ -16,7 +20,7 @@ py.install_sources(
 )
 
 incdir_numpy_cmd = run_command(
-    py,
+    build_py,
     [
         '-c',
         '''

@@ -129,12 +129,14 @@ class MesonBuildExt(build_ext):
 
     @staticmethod
     def _write_meson_native_file(build_dir: Path) -> Path:
-        """Pin Meson to the active interpreter for python-module discovery."""
+        """Pin Meson helper commands to the active build interpreter."""
 
         native_file = (build_dir / "meson-python-native.ini").resolve()
         python_executable = Path(sys.executable).resolve().as_posix()
         native_file.write_text(
-            "[binaries]\n" f"python = '{python_executable}'\n",
+            "[binaries]\n"
+            f"python = '{python_executable}'\n"
+            f"build_python = '{python_executable}'\n",
             encoding="utf-8",
         )
         return native_file

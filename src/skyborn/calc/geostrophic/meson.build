@@ -8,6 +8,10 @@ project(
 py_mod = import('python')
 py = py_mod.find_installation('python', pure: false)
 py_dep = py.dependency()
+build_py = find_program('build_python', required: false)
+if not build_py.found()
+  build_py = py
+endif
 
 py.install_sources(
   [
@@ -19,9 +23,9 @@ py.install_sources(
 )
 
 incdir_numpy_cmd = run_command(
-  py,
-  [
-    '-c',
+    build_py,
+    [
+        '-c',
     '''
 import numpy
 import os
@@ -55,7 +59,17 @@ openmp_dependencies = []
 openmp_fortran_args = []
 openmp_c_args = []
 openmp_link_args = []
-if host_system == 'windows'
+is_gcc_toolchain = fc.get_id() == 'gcc' and cc.get_id() == 'gcc'
+if is_gcc_toolchain
+  openmp_dep = dependency('openmp', required: false)
+  if openmp_dep.found()
+    openmp_dependencies += openmp_dep
+    message('Using OpenMP dependency for parallel processing')
+  endif
+  openmp_fortran_args += ['-fopenmp']
+  openmp_c_args += ['-fopenmp']
+  openmp_link_args += ['-fopenmp']
+elif host_system == 'windows'
   message('Skipping OpenMP flags on Windows for geostrophic build')
 else
   openmp_dep = dependency('openmp', required: false)
@@ -63,11 +77,8 @@ else
     openmp_dependencies += openmp_dep
     message('Using OpenMP dependency for parallel processing')
   else
-    warning('OpenMP dependency not found; relying on compiler flags only')
+    warning('OpenMP not found - building without parallel support')
   endif
-  openmp_fortran_args += ['-fopenmp']
-  openmp_c_args += ['-fopenmp']
-  openmp_link_args += ['-fopenmp']
 endif
 
 c_args = ['-DNPY_NO_DEPRECATED_API=NPY_1_19_API_VERSION']

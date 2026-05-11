@@ -11,6 +11,10 @@ project(
 py_mod = import('python')
 py = py_mod.find_installation('python', pure: false)
 py_dep = py.dependency()
+build_py = find_program('build_python', required: false)
+if not build_py.found()
+    build_py = py
+endif
 
 # Install Python module files
 py.install_sources(
@@ -29,7 +33,7 @@ py.install_sources(
 
 # Get numpy include directories with robust fallbacks
 incdir_numpy_cmd = run_command(
-    py,
+    build_py,
     [
         '-c', '''
 import numpy
@@ -54,7 +58,7 @@ incdir_numpy = incdir_numpy_cmd.stdout().strip()
 
 # Try to get f2py include, with multiple fallbacks
 incdir_f2py_cmd = run_command(
-    py,
+    build_py,
     [
         '-c', '''
 import numpy
@@ -152,12 +156,12 @@ message('Fortran args: ' + ' '.join(fortran_args))
 message('C args: ' + ' '.join(c_args))
 
 # Generate Fortran-Python interface with f2py
-try_f2py = run_command(py, '-c', 'import numpy.f2py; print("OK")', check: false)
+try_f2py = run_command(build_py, '-c', 'import numpy.f2py; print("OK")', check: false)
 
 if try_f2py.returncode() == 0
     inc_np = include_directories(incdir_numpy, incdir_f2py)
     f2py_inline_cmd = [
-        py,
+        build_py,
         '-c',
         '''import builtins
 import sys
@@ -181,7 +185,7 @@ f2py2e.main()
 
     # Get fortranobject.c path with extensive fallbacks
     fortranobject_cmd = run_command(
-        py,
+        build_py,
         [
             '-c', '''
 import numpy.f2py

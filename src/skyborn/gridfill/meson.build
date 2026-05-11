@@ -7,6 +7,10 @@ project('skyborn-gridfill', 'c',
 py_mod = import('python')
 py = py_mod.find_installation('python', pure: false)
 py_dep = py.dependency()
+build_py = find_program('build_python', required: false)
+if not build_py.found()
+    build_py = py
+endif
 
 # Install Python module files
 py.install_sources(
@@ -15,13 +19,13 @@ py.install_sources(
 )
 
 # Check for Cython availability
-cython_check = run_command(py, '-c', 'import Cython; print("OK")', check: false)
+cython_check = run_command(build_py, '-c', 'import Cython; print("OK")', check: false)
 have_cython = cython_check.returncode() == 0
 
 if have_cython
     # Get numpy include directories
     incdir_numpy_cmd = run_command(
-        py,
+        build_py,
         ['-c', '''
 import numpy
 import os
@@ -138,7 +142,7 @@ else:
             input: cython_source_file,
             output: '_gridfill.c',
             command: [
-                py, '-m', 'cython',
+                build_py, '-m', 'cython',
                 '--3str',  # Python 3 string handling
                 '--fast-fail',  # Fail fast on errors
                 '--directive', 'language_level=3',  # Python 3 language level
