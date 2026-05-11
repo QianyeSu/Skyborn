@@ -348,6 +348,9 @@ def test_reduced_gaussian_validation_cache_and_restore_branches(monkeypatch):
     reduced_single = ReducedGaussianSpharmt(
         np.array([8, 10, 8], dtype=np.int32), precision="single"
     )
+    assert reduced_single._public_real_dtype(np.ones(1, dtype=np.float64)) == np.dtype(
+        np.float32
+    )
     assert reduced_single._restore_spectral_shape(spec, (), None).dtype == np.complex64
     assert reduced_single._restore_grid_shape(grid, (), None).dtype == np.float32
 

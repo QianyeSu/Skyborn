@@ -430,13 +430,13 @@ class ReducedGaussianSpharmt:
         return np.asarray(result).astype(np.dtype(output_dtype), copy=False)
 
     def _analyze_scalar(
-        self, grid: FloatArray, ntrunc: Optional[int] = None
+        self, datagrid: FloatArray, ntrunc: Optional[int] = None
     ) -> ComplexArray:
         ntrunc = self._validate_ntrunc(ntrunc)
         basis = self._basis(ntrunc)
         try:
             dataspec, ierror = _spherepack.reduced_gaussian_grdtospec(
-                grid,
+                datagrid,
                 self.pl,
                 self._weights,
                 basis,
@@ -452,13 +452,13 @@ class ReducedGaussianSpharmt:
         return dataspec
 
     def _synthesize_scalar(
-        self, spec: ComplexArray, ntrunc: Optional[int] = None
+        self, dataspec: ComplexArray, ntrunc: Optional[int] = None
     ) -> FloatArray:
         ntrunc = self._validate_ntrunc(ntrunc)
         basis = self._basis_transposed(ntrunc)
         try:
             datagrid, ierror = _spherepack.reduced_gaussian_spectogrd(
-                spec,
+                dataspec,
                 self.pl,
                 basis,
                 ntrunc,
@@ -475,23 +475,23 @@ class ReducedGaussianSpharmt:
 
     def _synthesize_scalar_pair(
         self,
-        spec_a: ComplexArray,
-        spec_b: ComplexArray,
+        dataspec_a: ComplexArray,
+        dataspec_b: ComplexArray,
         ntrunc: Optional[int] = None,
     ) -> Tuple[FloatArray, FloatArray]:
         ntrunc = self._validate_ntrunc(ntrunc)
-        if spec_a.shape[1] == 1:
+        if dataspec_a.shape[1] == 1:
             return (
-                self._synthesize_scalar(spec_a, ntrunc),
-                self._synthesize_scalar(spec_b, ntrunc),
+                self._synthesize_scalar(dataspec_a, ntrunc),
+                self._synthesize_scalar(dataspec_b, ntrunc),
             )
 
         if _HAS_REDUCED_GAUSSIAN_SPECTOGRD_PAIR:
             basis = self._basis_transposed(ntrunc)
             try:
                 grid_a, grid_b, ierror = _spherepack.reduced_gaussian_spectogrd_pair(
-                    spec_a,
-                    spec_b,
+                    dataspec_a,
+                    dataspec_b,
                     self.pl,
                     basis,
                     ntrunc,
@@ -509,8 +509,8 @@ class ReducedGaussianSpharmt:
                 )
             return grid_a, grid_b
 
-        return self._synthesize_scalar(spec_a, ntrunc), self._synthesize_scalar(
-            spec_b, ntrunc
+        return self._synthesize_scalar(dataspec_a, ntrunc), self._synthesize_scalar(
+            dataspec_b, ntrunc
         )
 
     def _analyze_wind(
@@ -612,7 +612,7 @@ class ReducedGaussianSpharmt:
         return divspec
 
     def _synthesize_gradient(
-        self, spec: ComplexArray, ntrunc: Optional[int] = None
+        self, dataspec: ComplexArray, ntrunc: Optional[int] = None
     ) -> Tuple[FloatArray, FloatArray]:
         ntrunc = self._validate_ntrunc(ntrunc)
         basis = self._basis_transposed(ntrunc)
@@ -620,7 +620,7 @@ class ReducedGaussianSpharmt:
         try:
             if _HAS_REDUCED_GAUSSIAN_GETGRAD:
                 ugrad, vgrad, ierror = _spherepack.reduced_gaussian_getgrad(
-                    spec,
+                    dataspec,
                     self.pl,
                     basis,
                     dbasis,
@@ -630,9 +630,9 @@ class ReducedGaussianSpharmt:
                     self.rsphere,
                 )
             else:
-                zero_spec = np.zeros_like(spec)
+                zero_spec = np.zeros_like(dataspec)
                 ugrad, vgrad, _, _, ierror = _spherepack.reduced_gaussian_getgrad_pair(
-                    spec,
+                    dataspec,
                     zero_spec,
                     self.pl,
                     basis,
@@ -656,8 +656,8 @@ class ReducedGaussianSpharmt:
 
     def _synthesize_gradient_pair(
         self,
-        spec_a: ComplexArray,
-        spec_b: ComplexArray,
+        dataspec_a: ComplexArray,
+        dataspec_b: ComplexArray,
         ntrunc: Optional[int] = None,
     ) -> Tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
         ntrunc = self._validate_ntrunc(ntrunc)
@@ -666,8 +666,8 @@ class ReducedGaussianSpharmt:
         try:
             a_ugrad, a_vgrad, b_ugrad, b_vgrad, ierror = (
                 _spherepack.reduced_gaussian_getgrad_pair(
-                    spec_a,
-                    spec_b,
+                    dataspec_a,
+                    dataspec_b,
                     self.pl,
                     basis,
                     dbasis,
@@ -689,8 +689,8 @@ class ReducedGaussianSpharmt:
             )
         return a_ugrad, a_vgrad, b_ugrad, b_vgrad
 
-    def _invlap(self, spec: ComplexArray) -> ComplexArray:
-        return _spherepack.invlap(spec, self.rsphere)
+    def _invlap(self, dataspec: ComplexArray) -> ComplexArray:
+        return _spherepack.invlap(dataspec, self.rsphere)
 
     def grdtospec(
         self, datagrid: FloatArray, ntrunc: Optional[int] = None
@@ -705,9 +705,9 @@ class ReducedGaussianSpharmt:
         ntrunc:
             Optional triangular truncation.  Defaults to ``nlat - 1``.
         """
-        _, grid, extra_shape = self._validate_grid_data(datagrid, "grdtospec")
+        _, datagrid, extra_shape = self._validate_grid_data(datagrid, "grdtospec")
         ntrunc = self._validate_ntrunc(ntrunc)
-        dataspec = self._analyze_scalar(grid, ntrunc)
+        dataspec = self._analyze_scalar(datagrid, ntrunc)
 
         return self._restore_spectral_shape(
             dataspec, extra_shape, self._public_complex_dtype(datagrid)
@@ -717,10 +717,10 @@ class ReducedGaussianSpharmt:
         """
         Synthesize ``spharm`` spectra onto the packed reduced Gaussian grid.
         """
-        _, ntrunc, spec, extra_shape = self._validate_spectral_data(
+        _, ntrunc, dataspec, extra_shape = self._validate_spectral_data(
             dataspec, "spectogrd"
         )
-        datagrid = self._synthesize_scalar(spec, ntrunc)
+        datagrid = self._synthesize_scalar(dataspec, ntrunc)
 
         return self._restore_grid_shape(
             datagrid, extra_shape, self._public_real_dtype(dataspec)
@@ -731,11 +731,11 @@ class ReducedGaussianSpharmt:
     ) -> Tuple[FloatArray, FloatArray]:
         """Synthesize two scalar spectra together through one batched call."""
         public_dtype = self._public_real_dtype(spec_a, spec_b)
-        _, ntrunc, spec_a_2d, spec_b_2d, extra_shape = (
+        _, ntrunc, dataspec_a, dataspec_b, extra_shape = (
             self._validate_paired_spectral_data(spec_a, spec_b, "_spectogrd_pair")
         )
 
-        grid_a, grid_b = self._synthesize_scalar_pair(spec_a_2d, spec_b_2d, ntrunc)
+        grid_a, grid_b = self._synthesize_scalar_pair(dataspec_a, dataspec_b, ntrunc)
         return (
             self._restore_grid_shape(grid_a, extra_shape, public_dtype),
             self._restore_grid_shape(grid_b, extra_shape, public_dtype),
@@ -747,11 +747,11 @@ class ReducedGaussianSpharmt:
         if np.shape(ugrid) != np.shape(vgrid):
             raise ValidationError("ugrid and vgrid must have the same shape")
 
-        nt, ugrid_2d, extra_shape = self._validate_grid_data(ugrid, operation_name)
-        _, vgrid_2d, v_extra_shape = self._validate_grid_data(vgrid, operation_name)
+        nt, ugrid, extra_shape = self._validate_grid_data(ugrid, operation_name)
+        _, vgrid, v_extra_shape = self._validate_grid_data(vgrid, operation_name)
         if extra_shape != v_extra_shape:
             raise ValidationError("ugrid and vgrid must have consistent dimensions")
-        return nt, ugrid_2d, vgrid_2d, extra_shape
+        return nt, ugrid, vgrid, extra_shape
 
     def _validate_paired_spectral_data(
         self, spec_a: ComplexArray, spec_b: ComplexArray, operation_name: str
@@ -759,15 +759,15 @@ class ReducedGaussianSpharmt:
         if np.shape(spec_a) != np.shape(spec_b):
             raise ValidationError("paired spectra must have the same shape")
 
-        nt_a, ntrunc_a, spec_a_2d, extra_shape = self._validate_spectral_data(
+        nt_a, ntrunc_a, dataspec_a, extra_shape = self._validate_spectral_data(
             spec_a, operation_name
         )
-        nt_b, ntrunc_b, spec_b_2d, b_extra_shape = self._validate_spectral_data(
+        nt_b, ntrunc_b, dataspec_b, b_extra_shape = self._validate_spectral_data(
             spec_b, operation_name
         )
         if nt_a != nt_b or ntrunc_a != ntrunc_b or extra_shape != b_extra_shape:
             raise ValidationError("paired spectra must have consistent dimensions")
-        return nt_a, ntrunc_a, spec_a_2d, spec_b_2d, extra_shape
+        return nt_a, ntrunc_a, dataspec_a, dataspec_b, extra_shape
 
     def getvrtdivspec(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
@@ -776,11 +776,11 @@ class ReducedGaussianSpharmt:
         Compute vorticity and divergence spectra from packed reduced-grid winds.
         """
         public_dtype = self._public_complex_dtype(ugrid, vgrid)
-        _, ugrid_2d, vgrid_2d, extra_shape = self._validate_paired_grid_data(
+        _, ugrid, vgrid, extra_shape = self._validate_paired_grid_data(
             ugrid, vgrid, "getvrtdivspec"
         )
         ntrunc = self._validate_ntrunc(ntrunc)
-        vrtspec, divspec = self._analyze_wind(ugrid_2d, vgrid_2d, ntrunc)
+        vrtspec, divspec = self._analyze_wind(ugrid, vgrid, ntrunc)
 
         return (
             self._restore_spectral_shape(vrtspec, extra_shape, public_dtype),
@@ -792,11 +792,11 @@ class ReducedGaussianSpharmt:
     ) -> ComplexArray:
         """Compute only vorticity spectral coefficients from packed winds."""
         public_dtype = self._public_complex_dtype(ugrid, vgrid)
-        _, ugrid_2d, vgrid_2d, extra_shape = self._validate_paired_grid_data(
+        _, ugrid, vgrid, extra_shape = self._validate_paired_grid_data(
             ugrid, vgrid, "getvrtspec"
         )
         ntrunc = self._validate_ntrunc(ntrunc)
-        vrtspec = self._analyze_vorticity(ugrid_2d, vgrid_2d, ntrunc)
+        vrtspec = self._analyze_vorticity(ugrid, vgrid, ntrunc)
 
         return self._restore_spectral_shape(vrtspec, extra_shape, public_dtype)
 
@@ -805,11 +805,11 @@ class ReducedGaussianSpharmt:
     ) -> ComplexArray:
         """Compute only divergence spectral coefficients from packed winds."""
         public_dtype = self._public_complex_dtype(ugrid, vgrid)
-        _, ugrid_2d, vgrid_2d, extra_shape = self._validate_paired_grid_data(
+        _, ugrid, vgrid, extra_shape = self._validate_paired_grid_data(
             ugrid, vgrid, "getdivspec"
         )
         ntrunc = self._validate_ntrunc(ntrunc)
-        divspec = self._analyze_divergence(ugrid_2d, vgrid_2d, ntrunc)
+        divspec = self._analyze_divergence(ugrid, vgrid, ntrunc)
 
         return self._restore_spectral_shape(divspec, extra_shape, public_dtype)
 
@@ -819,12 +819,12 @@ class ReducedGaussianSpharmt:
         """
         Synthesize packed reduced-grid winds from vorticity/divergence spectra.
         """
-        _, ntrunc, vrtspec_2d, divspec_2d, extra_shape = (
-            self._validate_paired_spectral_data(vrtspec, divspec, "getuv")
+        _, ntrunc, vrtspec, divspec, extra_shape = self._validate_paired_spectral_data(
+            vrtspec, divspec, "getuv"
         )
 
-        psispec = self._invlap(vrtspec_2d)
-        chispec = self._invlap(divspec_2d)
+        psispec = self._invlap(vrtspec)
+        chispec = self._invlap(divspec)
         u_chi, v_chi, v_psi, u_psi = self._synthesize_gradient_pair(
             chispec, psispec, ntrunc
         )
@@ -838,10 +838,10 @@ class ReducedGaussianSpharmt:
     def getgrad(self, dataspec: ComplexArray) -> Tuple[FloatArray, FloatArray]:
         """Compute the packed reduced-grid vector gradient of a scalar spectrum."""
         public_dtype = self._public_real_dtype(dataspec)
-        _, ntrunc, spec_2d, extra_shape = self._validate_spectral_data(
+        _, ntrunc, dataspec, extra_shape = self._validate_spectral_data(
             dataspec, "getgrad"
         )
-        ugrad, vgrad = self._synthesize_gradient(spec_2d, ntrunc)
+        ugrad, vgrad = self._synthesize_gradient(dataspec, ntrunc)
 
         return (
             self._restore_grid_shape(ugrad, extra_shape, public_dtype),
@@ -858,11 +858,11 @@ class ReducedGaussianSpharmt:
         recurrences, which is faster than two independent ``getgrad`` calls for
         Helmholtz-style workflows.
         """
-        _, ntrunc, spec_a_2d, spec_b_2d, extra_shape = (
+        _, ntrunc, dataspec_a, dataspec_b, extra_shape = (
             self._validate_paired_spectral_data(spec_a, spec_b, "getgrad_pair")
         )
         a_ugrad, a_vgrad, b_ugrad, b_vgrad = self._synthesize_gradient_pair(
-            spec_a_2d, spec_b_2d, ntrunc
+            dataspec_a, dataspec_b, ntrunc
         )
 
         public_dtype = self._public_real_dtype(spec_a, spec_b)
@@ -877,10 +877,10 @@ class ReducedGaussianSpharmt:
         self, dataspec: ComplexArray, operation_name: str = "_invlapspec"
     ) -> ComplexArray:
         """Apply the inverse Laplacian to a scalar spectrum and preserve shape."""
-        _, _, spec_2d, extra_shape = self._validate_spectral_data(
+        _, _, dataspec, extra_shape = self._validate_spectral_data(
             dataspec, operation_name
         )
-        invlap_spec = self._invlap(spec_2d)
+        invlap_spec = self._invlap(dataspec)
         return self._restore_spectral_shape(
             invlap_spec, extra_shape, self._public_complex_dtype(dataspec)
         )
@@ -893,8 +893,8 @@ class ReducedGaussianSpharmt:
                 f"smooth must be rank 1 with size {self.nlat}, got shape {smooth.shape}"
             )
 
-        _, _, spec_2d, extra_shape = self._validate_spectral_data(
+        _, _, dataspec, extra_shape = self._validate_spectral_data(
             self.grdtospec(datagrid), "specsmooth"
         )
-        smoothed = _spherepack.multsmoothfact(spec_2d, smooth.astype(np.float32))
+        smoothed = _spherepack.multsmoothfact(dataspec, smooth.astype(np.float32))
         return self.spectogrd(self._restore_spectral_shape(smoothed, extra_shape))
