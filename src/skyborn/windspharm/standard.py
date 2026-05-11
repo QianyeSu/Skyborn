@@ -586,18 +586,20 @@ class VectorWind:
 
         if self.u.ndim == 2:
             extra_shape: Tuple[int, ...] = ()
-            layout_u = np.asfortranarray(np.expand_dims(self.u, 2))
-            layout_v = np.asfortranarray(np.expand_dims(self.v, 2))
+            layout_u = np.asfortranarray(np.expand_dims(self.u, 2), dtype=np.float32)
+            layout_v = np.asfortranarray(np.expand_dims(self.v, 2), dtype=np.float32)
         else:
             extra_shape = tuple(self.u.shape[2:])
             nt = int(np.prod(extra_shape, dtype=int))
             # Preserve the existing C-order flatten semantics, then convert once
             # to a Fortran-contiguous 3D layout for repeated vector analysis.
             layout_u = np.asfortranarray(
-                self.u.reshape(self.u.shape[0], self.u.shape[1], nt)
+                self.u.reshape(self.u.shape[0], self.u.shape[1], nt),
+                dtype=np.float32,
             )
             layout_v = np.asfortranarray(
-                self.v.reshape(self.v.shape[0], self.v.shape[1], nt)
+                self.v.reshape(self.v.shape[0], self.v.shape[1], nt),
+                dtype=np.float32,
             )
 
         cache = (layout_u, layout_v, extra_shape)
