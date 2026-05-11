@@ -143,23 +143,23 @@ def test_reduced_vectorwind_reuses_cached_spectra(monkeypatch):
     reduced = ReducedVectorWind(u, v, pl)
 
     calls = {"vrtdiv": 0}
-    original_getvrtdivspec = reduced.s.getvrtdivspec
+    original_getvrtdivspec = reduced.s._analyze_wind
 
     def counting_getvrtdivspec(*args, **kwargs):
         calls["vrtdiv"] += 1
         return original_getvrtdivspec(*args, **kwargs)
 
-    monkeypatch.setattr(reduced.s, "getvrtdivspec", counting_getvrtdivspec)
+    monkeypatch.setattr(reduced.s, "_analyze_wind", counting_getvrtdivspec)
     monkeypatch.setattr(
         reduced.s,
-        "getvrtspec",
+        "_analyze_vorticity",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("cached vorticity spectrum should be reused")
         ),
     )
     monkeypatch.setattr(
         reduced.s,
-        "getdivspec",
+        "_analyze_divergence",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("cached divergence spectrum should be reused")
         ),
@@ -186,16 +186,16 @@ def test_reduced_vectorwind_single_component_uses_single_spectrum(monkeypatch):
 
     reduced = ReducedVectorWind(u, v, pl)
     vrt_calls = {"count": 0}
-    original_getvrtspec = reduced.s.getvrtspec
+    original_getvrtspec = reduced.s._analyze_vorticity
 
     def counting_getvrtspec(*args, **kwargs):
         vrt_calls["count"] += 1
         return original_getvrtspec(*args, **kwargs)
 
-    monkeypatch.setattr(reduced.s, "getvrtspec", counting_getvrtspec)
+    monkeypatch.setattr(reduced.s, "_analyze_vorticity", counting_getvrtspec)
     monkeypatch.setattr(
         reduced.s,
-        "getvrtdivspec",
+        "_analyze_wind",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("single-component diagnostics should not compute vrt/div")
         ),
@@ -205,16 +205,16 @@ def test_reduced_vectorwind_single_component_uses_single_spectrum(monkeypatch):
 
     reduced = ReducedVectorWind(u, v, pl)
     div_calls = {"count": 0}
-    original_getdivspec = reduced.s.getdivspec
+    original_getdivspec = reduced.s._analyze_divergence
 
     def counting_getdivspec(*args, **kwargs):
         div_calls["count"] += 1
         return original_getdivspec(*args, **kwargs)
 
-    monkeypatch.setattr(reduced.s, "getdivspec", counting_getdivspec)
+    monkeypatch.setattr(reduced.s, "_analyze_divergence", counting_getdivspec)
     monkeypatch.setattr(
         reduced.s,
-        "getvrtdivspec",
+        "_analyze_wind",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("single-component diagnostics should not compute vrt/div")
         ),
@@ -329,14 +329,14 @@ def test_reduced_vectorwind_scalar_validation_and_cache_branches(monkeypatch):
     reduced._spectral_cache = {("vrtdiv", 4): (vrtspec, divspec)}
     monkeypatch.setattr(
         reduced.s,
-        "getvrtspec",
+        "_analyze_vorticity",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("vrtdiv cache should be reused")
         ),
     )
     monkeypatch.setattr(
         reduced.s,
-        "getdivspec",
+        "_analyze_divergence",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("vrtdiv cache should be reused")
         ),
