@@ -81,6 +81,8 @@ class ReducedVectorWind:
         self.u = self._process_input_array(u, "u")
         self.v = self._process_input_array(v, "v")
         self._validate_input_data()
+        self._u_backend = np.asfortranarray(self.u, dtype=np.float32)
+        self._v_backend = np.asfortranarray(self.v, dtype=np.float32)
 
         self.s = ReducedGaussianSpharmt(
             self.pl,
@@ -238,7 +240,9 @@ class ReducedVectorWind:
             return cached  # type: ignore[return-value]
 
         ntrunc = key[1]
-        vrtspec, divspec = self.s.getvrtdivspec(self.u, self.v, ntrunc=ntrunc)
+        vrtspec, divspec = self.s.getvrtdivspec(
+            self._u_backend, self._v_backend, ntrunc=ntrunc
+        )
         self._spectral_cache[key] = (vrtspec, divspec)
         self._spectral_cache[("vrt", ntrunc)] = vrtspec
         self._spectral_cache[("div", ntrunc)] = divspec

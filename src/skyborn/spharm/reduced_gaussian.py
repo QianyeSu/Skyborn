@@ -40,8 +40,16 @@ _GLOBAL_BASIS_CACHE: Dict[Tuple[int, int], FloatArray] = {}
 _GLOBAL_DBASIS_CACHE: Dict[Tuple[int, int], FloatArray] = {}
 _GLOBAL_BASIS_TRANSPOSED_CACHE: Dict[Tuple[int, int], FloatArray] = {}
 _GLOBAL_DBASIS_TRANSPOSED_CACHE: Dict[Tuple[int, int], FloatArray] = {}
+_GLOBAL_GAUSSIAN_GEOMETRY_CACHE: Dict[int, Tuple[FloatArray, FloatArray]] = {}
 _MAX_GLOBAL_BASIS_ENTRIES = 2
 _MAX_GLOBAL_TRANSPOSED_BASIS_ENTRIES = 1
+_HAS_REDUCED_GAUSSIAN_LEGENDRE_DERIVATIVE_FROM_BASIS = hasattr(
+    _spherepack, "reduced_gaussian_legendre_derivative_from_basis"
+)
+_HAS_REDUCED_GAUSSIAN_SPECTOGRD_PAIR = hasattr(
+    _spherepack, "reduced_gaussian_spectogrd_pair"
+)
+_HAS_REDUCED_GAUSSIAN_GETGRAD = hasattr(_spherepack, "reduced_gaussian_getgrad")
 
 
 def _cache_basis_array(
@@ -55,6 +63,22 @@ def _cache_basis_array(
     if len(cache) >= max_entries:
         cache.pop(next(iter(cache)))
     cache[key] = value
+
+
+def _cached_gaussian_geometry(nlat: int) -> Tuple[FloatArray, FloatArray]:
+    cached = _GLOBAL_GAUSSIAN_GEOMETRY_CACHE.get(nlat)
+    if cached is not None:
+        return cached
+
+    latitudes, weights = gaussian_lats_wts(nlat)
+    cached_weights = np.asfortranarray(weights.astype(np.float32, copy=False))
+    cached_sin_theta = np.asfortranarray(
+        np.cos(np.deg2rad(latitudes)).astype(np.float32, copy=False)
+    )
+    cached_weights.setflags(write=False)
+    cached_sin_theta.setflags(write=False)
+    _GLOBAL_GAUSSIAN_GEOMETRY_CACHE[nlat] = (cached_weights, cached_sin_theta)
+    return cached_weights, cached_sin_theta
 
 
 class ReducedGaussianSpharmt:
@@ -114,11 +138,7 @@ class ReducedGaussianSpharmt:
         if self.rsphere <= 0.0:
             raise ValidationError(f"rsphere must be positive, got {rsphere}")
 
-        latitudes, weights = gaussian_lats_wts(self.nlat)
-        self._weights = np.asfortranarray(weights.astype(np.float32, copy=False))
-        self._sin_theta = np.asfortranarray(
-            np.cos(np.deg2rad(latitudes)).astype(np.float32, copy=False)
-        )
+        self._weights, self._sin_theta = _cached_gaussian_geometry(self.nlat)
         self._basis_cache: Dict[int, FloatArray] = {}
         self._dbasis_cache: Dict[int, FloatArray] = {}
         self._basis_transposed_cache: Dict[int, FloatArray] = {}
@@ -244,7 +264,7 @@ class ReducedGaussianSpharmt:
 
         try:
             basis = self._basis(ntrunc)
-            if hasattr(_spherepack, "reduced_gaussian_legendre_derivative_from_basis"):
+            if _HAS_REDUCED_GAUSSIAN_LEGENDRE_DERIVATIVE_FROM_BASIS:
                 dbasis, ierror = (
                     _spherepack.reduced_gaussian_legendre_derivative_from_basis(
                         basis, ntrunc
@@ -478,6 +498,7 @@ class ReducedGaussianSpharmt:
         self, spec_a: ComplexArray, spec_b: ComplexArray
     ) -> Tuple[FloatArray, FloatArray]:
         """Synthesize two scalar spectra together through one batched call."""
+        public_dtype = self._public_real_dtype(spec_a, spec_b)
         _, ntrunc, normalized_a, normalized_b, extra_shape = (
             self._validate_paired_spectral_data(spec_a, spec_b, "_spectogrd_pair")
         )
@@ -490,7 +511,7 @@ class ReducedGaussianSpharmt:
         if normalized_a.shape[1] == 1:
             return self.spectogrd(spec_a), self.spectogrd(spec_b)
 
-        if hasattr(_spherepack, "reduced_gaussian_spectogrd_pair"):
+        if _HAS_REDUCED_GAUSSIAN_SPECTOGRD_PAIR:
             basis = self._basis_transposed(ntrunc)
             try:
                 grid_a, grid_b, ierror = _spherepack.reduced_gaussian_spectogrd_pair(
@@ -513,12 +534,8 @@ class ReducedGaussianSpharmt:
                 )
 
             return (
-                self._restore_grid_shape(
-                    grid_a, extra_shape, self._public_real_dtype(spec_a, spec_b)
-                ),
-                self._restore_grid_shape(
-                    grid_b, extra_shape, self._public_real_dtype(spec_a, spec_b)
-                ),
+                self._restore_grid_shape(grid_a, extra_shape, public_dtype),
+                self._restore_grid_shape(grid_b, extra_shape, public_dtype),
             )
 
         paired_specs = np.stack((spec_a, spec_b), axis=-1)
@@ -559,6 +576,7 @@ class ReducedGaussianSpharmt:
         """
         Compute vorticity and divergence spectra from packed reduced-grid winds.
         """
+        public_dtype = self._public_complex_dtype(ugrid, vgrid)
         _, normalized_u, normalized_v, extra_shape = self._validate_paired_grid_data(
             ugrid, vgrid, "getvrtdivspec"
         )
@@ -589,18 +607,15 @@ class ReducedGaussianSpharmt:
             )
 
         return (
-            self._restore_spectral_shape(
-                vrtspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
-            ),
-            self._restore_spectral_shape(
-                divspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
-            ),
+            self._restore_spectral_shape(vrtspec, extra_shape, public_dtype),
+            self._restore_spectral_shape(divspec, extra_shape, public_dtype),
         )
 
     def getvrtspec(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
     ) -> ComplexArray:
         """Compute only vorticity spectral coefficients from packed winds."""
+        public_dtype = self._public_complex_dtype(ugrid, vgrid)
         _, normalized_u, normalized_v, extra_shape = self._validate_paired_grid_data(
             ugrid, vgrid, "getvrtspec"
         )
@@ -631,14 +646,13 @@ class ReducedGaussianSpharmt:
                 f"error code {ierror}"
             )
 
-        return self._restore_spectral_shape(
-            vrtspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
-        )
+        return self._restore_spectral_shape(vrtspec, extra_shape, public_dtype)
 
     def getdivspec(
         self, ugrid: FloatArray, vgrid: FloatArray, ntrunc: Optional[int] = None
     ) -> ComplexArray:
         """Compute only divergence spectral coefficients from packed winds."""
+        public_dtype = self._public_complex_dtype(ugrid, vgrid)
         _, normalized_u, normalized_v, extra_shape = self._validate_paired_grid_data(
             ugrid, vgrid, "getdivspec"
         )
@@ -669,9 +683,7 @@ class ReducedGaussianSpharmt:
                 f"error code {ierror}"
             )
 
-        return self._restore_spectral_shape(
-            divspec, extra_shape, self._public_complex_dtype(ugrid, vgrid)
-        )
+        return self._restore_spectral_shape(divspec, extra_shape, public_dtype)
 
     def getuv(
         self, vrtspec: ComplexArray, divspec: ComplexArray
@@ -702,6 +714,7 @@ class ReducedGaussianSpharmt:
 
     def getgrad(self, dataspec: ComplexArray) -> Tuple[FloatArray, FloatArray]:
         """Compute the packed reduced-grid vector gradient of a scalar spectrum."""
+        public_dtype = self._public_real_dtype(dataspec)
         _, ntrunc, normalized_spec, extra_shape = self._validate_spectral_data(
             dataspec, "getgrad"
         )
@@ -709,7 +722,7 @@ class ReducedGaussianSpharmt:
         dbasis = self._dbasis_transposed(ntrunc)
 
         try:
-            if hasattr(_spherepack, "reduced_gaussian_getgrad"):
+            if _HAS_REDUCED_GAUSSIAN_GETGRAD:
                 ugrad, vgrad, ierror = _spherepack.reduced_gaussian_getgrad(
                     normalized_spec,
                     self.pl,
@@ -745,12 +758,8 @@ class ReducedGaussianSpharmt:
             )
 
         return (
-            self._restore_grid_shape(
-                ugrad, extra_shape, self._public_real_dtype(dataspec)
-            ),
-            self._restore_grid_shape(
-                vgrad, extra_shape, self._public_real_dtype(dataspec)
-            ),
+            self._restore_grid_shape(ugrad, extra_shape, public_dtype),
+            self._restore_grid_shape(vgrad, extra_shape, public_dtype),
         )
 
     def getgrad_pair(
