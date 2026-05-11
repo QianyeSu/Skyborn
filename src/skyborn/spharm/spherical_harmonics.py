@@ -135,7 +135,6 @@ __all__ = [
     "legendre",
     "specintrp",
 ]
-import sys
 
 import numpy as np
 from numpy.typing import NDArray
@@ -183,6 +182,7 @@ class Spharmt:
         rsphere: Sphere radius in meters (read-only after initialization)
         gridtype: Grid type - 'regular' or 'gaussian' (read-only after initialization)
         legfunc: Legendre function handling - 'stored' or 'computed' (read-only after initialization)
+        precision: Public output precision mode - 'auto', 'single', or 'double'
     """
 
     def __init__(
@@ -203,6 +203,9 @@ class Spharmt:
             rsphere: Sphere radius in meters (default: Earth radius)
             gridtype: Grid type - 'regular' or 'gaussian'
             legfunc: Legendre function handling - 'stored' or 'computed'
+            precision: Public output precision mode. 'auto' preserves the input
+                precision policy, 'single' returns float32/complex64 outputs, and
+                'double' returns float64/complex128 outputs.
 
         Raises:
             ValidationError: If input parameters are invalid
