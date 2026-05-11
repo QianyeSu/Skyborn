@@ -42,22 +42,6 @@ def __read_reference_solutions(gridtype):
     return exact
 
 
-def _wrap_iris(reference, lats, lons):
-    try:
-        from iris.coords import DimCoord
-        from iris.cube import Cube
-    except ImportError:
-        raise ValueError("cannot use container 'iris' without iris")
-
-    londim = DimCoord(lons, standard_name="longitude", units="degrees_east")
-    latdim = DimCoord(lats, standard_name="latitude", units="degrees_north")
-    coords = list(zip((latdim, londim), (0, 1)))
-    for name in reference.keys():
-        reference[name] = Cube(
-            reference[name], dim_coords_and_dims=coords, long_name=name
-        )
-
-
 def _wrap_xarray(reference, lats, lons):
     try:
         import xarray as xr
@@ -79,18 +63,15 @@ def _wrap_xarray(reference, lats, lons):
 
 
 def _get_wrapper(container_type):
-    if container_type == "iris":
-        return _wrap_iris
-    elif container_type == "xarray":
+    if container_type == "xarray":
         return _wrap_xarray
-    else:
-        raise ValueError("invalid container type: {!s}".format(container_type))
+    raise ValueError("invalid container type: {!s}".format(container_type))
 
 
 def reference_solutions(container_type, gridtype):
     """Generate reference solutions in the required container."""
     container_type = container_type.lower()
-    if container_type not in ("standard", "iris", "xarray"):
+    if container_type not in ("standard", "xarray"):
         raise ValueError("unknown container type: " "'{!s}'".format(container_type))
     reference = __read_reference_solutions(gridtype)
     if container_type == "standard":

@@ -11,10 +11,6 @@ from .utils import error
 # Create a mapping from interface name to VectorWind class.
 solvers = {"standard": windspharm.standard.VectorWind}
 try:
-    solvers["iris"] = windspharm.iris.VectorWind
-except AttributeError:
-    pass
-try:
     solvers["xarray"] = windspharm.xarray.VectorWind
 except AttributeError:
     pass

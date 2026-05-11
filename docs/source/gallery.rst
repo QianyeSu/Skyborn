@@ -145,7 +145,7 @@ The windspharm package provides sophisticated atmospheric analysis capabilities:
    * **Vorticity & Divergence**: Calculates fundamental atmospheric dynamics quantities
    * **Streamfunction & Velocity Potential**: Computes scalar representations of wind fields
    * **Spectral Truncation**: Enables filtering and smoothing of atmospheric data
-   * **Multiple Interfaces**: xarray, standard, and iris interfaces for flexibility
+   * **Multiple Interfaces**: standard and xarray interfaces for flexibility
 
 Core Calculations
 -----------------

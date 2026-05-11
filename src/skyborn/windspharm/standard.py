@@ -97,8 +97,8 @@ class VectorWind:
     -----
     The NumPy ``standard.VectorWind`` interface does not automatically reorder
     latitude. If your data is south-to-north, reverse it first or use
-    :func:`skyborn.windspharm.tools.order_latdim`. The xarray and iris
-    interfaces handle this reordering automatically.
+    :func:`skyborn.windspharm.tools.order_latdim`. The xarray interface handles
+    this reordering automatically.
     """
 
     def __init__(

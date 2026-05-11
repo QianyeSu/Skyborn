@@ -73,8 +73,8 @@ leads to incorrect spherical harmonic analysis and large diagnostic errors.
 Recommended usage:
 
 * NumPy arrays: reorder first with ``skyborn.windspharm.tools.order_latdim``.
-* xarray / iris interfaces: latitude is reordered automatically before calling
-  the standard backend.
+* xarray interface: latitude is reordered automatically before calling the
+  standard backend.
 
 Main Features
 -------------
