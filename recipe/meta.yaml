@@ -28,9 +28,8 @@ requirements:
     - cython >=3
     - meson
     - ninja
-    - libblas * *openblas
-    - liblapack * *openblas
     - libgomp  # [linux]
+    - libgomp  # [win]
     - llvm-openmp  # [osx]
   run:
     - python
@@ -45,9 +44,6 @@ requirements:
     - scipy
     - scikit-learn
     - dask
-    - libblas * *openblas
-    - liblapack * *openblas
-    - libgomp  # [win]
 
 test:
   requires:
@@ -58,6 +54,7 @@ test:
     - skyborn.interp
     - skyborn.spharm
   commands:
+    - python -c "import skyborn.spharm._spherepack; import skyborn.calc.geostrophic.geostrophicwind; import skyborn.calc.troposphere.tropopause_height; import skyborn.calc.growth_rate.growth_rate_kernels; import skyborn.calc.GPI.tropical_cyclone_potential_intensity; import skyborn.calc.mann_kendall.mann_kendall_core"
     - pip check
 
 about:

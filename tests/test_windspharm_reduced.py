@@ -344,3 +344,63 @@ def test_reduced_vectorwind_scalar_validation_and_cache_branches(monkeypatch):
 
     assert reduced.streamfunction(truncation=4).shape == u.shape
     assert reduced.velocitypotential(truncation=4).shape == u.shape
+
+
+@pytest.mark.skipif(not WINDSPHARM_AVAILABLE, reason="windspharm module not available")
+def test_reduced_vectorwind_caches_planetary_vorticity_backend(monkeypatch):
+    pl = np.array([8, 10, 12, 10, 8], dtype=np.int32)
+    npoints = int(pl.sum())
+    rng = np.random.default_rng(20260517)
+    u = rng.standard_normal((npoints, 2)).astype(np.float32)
+    v = rng.standard_normal((npoints, 2)).astype(np.float32)
+    reduced = ReducedVectorWind(u, v, pl)
+
+    calls = {"latitude": 0}
+    original_latitude_values = reduced._latitude_values
+
+    def counting_latitude_values() -> np.ndarray:
+        calls["latitude"] += 1
+        return original_latitude_values()
+
+    monkeypatch.setattr(reduced, "_latitude_values", counting_latitude_values)
+
+    first = reduced._planetary_vorticity_backend()
+    second = reduced._planetary_vorticity_backend()
+    custom = reduced._planetary_vorticity_backend(omega=7.2921150e-5)
+    custom_again = reduced._planetary_vorticity_backend(omega=7.2921150e-5)
+
+    assert first is second
+    assert custom is custom_again
+    assert custom is not first
+    assert first.dtype == np.float32
+    assert first.shape == reduced._u_backend.shape
+    assert custom.dtype == np.float32
+    assert calls["latitude"] == 2
+
+
+@pytest.mark.skipif(not WINDSPHARM_AVAILABLE, reason="windspharm module not available")
+def test_reduced_vectorwind_rossbywavesource_reuses_cached_planetary_spectrum(
+    monkeypatch,
+):
+    pl = np.array([8, 10, 12, 10, 8], dtype=np.int32)
+    npoints = int(pl.sum())
+    rng = np.random.default_rng(20260518)
+    u = rng.standard_normal((npoints, 2)).astype(np.float32)
+    v = rng.standard_normal((npoints, 2)).astype(np.float32)
+    reduced = ReducedVectorWind(u, v, pl)
+
+    first = reduced.rossbywavesource(truncation=4)
+
+    monkeypatch.setattr(
+        reduced.s,
+        "_analyze_scalar",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("planetary vorticity spectrum should be cached")
+        ),
+    )
+
+    second = reduced.rossbywavesource(truncation=4)
+
+    assert first.shape == u.shape
+    assert second.shape == u.shape
+    np.testing.assert_allclose(first, second)

@@ -81,8 +81,12 @@ class ReducedVectorWind:
         self.u = self._process_input_array(u, "u")
         self.v = self._process_input_array(v, "v")
         self._validate_input_data()
-        self._u_backend = np.asfortranarray(self.u, dtype=np.float32)
-        self._v_backend = np.asfortranarray(self.v, dtype=np.float32)
+        self._extra_shape = tuple(self.u.shape[1:])
+        self._nt = (
+            int(np.prod(self._extra_shape, dtype=int)) if self._extra_shape else 1
+        )
+        self._u_backend = self._normalize_grid_backend(self.u)
+        self._v_backend = self._normalize_grid_backend(self.v)
 
         self.s = ReducedGaussianSpharmt(
             self.pl,
@@ -94,6 +98,9 @@ class ReducedVectorWind:
         self.rsphere = self.s.rsphere
         self.legfunc = self.s.legfunc
         self._latitude_cache: Optional[np.ndarray] = None
+        self._coriolis_cache: Dict[Tuple[float, str], np.ndarray] = {}
+        self._planetary_vorticity_backend_cache: Dict[float, np.ndarray] = {}
+        self._planetary_vorticity_spec_cache: Dict[Tuple[float, int], np.ndarray] = {}
         self._spectral_cache: Dict[
             Tuple[str, int], Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]
         ] = {}
@@ -125,21 +132,35 @@ class ReducedVectorWind:
             )
         return np.dtype(np.float64 if output_dtype is None else output_dtype)
 
+    def _resolved_output_dtype(
+        self, output_dtype: Optional[np.dtype] = None
+    ) -> np.dtype:
+        if self._precision == "double":
+            return np.dtype(np.float64)
+        if self._precision == "single":
+            return np.dtype(np.float32)
+        return self._output_dtype if output_dtype is None else np.dtype(output_dtype)
+
     def _restore_output_dtype(
         self, data: np.ndarray, output_dtype: Optional[np.dtype] = None
     ) -> np.ndarray:
         array = np.asarray(data)
-        if self._precision == "double":
-            target_dtype = np.float64
-        elif self._precision == "single":
-            target_dtype = np.float32
-        else:
-            target_dtype = (
-                self._output_dtype if output_dtype is None else np.dtype(output_dtype)
-            )
+        target_dtype = self._resolved_output_dtype(output_dtype)
         if array.dtype == target_dtype:
             return array
         return array.astype(target_dtype, copy=False)
+
+    def _normalize_grid_backend(self, data: np.ndarray) -> np.ndarray:
+        return np.asfortranarray(
+            np.asarray(data).reshape(self.u.shape[0], self._nt), dtype=np.float32
+        )
+
+    def _restore_grid(
+        self, datagrid: np.ndarray, output_dtype: Optional[np.dtype] = None
+    ) -> np.ndarray:
+        return self.s._restore_grid_shape(
+            datagrid, self._extra_shape, self._resolved_output_dtype(output_dtype)
+        )
 
     @staticmethod
     def _process_input_array(arr: ArrayLike, name: str) -> np.ndarray:
@@ -208,69 +229,141 @@ class ReducedVectorWind:
             self._latitude_cache = np.repeat(lat, self.pl)
         return self._latitude_cache
 
+    def _coriolis_values(
+        self, omega: Optional[float], dtype: Optional[np.dtype] = None
+    ) -> np.ndarray:
+        omega_value = 7.292e-05 if omega is None else float(omega)
+        target_dtype = self._u_backend.dtype if dtype is None else np.dtype(dtype)
+        key = (omega_value, target_dtype.str)
+        cached = self._coriolis_cache.get(key)
+        if cached is not None:
+            return cached
+
+        coriolis = np.asarray(
+            2.0 * omega_value * np.sin(np.deg2rad(self._latitude_values())),
+            dtype=target_dtype,
+        )
+        self._coriolis_cache[key] = coriolis
+        return coriolis
+
     def _planetary_vorticity(
         self, omega: Optional[float] = None, materialize: bool = True
     ) -> np.ndarray:
-        omega_value = 7.292e-05 if omega is None else float(omega)
-        coriolis = 2.0 * omega_value * np.sin(np.deg2rad(self._latitude_values()))
+        coriolis = self._coriolis_values(
+            omega, dtype=self._output_dtype if materialize else self._u_backend.dtype
+        )
         indices = [slice(None)] + [np.newaxis] * (self.u.ndim - 1)
         broadcast = np.broadcast_to(coriolis[tuple(indices)], self.u.shape)
         if materialize:
             return np.array(broadcast, copy=True)
         return broadcast
 
-    def _spectogrd_pair(
-        self, spec_a: np.ndarray, spec_b: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        return self.s._spectogrd_pair(spec_a, spec_b)
+    def _planetary_vorticity_backend(self, omega: Optional[float] = None) -> np.ndarray:
+        omega_value = 7.292e-05 if omega is None else float(omega)
+        cached = self._planetary_vorticity_backend_cache.get(omega_value)
+        if cached is not None:
+            return cached
 
-    def _spectral_cache_key(
-        self, component: str, truncation: Optional[int]
-    ) -> Tuple[str, int]:
-        return component, self.s._validate_ntrunc(truncation)
+        coriolis = self._coriolis_values(omega_value, dtype=self._u_backend.dtype)
+        broadcast = np.broadcast_to(
+            coriolis.reshape(self.u.shape[0], 1), self._u_backend.shape
+        )
+        self._planetary_vorticity_backend_cache[omega_value] = broadcast
+        return broadcast
+
+    def _planetary_vorticity_spectral(
+        self, truncation: Optional[int] = None, omega: Optional[float] = None
+    ) -> np.ndarray:
+        ntrunc = self._ntrunc(truncation)
+        omega_value = 7.292e-05 if omega is None else float(omega)
+        key = (omega_value, ntrunc)
+        cached = self._planetary_vorticity_spec_cache.get(key)
+        if cached is not None:
+            return cached
+
+        coriolis = self._coriolis_values(omega_value, dtype=self._u_backend.dtype)
+        grid = np.broadcast_to(
+            coriolis.reshape(self.u.shape[0], 1), self._u_backend.shape
+        )
+        f_spec = self.s._analyze_scalar(
+            np.asfortranarray(grid, dtype=np.float32), ntrunc
+        )
+        self._planetary_vorticity_spec_cache[key] = f_spec
+        return f_spec
+
+    def _ntrunc(self, truncation: Optional[int]) -> int:
+        return self.s._validate_ntrunc(truncation)
+
+    def _spectogrd_pair(
+        self,
+        spec_a: np.ndarray,
+        spec_b: np.ndarray,
+        truncation: Optional[int] = None,
+        output_dtype: Optional[np.dtype] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        ntrunc = self._ntrunc(truncation)
+        grid_a, grid_b = self.s._synthesize_scalar_pair(spec_a, spec_b, ntrunc)
+        return self._restore_grid(grid_a, output_dtype), self._restore_grid(
+            grid_b, output_dtype
+        )
+
+    def _spectogrd(
+        self,
+        spec: np.ndarray,
+        truncation: Optional[int] = None,
+        output_dtype: Optional[np.dtype] = None,
+    ) -> np.ndarray:
+        ntrunc = self._ntrunc(truncation)
+        return self._restore_grid(self.s._synthesize_scalar(spec, ntrunc), output_dtype)
 
     def _vector_analysis_spectral(
-        self, truncation: Optional[int] = None
+        self, truncation: Optional[int]
     ) -> Tuple[np.ndarray, np.ndarray]:
-        key = self._spectral_cache_key("vrtdiv", truncation)
+        ntrunc = self._ntrunc(truncation)
+        key = ("vrtdiv", ntrunc)
         cached = self._spectral_cache.get(key)
         if cached is not None:
             return cached  # type: ignore[return-value]
 
-        ntrunc = key[1]
-        vrtspec, divspec = self.s.getvrtdivspec(
-            self._u_backend, self._v_backend, ntrunc=ntrunc
+        vrtspec, divspec = self.s._analyze_wind(
+            self._u_backend, self._v_backend, ntrunc
         )
         self._spectral_cache[key] = (vrtspec, divspec)
         self._spectral_cache[("vrt", ntrunc)] = vrtspec
         self._spectral_cache[("div", ntrunc)] = divspec
         return vrtspec, divspec
 
-    def _vorticity_spectral(self, truncation: Optional[int] = None) -> np.ndarray:
-        key = self._spectral_cache_key("vrt", truncation)
+    def _vorticity_spectral(self, truncation: Optional[int]) -> np.ndarray:
+        ntrunc = self._ntrunc(truncation)
+        key = ("vrt", ntrunc)
         cached = self._spectral_cache.get(key)
         if cached is not None:
             return cached  # type: ignore[return-value]
 
-        full = self._spectral_cache.get(("vrtdiv", key[1]))
+        full = self._spectral_cache.get(("vrtdiv", ntrunc))
         if full is not None:
             vrtspec = full[0]  # type: ignore[index]
         else:
-            vrtspec = self.s.getvrtspec(self.u, self.v, ntrunc=key[1])
+            vrtspec = self.s._analyze_vorticity(
+                self._u_backend, self._v_backend, ntrunc
+            )
         self._spectral_cache[key] = vrtspec
         return vrtspec
 
-    def _divergence_spectral(self, truncation: Optional[int] = None) -> np.ndarray:
-        key = self._spectral_cache_key("div", truncation)
+    def _divergence_spectral(self, truncation: Optional[int]) -> np.ndarray:
+        ntrunc = self._ntrunc(truncation)
+        key = ("div", ntrunc)
         cached = self._spectral_cache.get(key)
         if cached is not None:
             return cached  # type: ignore[return-value]
 
-        full = self._spectral_cache.get(("vrtdiv", key[1]))
+        full = self._spectral_cache.get(("vrtdiv", ntrunc))
         if full is not None:
             divspec = full[1]  # type: ignore[index]
         else:
-            divspec = self.s.getdivspec(self.u, self.v, ntrunc=key[1])
+            divspec = self.s._analyze_divergence(
+                self._u_backend, self._v_backend, ntrunc
+            )
         self._spectral_cache[key] = divspec
         return divspec
 
@@ -280,19 +373,18 @@ class ReducedVectorWind:
 
     def vrtdiv(self, truncation: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
         """Return relative vorticity and horizontal divergence."""
-        vrtspec, divspec = self._vector_analysis_spectral(truncation=truncation)
-        vrt, div = self._spectogrd_pair(vrtspec, divspec)
-        return self._restore_output_dtype(vrt), self._restore_output_dtype(div)
+        vrtspec, divspec = self._vector_analysis_spectral(truncation)
+        return self._spectogrd_pair(vrtspec, divspec, truncation)
 
     def vorticity(self, truncation: Optional[int] = None) -> np.ndarray:
         """Return relative vorticity."""
-        vrtspec = self._vorticity_spectral(truncation=truncation)
-        return self._restore_output_dtype(self.s.spectogrd(vrtspec))
+        vrtspec = self._vorticity_spectral(truncation)
+        return self._spectogrd(vrtspec, truncation)
 
     def divergence(self, truncation: Optional[int] = None) -> np.ndarray:
         """Return horizontal divergence."""
-        divspec = self._divergence_spectral(truncation=truncation)
-        return self._restore_output_dtype(self.s.spectogrd(divspec))
+        divspec = self._divergence_spectral(truncation)
+        return self._spectogrd(divspec, truncation)
 
     def planetaryvorticity(self, omega: Optional[float] = None) -> np.ndarray:
         """Return planetary vorticity on the packed reduced grid."""
@@ -309,60 +401,56 @@ class ReducedVectorWind:
 
     def sfvp(self, truncation: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
         """Return streamfunction and velocity potential."""
-        vrtspec, divspec = self._vector_analysis_spectral(truncation=truncation)
-        psi, chi = self._spectogrd_pair(
-            self.s._invlapspec(vrtspec, "sfvp"),
-            self.s._invlapspec(divspec, "sfvp"),
+        vrtspec, divspec = self._vector_analysis_spectral(truncation)
+        return self._spectogrd_pair(
+            self.s._invlap(vrtspec),
+            self.s._invlap(divspec),
+            truncation,
         )
-        return self._restore_output_dtype(psi), self._restore_output_dtype(chi)
 
     def streamfunction(self, truncation: Optional[int] = None) -> np.ndarray:
         """Return streamfunction."""
-        vrtspec = self._vorticity_spectral(truncation=truncation)
-        return self._restore_output_dtype(
-            self.s.spectogrd(self.s._invlapspec(vrtspec, "streamfunction"))
-        )
+        vrtspec = self._vorticity_spectral(truncation)
+        return self._spectogrd(self.s._invlap(vrtspec), truncation)
 
     def velocitypotential(self, truncation: Optional[int] = None) -> np.ndarray:
         """Return velocity potential."""
-        divspec = self._divergence_spectral(truncation=truncation)
-        return self._restore_output_dtype(
-            self.s.spectogrd(self.s._invlapspec(divspec, "velocitypotential"))
-        )
+        divspec = self._divergence_spectral(truncation)
+        return self._spectogrd(self.s._invlap(divspec), truncation)
 
     def helmholtz(
         self, truncation: Optional[int] = None
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Return irrotational and non-divergent wind components."""
-        vrtspec, divspec = self._vector_analysis_spectral(truncation=truncation)
-        psispec = self.s._invlapspec(vrtspec, "helmholtz")
-        chispec = self.s._invlapspec(divspec, "helmholtz")
-        u_chi, v_chi, v_psi, u_psi = self.s.getgrad_pair(chispec, psispec)
+        vrtspec, divspec = self._vector_analysis_spectral(truncation)
+        psispec = self.s._invlap(vrtspec)
+        chispec = self.s._invlap(divspec)
+        u_chi, v_chi, v_psi, u_psi = self.s._synthesize_gradient_pair(
+            chispec, psispec, truncation
+        )
         return (
-            self._restore_output_dtype(u_chi),
-            self._restore_output_dtype(v_chi),
-            self._restore_output_dtype(-u_psi),
-            self._restore_output_dtype(v_psi),
+            self._restore_grid(u_chi),
+            self._restore_grid(v_chi),
+            self._restore_grid(-u_psi),
+            self._restore_grid(v_psi),
         )
 
     def irrotationalcomponent(
         self, truncation: Optional[int] = None
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Return irrotational wind component."""
-        divspec = self._divergence_spectral(truncation=truncation)
-        u_chi, v_chi = self.s.getgrad(
-            self.s._invlapspec(divspec, "irrotationalcomponent")
-        )
-        return self._restore_output_dtype(u_chi), self._restore_output_dtype(v_chi)
+        divspec = self._divergence_spectral(truncation)
+        u_chi, v_chi = self.s._synthesize_gradient(self.s._invlap(divspec), truncation)
+        return self._restore_grid(u_chi), self._restore_grid(v_chi)
 
     def nondivergentcomponent(
         self, truncation: Optional[int] = None
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Return non-divergent wind component."""
-        vrtspec = self._vorticity_spectral(truncation=truncation)
-        psispec = self.s._invlapspec(vrtspec, "nondivergentcomponent")
-        v_psi, u_psi = self.s.getgrad(psispec)
-        return self._restore_output_dtype(-u_psi), self._restore_output_dtype(v_psi)
+        vrtspec = self._vorticity_spectral(truncation)
+        psispec = self.s._invlap(vrtspec)
+        v_psi, u_psi = self.s._synthesize_gradient(psispec, truncation)
+        return self._restore_grid(-u_psi), self._restore_grid(v_psi)
 
     def gradient(
         self, chi: ArrayLike, truncation: Optional[int] = None
@@ -370,11 +458,13 @@ class ReducedVectorWind:
         """Return vector gradient of a packed scalar field."""
         output_dtype = self._infer_output_dtype(chi)
         field = self._validate_scalar_field(chi, "chi")
-        chi_spec = self.s.grdtospec(field, ntrunc=truncation)
-        u_chi, v_chi = self.s.getgrad(chi_spec)
+        chi_spec = self.s._analyze_scalar(
+            self._normalize_grid_backend(field), truncation
+        )
+        u_chi, v_chi = self.s._synthesize_gradient(chi_spec, truncation)
         return (
-            self._restore_output_dtype(u_chi, output_dtype),
-            self._restore_output_dtype(v_chi, output_dtype),
+            self._restore_grid(u_chi, output_dtype),
+            self._restore_grid(v_chi, output_dtype),
         )
 
     def truncate(
@@ -383,18 +473,20 @@ class ReducedVectorWind:
         """Apply spectral truncation to a packed scalar field."""
         output_dtype = self._infer_output_dtype(field)
         scalar = self._validate_scalar_field(field, "field")
-        field_spec = self.s.grdtospec(scalar, ntrunc=truncation)
-        return self._restore_output_dtype(self.s.spectogrd(field_spec), output_dtype)
+        field_spec = self.s._analyze_scalar(
+            self._normalize_grid_backend(scalar), truncation
+        )
+        return self._spectogrd(field_spec, truncation, output_dtype)
 
     def rossbywavesource(
         self, truncation: Optional[int] = None, omega: Optional[float] = None
     ) -> np.ndarray:
         """Return Rossby wave source on the packed reduced grid."""
-        vrtspec, divspec = self._vector_analysis_spectral(truncation=truncation)
-        vrt, div = self._spectogrd_pair(vrtspec, divspec)
-        eta = vrt + self._planetary_vorticity(omega=omega, materialize=False)
-        uchi, vchi = self.s.getgrad(self.s._invlapspec(divspec, "rossbywavesource"))
-        etaspec = self.s.grdtospec(eta, ntrunc=truncation)
-        etax, etay = self.s.getgrad(etaspec)
+        vrtspec, divspec = self._vector_analysis_spectral(truncation)
+        vrt, div = self.s._synthesize_scalar_pair(vrtspec, divspec, truncation)
+        eta = vrt + self._planetary_vorticity_backend(omega=omega)
+        uchi, vchi = self.s._synthesize_gradient(self.s._invlap(divspec), truncation)
+        etaspec = vrtspec + self._planetary_vorticity_spectral(truncation, omega=omega)
+        etax, etay = self.s._synthesize_gradient(etaspec, truncation)
         rws = -eta * div - (uchi * etax + vchi * etay)
-        return self._restore_output_dtype(rws)
+        return self._restore_grid(rws)
