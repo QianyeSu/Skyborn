@@ -432,6 +432,7 @@ else:
         'rcm2points',
         [
             'fortran/rcm2points.f90',
+            'fortran/rcm2points_bindings.f90',
             rcm2points_support_sources,
             'rcm2points_module.c',
         ],
@@ -450,6 +451,7 @@ else:
         'rcm2rgrid',
         [
             'fortran/rcm2rgrid.f90',
+            'fortran/rcm2rgrid_bindings.f90',
             rcm2rgrid_support_sources,
             'rcm2rgrid_module.c',
         ],
@@ -469,6 +471,7 @@ else:
         [
             'triple2grid_module.c',
             'fortran/triple2grid.f90',
+            'fortran/triple2grid_bindings.f90',
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
@@ -485,6 +488,7 @@ else:
         [
             'grid2triple_module.c',
             'fortran/grid2triple.f90',
+            'fortran/grid2triple_bindings.f90',
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
@@ -500,6 +504,7 @@ else:
         'vinth2p_kernels',
         [
             'fortran/vinth2p_kernels.f90',
+            'fortran/vinth2p_kernels_bindings.f90',
             'vinth2p_kernels_module.c',
         ],
         include_directories: inc_np,
@@ -517,6 +522,7 @@ else:
         [
             'int2p_kernels_module.c',
             'fortran/int2p_kernels.f90',
+            'fortran/int2p_kernels_bindings.f90',
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
@@ -533,6 +539,7 @@ else:
         [
             'isentropic_kernels_module.c',
             'fortran/isentropic_kernels.f90',
+            'fortran/isentropic_kernels_bindings.f90',
         ],
         include_directories: inc_np,
         dependencies: [py_dep],
