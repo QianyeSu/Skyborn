@@ -141,6 +141,30 @@ class MesonBuildExt(build_ext):
         )
         return native_file
 
+    @staticmethod
+    def _write_build_python_shim(build_dir: Path) -> Path:
+        """Create a PATH-visible build_python shim for Meson lookups."""
+
+        if os.name == "nt":
+            shim_path = (build_dir / "build_python.bat").resolve()
+            python_executable = str(Path(sys.executable).resolve())
+            shim_path.write_text(
+                "@echo off\r\n" f'"{python_executable}" %*\r\n',
+                encoding="utf-8",
+                newline="\r\n",
+            )
+        else:
+            shim_path = (build_dir / "build_python").resolve()
+            python_executable = Path(sys.executable).resolve().as_posix()
+            shim_path.write_text(
+                "#!/bin/sh\n" f'exec "{python_executable}" "$@"\n',
+                encoding="utf-8",
+                newline="\n",
+            )
+            shim_path.chmod(0o755)
+
+        return shim_path
+
     def run(self):
         """Run the build process"""
         print("DEBUG: MesonBuildExt.run() called")
@@ -283,6 +307,10 @@ class MesonBuildExt(build_ext):
             # Setup build directory
             build_dir.mkdir(parents=True, exist_ok=True)
             native_file = self._write_meson_native_file(build_dir)
+            print(
+                "Prepared Meson build_python shim: "
+                f"{self._write_build_python_shim(build_dir)}"
+            )
 
             # Configure meson build with custom install directory for wheel builds
             print(f"Configuring meson build in {build_dir} (cwd={module_path})")
@@ -329,6 +357,7 @@ class MesonBuildExt(build_ext):
             active_prefix = _active_python_prefix()
             inherited_conda_prefix = env.get("CONDA_PREFIX", "")
             conda_prefix = str(active_prefix) if active_prefix.exists() else ""
+            build_dir_path = str(build_dir.resolve())
             if conda_prefix:
                 env["CONDA_PREFIX"] = conda_prefix
                 if inherited_conda_prefix:
@@ -353,6 +382,7 @@ class MesonBuildExt(build_ext):
                     )
                     usr_bin = os.path.join(conda_prefix, "Library", "usr", "bin")
                     path_entries = [
+                        build_dir_path,
                         conda_root,
                         conda_scripts,
                         conda_bin,
@@ -410,9 +440,9 @@ class MesonBuildExt(build_ext):
                     # Linux and macOS conda environment setup
                     conda_bin = os.path.join(conda_prefix, "bin")
                     # On Unix-like systems, use colon separator and prepend to PATH
-                    path_entries = [
-                        entry for entry in [conda_bin] if os.path.isdir(entry)
-                    ]
+                    path_entries = [build_dir_path]
+                    if os.path.isdir(conda_bin):
+                        path_entries.append(conda_bin)
                     env["PATH"] = ":".join(path_entries + [current_path])
 
                     # Add lib directory to LD_LIBRARY_PATH (Linux) or DYLD_LIBRARY_PATH (macOS)
@@ -566,7 +596,7 @@ class MesonBuildExt(build_ext):
                         f"Warning: Unknown platform {system}, using basic conda PATH setup"
                     )
                     conda_bin = os.path.join(conda_prefix, "bin")
-                    env["PATH"] = f"{conda_bin}:{current_path}"
+                    env["PATH"] = f"{build_dir_path}:{conda_bin}:{current_path}"
 
                 # Meson should detect its own linker / archiver from the
                 # compiler driver. On conda-build macOS these environment
@@ -588,6 +618,14 @@ class MesonBuildExt(build_ext):
                     ):
                         if key in env:
                             env.pop(key, None)
+            else:
+                current_path = env.get("PATH", "")
+                path_sep = ";" if platform.system() == "Windows" else ":"
+                env["PATH"] = (
+                    f"{build_dir_path}{path_sep}{current_path}"
+                    if current_path
+                    else build_dir_path
+                )
 
             subprocess.run(setup_cmd, cwd=str(module_path), check=True, env=env)
 
