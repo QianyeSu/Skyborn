@@ -294,16 +294,14 @@ class MesonBuildExt(build_ext):
                 str(native_file),
             )
 
-            # Conda-forge toolchains already provide aggressive release flags.
-            # Leaving Meson LTO enabled has caused two packaging-specific
-            # failures:
-            # 1. Linux static archives of Fortran helper objects were created
-            #    with plain `ar`, which left unresolved symbols behind.
-            # 2. macOS Meson configure mis-detected the linker under the
-            #    conda-build toolchain environment.
-            # Keep local editable/wheel builds on LTO, but turn it off under
-            # conda-build for cross-platform package stability.
-            if CONDA_BUILD_MODE:
+            # Toolchain-managed package builds already provide aggressive
+            # release flags. Leaving Meson LTO enabled has caused
+            # packaging-specific failures on Linux/macOS where static archives
+            # of Fortran helper objects are re-linked into extension modules.
+            # Keep local inplace builds on LTO, but turn it off for wheel,
+            # install, and conda-build paths where cross-platform stability is
+            # more important than a small local optimization.
+            if CONDA_BUILD_MODE or not self.inplace:
                 setup_cmd.append("-Db_lto=false")
             else:
                 setup_cmd.append("-Db_lto=true")
