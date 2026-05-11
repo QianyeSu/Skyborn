@@ -145,15 +145,18 @@ class MesonBuildExt(build_ext):
     def _write_build_python_shim(build_dir: Path) -> Path:
         """Create a PATH-visible build_python shim for Meson lookups."""
 
+        python_executable = shutil.which("python")
+        if not python_executable:
+            python_executable = str(Path(sys.executable).resolve())
+
         if os.name == "nt":
             shim_path = (build_dir / "build_python.bat").resolve()
-            python_executable = str(Path(sys.executable).resolve())
             with shim_path.open("w", encoding="utf-8", newline="\r\n") as handle:
                 handle.write("@echo off\r\n")
                 handle.write(f'"{python_executable}" %*\r\n')
         else:
             shim_path = (build_dir / "build_python").resolve()
-            python_executable = Path(sys.executable).resolve().as_posix()
+            python_executable = Path(python_executable).resolve().as_posix()
             with shim_path.open("w", encoding="utf-8", newline="\n") as handle:
                 handle.write("#!/bin/sh\n")
                 handle.write(f'exec "{python_executable}" "$@"\n')
