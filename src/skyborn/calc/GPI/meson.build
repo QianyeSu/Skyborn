@@ -115,6 +115,7 @@ gpi_ext = py.extension_module(
     [
         'tropical_cyclone_potential_intensity_module.c',
         'fortran/tropical_cyclone_potential_intensity.f90',
+        'fortran/tropical_cyclone_potential_intensity_bindings.f90',
     ],
     include_directories: include_directories(incdir_numpy),
     dependencies: [py_dep] + openmp_dependencies,

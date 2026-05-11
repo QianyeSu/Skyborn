@@ -4,7 +4,7 @@
 #include <Python.h>
 #include <numpy/arrayobject.h>
 
-void calculate_pi_gridded_data(
+void calculate_pi_gridded_data_c(
     void *sst_in,
     void *psl_in,
     void *pressure_levels,
@@ -17,7 +17,7 @@ void calculate_pi_gridded_data(
     int nlon,
     int num_levels
 );
-void calculate_pi_gridded_with_missing(
+void calculate_pi_gridded_with_missing_c(
     void *sst_in,
     void *psl_in,
     void *pressure_levels,
@@ -30,28 +30,7 @@ void calculate_pi_gridded_with_missing(
     int nlon,
     int num_levels
 );
-void calculate_pi_gridded_diagnostics(
-    void *sst_in,
-    void *psl_in,
-    void *pressure_levels,
-    void *temp_in,
-    void *mixing_ratio_in,
-    void *min_pressure,
-    void *max_wind,
-    void *error_flag,
-    void *outflow_temp,
-    void *outflow_level,
-    void *lnpi,
-    void *lneff,
-    void *lndiseq,
-    void *lnckcd,
-    int outflow_source_flag,
-    float ckcd_in,
-    int nlat,
-    int nlon,
-    int num_levels
-);
-void calculate_pi_gridded_diagnostics_with_missing(
+void calculate_pi_gridded_diagnostics_c(
     void *sst_in,
     void *psl_in,
     void *pressure_levels,
@@ -72,7 +51,28 @@ void calculate_pi_gridded_diagnostics_with_missing(
     int nlon,
     int num_levels
 );
-void calculate_pi_single_profile(
+void calculate_pi_gridded_diagnostics_with_missing_c(
+    void *sst_in,
+    void *psl_in,
+    void *pressure_levels,
+    void *temp_in,
+    void *mixing_ratio_in,
+    void *min_pressure,
+    void *max_wind,
+    void *error_flag,
+    void *outflow_temp,
+    void *outflow_level,
+    void *lnpi,
+    void *lneff,
+    void *lndiseq,
+    void *lnckcd,
+    int outflow_source_flag,
+    float ckcd_in,
+    int nlat,
+    int nlon,
+    int num_levels
+);
+void calculate_pi_single_profile_c(
     float sst_in,
     float psl_in,
     void *pressure_levels,
@@ -84,7 +84,7 @@ void calculate_pi_single_profile(
     void *error_flag,
     int num_levels
 );
-void calculate_pi_profile_diagnostics(
+void calculate_pi_profile_diagnostics_c(
     float sst_in,
     float psl_in,
     void *pressure_levels,
@@ -104,7 +104,7 @@ void calculate_pi_profile_diagnostics(
     float ckcd_in,
     int num_levels
 );
-void calculate_pi_4d_data(
+void calculate_pi_4d_data_c(
     void *sst_in,
     void *psl_in,
     void *pressure_levels,
@@ -118,7 +118,7 @@ void calculate_pi_4d_data(
     int num_levels,
     int num_times
 );
-void calculate_pi_4d_with_missing(
+void calculate_pi_4d_with_missing_c(
     void *sst_in,
     void *psl_in,
     void *pressure_levels,
@@ -132,29 +132,7 @@ void calculate_pi_4d_with_missing(
     int num_levels,
     int num_times
 );
-void calculate_pi_4d_diagnostics(
-    void *sst_in,
-    void *psl_in,
-    void *pressure_levels,
-    void *temp_in,
-    void *mixing_ratio_in,
-    void *min_pressure,
-    void *max_wind,
-    void *error_flag,
-    void *outflow_temp,
-    void *outflow_level,
-    void *lnpi,
-    void *lneff,
-    void *lndiseq,
-    void *lnckcd,
-    int outflow_source_flag,
-    float ckcd_in,
-    int nlat,
-    int nlon,
-    int num_levels,
-    int num_times
-);
-void calculate_pi_4d_diagnostics_with_missing(
+void calculate_pi_4d_diagnostics_c(
     void *sst_in,
     void *psl_in,
     void *pressure_levels,
@@ -176,7 +154,29 @@ void calculate_pi_4d_diagnostics_with_missing(
     int num_levels,
     int num_times
 );
-void cape(
+void calculate_pi_4d_diagnostics_with_missing_c(
+    void *sst_in,
+    void *psl_in,
+    void *pressure_levels,
+    void *temp_in,
+    void *mixing_ratio_in,
+    void *min_pressure,
+    void *max_wind,
+    void *error_flag,
+    void *outflow_temp,
+    void *outflow_level,
+    void *lnpi,
+    void *lneff,
+    void *lndiseq,
+    void *lnckcd,
+    int outflow_source_flag,
+    float ckcd_in,
+    int nlat,
+    int nlon,
+    int num_levels,
+    int num_times
+);
+void cape_c(
     float parcel_temp,
     float parcel_mixing_ratio,
     float parcel_pressure,
@@ -343,7 +343,7 @@ static PyObject *py_calculate_pi_gridded_data(PyObject *self, PyObject *args) {
     }
 
     Py_BEGIN_ALLOW_THREADS
-    calculate_pi_gridded_data(
+    calculate_pi_gridded_data_c(
         PyArray_DATA(sst_arr),
         PyArray_DATA(psl_arr),
         PyArray_DATA(pressure_arr),
@@ -443,7 +443,7 @@ static PyObject *py_calculate_pi_gridded_with_missing(PyObject *self, PyObject *
     }
 
     Py_BEGIN_ALLOW_THREADS
-    calculate_pi_gridded_with_missing(
+    calculate_pi_gridded_with_missing_c(
         PyArray_DATA(sst_arr),
         PyArray_DATA(psl_arr),
         PyArray_DATA(pressure_arr),
@@ -579,7 +579,7 @@ static PyObject *py_calculate_pi_gridded_diagnostics(PyObject *self, PyObject *a
     }
 
     Py_BEGIN_ALLOW_THREADS
-    calculate_pi_gridded_diagnostics(
+    calculate_pi_gridded_diagnostics_c(
         PyArray_DATA(sst_arr),
         PyArray_DATA(psl_arr),
         PyArray_DATA(pressure_arr),
@@ -738,7 +738,7 @@ static PyObject *py_calculate_pi_gridded_diagnostics_with_missing(PyObject *self
     }
 
     Py_BEGIN_ALLOW_THREADS
-    calculate_pi_gridded_diagnostics_with_missing(
+    calculate_pi_gridded_diagnostics_with_missing_c(
         PyArray_DATA(sst_arr),
         PyArray_DATA(psl_arr),
         PyArray_DATA(pressure_arr),
@@ -839,7 +839,7 @@ static PyObject *py_calculate_pi_single_profile(PyObject *self, PyObject *args) 
     }
 
     Py_BEGIN_ALLOW_THREADS
-    calculate_pi_single_profile(
+    calculate_pi_single_profile_c(
         sst_in,
         psl_in,
         PyArray_DATA(pressure_arr),
@@ -942,7 +942,7 @@ static PyObject *py_calculate_pi_profile_diagnostics(PyObject *self, PyObject *a
     }
 
     Py_BEGIN_ALLOW_THREADS
-    calculate_pi_profile_diagnostics(
+    calculate_pi_profile_diagnostics_c(
         sst_in,
         psl_in,
         PyArray_DATA(pressure_arr),
@@ -1097,7 +1097,7 @@ static PyObject *py_calculate_pi_4d_data(PyObject *self, PyObject *args) {
     }
 
     Py_BEGIN_ALLOW_THREADS
-    calculate_pi_4d_data(
+    calculate_pi_4d_data_c(
         PyArray_DATA(sst_arr),
         PyArray_DATA(psl_arr),
         PyArray_DATA(pressure_arr),
@@ -1186,7 +1186,7 @@ static PyObject *py_calculate_pi_4d_with_missing(PyObject *self, PyObject *args)
     }
 
     Py_BEGIN_ALLOW_THREADS
-    calculate_pi_4d_with_missing(
+    calculate_pi_4d_with_missing_c(
         PyArray_DATA(sst_arr),
         PyArray_DATA(psl_arr),
         PyArray_DATA(pressure_arr),
@@ -1311,7 +1311,7 @@ static PyObject *py_calculate_pi_4d_diagnostics(PyObject *self, PyObject *args, 
     }
 
     Py_BEGIN_ALLOW_THREADS
-    calculate_pi_4d_diagnostics(
+    calculate_pi_4d_diagnostics_c(
         PyArray_DATA(sst_arr),
         PyArray_DATA(psl_arr),
         PyArray_DATA(pressure_arr),
@@ -1459,7 +1459,7 @@ static PyObject *py_calculate_pi_4d_diagnostics_with_missing(PyObject *self, PyO
     }
 
     Py_BEGIN_ALLOW_THREADS
-    calculate_pi_4d_diagnostics_with_missing(
+    calculate_pi_4d_diagnostics_with_missing_c(
         PyArray_DATA(sst_arr),
         PyArray_DATA(psl_arr),
         PyArray_DATA(pressure_arr),
@@ -1575,7 +1575,7 @@ static PyObject *py_cape(PyObject *self, PyObject *args) {
     }
 
     Py_BEGIN_ALLOW_THREADS
-    cape(
+    cape_c(
         parcel_temp,
         parcel_mixing_ratio,
         parcel_pressure,
