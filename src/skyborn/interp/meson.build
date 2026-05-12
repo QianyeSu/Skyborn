@@ -78,6 +78,8 @@ except:
 )
 incdir_f2py = incdir_f2py_cmd.stdout().strip()
 
+inc_np = include_directories(incdir_numpy, incdir_f2py)
+
 message('NumPy include directory: ' + incdir_numpy)
 message('F2PY include directory: ' + incdir_f2py)
 
@@ -159,7 +161,6 @@ message('C args: ' + ' '.join(c_args))
 try_f2py = run_command(build_py, '-c', 'import numpy.f2py; print("OK")', check: false)
 
 if try_f2py.returncode() == 0
-    inc_np = include_directories(incdir_numpy, incdir_f2py)
     f2py_inline_cmd = [
         build_py,
         '-c',
@@ -621,3 +622,50 @@ with open(sys.argv[1], 'w') as f:
 else
     warning('f2py not available, skipping interp Fortran extensions')
 endif
+
+# Build the native nearest-neighbor accelerator for regular grids.
+regrid_ext = py.extension_module(
+    'regrid',
+    [
+        'regrid_module.c',
+    ],
+    include_directories: inc_np,
+    dependencies: [py_dep],
+    c_args: c_args,
+    install: true,
+    install_dir: get_option('python.purelibdir') / 'skyborn' / 'interp',
+    build_by_default: true,
+)
+
+custom_target(
+    'copy_interp_native_to_source',
+    input: regrid_ext,
+    output: 'interp_native_copy_marker.txt',
+    command: [
+        py,
+        '-c',
+        '''import shutil
+import sys
+from pathlib import Path
+
+current_dir = Path.cwd()
+module_dir = current_dir.parent
+
+patterns = ['regrid*.so', 'regrid*.pyd', 'regrid*.dylib']
+for pattern in patterns:
+    for built_file in current_dir.rglob(pattern):
+        target = module_dir / built_file.name
+        if not target.exists() or built_file.stat().st_mtime > target.stat().st_mtime:
+            shutil.copy2(str(built_file), str(target))
+            print(f'Copied {built_file.name} to source')
+
+with open(sys.argv[1], 'w', encoding='utf-8') as handle:
+    handle.write('Native interp extension copied\\n')
+''',
+        '@OUTPUT@',
+    ],
+    build_by_default: true,
+    console: true,
+)
+
+message('interp native regular-grid nearest accelerator configured')
