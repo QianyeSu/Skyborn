@@ -1,4 +1,4 @@
-"""DCAPE calculations backed by a compiled Fortran/C extension when available."""
+"""DCAPE calculations backed by the compiled Fortran/C extension."""
 
 from __future__ import annotations
 
@@ -11,25 +11,7 @@ import xarray as xr
 __all__ = ["calculate_dcape", "dcape_profile", "dcape_grid"]
 
 
-def _load_backend():
-    """Load the compiled DCAPE backend if it is available."""
-
-    qualified_name = f"{__package__}.dcape_core"
-    try:
-        backend = import_module(qualified_name)
-    except ImportError:
-        return None
-    return backend
-
-
-_BACKEND = _load_backend()
-
-
-def _require_backend():
-    if _BACKEND is None:
-        raise ImportError(
-            "Compiled DCAPE backend is unavailable. Build skyborn.calc.dcape to use DCAPE."
-        )
+_BACKEND = import_module(f"{__package__}.dcape_core")
 
 
 def _as_numpy(values):
@@ -52,7 +34,6 @@ def dcape_profile(
     if p.ndim != 1:
         raise ValueError(f"pressure must be 1D, got shape {p.shape}")
 
-    _require_backend()
     return float(
         _BACKEND.dcape_profile(
             np.asfortranarray(p),
@@ -78,7 +59,6 @@ def dcape_grid(
     if t.shape != p.shape or td.shape != p.shape:
         raise ValueError("pressure, temperature, and dewpoint must share a shape")
 
-    _require_backend()
     return np.asarray(
         _BACKEND.dcape_grid(
             np.asfortranarray(p),
@@ -137,8 +117,8 @@ def calculate_dcape(
 
     Notes
     -----
-    - If the compiled backend is unavailable, this function raises an
-      ``ImportError``.
+    - The compiled backend is required; importing this module raises an
+      ``ImportError`` if the extension is unavailable.
     - Profiles with fewer than 4 valid levels, or without a detectable
       theta-e minimum between 500--700 hPa, return NaN.
     """
