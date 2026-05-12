@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 import xarray as xr
 from numpy.testing import assert_array_almost_equal, assert_array_equal
+from sklearn import neighbors
 
 import skyborn.interp.regridding as regridding_module
 from skyborn.interp.regridding import (
@@ -26,6 +27,15 @@ from skyborn.interp.regridding import (
     nearest_neighbor_indices,
     regrid_dataset,
 )
+
+
+def _balltree_haversine_indices(source_grid: Grid, target_grid: Grid) -> np.ndarray:
+    source_mesh = np.meshgrid(source_grid.lon, source_grid.lat, indexing="ij")
+    target_mesh = np.meshgrid(target_grid.lon, target_grid.lat, indexing="ij")
+    source_coords = np.stack([source_mesh[1].ravel(), source_mesh[0].ravel()], axis=-1)
+    target_coords = np.stack([target_mesh[1].ravel(), target_mesh[0].ravel()], axis=-1)
+    tree = neighbors.BallTree(source_coords, metric="haversine")
+    return tree.query(target_coords, return_distance=False).squeeze(axis=-1)
 
 
 class TestGrid:
@@ -241,6 +251,165 @@ class TestNearestRegridder:
         assert np.all(indices >= 0)
         assert np.all(indices < source_grid.shape[0] * source_grid.shape[1])
 
+    def test_native_regrid_module_imports_under_new_name(self):
+        """The native backend should be importable as skyborn.interp.regrid."""
+        native_regrid_module = pytest.importorskip("skyborn.interp.regrid")
+        assert hasattr(native_regrid_module, "nearest_neighbor_indices")
+        assert hasattr(native_regrid_module, "nearest_regrid_apply")
+
+    def test_nearest_neighbor_indices_identity_grid(self):
+        """Test that identical regular grids map to the identity permutation."""
+        grid = Grid.from_degrees(
+            np.array([0.0, 90.0, 180.0, 270.0]),
+            np.array([-45.0, 0.0, 45.0]),
+        )
+
+        indices = nearest_neighbor_indices(grid, grid)
+
+        assert_array_equal(indices, np.arange(grid.shape[0] * grid.shape[1]))
+
+    def test_nearest_regridder_identity_grid(self):
+        """Nearest regridding should preserve a field on the same grid."""
+        grid = Grid.from_degrees(
+            np.array([0.0, 90.0, 180.0, 270.0]),
+            np.array([-45.0, 0.0, 45.0]),
+        )
+        regridder = NearestRegridder(grid, grid)
+
+        source_data = np.arange(grid.shape[0] * grid.shape[1]).reshape(grid.shape)
+        result = regridder.regrid_array(source_data)
+
+        assert_array_equal(result, source_data)
+
+    @pytest.mark.parametrize("shape_prefix", [(), (2,), (2, 3)])
+    def test_nearest_regridder_nd_matches_flat_gather(self, sample_grids, shape_prefix):
+        """Nearest regridding should apply the cached flat indices across leading dims."""
+        source_grid, target_grid = sample_grids
+        regridder = NearestRegridder(source_grid, target_grid)
+
+        source_data = np.arange(
+            np.prod(shape_prefix + source_grid.shape),
+            dtype=float,
+        ).reshape(shape_prefix + source_grid.shape)
+        result = regridder.regrid_array(source_data)
+
+        flat = source_data.reshape(-1, source_grid.shape[0] * source_grid.shape[1])
+        expected = np.take(flat, regridder.indices, axis=1).reshape(
+            shape_prefix + target_grid.shape
+        )
+
+        assert_array_equal(result, expected)
+
+    def test_nearest_neighbor_indices_match_balltree_reference(self):
+        """Nearest indices should agree with the BallTree haversine reference."""
+        source_grid = Grid.from_degrees(
+            np.linspace(0, 360, 16, endpoint=False),
+            np.linspace(-80, 80, 9),
+        )
+        target_grid = Grid.from_degrees(
+            np.linspace(0, 360, 23, endpoint=False),
+            np.linspace(-75, 75, 13),
+        )
+
+        indices = nearest_neighbor_indices(source_grid, target_grid)
+        expected = _balltree_haversine_indices(source_grid, target_grid)
+
+        assert_array_equal(indices, expected)
+
+    @pytest.mark.parametrize("shape_prefix", [(), (2,), (2, 3)])
+    def test_nearest_native_matches_python_fallback(self, monkeypatch, shape_prefix):
+        """Nearest backend choice should not change 2D/3D/4D outputs."""
+        source_grid = Grid.from_degrees(
+            np.linspace(0, 360, 16, endpoint=False),
+            np.linspace(-80, 80, 9),
+        )
+        target_grid = Grid.from_degrees(
+            np.linspace(0, 360, 23, endpoint=False),
+            np.linspace(-75, 75, 13),
+        )
+        native_regridder = NearestRegridder(source_grid, target_grid)
+        source_data = np.arange(
+            np.prod(shape_prefix + source_grid.shape),
+            dtype=float,
+        ).reshape(shape_prefix + source_grid.shape)
+        native_result = native_regridder.regrid_array(source_data)
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_nearest_neighbor_indices",
+            None,
+        )
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_nearest_regrid_apply",
+            None,
+        )
+        fallback_regridder = NearestRegridder(source_grid, target_grid)
+        fallback_result = fallback_regridder.regrid_array(source_data)
+
+        assert_array_equal(native_result, fallback_result)
+
+    @pytest.mark.parametrize("shape_prefix", [(), (2,), (2, 3)])
+    def test_nearest_native_apply_matches_numpy_take(self, shape_prefix):
+        """Native nearest gather should match the NumPy flat-take reference exactly."""
+        source_grid = Grid.from_degrees(
+            np.linspace(0, 360, 24, endpoint=False),
+            np.linspace(-85, 85, 15),
+        )
+        target_grid = Grid.from_degrees(
+            np.linspace(0, 360, 37, endpoint=False),
+            np.linspace(-80, 80, 17),
+        )
+        regridder = NearestRegridder(source_grid, target_grid)
+        source_data = np.arange(
+            np.prod(shape_prefix + source_grid.shape),
+            dtype=np.float64,
+        ).reshape(shape_prefix + source_grid.shape)
+
+        result = regridder.regrid_array(source_data)
+        flat = source_data.reshape(-1, source_grid.shape[0] * source_grid.shape[1])
+        expected = np.take(flat, regridder.indices, axis=1).reshape(
+            shape_prefix + target_grid.shape
+        )
+
+        assert_array_equal(result, expected)
+
+    def test_nearest_polar_tie_outputs_stay_on_equivalent_poles(self):
+        """Exact-pole source rows may choose different longitudes but stay on the same pole."""
+        source_grid = Grid.from_degrees(
+            np.linspace(0, 360, 16, endpoint=False),
+            np.linspace(-90, 90, 9),
+        )
+        target_grid = Grid.from_degrees(
+            np.linspace(0, 360, 23, endpoint=False),
+            np.linspace(-85, 85, 13),
+        )
+        source_data = np.tile(
+            np.arange(source_grid.shape[1], dtype=float), (source_grid.shape[0], 1)
+        )
+
+        native_regridder = NearestRegridder(source_grid, target_grid)
+        native_result = native_regridder.regrid_array(source_data)
+
+        source_mesh = np.meshgrid(source_grid.lon, source_grid.lat, indexing="ij")
+        target_mesh = np.meshgrid(target_grid.lon, target_grid.lat, indexing="ij")
+        source_coords = np.stack(
+            [source_mesh[1].ravel(), source_mesh[0].ravel()], axis=-1
+        )
+        target_coords = np.stack(
+            [target_mesh[1].ravel(), target_mesh[0].ravel()], axis=-1
+        )
+        expected_indices = (
+            neighbors.BallTree(source_coords, metric="haversine")
+            .query(target_coords, return_distance=False)
+            .squeeze(axis=-1)
+        )
+        fallback_result = source_data.ravel()[expected_indices].reshape(
+            target_grid.shape
+        )
+
+        assert_array_equal(native_result, fallback_result)
+
     def test_nearest_neighbor_2d_wrong_shape_raises(self, sample_grids):
         """Test the private 2D kernel rejects arrays with the wrong source shape."""
         source_grid, target_grid = sample_grids
@@ -248,6 +417,99 @@ class TestNearestRegridder:
 
         with pytest.raises(ValueError, match="to match source.shape"):
             regridder._nearest_neighbor_2d(np.zeros((2, 2)))
+
+    def test_nearest_neighbor_2d_matches_cached_indices(self, sample_grids):
+        """The private 2D nearest kernel should apply the cached flat indices."""
+        source_grid, target_grid = sample_grids
+        regridder = NearestRegridder(source_grid, target_grid)
+
+        source_data = np.arange(np.prod(source_grid.shape), dtype=float).reshape(
+            source_grid.shape
+        )
+        result = regridder._nearest_neighbor_2d(source_data)
+        expected = source_data.ravel()[regridder.indices].reshape(target_grid.shape)
+
+        assert_array_equal(result, expected)
+
+    def test_nearest_neighbor_indices_uses_native_helper_when_enabled(
+        self, sample_grids, monkeypatch
+    ):
+        """The native nearest-index helper should be used only when the feature flag is enabled."""
+        source_grid, target_grid = sample_grids
+        expected = np.arange(target_grid.shape[0] * target_grid.shape[1], dtype=np.intp)
+        calls = []
+
+        def fake_native(src_lon, src_lat, tgt_lon, tgt_lat):
+            calls.append((src_lon.shape, src_lat.shape, tgt_lon.shape, tgt_lat.shape))
+            return expected
+
+        monkeypatch.setattr(regridding_module, "_ENABLE_NATIVE_NEAREST", True)
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_nearest_neighbor_indices",
+            fake_native,
+        )
+
+        result = nearest_neighbor_indices(source_grid, target_grid)
+
+        assert_array_equal(result, expected)
+        assert calls == [
+            (
+                source_grid.lon.shape,
+                source_grid.lat.shape,
+                target_grid.lon.shape,
+                target_grid.lat.shape,
+            )
+        ]
+
+    @pytest.mark.parametrize("shape_prefix", [(), (2,), (2, 3)])
+    def test_nearest_regridder_nd_falls_back_to_flat_gather(
+        self, sample_grids, monkeypatch, shape_prefix
+    ):
+        """Nearest ND regridding should fall back to flat gather when native apply is absent."""
+        source_grid, target_grid = sample_grids
+        regridder = NearestRegridder(source_grid, target_grid)
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_nearest_regrid_apply",
+            None,
+        )
+
+        source_data = np.arange(
+            np.prod(shape_prefix + source_grid.shape),
+            dtype=float,
+        ).reshape(shape_prefix + source_grid.shape)
+        result = regridder.regrid_array(source_data)
+        expected = regridding_module._gather_flat_spatial(
+            source_data,
+            regridder.indices,
+            source_grid.shape,
+            target_grid.shape,
+        )
+
+        assert_array_equal(result, expected)
+
+    def test_nearest_regridder_wrong_shape_raises(self, sample_grids):
+        """Nearest ND regridding should reject arrays with the wrong spatial shape."""
+        source_grid, target_grid = sample_grids
+        regridder = NearestRegridder(source_grid, target_grid)
+
+        wrong = np.zeros((source_grid.shape[0], source_grid.shape[1] + 1))
+
+        with pytest.raises(ValueError, match="Expected field shape"):
+            regridder.regrid_array(wrong)
+
+
+def test_gather_flat_spatial_applies_indices_across_leading_dimensions():
+    """The flat gather helper should preserve leading dimensions while remapping space."""
+    field = np.arange(2 * 3 * 4 * 5, dtype=float).reshape(2, 3, 4, 5)
+    indices = np.array([0, 6, 11, 19], dtype=np.intp)
+
+    result = regridding_module._gather_flat_spatial(field, indices, (4, 5), (2, 2))
+    expected = np.take(field.reshape(-1, 20), indices, axis=1).reshape(2, 3, 2, 2)
+
+    assert_array_equal(result, expected)
 
 
 class TestBilinearRegridder:
@@ -288,6 +550,89 @@ class TestBilinearRegridder:
         assert result.shape == target_grid.shape
         assert np.all(np.isfinite(result))
 
+    def test_bilinear_regridder_uses_native_regular_grid_helper(
+        self, sample_grids, monkeypatch
+    ):
+        """Test that regular monotone grids dispatch to the native helper."""
+        source_grid, target_grid = sample_grids
+        regridder = BilinearRegridder(source_grid, target_grid)
+
+        calls = []
+
+        def fake_native(field, src_lon, src_lat, tgt_lon, tgt_lat):
+            calls.append(
+                (
+                    field.shape,
+                    src_lon.shape,
+                    src_lat.shape,
+                    tgt_lon.shape,
+                    tgt_lat.shape,
+                )
+            )
+            return np.zeros((len(tgt_lon), len(tgt_lat)))
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_bilinear_regrid",
+            fake_native,
+        )
+
+        source_data = np.random.randn(*source_grid.shape)
+        result = regridder.regrid_array(source_data)
+
+        assert calls == [
+            (
+                source_data.shape,
+                source_grid.lon.shape,
+                source_grid.lat.shape,
+                target_grid.lon.shape,
+                target_grid.lat.shape,
+            )
+        ]
+        assert result.shape == target_grid.shape
+
+    @pytest.mark.parametrize("shape_prefix", [(2,), (2, 3)])
+    def test_bilinear_regridder_nd_uses_native_regular_grid_helper(
+        self, sample_grids, monkeypatch, shape_prefix
+    ):
+        """Multidimensional bilinear regridding should use the ND native helper."""
+        source_grid, target_grid = sample_grids
+        regridder = BilinearRegridder(source_grid, target_grid)
+
+        calls = []
+
+        def fake_native(field, src_lon, src_lat, tgt_lon, tgt_lat):
+            calls.append(
+                (
+                    field.shape,
+                    src_lon.shape,
+                    src_lat.shape,
+                    tgt_lon.shape,
+                    tgt_lat.shape,
+                )
+            )
+            return np.zeros(field.shape[:-2] + (len(tgt_lon), len(tgt_lat)))
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_bilinear_regrid_nd",
+            fake_native,
+        )
+
+        source_data = np.random.randn(*shape_prefix, *source_grid.shape)
+        result = regridder.regrid_array(source_data)
+
+        assert calls == [
+            (
+                source_data.shape,
+                source_grid.lon.shape,
+                source_grid.lat.shape,
+                target_grid.lon.shape,
+                target_grid.lat.shape,
+            )
+        ]
+        assert result.shape == shape_prefix + target_grid.shape
+
     def test_bilinear_regridder_linear_function(self):
         """Test bilinear interpolation with linear function (should be exact)."""
         # Create regular grids
@@ -315,6 +660,59 @@ class TestBilinearRegridder:
 
         assert_array_almost_equal(result, expected, decimal=10)
 
+    def test_bilinear_regridder_falls_back_when_native_helper_is_missing(
+        self, sample_grids, monkeypatch
+    ):
+        """Test the Python fallback stays available when the native helper is absent."""
+        source_grid, target_grid = sample_grids
+        regridder = BilinearRegridder(source_grid, target_grid)
+
+        called = False
+
+        def fake_native(*args, **kwargs):
+            nonlocal called
+            called = True
+            return np.zeros((len(target_grid.lon), len(target_grid.lat)))
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_bilinear_regrid",
+            None,
+        )
+
+        source_data = np.random.randn(*source_grid.shape)
+        result = regridder.regrid_array(source_data)
+
+        assert not called
+        assert result.shape == target_grid.shape
+
+    @pytest.mark.parametrize("shape_prefix", [(2,), (2, 3)])
+    def test_bilinear_regridder_nd_falls_back_to_python_loop(
+        self, sample_grids, monkeypatch, shape_prefix
+    ):
+        """Multidimensional bilinear regridding should keep the Python loop fallback."""
+        source_grid, target_grid = sample_grids
+        regridder = BilinearRegridder(source_grid, target_grid)
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_bilinear_regrid_nd",
+            None,
+        )
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_bilinear_regrid",
+            None,
+        )
+
+        source_data = np.random.randn(*shape_prefix, *source_grid.shape)
+        result = regridder.regrid_array(source_data)
+        expected = np.empty(shape_prefix + target_grid.shape, dtype=np.float64)
+        for index in np.ndindex(shape_prefix):
+            expected[index] = regridder._bilinear_2d(source_data[index])
+
+        assert_array_almost_equal(result, expected, decimal=12)
+
     def test_bilinear_regridder_wrong_shape(self, sample_grids):
         """Test bilinear regridder with wrong input shape."""
         source_grid, target_grid = sample_grids
@@ -325,6 +723,40 @@ class TestBilinearRegridder:
 
         with pytest.raises(ValueError, match="Expected field shape"):
             regridder.regrid_array(wrong_data)
+
+    def test_bilinear_2d_wrong_shape_raises(self, sample_grids):
+        """The private 2D bilinear kernel should reject arrays with the wrong source shape."""
+        source_grid, target_grid = sample_grids
+        regridder = BilinearRegridder(source_grid, target_grid)
+
+        with pytest.raises(ValueError, match="Expected field shape"):
+            regridder._bilinear_2d(np.zeros((2, 2)))
+
+    @pytest.mark.parametrize("shape_prefix", [(2,), (2, 3)])
+    def test_bilinear_regridder_multidimensional_matches_stacked_2d(
+        self, sample_grids, shape_prefix
+    ):
+        """Bilinear regridding should act independently on leading dimensions."""
+        source_grid, target_grid = sample_grids
+        regridder = BilinearRegridder(source_grid, target_grid)
+
+        lon_2d, lat_2d = np.meshgrid(source_grid.lon, source_grid.lat, indexing="ij")
+        base = np.sin(2 * lon_2d) * np.cos(3 * lat_2d)
+        source_data = np.stack(
+            [base + float(i) for i in range(np.prod(shape_prefix))],
+            axis=0,
+        ).reshape(shape_prefix + source_grid.shape)
+
+        result = regridder.regrid_array(source_data)
+        expected = np.stack(
+            [
+                regridder._bilinear_2d(source_data[index])
+                for index in np.ndindex(shape_prefix)
+            ],
+            axis=0,
+        ).reshape(shape_prefix + target_grid.shape)
+
+        assert_array_almost_equal(result, expected, decimal=12)
 
 
 class TestConservativeRegridder:
@@ -407,6 +839,127 @@ class TestConservativeRegridder:
         # Result may contain NaN but should not be all NaN
         assert not np.all(np.isnan(result))
 
+    @pytest.mark.parametrize("shape_prefix", [(2,), (2, 3)])
+    def test_conservative_regridder_nd_uses_native_helper(
+        self, sample_grids, monkeypatch, shape_prefix
+    ):
+        """Multidimensional conservative regridding should use the native helper."""
+        source_grid, target_grid = sample_grids
+        regridder = ConservativeRegridder(source_grid, target_grid)
+
+        calls = []
+
+        def fake_native(field, lon_weights, lat_weights):
+            calls.append((field.shape, lon_weights.shape, lat_weights.shape))
+            return np.zeros(field.shape[:-2] + target_grid.shape)
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_conservative_regrid",
+            fake_native,
+        )
+
+        source_data = np.random.randn(*shape_prefix, *source_grid.shape)
+        result = regridder.regrid_array(source_data)
+
+        assert calls == [
+            (
+                source_data.shape,
+                (len(target_grid.lon), len(source_grid.lon)),
+                (len(target_grid.lat), len(source_grid.lat)),
+            )
+        ]
+        assert result.shape == shape_prefix + target_grid.shape
+
+    @pytest.mark.parametrize("shape_prefix", [(), (2,), (2, 3)])
+    def test_conservative_native_helper_matches_python_nanmean(
+        self, sample_grids, shape_prefix
+    ):
+        """The optional native conservative helper should match the Python nanmean path."""
+        if regridding_module._native_conservative_regrid is None:
+            pytest.skip("native conservative helper is unavailable")
+
+        source_grid, target_grid = sample_grids
+        regridder = ConservativeRegridder(source_grid, target_grid)
+
+        source_data = np.arange(
+            np.prod(shape_prefix + source_grid.shape),
+            dtype=float,
+        ).reshape(shape_prefix + source_grid.shape)
+        source_data = source_data / np.nanmax(source_data)
+        source_data = source_data.copy()
+        source_data[..., 0, 0] = np.nan
+        source_data[..., -1, -1] = np.nan
+
+        native_result = regridding_module._native_conservative_regrid(
+            np.asarray(source_data, dtype=np.float64),
+            regridder.lon_weights,
+            regridder.lat_weights,
+        )
+        fallback_result = regridder._python_nanmean(source_data)
+
+        assert_array_almost_equal(native_result, fallback_result, decimal=12)
+
+    @pytest.mark.parametrize("shape_prefix", [(), (2,), (2, 3)])
+    def test_conservative_regridder_falls_back_when_native_helper_is_missing(
+        self, sample_grids, monkeypatch, shape_prefix
+    ):
+        """Conservative regridding should keep the Python fallback when native code is absent."""
+        source_grid, target_grid = sample_grids
+        regridder = ConservativeRegridder(source_grid, target_grid)
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_conservative_regrid",
+            None,
+        )
+
+        source_data = np.random.randn(*shape_prefix, *source_grid.shape)
+        source_data = source_data.copy()
+        source_data[..., 0, 0] = np.nan
+
+        result = regridder.regrid_array(source_data)
+        expected = regridder._python_nanmean(source_data)
+
+        assert result.shape == shape_prefix + target_grid.shape
+        assert_array_almost_equal(result, expected, decimal=12)
+
+    @pytest.mark.parametrize("shape_prefix", [(2,), (2, 3)])
+    def test_conservative_regridder_multidimensional_constant_field(
+        self, sample_grids, shape_prefix
+    ):
+        """Conservative regridding should preserve constant stacked fields."""
+        source_grid, target_grid = sample_grids
+        regridder = ConservativeRegridder(source_grid, target_grid)
+
+        source_data = np.ones(shape_prefix + source_grid.shape, dtype=float)
+        result = regridder.regrid_array(source_data)
+
+        assert result.shape == shape_prefix + target_grid.shape
+        assert_array_almost_equal(
+            result,
+            np.ones(shape_prefix + target_grid.shape),
+            decimal=10,
+        )
+
+    def test_conservative_regridder_wrong_shape(self, sample_grids):
+        """Conservative regridding should reject arrays whose spatial shape is wrong."""
+        source_grid, target_grid = sample_grids
+        regridder = ConservativeRegridder(source_grid, target_grid)
+
+        wrong = np.random.randn(len(source_grid.lon), len(source_grid.lat) + 1)
+
+        with pytest.raises(ValueError, match="Expected field shape"):
+            regridder.regrid_array(wrong)
+
+    def test_conservative_2d_wrong_shape_raises(self, sample_grids):
+        """The private 2D conservative kernel should reject arrays with the wrong source shape."""
+        source_grid, target_grid = sample_grids
+        regridder = ConservativeRegridder(source_grid, target_grid)
+
+        with pytest.raises(ValueError, match="Expected field shape"):
+            regridder._conservative_2d(np.zeros((2, 2)))
+
 
 class TestConservativeWeights:
     """Test conservative interpolation weight calculation functions."""
@@ -423,6 +976,25 @@ class TestConservativeWeights:
         row_sums = np.sum(weights, axis=1)
         assert_array_almost_equal(row_sums, np.ones(len(target_lat)), decimal=5)
 
+    def test_latitude_weights_python_path_normalizes_nonzero_rows(self, monkeypatch):
+        """The Python latitude-weight path should normalize ordinary overlap rows."""
+        source_lat = np.deg2rad(np.array([-60, -30, 0, 30, 60]))
+        target_lat = np.deg2rad(np.array([-45, 0, 45]))
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_conservative_latitude_weights",
+            None,
+        )
+
+        weights = _conservative_latitude_weights(source_lat, target_lat)
+
+        assert np.all(weights >= 0)
+        assert np.any(weights > 0)
+        assert_array_almost_equal(
+            weights.sum(axis=1), np.ones(len(target_lat)), decimal=12
+        )
+
     def test_longitude_weights_basic(self):
         """Test basic longitude weight calculation."""
         source_lon = np.deg2rad(np.array([0, 90, 180, 270]))
@@ -435,11 +1007,81 @@ class TestConservativeWeights:
         row_sums = np.sum(weights, axis=1)
         assert_array_almost_equal(row_sums, np.ones(len(target_lon)), decimal=5)
 
+    def test_longitude_weights_python_path_normalizes_nonzero_rows(self, monkeypatch):
+        """The Python longitude-weight path should normalize ordinary overlap rows."""
+        source_lon = np.deg2rad(np.array([0, 90, 180, 270]))
+        target_lon = np.deg2rad(np.array([45, 135, 225, 315]))
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_conservative_longitude_weights",
+            None,
+        )
+
+        weights = _conservative_longitude_weights(source_lon, target_lon)
+
+        assert np.all(weights >= 0)
+        assert np.any(weights > 0)
+        assert_array_almost_equal(
+            weights.sum(axis=1), np.ones(len(target_lon)), decimal=12
+        )
+
+    def test_latitude_weights_validate_before_native_dispatch(self, monkeypatch):
+        """Invalid latitude coordinates should fail before calling the native helper."""
+        called = False
+
+        def fake_native(source_points, target_points):
+            nonlocal called
+            called = True
+            return np.empty((len(target_points), len(source_points)))
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_conservative_latitude_weights",
+            fake_native,
+        )
+
+        with pytest.raises(ValueError, match="Array is not increasing"):
+            _conservative_latitude_weights(
+                np.deg2rad(np.array([0, -30, 30])),
+                np.deg2rad(np.array([-15, 15])),
+            )
+
+        assert not called
+
+    def test_longitude_weights_validate_before_native_dispatch(self, monkeypatch):
+        """Invalid longitude coordinates should fail before calling the native helper."""
+        called = False
+
+        def fake_native(source_points, target_points):
+            nonlocal called
+            called = True
+            return np.empty((len(target_points), len(source_points)))
+
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_conservative_longitude_weights",
+            fake_native,
+        )
+
+        with pytest.raises(ValueError, match="Array is not increasing"):
+            _conservative_longitude_weights(
+                np.deg2rad(np.array([0, 180, 90])),
+                np.deg2rad(np.array([45, 135])),
+            )
+
+        assert not called
+
     def test_latitude_weights_zero_sum_rows_fall_back_to_uniform(self, monkeypatch):
         """Test zero-overlap latitude rows use equal weights instead of dividing by zero."""
         source_lat = np.deg2rad(np.array([-60, 0, 60]))
         target_lat = np.deg2rad(np.array([-30, 30]))
 
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_conservative_latitude_weights",
+            None,
+        )
         monkeypatch.setattr(
             regridding_module,
             "_latitude_overlap",
@@ -458,6 +1100,11 @@ class TestConservativeWeights:
         source_lon = np.deg2rad(np.array([0, 90, 180, 270]))
         target_lon = np.deg2rad(np.array([45, 135]))
 
+        monkeypatch.setattr(
+            regridding_module,
+            "_native_conservative_longitude_weights",
+            None,
+        )
         monkeypatch.setattr(
             regridding_module,
             "_longitude_overlap",
@@ -662,26 +1309,108 @@ class TestRegridderEdgeCases:
         assert result["time_bounds"].shape == (3, 2)
         assert_array_equal(result["time_bounds"].values, dataset["time_bounds"].values)
 
-    def test_regrid_with_descending_latitude(self):
-        """Test regridding with descending latitude coordinates."""
-        # Create dataset with descending latitude
+    @pytest.mark.parametrize("method", ["nearest", "bilinear", "conservative"])
+    def test_regrid_with_descending_latitude_matches_ascending(self, method):
+        """Descending latitude inputs should match the equivalent ascending dataset."""
         lon_vals = np.linspace(0, 360, 8, endpoint=False)
-        lat_vals = np.linspace(60, -60, 7)  # Descending
+        lat_vals = np.linspace(-60, 60, 7)
+        lon_2d, lat_2d = np.meshgrid(
+            np.deg2rad(lon_vals),
+            np.deg2rad(lat_vals),
+            indexing="xy",
+        )
+        values = np.sin(lon_2d) + np.cos(lat_2d)
 
-        dataset = xr.Dataset(
-            {"temp": (["lat", "lon"], np.random.randn(7, 8))},
+        ascending = xr.Dataset(
+            {"temp": (["lat", "lon"], values)},
             coords={"lat": lat_vals, "lon": lon_vals},
         )
+        descending = ascending.isel(lat=slice(None, None, -1))
 
         target_grid = Grid.from_degrees(
             np.linspace(0, 360, 4, endpoint=False), np.linspace(-30, 30, 3)
         )
 
-        # Should automatically reverse latitude and work correctly
-        result = regrid_dataset(dataset, target_grid, method="nearest")
+        expected = regrid_dataset(ascending, target_grid, method=method)
+        result = regrid_dataset(descending, target_grid, method=method)
 
         assert result["temp"].shape == (3, 4)
-        assert np.all(np.isfinite(result["temp"].values))
+        assert_array_almost_equal(result["temp"].values, expected["temp"].values)
+
+    def test_regrid_dataset_rejects_partial_spatial_data_variables(self):
+        """Variables with only lon or only lat should fail before target-coordinate alignment."""
+        lon_vals = np.linspace(0, 360, 8, endpoint=False)
+        lat_vals = np.linspace(-60, 60, 7)
+        dataset = xr.Dataset(
+            {
+                "temp": (["lat", "lon"], np.random.randn(7, 8)),
+                "lat_bounds": (
+                    ["lat", "bnds"],
+                    np.column_stack((lat_vals - 5.0, lat_vals + 5.0)),
+                ),
+            },
+            coords={"lat": lat_vals, "lon": lon_vals},
+        )
+        target_grid = Grid.from_degrees(
+            np.linspace(0, 360, 4, endpoint=False), np.linspace(-30, 30, 3)
+        )
+
+        with pytest.raises(ValueError, match="lat_bounds.*only one horizontal"):
+            regrid_dataset(dataset, target_grid, method="nearest")
+
+    def test_regrid_dataset_rejects_partial_spatial_coordinates(self):
+        """Coordinates with only lon or only lat should fail before target-coordinate alignment."""
+        lon_vals = np.linspace(0, 360, 8, endpoint=False)
+        lat_vals = np.linspace(-60, 60, 7)
+        dataset = xr.Dataset(
+            {"temp": (["lat", "lon"], np.random.randn(7, 8))},
+            coords={
+                "lat": lat_vals,
+                "lon": lon_vals,
+                "lat_bounds": (
+                    ["lat", "bnds"],
+                    np.column_stack((lat_vals - 5.0, lat_vals + 5.0)),
+                ),
+            },
+        )
+        target_grid = Grid.from_degrees(
+            np.linspace(0, 360, 4, endpoint=False), np.linspace(-30, 30, 3)
+        )
+
+        with pytest.raises(ValueError, match="lat_bounds.*only one horizontal"):
+            regrid_dataset(dataset, target_grid, method="nearest")
+
+    def test_regrid_dataset_rejects_nonmonotonic_latitude(self):
+        """Latitude coordinates must be strictly ascending or descending."""
+        lon_vals = np.linspace(0, 360, 8, endpoint=False)
+        lat_vals = np.array([-60.0, 0.0, -30.0, 30.0])
+        dataset = xr.Dataset(
+            {"temp": (["lat", "lon"], np.random.randn(4, 8))},
+            coords={"lat": lat_vals, "lon": lon_vals},
+        )
+        target_grid = Grid.from_degrees(
+            np.linspace(0, 360, 4, endpoint=False), np.linspace(-30, 30, 3)
+        )
+
+        with pytest.raises(ValueError, match="strictly monotonic"):
+            regrid_dataset(dataset, target_grid, method="nearest")
+
+    def test_regridder_rejects_source_grid_mismatch(self):
+        """A direct Regridder should fail clearly when its source grid differs from the dataset."""
+        lon_vals = np.linspace(0, 360, 8, endpoint=False)
+        lat_vals = np.linspace(-60, 60, 7)
+        dataset = xr.Dataset(
+            {"temp": (["lat", "lon"], np.random.randn(7, 8))},
+            coords={"lat": lat_vals, "lon": lon_vals},
+        )
+        source_grid = Grid.from_degrees(lon_vals + 1.0, lat_vals)
+        target_grid = Grid.from_degrees(
+            np.linspace(0, 360, 4, endpoint=False), np.linspace(-30, 30, 3)
+        )
+        regridder = NearestRegridder(source_grid, target_grid)
+
+        with pytest.raises(ValueError, match="source grid does not match"):
+            regridder.regrid_dataset(dataset)
 
     def test_regrid_single_point_grids(self):
         """Test regridding with single point grids."""
@@ -769,6 +1498,12 @@ class TestPerformanceOptimizations:
 # Integration tests
 class TestRegridIntegration:
     """Integration tests with realistic climate data scenarios."""
+
+    def test_native_regrid_module_imports_under_new_name(self):
+        """The compiled accelerator should be importable as skyborn.interp.regrid."""
+        native_regrid_module = pytest.importorskip("skyborn.interp.regrid")
+        assert hasattr(native_regrid_module, "nearest_neighbor_indices")
+        assert hasattr(native_regrid_module, "nearest_regrid_apply")
 
     def test_climate_data_regridding_workflow(self):
         """Test complete workflow similar to climate data processing."""

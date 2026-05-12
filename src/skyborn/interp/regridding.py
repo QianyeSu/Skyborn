@@ -13,12 +13,26 @@ Reference
 from __future__ import annotations
 
 import dataclasses
-import functools
 from typing import Optional, Tuple, Union
 
 import numpy as np
 import xarray
 from sklearn import neighbors
+
+from . import regrid as _native_regrid
+
+_native_nearest_neighbor_indices = _native_regrid.nearest_neighbor_indices
+_native_nearest_regrid_apply = _native_regrid.nearest_regrid_apply
+_native_bilinear_regrid = _native_regrid.bilinear_regrid
+_native_bilinear_regrid_nd = _native_regrid.bilinear_regrid_nd
+_native_conservative_latitude_weights = _native_regrid.conservative_latitude_weights
+_native_conservative_longitude_weights = _native_regrid.conservative_longitude_weights
+_native_conservative_regrid = _native_regrid.conservative_regrid
+
+
+# Keep BallTree as the default nearest-neighbor backend until the compiled helper
+# matches sklearn's haversine tie-breaking on midpoint-heavy regular grids.
+_ENABLE_NATIVE_NEAREST = False
 
 __all__ = [
     "Grid",
@@ -31,6 +45,25 @@ __all__ = [
 ]
 
 Array = Union[np.ndarray]
+
+
+def _is_strictly_increasing_1d(values: np.ndarray) -> bool:
+    """Return True when a 1D coordinate array is strictly increasing."""
+    return bool(np.all(np.diff(values) > 0))
+
+
+def _supports_native_regular_grid(source: Grid, target: Grid) -> bool:
+    """Check whether both grids satisfy the monotone 1D requirements of the native helpers."""
+    return (
+        len(source.lon) > 1
+        and len(source.lat) > 1
+        and len(target.lon) > 0
+        and len(target.lat) > 0
+        and _is_strictly_increasing_1d(source.lon)
+        and _is_strictly_increasing_1d(source.lat)
+        and _is_strictly_increasing_1d(target.lon)
+        and _is_strictly_increasing_1d(target.lat)
+    )
 
 
 def _detect_coordinate_names(dataset: xarray.Dataset) -> Tuple[str, str]:
@@ -65,7 +98,7 @@ def _detect_coordinate_names(dataset: xarray.Dataset) -> Tuple[str, str]:
             break
 
     if lon_coord is None or lat_coord is None:
-        available_dims = list(dataset.dims.keys())
+        available_dims = list(dataset.sizes.keys())
         raise ValueError(
             f"Could not detect longitude/latitude coordinates. "
             f"Available dimensions: {available_dims}. "
@@ -73,6 +106,63 @@ def _detect_coordinate_names(dataset: xarray.Dataset) -> Tuple[str, str]:
         )
 
     return lon_coord, lat_coord
+
+
+def _grid_allclose(left: Grid, right: Grid) -> bool:
+    """Return True when two grids describe the same 1D lon/lat coordinates."""
+    return bool(
+        left.lon.shape == right.lon.shape
+        and left.lat.shape == right.lat.shape
+        and np.allclose(left.lon, right.lon)
+        and np.allclose(left.lat, right.lat)
+    )
+
+
+def _has_partial_spatial_dims(
+    variable: xarray.DataArray, lon_dim: str, lat_dim: str
+) -> bool:
+    """Return True when a variable depends on only one horizontal dimension."""
+    has_lon = lon_dim in variable.dims
+    has_lat = lat_dim in variable.dims
+    return has_lon != has_lat
+
+
+def _validate_no_partial_spatial_variables(
+    dataset: xarray.Dataset, lon_dim: str, lat_dim: str
+) -> None:
+    """Reject variables that would be misaligned after replacing the target grid."""
+    for name, variable in dataset.data_vars.items():
+        if _has_partial_spatial_dims(variable, lon_dim, lat_dim):
+            raise ValueError(
+                f"Variable {name!r} has only one horizontal dimension. "
+                f"Variables must contain both {lon_dim!r} and {lat_dim!r}, or neither."
+            )
+
+    for name, coordinate in dataset.coords.items():
+        if name in {lon_dim, lat_dim}:
+            continue
+        if _has_partial_spatial_dims(coordinate, lon_dim, lat_dim):
+            raise ValueError(
+                f"Coordinate {name!r} has only one horizontal dimension. "
+                f"Coordinates must contain both {lon_dim!r} and {lat_dim!r}, or neither."
+            )
+
+
+def _select_regridder(
+    source_grid: Grid,
+    target_grid: Grid,
+    method: str,
+) -> Regridder:
+    """Construct the regridder for a supported method."""
+    if method == "nearest":
+        return NearestRegridder(source_grid, target_grid)
+    if method == "bilinear":
+        return BilinearRegridder(source_grid, target_grid)
+    if method == "conservative":
+        return ConservativeRegridder(source_grid, target_grid)
+    raise ValueError(
+        f"Unknown method: {method}. Choose from 'nearest', 'bilinear', 'conservative'"
+    )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -148,9 +238,28 @@ class Regridder:
             original_dims[var_name] = list(dataset[var_name].dims)
 
         # Ensure latitude is in ascending order
-        if not (dataset[lat_dim].diff(lat_dim) > 0).all():
+        lat_diff = dataset[lat_dim].diff(lat_dim)
+        if not (lat_diff > 0).all():
+            if not (lat_diff < 0).all():
+                raise ValueError(
+                    f"Latitude coordinate {lat_dim!r} must be strictly monotonic"
+                )
             dataset = dataset.isel({lat_dim: slice(None, None, -1)})  # Reverse
         assert (dataset[lat_dim].diff(lat_dim) > 0).all()
+        _validate_no_partial_spatial_variables(dataset, lon_dim, lat_dim)
+
+        dataset_source_grid = Grid.from_degrees(
+            dataset[lon_dim].values,
+            dataset[lat_dim].values,
+        )
+        active_regridder = self
+        if not _grid_allclose(self.source, dataset_source_grid):
+            reversed_source_grid = Grid(self.source.lon, self.source.lat[::-1])
+            if not _grid_allclose(reversed_source_grid, dataset_source_grid):
+                raise ValueError(
+                    "Regridder source grid does not match dataset coordinates"
+                )
+            active_regridder = self.__class__(dataset_source_grid, self.target)
 
         # Create target grid coordinates
         target_lon_deg = np.rad2deg(self.target.lon)
@@ -162,7 +271,7 @@ class Regridder:
             if lon_dim in var.dims and lat_dim in var.dims:
                 # Apply regridding with proper dimension handling
                 regridded_var = xarray.apply_ufunc(
-                    self.regrid_array,
+                    active_regridder.regrid_array,
                     var,
                     input_core_dims=[[lon_dim, lat_dim]],
                     output_core_dims=[[lon_dim, lat_dim]],
@@ -218,14 +327,35 @@ class Regridder:
 
 def nearest_neighbor_indices(source_grid: Grid, target_grid: Grid) -> np.ndarray:
     """Returns Haversine nearest neighbor indices from source_grid to target_grid."""
+    if _ENABLE_NATIVE_NEAREST and _native_nearest_neighbor_indices is not None:
+        return _native_nearest_neighbor_indices(
+            source_grid.lon,
+            source_grid.lat,
+            target_grid.lon,
+            target_grid.lat,
+        )
+
     # Construct a BallTree to find nearest neighbors on the sphere
-    source_mesh = np.meshgrid(source_grid.lat, source_grid.lon, indexing="ij")
-    target_mesh = np.meshgrid(target_grid.lat, target_grid.lon, indexing="ij")
-    index_coords = np.stack([x.ravel() for x in source_mesh], axis=-1)
-    query_coords = np.stack([x.ravel() for x in target_mesh], axis=-1)
+    source_mesh = np.meshgrid(source_grid.lon, source_grid.lat, indexing="ij")
+    target_mesh = np.meshgrid(target_grid.lon, target_grid.lat, indexing="ij")
+    index_coords = np.stack([source_mesh[1].ravel(), source_mesh[0].ravel()], axis=-1)
+    query_coords = np.stack([target_mesh[1].ravel(), target_mesh[0].ravel()], axis=-1)
     tree = neighbors.BallTree(index_coords, metric="haversine")
     indices = tree.query(query_coords, return_distance=False).squeeze(axis=-1)
     return indices
+
+
+def _gather_flat_spatial(
+    field_arr: np.ndarray,
+    indices: np.ndarray,
+    source_shape: tuple[int, int],
+    target_shape: tuple[int, int],
+) -> np.ndarray:
+    """Apply flat spatial indices across arbitrary leading dimensions."""
+    src_size = source_shape[0] * source_shape[1]
+    flat = field_arr.reshape(-1, src_size)
+    gathered = np.take(flat, indices, axis=1)
+    return gathered.reshape(field_arr.shape[:-2] + target_shape)
 
 
 class NearestRegridder(Regridder):
@@ -253,16 +383,37 @@ class NearestRegridder(Regridder):
         interpolated = array_flat[self.indices]
         return interpolated.reshape(self.target.shape)
 
+    def _nearest_neighbor_nd(self, field: Array) -> np.ndarray:
+        """Apply the cached flat indices across leading dimensions."""
+        field_arr = np.asarray(field)
+        if field_arr.shape[-2:] != self.source.shape:
+            raise ValueError(
+                f"Expected field shape {self.source.shape}, got {field_arr.shape[-2:]}"
+            )
+
+        if _native_nearest_regrid_apply is not None:
+            return _native_nearest_regrid_apply(
+                field_arr,
+                self.indices,
+                self.target.shape[0],
+                self.target.shape[1],
+            )
+
+        return _gather_flat_spatial(
+            field_arr,
+            self.indices,
+            self.source.shape,
+            self.target.shape,
+        )
+
     def regrid_array(self, field: Array) -> np.ndarray:
-        # Use direct vectorization for better performance
-        interp = np.vectorize(self._nearest_neighbor_2d, signature="(a,b)->(c,d)")
-        return interp(field)
+        return self._nearest_neighbor_nd(field)
 
 
 class BilinearRegridder(Regridder):
     """Regrid with bilinear interpolation."""
 
-    def regrid_array(self, field: Array) -> np.ndarray:
+    def _bilinear_2d(self, field: Array) -> np.ndarray:
         lat_source = self.source.lat
         lat_target = self.target.lat
         lon_source = self.source.lon
@@ -273,6 +424,17 @@ class BilinearRegridder(Regridder):
             raise ValueError(
                 f"Expected field shape {(len(lon_source), len(lat_source))}, "
                 f"got {field.shape}"
+            )
+
+        if _native_bilinear_regrid is not None and _supports_native_regular_grid(
+            self.source, self.target
+        ):
+            return _native_bilinear_regrid(
+                np.asarray(field, dtype=np.float64),
+                lon_source,
+                lat_source,
+                lon_target,
+                lat_target,
             )
 
         # Interpolate over latitude first (for each longitude)
@@ -286,6 +448,37 @@ class BilinearRegridder(Regridder):
             result[:, j] = np.interp(lon_target, lon_source, lat_interp[:, j])
 
         return result
+
+    def _bilinear_nd(self, field: Array) -> np.ndarray:
+        """Apply bilinear interpolation across arbitrary leading dimensions."""
+        field_arr = np.asarray(field)
+        if field_arr.shape[-2:] != self.source.shape:
+            raise ValueError(
+                f"Expected field shape {self.source.shape}, got {field_arr.shape[-2:]}"
+            )
+
+        if field_arr.ndim == 2:
+            return self._bilinear_2d(field_arr)
+
+        if _native_bilinear_regrid_nd is not None and _supports_native_regular_grid(
+            self.source, self.target
+        ):
+            return _native_bilinear_regrid_nd(
+                np.asarray(field_arr, dtype=np.float64),
+                self.source.lon,
+                self.source.lat,
+                self.target.lon,
+                self.target.lat,
+            )
+
+        leading_shape = field_arr.shape[:-2]
+        result = np.empty(leading_shape + self.target.shape, dtype=np.float64)
+        for index in np.ndindex(leading_shape):
+            result[index] = self._bilinear_2d(field_arr[index])
+        return result
+
+    def regrid_array(self, field: Array) -> np.ndarray:
+        return self._bilinear_nd(field)
 
 
 def _assert_increasing(x: np.ndarray) -> None:
@@ -326,6 +519,9 @@ def _conservative_latitude_weights(
     """
     _assert_increasing(source_points)
     _assert_increasing(target_points)
+    if _native_conservative_latitude_weights is not None:
+        return _native_conservative_latitude_weights(source_points, target_points)
+
     weights = _latitude_overlap(source_points, target_points)
 
     # Handle zero-sum rows to avoid division by zero
@@ -407,6 +603,9 @@ def _conservative_longitude_weights(
     """
     _assert_increasing(source_points)
     _assert_increasing(target_points)
+    if _native_conservative_longitude_weights is not None:
+        return _native_conservative_longitude_weights(source_points, target_points)
+
     weights = _longitude_overlap(target_points, source_points)
 
     # Handle zero-sum rows to avoid division by zero
@@ -464,8 +663,8 @@ class ConservativeRegridder(Regridder):
         )
         return result
 
-    def _nanmean(self, field: Array) -> np.ndarray:
-        """Compute cell-averages skipping NaNs like np.nanmean."""
+    def _python_nanmean(self, field: Array) -> np.ndarray:
+        """Compute cell-averages skipping NaNs using the Python fallback path."""
         nulls = np.isnan(field)
         total = self._mean(np.where(nulls, 0, field))
         count = self._mean(~nulls)
@@ -474,8 +673,45 @@ class ConservativeRegridder(Regridder):
             result[count == 0] = np.nan  # Set divisions by zero to NaN
         return result
 
+    def _conservative_2d(self, field: Array) -> np.ndarray:
+        """Apply conservative regridding to a single 2D lon/lat field."""
+        field_arr = np.asarray(field)
+        if field_arr.shape != self.source.shape:
+            raise ValueError(
+                f"Expected field shape {self.source.shape}, got {field_arr.shape}"
+            )
+
+        if _native_conservative_regrid is not None:
+            return _native_conservative_regrid(
+                np.asarray(field_arr, dtype=np.float64),
+                self.lon_weights,
+                self.lat_weights,
+            )
+
+        return self._python_nanmean(field_arr)
+
+    def _conservative_nd(self, field: Array) -> np.ndarray:
+        """Apply conservative regridding across arbitrary leading dimensions."""
+        field_arr = np.asarray(field)
+        if field_arr.shape[-2:] != self.source.shape:
+            raise ValueError(
+                f"Expected field shape {self.source.shape}, got {field_arr.shape[-2:]}"
+            )
+
+        if field_arr.ndim == 2:
+            return self._conservative_2d(field_arr)
+
+        if _native_conservative_regrid is not None:
+            return _native_conservative_regrid(
+                np.asarray(field_arr, dtype=np.float64),
+                self.lon_weights,
+                self.lat_weights,
+            )
+
+        return self._python_nanmean(field_arr)
+
     def regrid_array(self, field: Array) -> np.ndarray:
-        return self._nanmean(field)
+        return self._conservative_nd(field)
 
 
 # Convenience function for easy regridding
@@ -502,16 +738,8 @@ def regrid_dataset(
     # Create source grid from dataset
     source_grid = Grid.from_dataset(dataset)
 
-    # Select regridder based on method with performance optimizations
-    if method == "nearest":
-        regridder = NearestRegridder(source_grid, target_grid)
-    elif method == "bilinear":
-        regridder = BilinearRegridder(source_grid, target_grid)
-    elif method == "conservative":
-        regridder = ConservativeRegridder(source_grid, target_grid)
-    else:
-        raise ValueError(
-            f"Unknown method: {method}. Choose from 'nearest', 'bilinear', 'conservative'"
-        )
-
-    return regridder.regrid_dataset(dataset, lon_dim=lon_dim, lat_dim=lat_dim)
+    return _select_regridder(source_grid, target_grid, method).regrid_dataset(
+        dataset,
+        lon_dim=lon_dim,
+        lat_dim=lat_dim,
+    )
