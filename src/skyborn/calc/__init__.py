@@ -22,6 +22,7 @@ from typing import Any
 
 _SUBMODULE_EXPORTS = {
     "GPI",
+    "dcape",
     "geostrophic",
     "growth_rate",
     "mann_kendall",
@@ -30,7 +31,6 @@ _SUBMODULE_EXPORTS = {
 
 _OBJECT_EXPORTS = {
     # Statistical calculations.
-    "calculate_dcape": ("skyborn.calc.calculations", "calculate_dcape"),
     "calculate_potential_temperature": (
         "skyborn.calc.calculations",
         "calculate_potential_temperature",
@@ -44,6 +44,7 @@ _OBJECT_EXPORTS = {
     "pearson_correlation": ("skyborn.calc.calculations", "pearson_correlation"),
     "spatial_correlation": ("skyborn.calc.calculations", "spatial_correlation"),
     "spearman_correlation": ("skyborn.calc.calculations", "spearman_correlation"),
+    "calculate_dcape": ("skyborn.calc.dcape", "calculate_dcape"),
     # Emergent constraints.
     "calc_GAUSSIAN_PDF": (
         "skyborn.calc.emergent_constraints",
