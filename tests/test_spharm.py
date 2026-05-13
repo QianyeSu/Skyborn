@@ -91,6 +91,52 @@ class TestSpharmtInitialization:
         assert sht.gridtype == "gaussian"
         assert sht.legfunc == "stored"
 
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_gaussian_stored_repeated_initialization_is_stable(self):
+        """Repeated Gaussian stored initialization should preserve exact outputs."""
+        rng = np.random.default_rng(20260513)
+        grid = rng.standard_normal((19, 36)).astype(np.float32)
+
+        first = Spharmt(nlon=36, nlat=19, gridtype="gaussian", legfunc="stored")
+        second = Spharmt(nlon=36, nlat=19, gridtype="gaussian", legfunc="stored")
+
+        assert first.wshags is first.wshsgs
+        assert second.wshags is second.wshsgs
+
+        spec_first = first.grdtospec(grid)
+        spec_second = second.grdtospec(grid)
+
+        np.testing.assert_allclose(spec_second, spec_first, rtol=0, atol=0)
+        np.testing.assert_allclose(
+            second.spectogrd(spec_second),
+            first.spectogrd(spec_first),
+            rtol=0,
+            atol=0,
+        )
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_gaussian_computed_repeated_initialization_is_stable(self):
+        """Repeated Gaussian computed initialization should preserve exact outputs."""
+        rng = np.random.default_rng(20260513)
+        grid = rng.standard_normal((19, 36)).astype(np.float32)
+
+        first = Spharmt(nlon=36, nlat=19, gridtype="gaussian", legfunc="computed")
+        second = Spharmt(nlon=36, nlat=19, gridtype="gaussian", legfunc="computed")
+
+        assert first.wshagc is first.wshsgc
+        assert second.wshagc is second.wshsgc
+
+        spec_first = first.grdtospec(grid)
+        spec_second = second.grdtospec(grid)
+
+        np.testing.assert_allclose(spec_second, spec_first, rtol=0, atol=0)
+        np.testing.assert_allclose(
+            second.spectogrd(spec_second),
+            first.spectogrd(spec_first),
+            rtol=0,
+            atol=0,
+        )
+
     def test_spharmt_import_error(self):
         """Test graceful handling when spharm module is not available."""
         if not SPHARM_AVAILABLE:

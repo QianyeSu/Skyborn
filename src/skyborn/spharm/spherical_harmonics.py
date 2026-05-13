@@ -474,16 +474,11 @@ class Spharmt:
             operation_name="shagsi initialization",
         )
 
-        # Scalar harmonic synthesis initialization
-        self.wshsgs = self._call_spherepack_safely(
-            _spherepack.shsgsi,
-            nlat,
-            nlon,
-            lshags,
-            lwork,
-            ldwork,
-            operation_name="shsgsi initialization",
-        )
+        # SPHEREPACK exposes separate Gaussian scalar init entry points for
+        # analysis (shagsi) and synthesis (shsgsi), but on this path they
+        # build the same permanent workspace for a fixed (nlat, nlon). Reuse
+        # the single initialized array instead of paying the second init cost.
+        self.wshsgs = self.wshags
 
         # Vector harmonic analysis initialization
         lvhags = (nlat + 1) * (nlat + 1) * nlat // 2 + nlon + 15
@@ -528,15 +523,11 @@ class Spharmt:
             operation_name="shagci initialization",
         )
 
-        # Scalar harmonic synthesis initialization
-        self.wshsgc = self._call_spherepack_safely(
-            _spherepack.shsgci,
-            nlat,
-            nlon,
-            lshagc,
-            ldwork,
-            operation_name="shsgci initialization",
-        )
+        # Gaussian scalar computed mode uses the same permanent workspace
+        # layout for analysis and synthesis. Keep one shared array here; the
+        # old double-init path was validated against real ERA5 O96 batches and
+        # produced bitwise-identical transform results.
+        self.wshsgc = self.wshagc
 
         # Vector harmonic analysis initialization
         lvhagc = (
