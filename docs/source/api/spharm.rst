@@ -250,16 +250,6 @@ ReducedGaussianSpharmt
    - ``rsphere`` (float): sphere radius in meters
    - ``backend`` (str): currently ``"ectrans"``
 
-ReducedGaussianGrid
-~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: skyborn.spharm.ReducedGaussianGrid
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-   Lightweight metadata container for one packed reduced-Gaussian grid layout.
-
 Functions
 ---------
 
@@ -284,8 +274,6 @@ Data Processing
 
 .. autofunction:: skyborn.spharm.regrid
 
-.. autofunction:: skyborn.spharm.regriduv
-
 Unified Workflow Examples
 -------------------------
 
@@ -298,17 +286,13 @@ rectangular-grid :class:`skyborn.spharm.Spharmt` interface.
 .. code-block:: python
 
     import numpy as np
-    from skyborn.spharm import Spharmt, regrid, regriduv
+    from skyborn.spharm import Spharmt, regrid
 
     src = Spharmt(72, 37, gridtype="gaussian")
     dst = Spharmt(36, 19, gridtype="gaussian")
 
     scalar_in = np.random.randn(src.nlat, src.nlon)
     scalar_out = regrid(src, dst, scalar_in, ntrunc=18)
-
-    u_in = np.random.randn(src.nlat, src.nlon)
-    v_in = np.random.randn(src.nlat, src.nlon)
-    u_out, v_out = regriduv(src, dst, u_in, v_in, ntrunc=18)
 
 Reduced-grid Workflow
 ---------------------
@@ -334,7 +318,7 @@ Minimal Example
 .. code-block:: python
 
     import numpy as np
-    from skyborn.spharm import ReducedGaussianSpharmt, regrid, regriduv
+    from skyborn.spharm import ReducedGaussianSpharmt, regrid
 
     src = ReducedGaussianSpharmt(
         np.array([20, 24, 28, 24, 20], dtype=np.int32)
@@ -346,13 +330,9 @@ Minimal Example
     scalar_field = np.zeros(src.ngptot, dtype=np.float64)
     scalar_out = regrid(src, dst, scalar_field, ntrunc=4)
 
-    u = np.zeros(src.ngptot, dtype=np.float64)
-    v = np.zeros(src.ngptot, dtype=np.float64)
-    u_out, v_out = regriduv(src, dst, u, v, ntrunc=4)
-
-The same top-level function names are used for both rectangular-grid and
-reduced-grid workflows. The backend is selected from the transform objects
-passed as ``grdin`` and ``grdout``.
+The same top-level ``regrid(...)`` helper is used for both rectangular-grid
+and reduced-grid scalar workflows. The backend is selected from the transform
+objects passed as ``grdin`` and ``grdout``.
 
 Current Scope
 ~~~~~~~~~~~~~
@@ -365,7 +345,7 @@ diagnostic workflow:
 - wind synthesis from ``vrt/div`` spectra
 - scalar gradient synthesis
 - streamfunction / velocity-potential diagnostics
-- packed-grid ``regrid(...)`` and ``regriduv(...)``
+- packed-grid ``regrid(...)``
 
 It is still narrower in scope than the main rectangular-grid
 :class:`skyborn.spharm.Spharmt` interface:
@@ -426,9 +406,6 @@ Feature Status Matrix
    * - ``regrid(...)``
      - Implemented
      - Packed reduced-grid scalar regridding through spectral space
-   * - ``regriduv(...)``
-     - Implemented
-     - Packed reduced-grid vector-wind regridding through ``vrt/div`` spectra
    * - Regular lat-lon backend
      - Not implemented
      - ``ectrans`` currently targets reduced Gaussian only
