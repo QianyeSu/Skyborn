@@ -1,7 +1,37 @@
 Changelog
 =========
 
-Version 0.3.22 (Current)
+Version 0.4.0 (Current)
+------------------------
+
+**New Features**
+
+* **Atmospheric Diagnostics Expansion**: Added new compiled diagnostics and
+  Python bindings for atmospheric-column workflows, including DCAPE and the
+  updated tropical-cyclone / growth-rate calculation paths.
+* **Hybrid and Sigma Interpolation Modernization**: Expanded the `vinth2p`
+  family with clearer column-major and C-order entry points, improved ECMWF
+  handling, and updated hybrid / sigma remapping helpers.
+
+**Improvements**
+
+* **Spharm and Wind Analysis Refactoring**: Refined spherical-harmonic and
+  reduced-vector-wind internals to reduce wrapper overhead, improve caching,
+  and make the public flow clearer.
+* **Plotting Pipeline Acceleration**: Moved more scatter and curly-vector
+  validation / sampling work into native helpers to reduce Python-side
+  overhead and temporary-array churn.
+* **Build and Documentation Cleanup**: Continued Meson build modernization
+  and refreshed documentation and tests around the reorganized interfaces.
+
+**Cleanup**
+
+* **Legacy API Removal**: Removed the old Iris interface and other unused
+  legacy paths, and tightened the wind-analysis / spectral-helper APIs.
+* **Regression Coverage**: Added focused tests for the updated interpolation,
+  plotting, spectral-helper, and wind-analysis paths.
+
+Version 0.3.22
 ------------------------
 
 **Improvements**
