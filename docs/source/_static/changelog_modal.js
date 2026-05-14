@@ -134,6 +134,9 @@ function injectChangelogModalStyles() {
             padding: 0.95rem 1rem 0.95rem 2.9rem;
             border-radius: 16px;
             background: linear-gradient(135deg, rgba(37, 99, 235, 0.14), rgba(59, 130, 246, 0.08));
+            font-size: clamp(1.15rem, 1.02rem + 0.75vw, 1.45rem);
+            font-weight: 700;
+            line-height: 1.25;
             transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
             outline: none;
         }
@@ -172,6 +175,9 @@ function injectChangelogModalStyles() {
         .changelog-section-title {
             flex: 1 1 auto;
             min-width: 0;
+            font-size: inherit;
+            font-weight: inherit;
+            line-height: inherit;
         }
 
         .changelog-section-actions {
@@ -468,6 +474,7 @@ function injectChangelogModalStyles() {
                 flex-wrap: wrap;
                 align-items: flex-start;
                 padding: 0.95rem 1rem 0.95rem 2.9rem;
+                line-height: 1.3;
             }
 
             .changelog-section-actions {
