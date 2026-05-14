@@ -116,16 +116,28 @@ class MesonBuildExt(build_ext):
     """Custom build extension to handle meson builds for Fortran modules"""
 
     @staticmethod
+    def _resolve_tool_command(executable_name, module_name, *args):
+        """Prefer a PATH executable, then fall back to a Python module entry point."""
+
+        executable_path = shutil.which(executable_name)
+        if executable_path:
+            return [executable_path, *args]
+
+        return [sys.executable, "-m", module_name, *args]
+
+    @staticmethod
     def _meson_command(*args):
         """Run Meson through the active interpreter to keep Python ABI aligned."""
 
-        return [sys.executable, "-m", "mesonbuild.mesonmain", *args]
+        return MesonBuildExt._resolve_tool_command(
+            "meson", "mesonbuild.mesonmain", *args
+        )
 
     @staticmethod
     def _ninja_command(*args):
         """Run Ninja through the active interpreter environment."""
 
-        return [sys.executable, "-m", "ninja", *args]
+        return MesonBuildExt._resolve_tool_command("ninja", "ninja", *args)
 
     @staticmethod
     def _write_meson_native_file(build_dir: Path) -> Path:
