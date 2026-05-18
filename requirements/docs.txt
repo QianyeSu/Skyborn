@@ -1,6 +1,6 @@
 # Documentation build dependencies for Skyborn
 sphinx>=5.0.0
-sphinx-book-theme>=1.0.0
+sphinx-book-theme>=1.1.4
 myst-nb>=0.17.0
 sphinx-copybutton>=0.5.0
 toml>=0.10.2
