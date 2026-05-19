@@ -1617,6 +1617,28 @@ class TestSpharmtAdditionalCoverage:
         assert np.isfinite(grid).all()
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    @pytest.mark.parametrize("legfunc", ["stored", "computed"])
+    def test_regular_scalar_workspaces_stay_finite_at_f480_shape(self, legfunc):
+        """High-resolution regular-grid scalar init should keep finite workspaces."""
+        nlat = 960
+        nlon = 1920
+
+        sht = Spharmt(
+            nlon=nlon,
+            nlat=nlat,
+            gridtype="regular",
+            legfunc=legfunc,
+            precision="single",
+        )
+
+        if legfunc == "stored":
+            assert np.isfinite(sht.wshaes).all()
+            assert np.isfinite(sht.wshses).all()
+        else:
+            assert np.isfinite(sht.wshaec).all()
+            assert np.isfinite(sht.wshsec).all()
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_internal_dispatch_and_validation_branches(self):
         """Exercise uncovered internal validation and dispatch branches."""
         sht = object.__new__(Spharmt)
