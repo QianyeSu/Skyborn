@@ -1574,6 +1574,18 @@ class TestSpharmtAdditionalCoverage:
         np.testing.assert_allclose(v_stored, v_computed, rtol=1e-5, atol=1e-5)
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    def test_gaussian_stored_vector_workspaces_stay_finite_near_overflow_threshold(
+        self,
+    ):
+        """Stored Gaussian vector init must avoid integer-overflow NaNs."""
+        # Around nlat~700, terms such as (2*n+1)*(m+n-2)*(m+n-3) exceed
+        # 32-bit integer range if multiplied before promotion to float64.
+        sht = Spharmt(nlon=1400, nlat=700, gridtype="gaussian", legfunc="stored")
+
+        assert np.isfinite(sht.wvhags).all()
+        assert np.isfinite(sht.wvhsgs).all()
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_internal_dispatch_and_validation_branches(self):
         """Exercise uncovered internal validation and dispatch branches."""
         sht = object.__new__(Spharmt)

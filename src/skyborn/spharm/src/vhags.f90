@@ -814,9 +814,18 @@ subroutine vhgai1(nlat, imid, vb, wb, dthet, dwts, dpbar, work)
         ! m=2 to n (recursive computation)
         if (n >= 2) then
             do m = 2, n
-                abel = sqrt(real((2*n+1)*(m+n-2)*(m+n-3), kind=real64) / real((2*n-3)*(m+n-1)*(m+n), kind=real64))
-                bbel = sqrt(real((2*n+1)*(n-m-1)*(n-m), kind=real64) / real((2*n-3)*(m+n-1)*(m+n), kind=real64))
-                cbel = sqrt(real((n-m+1)*(n-m+2), kind=real64) / real((m+n-1)*(m+n), kind=real64))
+                abel = sqrt( &
+                    (real(2*n+1, kind=real64) * real(m+n-2, kind=real64) * real(m+n-3, kind=real64)) / &
+                    (real(2*n-3, kind=real64) * real(m+n-1, kind=real64) * real(m+n, kind=real64)) &
+                )
+                bbel = sqrt( &
+                    (real(2*n+1, kind=real64) * real(n-m-1, kind=real64) * real(n-m, kind=real64)) / &
+                    (real(2*n-3, kind=real64) * real(m+n-1, kind=real64) * real(m+n, kind=real64)) &
+                )
+                cbel = sqrt( &
+                    (real(n-m+1, kind=real64) * real(n-m+2, kind=real64)) / &
+                    (real(m+n-1, kind=real64) * real(m+n, kind=real64)) &
+                )
 
                 if (m < n - 1) then
                     do i = 1, imid
@@ -835,15 +844,15 @@ subroutine vhgai1(nlat, imid, vb, wb, dthet, dwts, dpbar, work)
         iy = indx(n, n)
         do i = 1, imid
             vb(i, ix) = -dpbar(i, 2, np) * dwts(i)
-            vb(i, iy) = dpbar(i, n, np) / sqrt(real(2*(n+1), kind=real64)) * dwts(i)
+            vb(i, iy) = dpbar(i, n, np) / sqrt(real(2, kind=real64) * real(n+1, kind=real64)) * dwts(i)
         end do
 
         if (n >= 2) then
-            dcf = sqrt(real(4*n*(n+1), kind=real64))
+            dcf = sqrt(real(4, kind=real64) * real(n, kind=real64) * real(n+1, kind=real64))
             do m = 1, n - 1
                 ix = indx(m, n)
-                abel = sqrt(real((n+m)*(n-m+1), kind=real64)) / dcf
-                bbel = sqrt(real((n-m)*(n+m+1), kind=real64)) / dcf
+                abel = sqrt(real(n+m, kind=real64) * real(n-m+1, kind=real64)) / dcf
+                bbel = sqrt(real(n-m, kind=real64) * real(n+m+1, kind=real64)) / dcf
                 do i = 1, imid
                     vb(i, ix) = (abel * dpbar(i, m, np) - bbel * dpbar(i, m+2, np)) * dwts(i)
                 end do
@@ -855,11 +864,14 @@ subroutine vhgai1(nlat, imid, vb, wb, dthet, dwts, dpbar, work)
             wb(i, ix) = 0.0_real64
         end do
 
-        dcf = sqrt(real(2*n+1, kind=real64) / real(4*n*(n+1)*(2*n-1), kind=real64))
+        dcf = sqrt( &
+            real(2*n+1, kind=real64) / &
+            (real(4, kind=real64) * real(n, kind=real64) * real(n+1, kind=real64) * real(2*n-1, kind=real64)) &
+        )
         do m = 1, n
             ix = indx(m, n)
-            abel = dcf * sqrt(real((n+m)*(n+m-1), kind=real64))
-            bbel = dcf * sqrt(real((n-m)*(n-m-1), kind=real64))
+            abel = dcf * sqrt(real(n+m, kind=real64) * real(n+m-1, kind=real64))
+            bbel = dcf * sqrt(real(n-m, kind=real64) * real(n-m-1, kind=real64))
             if (m < n - 1) then
                 do i = 1, imid
                     wb(i, ix) = (abel * dpbar(i, m, nz) + bbel * dpbar(i, m+2, nz)) * dwts(i)
