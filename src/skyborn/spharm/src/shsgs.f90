@@ -794,14 +794,20 @@ subroutine shsgsp1(nlat, nlon, l, late, wts, p0n, p1n, abel, bbel, cbel, &
             if (n >= l) imn = imndx(m, n)
 
             ! Compute recursion coefficients with enhanced numerical stability
-            abel(imn) = sqrt(real((2*n + 1) * (m + n - 2) * (m + n - 3)) / &
-                            real((2*n - 3) * (m + n - 1) * (m + n)))
+            abel(imn) = sqrt( &
+                (real(2*n + 1, kind=kind(pb)) * real(m + n - 2, kind=kind(pb)) * real(m + n - 3, kind=kind(pb))) / &
+                (real(2*n - 3, kind=kind(pb)) * real(m + n - 1, kind=kind(pb)) * real(m + n, kind=kind(pb))) &
+            )
 
-            bbel(imn) = sqrt(real((2*n + 1) * (n - m - 1) * (n - m)) / &
-                            real((2*n - 3) * (m + n - 1) * (m + n)))
+            bbel(imn) = sqrt( &
+                (real(2*n + 1, kind=kind(pb)) * real(n - m - 1, kind=kind(pb)) * real(n - m, kind=kind(pb))) / &
+                (real(2*n - 3, kind=kind(pb)) * real(m + n - 1, kind=kind(pb)) * real(m + n, kind=kind(pb))) &
+            )
 
-            cbel(imn) = sqrt(real((n - m + 1) * (n - m + 2)) / &
-                            real((n + m - 1) * (n + m)))
+            cbel(imn) = sqrt( &
+                (real(n - m + 1, kind=kind(pb)) * real(n - m + 2, kind=kind(pb))) / &
+                (real(n + m - 1, kind=kind(pb)) * real(n + m, kind=kind(pb))) &
+            )
         end do
     end do
 

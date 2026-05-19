@@ -1586,6 +1586,37 @@ class TestSpharmtAdditionalCoverage:
         assert np.isfinite(sht.wvhsgs).all()
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    @pytest.mark.parametrize("legfunc", ["stored", "computed"])
+    def test_gaussian_scalar_synthesis_stays_finite_at_f480(self, legfunc):
+        """High-resolution Gaussian scalar synthesis must not poison workspaces."""
+        nlat = 960
+        nlon = 1920
+        ntrunc = 639
+        rng = np.random.default_rng(20260520)
+        field = np.asfortranarray(rng.standard_normal((nlat, nlon), dtype=np.float32))
+
+        sht = Spharmt(
+            nlon=nlon,
+            nlat=nlat,
+            gridtype="gaussian",
+            legfunc=legfunc,
+            precision="single",
+        )
+
+        if legfunc == "stored":
+            assert np.isfinite(sht.wshags).all()
+            assert np.isfinite(sht.wshsgs).all()
+        else:
+            assert np.isfinite(sht.wshagc).all()
+            assert np.isfinite(sht.wshsgc).all()
+
+        spec = np.asfortranarray(sht.grdtospec(field, ntrunc=ntrunc))
+        grid = sht.spectogrd(spec)
+
+        assert np.isfinite(spec).all()
+        assert np.isfinite(grid).all()
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     def test_internal_dispatch_and_validation_branches(self):
         """Exercise uncovered internal validation and dispatch branches."""
         sht = object.__new__(Spharmt)
