@@ -341,7 +341,56 @@ jobs:
           find dist-artifacts -name "*.tar.gz" -exec cp {} dist/ \;
           ls -la dist/
 
+      - name: Check whether this version is already on PyPI
+        id: pypi_check
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact="$(find dist -maxdepth 1 \( -name 'skyborn-*.whl' -o -name 'skyborn-*.tar.gz' \) | sort | head -n1)"
+          if [[ -z "$artifact" ]]; then
+            echo "No distribution artifacts found in dist/" >&2
+            exit 1
+          fi
+
+          filename="$(basename "$artifact")"
+          if [[ "$filename" == *.tar.gz ]]; then
+            version="${filename#skyborn-}"
+            version="${version%.tar.gz}"
+          else
+            version="${filename#skyborn-}"
+            version="${version%%-*}"
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          status_code="$(
+            curl -sS -o /dev/null -w '%{http_code}' \
+              "https://pypi.org/pypi/skyborn/${version}/json"
+          )"
+
+          case "$status_code" in
+            200)
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              echo "PyPI already has skyborn ${version}; skipping publish."
+              ;;
+            404)
+              echo "should_publish=true" >> "$GITHUB_OUTPUT"
+              echo "PyPI does not have skyborn ${version}; continuing publish."
+              ;;
+            *)
+              echo "Unexpected response from PyPI for skyborn ${version}: HTTP ${status_code}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Report skipped publish
+        if: steps.pypi_check.outputs.should_publish != 'true'
+        shell: bash
+        run: |
+          echo "Skipping PyPI publish because skyborn ${{ steps.pypi_check.outputs.version }} already exists."
+
       - name: Publish to PyPI
+        if: steps.pypi_check.outputs.should_publish == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
