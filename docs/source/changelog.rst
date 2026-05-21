@@ -1,7 +1,20 @@
 Changelog
 =========
 
-Version 0.4.0 (Current)
+Version 0.4.1 (Current)
+------------------------
+
+**Bug Fixes**
+
+* **Spharm Recursion Stability**: Hardened the spherical-harmonic recursion
+  coefficient handling to remove a small numerical instability observed in
+  recent spharm workflows.
+* **Gaussian Vector Initialization Robustness**: Fixed a Gaussian vector
+  initialization edge case that could surface as NaNs on larger grids.
+* **Regression Coverage**: Added tests around repeated Gaussian
+  initialization and spharm validation paths to guard against regressions.
+
+Version 0.4.0
 ------------------------
 
 **New Features**
