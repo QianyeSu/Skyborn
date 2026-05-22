@@ -93,6 +93,34 @@ message('Host CPU family: ' + host_cpu)
 # Cross-platform optimization flags
 fortran_args = []
 c_args = []
+openmp_dependencies = []
+openmp_fortran_args = []
+openmp_c_args = []
+openmp_link_args = []
+
+fortran_compiler = meson.get_compiler('fortran')
+c_compiler = meson.get_compiler('c')
+is_gcc_toolchain = fortran_compiler.get_id() == 'gcc' and c_compiler.get_id() == 'gcc'
+if is_gcc_toolchain
+    openmp_dep = dependency('openmp', required: false)
+    if openmp_dep.found()
+        openmp_dependencies += openmp_dep
+        message('Using OpenMP dependency for interp parallel kernels')
+    endif
+    openmp_fortran_args += ['-fopenmp']
+    openmp_c_args += ['-fopenmp']
+    openmp_link_args += ['-fopenmp']
+elif host_system != 'windows'
+    openmp_dep = dependency('openmp', required: false)
+    if openmp_dep.found()
+        openmp_dependencies += openmp_dep
+        message('Using OpenMP dependency for interp parallel kernels')
+    else
+        warning('OpenMP not found - building interp without parallel support')
+    endif
+else
+    message('Skipping OpenMP flags on Windows for interp build')
+endif
 
 if host_system == 'darwin' and host_cpu == 'aarch64'
     # Apple Silicon (arm64) optimized flags
@@ -513,9 +541,10 @@ else:
             'vinth2p_kernels_module.c',
         ],
         include_directories: inc_np,
-        dependencies: [py_dep],
-        fortran_args: fortran_args,
-        c_args: c_args,
+        dependencies: [py_dep] + openmp_dependencies,
+        fortran_args: fortran_args + openmp_fortran_args,
+        c_args: c_args + openmp_c_args,
+        link_args: openmp_link_args,
         install: true,
         install_dir: get_option('python.purelibdir') / 'skyborn' / 'interp' / 'fortran',
         build_by_default: true,
