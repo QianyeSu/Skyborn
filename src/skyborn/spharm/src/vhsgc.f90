@@ -345,6 +345,8 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         call vbin(0, nlat, nlon, 0, vb, iv, wvbin)
 
         ! case m = 0 with SIMD optimization
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+        !$OMP& SHARED(nt, ndo2, imid, br, cr, vb, iv, ve, we)
         do k = 1, nt
             do np1 = 2, ndo2, 2
                 !$omp simd
@@ -354,7 +356,10 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
 
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+        !$OMP& SHARED(nt, ndo1, imm1, br, cr, vb, iv, vo, wo)
         do k = 1, nt
             do np1 = 3, ndo1, 2
                 !$omp simd
@@ -364,6 +369,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
 
         ! case m = 1 through nlat-1
         if (mmax >= 2) then
@@ -374,6 +380,8 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 call wbin(0, nlat, nlon, m, wb, iw, wwbin)
 
                 if (mp1 <= ndo1) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+                    !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, br, bi, cr, ci, vb, wb, iv, iw, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
                             !$omp simd
@@ -395,9 +403,12 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
 
                 if (mp2 <= ndo2) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+                    !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, br, bi, cr, ci, vb, wb, iv, iw, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
                             !$omp simd
@@ -419,6 +430,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
             end do
         end if
@@ -876,6 +888,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     ! Final processing with SIMD optimization
     if (ityp <= 2) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, imm1, nlp1, ve, vo, we, wo, v, w)
         do k = 1, nt
             do j = 1, nlon
                 !$omp simd
@@ -887,7 +900,9 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     else
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, imm1, ve, we, v, w)
         do k = 1, nt
             do j = 1, nlon
                 !$omp simd
@@ -897,15 +912,18 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
 
     if (mlat /= 0) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j) SHARED(nt, nlon, imid, ve, we, v, w)
         do k = 1, nt
             do j = 1, nlon
                 v(imid, j, k) = 0.5 * ve(imid, j, k)
                 w(imid, j, k) = 0.5 * we(imid, j, k)
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
 
 end subroutine vhsgc1

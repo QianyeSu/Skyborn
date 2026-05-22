@@ -379,6 +379,8 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     case (1) ! ityp=0: no symmetries
         ! m=0
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, br_val, cr_val, vb_val) &
+        !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, br, cr, vb, ve, we, vo, wo)
         do k = 1, nt
             do np1 = 2, ndo2, 2
                 br_val = br(1, np1, k); cr_val = cr(1, np1, k)
@@ -399,12 +401,15 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
         ! m>0
         if (mmax >= 2) then
             do mp1 = 2, mmax
                 m = mp1 - 1; mp2 = mp1 + 1
                 mb = m * (nlat - 1) - (m * (m - 1)) / 2
                 if (mp1 <= ndo1) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val, bi_val, cr_val, ci_val, vb_val, wb_val) &
+                    !$OMP& SHARED(nt, mp1, mb, ndo1, imm1, imid, mlat, br, bi, cr, ci, vb, wb, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
                             mn = mb + np1
@@ -433,8 +438,11 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
                 if (mp2 <= ndo2) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val, bi_val, cr_val, ci_val, vb_val, wb_val) &
+                    !$OMP& SHARED(nt, mp1, mp2, mb, ndo2, imm1, imid, mlat, br, bi, cr, ci, vb, wb, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
                             mn = mb + np1
@@ -463,6 +471,7 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
             end do
         end if
@@ -896,6 +905,7 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     end do
 
     if (ityp > 2) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, idv, ve, we, v, w)
         do k = 1, nt
             do j = 1, nlon
                 !$OMP SIMD
@@ -905,7 +915,10 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     else
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i, ve_val, vo_val, we_val, wo_val) &
+        !$OMP& SHARED(nt, nlon, imm1, nlp1, ve, vo, we, wo, v, w)
         do k = 1, nt
             do j = 1, nlon
                 !$OMP SIMD
@@ -921,15 +934,18 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
 
     if (mlat /= 0) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j) SHARED(nt, nlon, imid, ve, we, v, w)
         do k = 1, nt
             do j = 1, nlon
                 v(imid, j, k) = 0.5 * ve(imid, j, k)
                 w(imid, j, k) = 0.5 * we(imid, j, k)
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
 
 end subroutine vhses1
