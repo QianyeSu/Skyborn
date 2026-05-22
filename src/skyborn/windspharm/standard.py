@@ -203,9 +203,10 @@ class VectorWind:
     ) -> np.ndarray:
         """Cast grid-space public outputs back to the input precision."""
         array = np.asarray(data)
-        if self._precision == "double":
+        precision = getattr(self, "_precision", "auto")
+        if precision == "double":
             target_dtype = np.float64
-        elif self._precision == "single":
+        elif precision == "single":
             target_dtype = np.float32
         else:
             target_dtype = (

@@ -278,9 +278,10 @@ class Spharmt:
 
     def _public_real_dtype(self, *arrays: np.ndarray) -> np.dtype:
         """Resolve the public real output dtype for this instance."""
-        if self.precision == "single":
+        precision = getattr(self, "precision", "auto")
+        if precision == "single":
             return np.dtype(np.float32)
-        if self.precision == "double":
+        if precision == "double":
             return np.dtype(np.float64)
 
         dtype = np.dtype(np.float32)
@@ -644,9 +645,10 @@ class Spharmt:
         """Restore flattened grid fields to their original extra dimensions."""
         array = np.asarray(datagrid)
         if output_dtype is None:
-            if self.precision == "double":
+            precision = getattr(self, "precision", "auto")
+            if precision == "double":
                 output_dtype = np.float64
-            elif self.precision == "single":
+            elif precision == "single":
                 output_dtype = np.float32
         if output_dtype is not None:
             array = array.astype(np.dtype(output_dtype), copy=False)
@@ -663,9 +665,10 @@ class Spharmt:
         """Restore flattened spectral fields to their original extra dimensions."""
         array = np.asarray(dataspec)
         if output_dtype is None:
-            if self.precision == "double":
+            precision = getattr(self, "precision", "auto")
+            if precision == "double":
                 output_dtype = np.complex128
-            elif self.precision == "single":
+            elif precision == "single":
                 output_dtype = np.complex64
         if output_dtype is not None:
             array = array.astype(np.dtype(output_dtype), copy=False)
@@ -1674,7 +1677,9 @@ class Spharmt:
         _, _, normalized_spec, extra_shape = self._validate_spectral_data(
             dataspec, "specsmooth"
         )
-        smoothed_spec = _spherepack.multsmoothfact(normalized_spec, smooth)
+        smoothed_spec = _spherepack.multsmoothfact(
+            normalized_spec, np.asfortranarray(smooth, dtype=np.float32)
+        )
 
         # Spectral to grid transform
         return self.spectogrd(self._restore_spectral_shape(smoothed_spec, extra_shape))
@@ -1735,7 +1740,10 @@ def regrid(
             dataspec, "regrid"
         )
         dataspec = grdin._restore_spectral_shape(
-            _spherepack.multsmoothfact(normalized_spec, smooth), extra_shape
+            _spherepack.multsmoothfact(
+                normalized_spec, np.asfortranarray(smooth, dtype=np.float32)
+            ),
+            extra_shape,
         )
 
     return grdout.spectogrd(dataspec)
@@ -1894,7 +1902,10 @@ def specintrp(
 
     try:
         return _spherepack.specintrp(
-            lon * DEGREES_TO_RADIANS, ntrunc1, dataspec, legfuncs
+            lon * DEGREES_TO_RADIANS,
+            ntrunc1,
+            np.asfortranarray(dataspec, dtype=np.complex64),
+            np.asfortranarray(legfuncs, dtype=np.float32),
         )
     except Exception as e:
         raise SpheremackError(f"Spectral interpolation failed: {str(e)}") from e

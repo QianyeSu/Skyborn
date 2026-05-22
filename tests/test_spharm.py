@@ -309,6 +309,129 @@ class TestSpharmtVectorOperations:
         np.testing.assert_allclose(divspec, divspec_pair, rtol=0, atol=0)
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    @pytest.mark.parametrize(("gridtype", "legfunc"), _VECTOR_BACKEND_CASES)
+    def test_even_nlon_vector_tail_coefficients_are_zero(self, gridtype, legfunc):
+        """Unsupported even-nlon vector tail slots should not leak undefined values."""
+        sht = Spharmt(nlon=36, nlat=19, gridtype=gridtype, legfunc=legfunc)
+        rng = np.random.default_rng(20260522)
+        u = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
+        v = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
+
+        vrtspec_pair, divspec_pair = sht.getvrtdivspec(u, v)
+        vrtspec = sht.getvrtspec(u, v)
+        divspec = sht.getdivspec(u, v)
+
+        expected_tail = np.zeros((2, 3), dtype=np.complex64)
+        np.testing.assert_allclose(vrtspec_pair[-1], expected_tail, rtol=0, atol=0)
+        np.testing.assert_allclose(divspec_pair[-1], expected_tail, rtol=0, atol=0)
+        np.testing.assert_allclose(vrtspec[-1], expected_tail, rtol=0, atol=0)
+        np.testing.assert_allclose(divspec[-1], expected_tail, rtol=0, atol=0)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    @pytest.mark.parametrize(("gridtype", "legfunc"), _VECTOR_BACKEND_CASES)
+    def test_even_nlon_vector_roundtrip_stays_stable_for_representable_spectra(
+        self, gridtype, legfunc
+    ):
+        """Even-nlon vector analyze/synthesize roundtrip should stay numerically stable."""
+        sht = Spharmt(nlon=36, nlat=19, gridtype=gridtype, legfunc=legfunc)
+        ntrunc = sht.nlat - 1
+        nspec = (ntrunc + 1) * (ntrunc + 2) // 2
+
+        vrtspec = np.zeros((nspec, 2), dtype=np.complex64)
+        divspec = np.zeros((nspec, 2), dtype=np.complex64)
+        indxm, indxn = getspecindx(ntrunc)
+        valid = np.flatnonzero((indxn >= 2) & (indxm >= 1))[:6]
+
+        vrtspec[valid, 0] = np.array(
+            [0.75 + 0.125j, -0.5 + 0.375j, 0.125 - 0.25j, -0.2 + 0.05j, 0.1j, 0.2],
+            dtype=np.complex64,
+        )
+        divspec[valid, 1] = np.array(
+            [-0.4 + 0.2j, 0.3 - 0.1j, 0.15 + 0.05j, -0.05 - 0.15j, 0.08, -0.12j],
+            dtype=np.complex64,
+        )
+
+        u, v = sht.getuv(vrtspec, divspec)
+        vrtspec_back, divspec_back = sht.getvrtdivspec(u, v)
+        u_back, v_back = sht.getuv(vrtspec_back, divspec_back)
+
+        np.testing.assert_allclose(vrtspec_back, vrtspec, rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(divspec_back, divspec, rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(u_back, u, rtol=1e-3, atol=1.0)
+        np.testing.assert_allclose(v_back, v, rtol=1e-3, atol=1.0)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    @pytest.mark.parametrize(("gridtype", "legfunc"), _VECTOR_BACKEND_CASES)
+    def test_even_nlon_vector_tail_cleanup_preserves_public_synthesis(
+        self, gridtype, legfunc
+    ):
+        """Zeroing undefined analysis tail slots must not alter synthesized winds."""
+        sht = Spharmt(nlon=36, nlat=19, gridtype=gridtype, legfunc=legfunc)
+        rng = np.random.default_rng(20260522)
+        u = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
+        v = rng.standard_normal((19, 36, 2, 3)).astype(np.float32)
+
+        _, normalized_u, _ = sht._validate_grid_data(u, "tail cleanup check")
+        _, normalized_v, _ = sht._validate_grid_data(v, "tail cleanup check")
+        math_w = np.asfortranarray(normalized_u)
+        math_v = np.asfortranarray(-normalized_v)
+        nt = math_w.shape[2]
+        ntrunc = sht.nlat - 1
+
+        if (gridtype, legfunc) == ("regular", "stored"):
+            backend = spharm_mod._spherepack.vhaes
+            workspace = sht.wvhaes
+            lwork = (2 * nt + 1) * sht.nlat * sht.nlon
+        elif (gridtype, legfunc) == ("regular", "computed"):
+            backend = spharm_mod._spherepack.vhaec
+            workspace = sht.wvhaec
+            lwork = sht.nlat * (2 * nt * sht.nlon + max(6 * sht._n2, sht.nlon))
+        elif (gridtype, legfunc) == ("gaussian", "stored"):
+            backend = spharm_mod._spherepack.vhags
+            workspace = sht.wvhags
+            lwork = (2 * nt + 1) * sht.nlat * sht.nlon
+        else:
+            backend = spharm_mod._spherepack.vhagc
+            workspace = sht.wvhagc
+            lwork = 2 * sht.nlat * (2 * sht.nlon * nt + 3 * sht._n2)
+
+        br_raw, bi_raw, cr_raw, ci_raw, ierror = backend(
+            math_v, math_w, workspace, lwork, 0
+        )
+        assert ierror == 0
+
+        br_clean = np.array(br_raw, copy=True, order="F")
+        bi_clean = np.array(bi_raw, copy=True, order="F")
+        cr_clean = np.array(cr_raw, copy=True, order="F")
+        ci_clean = np.array(ci_raw, copy=True, order="F")
+        mmax = min(sht.nlat, (sht.nlon + 1) // 2)
+
+        if mmax < br_clean.shape[0]:
+            br_clean[mmax:, :, :] = 0.0
+            bi_clean[mmax:, :, :] = 0.0
+            cr_clean[mmax:, :, :] = 0.0
+            ci_clean[mmax:, :, :] = 0.0
+        if sht.nlat % 2 == 1:
+            br_clean[0:mmax:2, sht.nlat - 1, :] = 0.0
+            bi_clean[0:mmax:2, sht.nlat - 1, :] = 0.0
+            cr_clean[0:mmax:2, sht.nlat - 1, :] = 0.0
+            ci_clean[0:mmax:2, sht.nlat - 1, :] = 0.0
+
+        vrt_raw, div_raw = spharm_mod._spherepack.twodtooned_vrtdiv(
+            br_raw, bi_raw, cr_raw, ci_raw, ntrunc, sht.rsphere
+        )
+        vrt_clean, div_clean = spharm_mod._spherepack.twodtooned_vrtdiv(
+            br_clean, bi_clean, cr_clean, ci_clean, ntrunc, sht.rsphere
+        )
+
+        shape = (vrt_raw.shape[0],) + u.shape[2:]
+        u_raw, v_raw = sht.getuv(vrt_raw.reshape(shape), div_raw.reshape(shape))
+        u_clean, v_clean = sht.getuv(vrt_clean.reshape(shape), div_clean.reshape(shape))
+
+        np.testing.assert_allclose(u_clean, u_raw, rtol=0, atol=0)
+        np.testing.assert_allclose(v_clean, v_raw, rtol=0, atol=0)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     @pytest.mark.parametrize(
         ("gridtype", "legfunc", "expected_vrt_wrapper", "expected_div_wrapper"),
         [
@@ -1738,6 +1861,7 @@ class TestSpharmtAdditionalCoverage:
         """Cover defensive consistency checks that public validation normally prevents."""
         sht = object.__new__(Spharmt)
         sht.nlat = 19
+        sht.precision = "auto"
 
         with pytest.raises(ValidationError, match="needs at least a rank 1 array"):
             sht._validate_spectral_data(np.array(1.0 + 0.0j), "spectral")
@@ -1857,6 +1981,7 @@ class TestSpharmtAdditionalCoverage:
         sht.legfunc = "stored"
         sht.rsphere = 6.3712e6
         sht._n2 = 10
+        sht.precision = "auto"
 
         with pytest.raises(
             ValidationError, match="paired spectra must have the same shape"

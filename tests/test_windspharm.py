@@ -1529,6 +1529,7 @@ class TestWindSpharmTargetedCoverage:
         vw.u = np.zeros((4, 8, 2), dtype=np.float32)
         vw.v = np.zeros((4, 8, 2), dtype=np.float32)
         vw._output_dtype = np.dtype(np.float32)
+        vw._precision = "auto"
 
         vw.gridtype = "regular"
         regular_abs = vw.absolutevorticity()
@@ -1695,18 +1696,31 @@ class TestWindSpharmTargetedCoverage:
 
         calls = {"count": 0}
         original_asfortranarray = standard.np.asfortranarray
+        original_layout_builder = vw._vector_analysis_layout_inputs
 
         def counting_asfortranarray(*args, **kwargs):
             calls["count"] += 1
             return original_asfortranarray(*args, **kwargs)
 
+        layout_calls = {"count": 0}
+
+        def counting_layout_builder():
+            layout_calls["count"] += 1
+            return original_layout_builder()
+
         monkeypatch.setattr(standard.np, "asfortranarray", counting_asfortranarray)
+        monkeypatch.setattr(
+            vw, "_vector_analysis_layout_inputs", counting_layout_builder
+        )
 
         vw.vorticity()
         vw.divergence()
         vw.sfvp()
 
-        assert calls["count"] == 2
+        assert layout_calls["count"] == 3
+        assert calls["count"] >= 2
+        assert vw._vector_analysis_layout_cache[0].flags["F_CONTIGUOUS"]
+        assert vw._vector_analysis_layout_cache[1].flags["F_CONTIGUOUS"]
 
     def test_component_paths_match_direct_spectral_expression(self):
         """Component wind paths should use direct spectral reconstruction."""
