@@ -161,9 +161,9 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
     integer :: ls, nlon, mmax, mdo, nlp1, modl, imm1, ndo
     integer :: k, i, j, mp1, np1, m, mp2, i3
     integer :: idx_a, idx_b, idx_mmax, idx_go_a, idx_go_b, idx_go_mmax
-    real :: tsn, fsn, inv_nlon
+    real :: tsn, fsn, inv_nlon, sum_a, sum_b
     real :: ge_val, ge_a, ge_b, ge_mmax, go_val, go_a, go_b, go_mmax, zb_val
-    logical :: is_nlon_even, needs_center_point
+    logical :: is_nlon_even, needs_center_point, use_heavy_omp
 
     ! External function interface
     external :: hrfftf, zfin
@@ -187,6 +187,7 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
     ! Pre-compute loop bounds for efficiency
     is_nlon_even = (mod(nlon, 2) == 0)
     needs_center_point = (modl /= 0 .and. isym /= 1)
+    use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
 
     ! Process input data based on symmetry mode with optimized memory access
     if (isym == 0) then
@@ -245,16 +246,19 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
     if (isym /= 1) then
         ! m=0 case for even part - cache-optimized accumulation
         call zfin(2, nlat, nlon, 0, zb, i3, wzfin)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, sum_a) &
+        !$OMP& SHARED(nt, nlat, imid, zb, i3, ge, a)
         do k = 1, nt
-            do i = 1, imid
-                ! Cache ge value and loop unroll when beneficial
-                ge_val = ge(i, 1, k)
-                ! Process coefficients in chunks for better cache utilization
-                do np1 = 1, nlat, 2
-                    a(1, np1, k) = a(1, np1, k) + zb(i, np1, i3) * ge_val
+            do np1 = 1, nlat, 2
+                sum_a = 0.0
+                do i = 1, imid
+                    ! Keep the latitude accumulation order unchanged inside each sum.
+                    sum_a = sum_a + zb(i, np1, i3) * ge(i, 1, k)
                 end do
+                a(1, np1, k) = sum_a
             end do
         end do
+        !$OMP END PARALLEL DO
 
         ! m > 0 cases for even part
         ndo = nlat
@@ -269,34 +273,41 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
             idx_b = 2*mp1-1
 
             ! Restructure loops for optimal memory access patterns
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, i, sum_a, sum_b) &
+            !$OMP& SHARED(nt, mp1, ndo, idx_a, idx_b, imid, zb, i3, ge, a, b)
             do k = 1, nt
-                do i = 1, imid
-                    ! Load ge values once per (k,i) pair
-                    ge_a = ge(i, idx_a, k)
-                    ge_b = ge(i, idx_b, k)
-
-                    ! Process coefficients with cached values
-                    do np1 = mp1, ndo, 2
-                        zb_val = zb(i, np1, i3)
-                        a(mp1, np1, k) = a(mp1, np1, k) + zb_val * ge_a
-                        b(mp1, np1, k) = b(mp1, np1, k) + zb_val * ge_b
+                do np1 = mp1, ndo, 2
+                    sum_a = 0.0
+                    sum_b = 0.0
+                    do i = 1, imid
+                        ! Keep the latitude accumulation order unchanged inside each sum.
+                        sum_a = sum_a + zb(i, np1, i3) * ge(i, idx_a, k)
+                        sum_b = sum_b + zb(i, np1, i3) * ge(i, idx_b, k)
                     end do
+                    a(mp1, np1, k) = sum_a
+                    b(mp1, np1, k) = sum_b
                 end do
             end do
+            !$OMP END PARALLEL DO
         end do
 
         ! Handle special case for mmax - optimized
         if (mdo /= mmax .and. mmax <= ndo) then
             call zfin(2, nlat, nlon, mdo, zb, i3, wzfin)
             idx_mmax = 2*mmax-2
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, sum_a) &
+            !$OMP& SHARED(nt, mmax, ndo, idx_mmax, imid, zb, i3, ge, a)
             do k = 1, nt
-                do i = 1, imid
-                    ge_mmax = ge(i, idx_mmax, k)
-                    do np1 = mmax, ndo, 2
-                        a(mmax, np1, k) = a(mmax, np1, k) + zb(i, np1, i3) * ge_mmax
+                do np1 = mmax, ndo, 2
+                    sum_a = 0.0
+                    do i = 1, imid
+                        sum_a = sum_a + zb(i, np1, i3) * ge(i, idx_mmax, k)
                     end do
+                    a(mmax, np1, k) = sum_a
                 end do
             end do
+            !$OMP END PARALLEL DO
         end if
     end if
 
@@ -306,14 +317,18 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
     ! Process odd part (antisymmetric component)
     ! m=0 case for odd part - optimized
     call zfin(1, nlat, nlon, 0, zb, i3, wzfin)
+    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, sum_a) &
+    !$OMP& SHARED(nt, nlat, imm1, zb, i3, go, a)
     do k = 1, nt
-        do i = 1, imm1
-            go_val = go(i, 1, k)
-            do np1 = 2, nlat, 2
-                a(1, np1, k) = a(1, np1, k) + zb(i, np1, i3) * go_val
+        do np1 = 2, nlat, 2
+            sum_a = 0.0
+            do i = 1, imm1
+                sum_a = sum_a + zb(i, np1, i3) * go(i, 1, k)
             end do
+            a(1, np1, k) = sum_a
         end do
     end do
+    !$OMP END PARALLEL DO
 
     ! m > 0 cases for odd part
     ndo = nlat
@@ -326,18 +341,22 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
         ! Pre-compute go indices for better performance
         idx_go_a = 2*mp1-2
         idx_go_b = 2*mp1-1
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+        !$OMP& PRIVATE(k, np1, i, sum_a, sum_b) &
+        !$OMP& SHARED(nt, mp1, mp2, ndo, idx_go_a, idx_go_b, imm1, zb, i3, go, a, b)
         do k = 1, nt
-            do i = 1, imm1
-                ! Cache go values
-                go_a = go(i, idx_go_a, k)
-                go_b = go(i, idx_go_b, k)
-                do np1 = mp2, ndo, 2
-                    zb_val = zb(i, np1, i3)
-                    a(mp1, np1, k) = a(mp1, np1, k) + zb_val * go_a
-                    b(mp1, np1, k) = b(mp1, np1, k) + zb_val * go_b
+            do np1 = mp2, ndo, 2
+                sum_a = 0.0
+                sum_b = 0.0
+                do i = 1, imm1
+                    sum_a = sum_a + zb(i, np1, i3) * go(i, idx_go_a, k)
+                    sum_b = sum_b + zb(i, np1, i3) * go(i, idx_go_b, k)
                 end do
+                a(mp1, np1, k) = sum_a
+                b(mp1, np1, k) = sum_b
             end do
         end do
+        !$OMP END PARALLEL DO
     end do
 
     ! Handle special case for mmax in odd part - optimized
@@ -345,14 +364,18 @@ subroutine shaec1(nlat, isym, nt, g, idgs, jdgs, a, b, mdab, ndab, imid, &
     if (mdo /= mmax .and. mp2 <= ndo) then
         call zfin(1, nlat, nlon, mdo, zb, i3, wzfin)
         idx_go_mmax = 2*mmax-2
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, sum_a) &
+        !$OMP& SHARED(nt, mmax, mp2, ndo, idx_go_mmax, imm1, zb, i3, go, a)
         do k = 1, nt
-            do i = 1, imm1
-                go_mmax = go(i, idx_go_mmax, k)
-                do np1 = mp2, ndo, 2
-                    a(mmax, np1, k) = a(mmax, np1, k) + zb(i, np1, i3) * go_mmax
+            do np1 = mp2, ndo, 2
+                sum_a = 0.0
+                do i = 1, imm1
+                    sum_a = sum_a + zb(i, np1, i3) * go(i, idx_go_mmax, k)
                 end do
+                a(mmax, np1, k) = sum_a
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
 
 end subroutine shaec1

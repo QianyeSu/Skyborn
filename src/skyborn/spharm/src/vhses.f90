@@ -313,6 +313,7 @@ end subroutine vhses
 !> @brief Core vector harmonic synthesis computation routine with SIMD.
 subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                   ndab, br, bi, cr, ci, idv, ve, vo, we, wo, work, idz, vb, wb, wrfft)
+    use omp_lib, only: omp_get_max_threads, omp_get_thread_num
     implicit none
 
     ! Argument definitions
@@ -333,10 +334,11 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     ! Local variables
     integer :: nlp1, mlat, mmax, imm1, ndo1, ndo2, itypp
-    integer :: k, i, j, mp1, np1, m, mb, mp2, mn
-    logical :: use_heavy_omp
+    integer :: k, i, j, mp1, np1, m, mb, mp2, mn, nthreads_fft, fft_alloc_stat, fft_tid
+    logical :: use_heavy_omp, use_fft_omp
     real :: br_val, bi_val, cr_val, ci_val, vb_val, wb_val
     real :: ve_val, vo_val, we_val, wo_val
+    real, allocatable :: fft_work_all(:, :, :)
 
     ! --- Precompute constants ---
     nlp1 = nlat + 1
@@ -345,6 +347,14 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     imm1 = imid
     if (mlat /= 0) imm1 = imid - 1
     use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
+    use_fft_omp = .false.
+    if (use_heavy_omp) then
+        nthreads_fft = omp_get_max_threads()
+        if (nthreads_fft > 1) then
+            allocate (fft_work_all(idv, nlon, nthreads_fft), stat=fft_alloc_stat)
+            if (fft_alloc_stat == 0) use_fft_omp = .true.
+        end if
+    end if
 
     ! --- Initialize workspace arrays to zero ---
     ! Keep the explicit vo/wo clear for safety. The overlap-based legacy layout
@@ -901,10 +911,22 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     end select
 
     ! --- Perform Inverse Fourier Transform and combine components ---
-    do k = 1, nt
-        call hrfftb(idv, nlon, ve(1, 1, k), idv, wrfft, work)
-        call hrfftb(idv, nlon, we(1, 1, k), idv, wrfft, work)
-    end do
+    if (use_fft_omp) then
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_fft_omp) PRIVATE(k, fft_tid) &
+        !$OMP& SHARED(nt, idv, nlon, ve, we, wrfft, fft_work_all)
+        do k = 1, nt
+            fft_tid = omp_get_thread_num() + 1
+            call hrfftb(idv, nlon, ve(1, 1, k), idv, wrfft, fft_work_all(:, :, fft_tid))
+            call hrfftb(idv, nlon, we(1, 1, k), idv, wrfft, fft_work_all(:, :, fft_tid))
+        end do
+        !$OMP END PARALLEL DO
+        deallocate (fft_work_all)
+    else
+        do k = 1, nt
+            call hrfftb(idv, nlon, ve(1, 1, k), idv, wrfft, work)
+            call hrfftb(idv, nlon, we(1, 1, k), idv, wrfft, work)
+        end do
+    end if
 
     if (ityp > 2) then
         !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) SHARED(nt, nlon, idv, ve, we, v, w)

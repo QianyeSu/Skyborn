@@ -285,6 +285,7 @@ end subroutine vhsgci
 subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                   ndab, br, bi, cr, ci, idv, ve, vo, we, wo, vb, wb, &
                   wvbin, wwbin, wrfft)
+    use omp_lib, only: omp_get_max_threads, omp_get_thread_num
 
     use, intrinsic :: iso_fortran_env, only: real32
     implicit none
@@ -299,8 +300,9 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     ! Local variables - computational parameters and loop indices
     integer :: nlp1, mlat, mlon, mmax, imm1, ndo1, ndo2, itypp
-    integer :: k, j, i, np1, mp1, mp2, m, iv, iw
-    logical :: use_heavy_omp
+    integer :: k, j, i, np1, mp1, mp2, m, iv, iw, nthreads_fft, fft_alloc_stat, fft_tid
+    logical :: use_heavy_omp, use_fft_omp
+    real, allocatable :: fft_work_all(:, :, :)
 
     ! Pre-compute frequently used parameters for optimal performance
     nlp1 = nlat + 1                               ! Total latitudes plus 1
@@ -310,6 +312,14 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     imm1 = imid                                   ! Default hemisphere points
     if (mlat /= 0) imm1 = imid - 1                ! Adjust for odd latitudes
     use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
+    use_fft_omp = .false.
+    if (use_heavy_omp) then
+        nthreads_fft = omp_get_max_threads()
+        if (nthreads_fft > 1) then
+            allocate (fft_work_all(idv, nlon, nthreads_fft), stat=fft_alloc_stat)
+            if (fft_alloc_stat == 0) use_fft_omp = .true.
+        end if
+    end if
 
     ! Initialize workspace arrays to zero with SIMD vectorization
     ! Critical for accumulation of harmonic coefficients
@@ -883,10 +893,22 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     end select
 
     ! Final processing (common to all cases)
-    do k = 1, nt
-        call hrfftb(idv, nlon, ve(1, 1, k), idv, wrfft, vb)
-        call hrfftb(idv, nlon, we(1, 1, k), idv, wrfft, vb)
-    end do
+    if (use_fft_omp) then
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_fft_omp) PRIVATE(k, fft_tid) &
+        !$OMP& SHARED(nt, idv, nlon, ve, we, wrfft, fft_work_all)
+        do k = 1, nt
+            fft_tid = omp_get_thread_num() + 1
+            call hrfftb(idv, nlon, ve(1, 1, k), idv, wrfft, fft_work_all(:, :, fft_tid))
+            call hrfftb(idv, nlon, we(1, 1, k), idv, wrfft, fft_work_all(:, :, fft_tid))
+        end do
+        !$OMP END PARALLEL DO
+        deallocate (fft_work_all)
+    else
+        do k = 1, nt
+            call hrfftb(idv, nlon, ve(1, 1, k), idv, wrfft, vb)
+            call hrfftb(idv, nlon, we(1, 1, k), idv, wrfft, vb)
+        end do
+    end if
 
     ! Final processing with SIMD optimization
     if (ityp <= 2) then

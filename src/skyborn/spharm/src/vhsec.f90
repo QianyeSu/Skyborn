@@ -215,6 +215,7 @@ end subroutine vhseci
 subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
                            v, w, mdab, ndab, br, bi, cr, ci, idv, &
                            ve, vo, we, wo, vb, wb, wvbin, wwbin, wrfft)
+    use omp_lib, only: omp_get_max_threads, omp_get_thread_num
     implicit none
 
     ! Input parameters
@@ -234,8 +235,9 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
 
     ! Local variables - optimized for better performance
     integer :: nlp1, mlat, mlon, mmax, imm1, ndo1, ndo2
-    integer :: k, j, i
-    logical :: use_heavy_omp
+    integer :: k, j, i, nthreads_fft, fft_alloc_stat, fft_tid
+    logical :: use_heavy_omp, use_fft_omp
+    real, allocatable :: fft_work_all(:, :, :)
 
     ! Pre-compute constants for better performance
     nlp1 = nlat + 1
@@ -245,6 +247,14 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
     imm1 = imid
     if (mlat /= 0) imm1 = imid - 1
     use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
+    use_fft_omp = .false.
+    if (use_heavy_omp) then
+        nthreads_fft = omp_get_max_threads()
+        if (nthreads_fft > 1) then
+            allocate (fft_work_all(idv, nlon, nthreads_fft), stat=fft_alloc_stat)
+            if (fft_alloc_stat == 0) use_fft_omp = .true.
+        end if
+    end if
 
     ! OPTIMIZATION 1: Vectorized array initialization
     ! Replace triple nested loops with more efficient initialization
@@ -313,10 +323,22 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
 
     ! OPTIMIZATION 3: Optimized FFT application with better memory access
     ! Remove OpenMP here - FFT calls are not thread-safe and overhead is too high
-    do k = 1, nt
-        call hrfftb(idv, nlon, ve(1, 1, k), idv, wrfft, vb)
-        call hrfftb(idv, nlon, we(1, 1, k), idv, wrfft, vb)
-    end do
+    if (use_fft_omp) then
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_fft_omp) PRIVATE(k, fft_tid) &
+        !$OMP& SHARED(nt, idv, nlon, ve, we, wrfft, fft_work_all)
+        do k = 1, nt
+            fft_tid = omp_get_thread_num() + 1
+            call hrfftb(idv, nlon, ve(1, 1, k), idv, wrfft, fft_work_all(:, :, fft_tid))
+            call hrfftb(idv, nlon, we(1, 1, k), idv, wrfft, fft_work_all(:, :, fft_tid))
+        end do
+        !$OMP END PARALLEL DO
+        deallocate (fft_work_all)
+    else
+        do k = 1, nt
+            call hrfftb(idv, nlon, ve(1, 1, k), idv, wrfft, vb)
+            call hrfftb(idv, nlon, we(1, 1, k), idv, wrfft, vb)
+        end do
+    end if
 
     ! OPTIMIZATION 4: Vectorized final combination with better cache locality and OpenMP
     if (ityp <= 2) then

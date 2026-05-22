@@ -169,14 +169,18 @@ subroutine shagc1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
     ! Local variables
     integer :: k, i, j, mp1, np1, m, mp2, lm1, nl2, is, km
     integer :: ms, ns, lp1
-    real :: sfn, t1, t2
+    real :: sfn, t1, t2, sum_a, sum_b
+    integer :: mn, mr, mi
+    logical :: use_heavy_omp
 
     ! External function interface
     external :: hrfftf, legin
 
+    use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
+
     ! Copy gs array to internal g array with OpenMP optimization
-    ! PARALLEL DO COLLAPSE(3) IF(nt*lat*nlon > 10000) PRIVATE(k,j,i)
-    !DIR$ VECTOR ALWAYS
+    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) &
+    !$OMP& SHARED(nt, nlon, lat, gs, g)
     do k = 1, nt
         do j = 1, nlon
             do i = 1, lat
@@ -184,7 +188,7 @@ subroutine shagc1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
             end do
         end do
     end do
-    ! END PARALLEL DO
+    !$OMP END PARALLEL DO
 
     ! Perform Fourier transform - cannot be parallelized due to workspace sharing
     do k = 1, nt
@@ -193,8 +197,8 @@ subroutine shagc1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
 
     ! Scale result with pre-computed factor
     sfn = 2.0 / real(nlon)
-    ! PARALLEL DO COLLAPSE(3) IF(nt*lat*nlon > 10000) PRIVATE(k,j,i)
-    !DIR$ VECTOR ALWAYS
+    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) &
+    !$OMP& SHARED(nt, nlon, lat, sfn, g)
     do k = 1, nt
         do j = 1, nlon
             do i = 1, lat
@@ -202,11 +206,11 @@ subroutine shagc1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
             end do
         end do
     end do
-    ! END PARALLEL DO
+    !$OMP END PARALLEL DO
 
     ! Initialize coefficients to zero with OpenMP
-    ! PARALLEL DO COLLAPSE(3) IF(nt*nlat*l > 10000) PRIVATE(k,np1,mp1)
-    !DIR$ VECTOR ALWAYS
+    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, mp1) &
+    !$OMP& SHARED(nt, nlat, l, a, b)
     do k = 1, nt
         do np1 = 1, nlat
             do mp1 = 1, l
@@ -215,7 +219,7 @@ subroutine shagc1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
             end do
         end do
     end do
-    ! END PARALLEL DO
+    !$OMP END PARALLEL DO
 
     ! Set m+1 limit on b(m+1) calculation
     lm1 = l
@@ -237,10 +241,10 @@ contains
         ! overwrite g(i) with (g(i)+g(nlat-i+1))*wts(i)
         ! overwrite g(nlat-i+1) with (g(i)-g(nlat-i+1))*wts(i)
         nl2 = nlat / 2
-        ! PARALLEL DO COLLAPSE(2) IF(nt*nlon > 5000) PRIVATE(k,j,i,is,t1,t2)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i, is, t1, t2) &
+        !$OMP& SHARED(nt, nlon, nl2, nlat, late, g, wts)
         do k = 1, nt
             do j = 1, nlon
-                !DIR$ VECTOR ALWAYS
                 do i = 1, nl2
                     is = nlat - i + 1
                     t1 = g(i, j, k)
@@ -255,54 +259,82 @@ contains
                 end if
             end do
         end do
-        ! END PARALLEL DO
+        !$OMP END PARALLEL DO
 
         ! Set m = 0 coefficients first
         m = 0
         call legin(mode, l, nlat, m, w, pmn, km)
-        ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+        !$OMP& PRIVATE(k, np1, mn, sum_a, i) &
+        !$OMP& SHARED(nt, nlat, late, g, pmn, a, km)
         do k = 1, nt
-            do i = 1, late
-                is = nlat - i + 1
-                ! n even
-                !DIR$ VECTOR ALWAYS
-                do np1 = 1, nlat, 2
-                    a(1, np1, k) = a(1, np1, k) + g(i, 1, k) * pmn(np1, i, km)
+            do np1 = 1, nlat, 2
+                sum_a = 0.0
+                do i = 1, late
+                    sum_a = sum_a + g(i, 1, k) * pmn(np1, i, km)
                 end do
-                ! n odd
-                !DIR$ VECTOR ALWAYS
-                do np1 = 2, nlat, 2
-                    a(1, np1, k) = a(1, np1, k) + g(is, 1, k) * pmn(np1, i, km)
-                end do
+                a(1, np1, k) = sum_a
             end do
         end do
-        ! END PARALLEL DO
+        !$OMP END PARALLEL DO
+
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+        !$OMP& PRIVATE(k, np1, is, sum_a, i) &
+        !$OMP& SHARED(nt, nlat, late, g, pmn, a, km)
+        do k = 1, nt
+            do np1 = 2, nlat, 2
+                sum_a = 0.0
+                do i = 1, late
+                    is = nlat - i + 1
+                    sum_a = sum_a + g(is, 1, k) * pmn(np1, i, km)
+                end do
+                a(1, np1, k) = sum_a
+            end do
+        end do
+        !$OMP END PARALLEL DO
 
         ! Compute coefficients for which b(m,n) is available
         do mp1 = 2, lm1
             m = mp1 - 1
             mp2 = m + 2
+            mr = 2 * m
+            mi = mr + 1
             ! Compute pmn for all i and n=m,...,l-1
             call legin(mode, l, nlat, m, w, pmn, km)
-            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1)
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, sum_a, sum_b, i, mn) &
+            !$OMP& SHARED(nt, mp1, nlat, late, g, pmn, a, b, km, mr, mi)
             do k = 1, nt
-                do i = 1, late
-                    is = nlat - i + 1
-                    ! n-m even
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = mp1, nlat, 2
-                        a(mp1, np1, k) = a(mp1, np1, k) + g(i, 2*m, k) * pmn(np1, i, km)
-                        b(mp1, np1, k) = b(mp1, np1, k) + g(i, 2*m+1, k) * pmn(np1, i, km)
+                do np1 = mp1, nlat, 2
+                    sum_a = 0.0
+                    sum_b = 0.0
+                    do i = 1, late
+                        sum_a = sum_a + g(i, mr, k) * pmn(np1, i, km)
+                        sum_b = sum_b + g(i, mi, k) * pmn(np1, i, km)
                     end do
-                    ! n-m odd
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = mp2, nlat, 2
-                        a(mp1, np1, k) = a(mp1, np1, k) + g(is, 2*m, k) * pmn(np1, i, km)
-                        b(mp1, np1, k) = b(mp1, np1, k) + g(is, 2*m+1, k) * pmn(np1, i, km)
-                    end do
+                    a(mp1, np1, k) = sum_a
+                    b(mp1, np1, k) = sum_b
                 end do
             end do
-            ! END PARALLEL DO
+            !$OMP END PARALLEL DO
+
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, sum_a, sum_b, i, is) &
+            !$OMP& SHARED(nt, mp1, mp2, nlat, late, g, pmn, a, b, km, mr, mi)
+            do k = 1, nt
+                do np1 = mp2, nlat, 2
+                    sum_a = 0.0
+                    sum_b = 0.0
+                    do i = 1, late
+                        is = nlat - i + 1
+                        sum_a = sum_a + g(is, mr, k) * pmn(np1, i, km)
+                        sum_b = sum_b + g(is, mi, k) * pmn(np1, i, km)
+                    end do
+                    a(mp1, np1, k) = sum_a
+                    b(mp1, np1, k) = sum_b
+                end do
+            end do
+            !$OMP END PARALLEL DO
         end do
 
         ! Handle special case for nlon == l+l-2
@@ -311,23 +343,34 @@ contains
             m = l - 1
             call legin(mode, l, nlat, m, w, pmn, km)
             lp1 = l + 1
-            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,is,np1)
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, sum_a, i) &
+            !$OMP& SHARED(nt, l, nlat, late, nlon, g, pmn, a, km)
             do k = 1, nt
-                do i = 1, late
-                    is = nlat - i + 1
-                    ! n-m even
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = l, nlat, 2
-                        a(l, np1, k) = a(l, np1, k) + 0.5 * g(i, nlon, k) * pmn(np1, i, km)
+                do np1 = l, nlat, 2
+                    sum_a = 0.0
+                    do i = 1, late
+                        sum_a = sum_a + 0.5 * g(i, nlon, k) * pmn(np1, i, km)
                     end do
-                    ! n-m odd
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = lp1, nlat, 2
-                        a(l, np1, k) = a(l, np1, k) + 0.5 * g(is, nlon, k) * pmn(np1, i, km)
-                    end do
+                    a(l, np1, k) = sum_a
                 end do
             end do
-            ! END PARALLEL DO
+            !$OMP END PARALLEL DO
+
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, sum_a, i, is) &
+            !$OMP& SHARED(nt, lp1, nlat, late, nlon, g, pmn, a, l, km)
+            do k = 1, nt
+                do np1 = lp1, nlat, 2
+                    sum_a = 0.0
+                    do i = 1, late
+                        is = nlat - i + 1
+                        sum_a = sum_a + 0.5 * g(is, nlon, k) * pmn(np1, i, km)
+                    end do
+                    a(l, np1, k) = sum_a
+                end do
+            end do
+            !$OMP END PARALLEL DO
         end if
     end subroutine process_full_sphere_mode
 
@@ -335,10 +378,10 @@ contains
     subroutine process_half_sphere_mode()
         ! Half sphere: overwrite g(i) with wts(i)*(g(i)+g(i)) for i=1,...,nlate/2
         nl2 = nlat / 2
-        ! PARALLEL DO COLLAPSE(2) IF(nt*nlon > 5000) PRIVATE(k,j,i)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) &
+        !$OMP& SHARED(nt, nlon, nl2, late, g, wts)
         do k = 1, nt
             do j = 1, nlon
-                !DIR$ VECTOR ALWAYS
                 do i = 1, nl2
                     g(i, j, k) = wts(i) * (g(i, j, k) + g(i, j, k))
                 end do
@@ -349,7 +392,7 @@ contains
                 end if
             end do
         end do
-        ! END PARALLEL DO
+        !$OMP END PARALLEL DO
 
         ! Set m = 0 coefficients first
         m = 0
@@ -357,35 +400,45 @@ contains
         ms = 1
         if (mode == 1) ms = 2
 
-        ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+        !$OMP& PRIVATE(k, np1, sum_a, i) &
+        !$OMP& SHARED(nt, ms, nlat, late, g, pmn, a, km)
         do k = 1, nt
-            do i = 1, late
-                !DIR$ VECTOR ALWAYS
-                do np1 = ms, nlat, 2
-                    a(1, np1, k) = a(1, np1, k) + g(i, 1, k) * pmn(np1, i, km)
+            do np1 = ms, nlat, 2
+                sum_a = 0.0
+                do i = 1, late
+                    sum_a = sum_a + g(i, 1, k) * pmn(np1, i, km)
                 end do
+                a(1, np1, k) = sum_a
             end do
         end do
-        ! END PARALLEL DO
+        !$OMP END PARALLEL DO
 
         ! Compute coefficients for which b(m,n) is available
         do mp1 = 2, lm1
             m = mp1 - 1
             ms = mp1
             if (mode == 1) ms = mp1 + 1
+            mr = 2 * m
+            mi = mr + 1
             ! Compute pmn for all i and n=m,...,nlat-1
             call legin(mode, l, nlat, m, w, pmn, km)
-            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1)
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, sum_a, sum_b, i) &
+            !$OMP& SHARED(nt, ms, nlat, late, g, pmn, a, b, km, mp1, mr, mi)
             do k = 1, nt
-                do i = 1, late
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = ms, nlat, 2
-                        a(mp1, np1, k) = a(mp1, np1, k) + g(i, 2*m, k) * pmn(np1, i, km)
-                        b(mp1, np1, k) = b(mp1, np1, k) + g(i, 2*m+1, k) * pmn(np1, i, km)
+                do np1 = ms, nlat, 2
+                    sum_a = 0.0
+                    sum_b = 0.0
+                    do i = 1, late
+                        sum_a = sum_a + g(i, mr, k) * pmn(np1, i, km)
+                        sum_b = sum_b + g(i, mi, k) * pmn(np1, i, km)
                     end do
+                    a(mp1, np1, k) = sum_a
+                    b(mp1, np1, k) = sum_b
                 end do
             end do
-            ! END PARALLEL DO
+            !$OMP END PARALLEL DO
         end do
 
         ! Handle special case for nlon == l+l-2
@@ -395,16 +448,19 @@ contains
             call legin(mode, l, nlat, m, w, pmn, km)
             ns = l
             if (mode == 1) ns = l + 1
-            ! PARALLEL DO COLLAPSE(2) IF(nt*late > 2000) PRIVATE(k,i,np1)
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, sum_a, i) &
+            !$OMP& SHARED(nt, ns, nlat, late, nlon, g, pmn, a, l, km)
             do k = 1, nt
-                do i = 1, late
-                    !DIR$ VECTOR ALWAYS
-                    do np1 = ns, nlat, 2
-                        a(l, np1, k) = a(l, np1, k) + 0.5 * g(i, nlon, k) * pmn(np1, i, km)
+                do np1 = ns, nlat, 2
+                    sum_a = 0.0
+                    do i = 1, late
+                        sum_a = sum_a + 0.5 * g(i, nlon, k) * pmn(np1, i, km)
                     end do
+                    a(l, np1, k) = sum_a
                 end do
             end do
-            ! END PARALLEL DO
+            !$OMP END PARALLEL DO
         end if
     end subroutine process_half_sphere_mode
 

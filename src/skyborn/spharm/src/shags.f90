@@ -353,6 +353,9 @@ contains
         m = 0
         mml1 = m * (2 * nlat - m - 1) / 2
         ! Reduce into scalars first so SIMD can run on the contiguous i dimension.
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+        !$OMP& PRIVATE(k, np1, mn, sum_a, i) &
+        !$OMP& SHARED(nt, nlat, late, g, pmn, a, mml1)
         do k = 1, nt
             do np1 = 1, nlat, 2
                 mn = mml1 + np1
@@ -363,6 +366,13 @@ contains
                 end do
                 a(1, np1, k) = sum_a
             end do
+        end do
+        !$OMP END PARALLEL DO
+
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+        !$OMP& PRIVATE(k, np1, mn, sum_a, is, i) &
+        !$OMP& SHARED(nt, nlat, late, g, pmn, a, mml1)
+        do k = 1, nt
             do np1 = 2, nlat, 2
                 mn = mml1 + np1
                 sum_a = 0.0
@@ -374,6 +384,7 @@ contains
                 a(1, np1, k) = sum_a
             end do
         end do
+        !$OMP END PARALLEL DO
 
         ! Compute m >= 1 coefficients next
         do mp1 = 2, lm1
@@ -382,6 +393,9 @@ contains
             mp2 = mp1 + 1
             mr = 2 * m
             mi = mr + 1
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, mn, sum_a, sum_b, i) &
+            !$OMP& SHARED(nt, nlat, late, g, pmn, a, b, mp1, mml1, mr, mi)
             do k = 1, nt
                 do np1 = mp1, nlat, 2
                     mn = mml1 + np1
@@ -395,6 +409,13 @@ contains
                     a(mp1, np1, k) = sum_a
                     b(mp1, np1, k) = sum_b
                 end do
+            end do
+            !$OMP END PARALLEL DO
+
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, mn, sum_a, sum_b, is, i) &
+            !$OMP& SHARED(nt, nlat, late, g, pmn, a, b, mp1, mp2, mml1, mr, mi)
+            do k = 1, nt
                 do np1 = mp2, nlat, 2
                     mn = mml1 + np1
                     sum_a = 0.0
@@ -409,6 +430,7 @@ contains
                     b(mp1, np1, k) = sum_b
                 end do
             end do
+            !$OMP END PARALLEL DO
         end do
 
         ! Handle special case for nlon == l+l-2
@@ -417,6 +439,9 @@ contains
             m = l - 1
             mml1 = m * (2 * nlat - m - 1) / 2
             lp1 = l + 1
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, mn, sum_a, i) &
+            !$OMP& SHARED(nt, nlat, late, g, pmn, a, l, nlon, mml1)
             do k = 1, nt
                 do np1 = l, nlat, 2
                     mn = mml1 + np1
@@ -427,6 +452,13 @@ contains
                     end do
                     a(l, np1, k) = 0.5 * sum_a
                 end do
+            end do
+            !$OMP END PARALLEL DO
+
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, mn, sum_a, is, i) &
+            !$OMP& SHARED(nt, nlat, late, g, pmn, a, l, nlon, lp1, mml1)
+            do k = 1, nt
                 do np1 = lp1, nlat, 2
                     mn = mml1 + np1
                     sum_a = 0.0
@@ -438,6 +470,7 @@ contains
                     a(l, np1, k) = 0.5 * sum_a
                 end do
             end do
+            !$OMP END PARALLEL DO
         end if
     end subroutine process_full_sphere_mode
 
@@ -473,6 +506,9 @@ contains
         ms = 1
         if (mode == 1) ms = 2
 
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+        !$OMP& PRIVATE(k, np1, mn, sum_a, i) &
+        !$OMP& SHARED(nt, nlat, late, g, pmn, a, ms, mml1)
         do k = 1, nt
             do np1 = ms, nlat, 2
                 mn = mml1 + np1
@@ -484,6 +520,7 @@ contains
                 a(1, np1, k) = sum_a
             end do
         end do
+        !$OMP END PARALLEL DO
 
         ! Compute m >= 1 coefficients next
         do mp1 = 2, lm1
@@ -493,6 +530,9 @@ contains
             if (mode == 1) ms = mp1 + 1
             mr = 2 * m
             mi = mr + 1
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, mn, sum_a, sum_b, i) &
+            !$OMP& SHARED(nt, nlat, late, g, pmn, a, b, mp1, ms, mml1, mr, mi)
             do k = 1, nt
                 do np1 = ms, nlat, 2
                     mn = mml1 + np1
@@ -507,6 +547,7 @@ contains
                     b(mp1, np1, k) = sum_b
                 end do
             end do
+            !$OMP END PARALLEL DO
         end do
 
         ! Handle special case for nlon == l+l-2
@@ -518,6 +559,9 @@ contains
             ns = l
             ! Set starting n for mode odd
             if (mode == 1) ns = l + 1
+            !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+            !$OMP& PRIVATE(k, np1, mn, sum_a, i) &
+            !$OMP& SHARED(nt, nlat, late, g, pmn, a, l, nlon, ns, mml1)
             do k = 1, nt
                 do np1 = ns, nlat, 2
                     mn = mml1 + np1
@@ -529,6 +573,7 @@ contains
                     a(l, np1, k) = 0.5 * sum_a
                 end do
             end do
+            !$OMP END PARALLEL DO
         end if
     end subroutine process_half_sphere_mode
 
