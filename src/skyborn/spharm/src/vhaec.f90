@@ -442,14 +442,18 @@ subroutine vhaec1_case0(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
     integer, intent(out) :: iv, iw
 
     integer :: k, i, mp1, np1, m, mp2
+    logical :: use_heavy_omp
     real :: br_val_0, cr_val_0
     real :: br_val_m, bi_val_m, cr_val_m, ci_val_m
     real :: zv_val, zw_val
 
+    use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
+
     ! Case m=0 (original lines 421-436)
     call zvin(0, nlat, nlon, 0, zv, iv, wzvin)
 
-    !$omp parallel do default(none) private(k, np1, i, br_val_0, cr_val_0, zv_val) &
+    !$omp parallel do default(none) if (use_heavy_omp) &
+    !$omp& private(k, np1, i, br_val_0, cr_val_0, zv_val) &
     !$omp& shared(nt, ndo1, ndo2, imid, imm1, br, cr, zv, iv, ve, we, vo, wo)
     do k = 1, nt
         do np1 = 2, ndo2, 2
@@ -490,7 +494,8 @@ subroutine vhaec1_case0(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
 
         ! Handle odd harmonic terms if mp1 <= ndo1
         if (mp1 <= ndo1) then
-            !$omp parallel do default(none) private(k, np1, i, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
+            !$omp parallel do default(none) if (use_heavy_omp) &
+            !$omp& private(k, np1, i, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
             !$omp& shared(nt, mp1, ndo1, imm1, imid, mlat, br, bi, cr, ci, zv, zw, iv, iw, vo, we, wo, ve)
             do k = 1, nt
                 do np1 = mp1, ndo1, 2
@@ -525,7 +530,8 @@ subroutine vhaec1_case0(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
 
         ! Handle even harmonic terms if mp2 <= ndo2
         if (mp2 <= ndo2) then
-            !$omp parallel do default(none) private(k, np1, i, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
+            !$omp parallel do default(none) if (use_heavy_omp) &
+            !$omp& private(k, np1, i, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
             !$omp& shared(nt, mp1, mp2, ndo2, imm1, imid, mlat, br, bi, cr, ci, zv, zw, iv, iw, ve, wo, we, vo)
             do k = 1, nt
                 do np1 = mp2, ndo2, 2
@@ -579,13 +585,17 @@ subroutine vhaec1_case1(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
     integer, intent(out) :: iv, iw
 
     integer :: k, i, mp1, np1, m, mp2
+    logical :: use_heavy_omp
     real :: br_val_0, br_val_m, bi_val_m
     real :: zv_val, zw_val
+
+    use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
 
     ! Case m=0
     call zvin(0, nlat, nlon, 0, zv, iv, wzvin)
 
-    !$omp parallel do default(none) private(k, np1, i, br_val_0, zv_val) &
+    !$omp parallel do default(none) if (use_heavy_omp) &
+    !$omp& private(k, np1, i, br_val_0, zv_val) &
     !$omp& shared(nt, ndo1, ndo2, imid, imm1, br, zv, iv, ve, vo)
     do k = 1, nt
         do np1 = 2, ndo2, 2
@@ -619,7 +629,8 @@ subroutine vhaec1_case1(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
         call zwin(0, nlat, nlon, m, zw, iw, wzwin)
 
         if (mp1 <= ndo1) then
-            !$omp parallel do default(none) private(k, np1, i, br_val_m, bi_val_m, zv_val, zw_val) &
+            !$omp parallel do default(none) if (use_heavy_omp) &
+            !$omp& private(k, np1, i, br_val_m, bi_val_m, zv_val, zw_val) &
             !$omp& shared(nt, mp1, ndo1, imm1, imid, mlat, br, bi, zv, zw, iv, iw, vo, we)
             do k = 1, nt
                 do np1 = mp1, ndo1, 2
@@ -645,7 +656,8 @@ subroutine vhaec1_case1(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
         end if
 
         if (mp2 <= ndo2) then
-            !$omp parallel do default(none) private(k, np1, i, br_val_m, bi_val_m, zv_val, zw_val) &
+            !$omp parallel do default(none) if (use_heavy_omp) &
+            !$omp& private(k, np1, i, br_val_m, bi_val_m, zv_val, zw_val) &
             !$omp& shared(nt, mp1, mp2, ndo2, imm1, imid, mlat, br, bi, zv, zw, iv, iw, ve, wo)
             do k = 1, nt
                 do np1 = mp2, ndo2, 2
@@ -694,14 +706,18 @@ subroutine vhaec1_case2(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
     integer, intent(out) :: iv, iw
 
     integer :: k, i, mp1, np1, m, mp2
+    logical :: use_heavy_omp
     real :: cr_val_0, cr_val_m, ci_val_m
     real :: zv_val, zw_val
+
+    use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
 
     ! Case m=0 - only compute curl coefficients
     call zvin(0, nlat, nlon, 0, zv, iv, wzvin)
 
     ! m=0 even terms for curl
-    !$omp parallel do default(none) private(k, np1, i, cr_val_0, zv_val) &
+    !$omp parallel do default(none) if (use_heavy_omp) &
+    !$omp& private(k, np1, i, cr_val_0, zv_val) &
     !$omp& shared(nt, ndo1, ndo2, imid, imm1, cr, zv, iv, we, wo)
     do k = 1, nt
         do np1 = 2, ndo2, 2
@@ -736,7 +752,8 @@ subroutine vhaec1_case2(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
 
         ! Odd harmonic terms
         if (mp1 <= ndo1) then
-            !$omp parallel do default(none) private(k, np1, i, cr_val_m, ci_val_m, zv_val, zw_val) &
+            !$omp parallel do default(none) if (use_heavy_omp) &
+            !$omp& private(k, np1, i, cr_val_m, ci_val_m, zv_val, zw_val) &
             !$omp& shared(nt, mp1, ndo1, imm1, imid, mlat, cr, ci, zv, zw, iv, iw, wo, ve)
             do k = 1, nt
                 do np1 = mp1, ndo1, 2
@@ -763,7 +780,8 @@ subroutine vhaec1_case2(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
 
         ! Even harmonic terms
         if (mp2 <= ndo2) then
-            !$omp parallel do default(none) private(k, np1, i, cr_val_m, ci_val_m, zv_val, zw_val) &
+            !$omp parallel do default(none) if (use_heavy_omp) &
+            !$omp& private(k, np1, i, cr_val_m, ci_val_m, zv_val, zw_val) &
             !$omp& shared(nt, mp1, mp2, ndo2, imm1, imid, mlat, cr, ci, zv, zw, iv, iw, we, vo)
             do k = 1, nt
                 do np1 = mp2, ndo2, 2

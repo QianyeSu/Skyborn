@@ -235,6 +235,7 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
     ! Local variables - optimized for better performance
     integer :: nlp1, mlat, mlon, mmax, imm1, ndo1, ndo2
     integer :: k, j, i
+    logical :: use_heavy_omp
 
     ! Pre-compute constants for better performance
     nlp1 = nlat + 1
@@ -243,6 +244,7 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
     mmax = min(nlat, (nlon + 1) / 2)
     imm1 = imid
     if (mlat /= 0) imm1 = imid - 1
+    use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
 
     ! OPTIMIZATION 1: Vectorized array initialization
     ! Replace triple nested loops with more efficient initialization
@@ -319,7 +321,7 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
     ! OPTIMIZATION 4: Vectorized final combination with better cache locality and OpenMP
     if (ityp <= 2) then
         ! Full sphere case - vectorized operations with OpenMP
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, imm1, nlp1, ve, vo, we, wo, v, w)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) SHARED(nt, nlon, imm1, nlp1, ve, vo, we, wo, v, w)
         do k = 1, nt
             do j = 1, nlon
                 !$DIR$ VECTOR ALWAYS
@@ -335,7 +337,7 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
         !$OMP END PARALLEL DO
     else
         ! Half sphere case - vectorized operations with OpenMP
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, imm1, ve, we, v, w)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) SHARED(nt, nlon, imm1, ve, we, v, w)
         do k = 1, nt
             do j = 1, nlon
                 !$DIR$ VECTOR ALWAYS
@@ -351,7 +353,7 @@ subroutine vhsec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, &
 
     ! Handle equator point if needed - optimized branch with OpenMP
     if (mlat /= 0) then
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j) SHARED(nt, nlon, imid, ve, we, v, w)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j) SHARED(nt, nlon, imid, ve, we, v, w)
         do k = 1, nt
             do j = 1, nlon
                 v(imid, j, k) = 0.5 * ve(imid, j, k)
@@ -382,12 +384,15 @@ subroutine vhsec_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, 
 
     ! Local variables
     integer :: k, i, np1, mp1, mp2, m, iv, iw
+    logical :: use_heavy_omp
+
+    use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
 
     ! PERFORMANCE OPTIMIZATION: m = 0 case with vectorization
     call vbin(0, nlat, nlon, 0, vb, iv, wvbin)
 
     ! Process even np1 values - VECTORIZED for maximum throughput
-    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i) &
     !$OMP& SHARED(nt, ndo2, imid, br, cr, vb, iv, ve, we)
     do k = 1, nt
         do np1 = 2, ndo2, 2
@@ -402,7 +407,7 @@ subroutine vhsec_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, 
     !$OMP END PARALLEL DO
 
     ! Process odd np1 values - VECTORIZED for maximum throughput
-    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i) &
     !$OMP& SHARED(nt, ndo1, imm1, br, cr, vb, iv, vo, wo)
     do k = 1, nt
         do np1 = 3, ndo1, 2
@@ -428,7 +433,7 @@ subroutine vhsec_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, 
 
             ! Process odd harmonics with FUSED LOOPS for better cache usage
             if (mp1 <= ndo1) then
-                !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+                !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i) &
                 !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, br, bi, cr, ci, vb, wb, iv, iw, ve, vo, we, wo)
                 do k = 1, nt
                     do np1 = mp1, ndo1, 2
@@ -463,7 +468,7 @@ subroutine vhsec_case0(nlat, nlon, nt, imid, imm1, mlat, mmax, ndo1, ndo2, idv, 
 
             ! Process even harmonics with FUSED LOOPS for better cache usage
             if (mp2 <= ndo2) then
-                !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+                !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i) &
                 !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, br, bi, cr, ci, vb, wb, iv, iw, ve, vo, we, wo)
                 do k = 1, nt
                     do np1 = mp2, ndo2, 2

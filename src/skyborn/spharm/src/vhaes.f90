@@ -153,6 +153,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     integer :: nlp1, mlat, mmax, imm1, ndo1, ndo2, itypp
     integer :: k, i, j, mp1, np1, m, mb, mp2
     integer :: mr, mi, mn
+    logical :: use_heavy_omp
     real :: tsn, fsn
     real :: br_val_0, cr_val_0
     real :: br_val_m, bi_val_m, cr_val_m, ci_val_m
@@ -166,10 +167,11 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     mmax = min(nlat, (nlon + 1) / 2)
     imm1 = imid
     if (mlat /= 0) imm1 = imid - 1
+    use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
 
     ! --- Decompose grid into even and odd components about the equator ---
     if (ityp <= 2) then
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) &
         !$OMP& SHARED(nt, nlon, imm1, nlp1, tsn, v, w, ve, vo, we, wo)
         do k = 1, nt
             do j = 1, nlon
@@ -184,7 +186,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         end do
         !$OMP END PARALLEL DO
     else
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) &
         !$OMP& SHARED(nt, nlon, imm1, fsn, v, w, ve, vo, we, wo)
         do k = 1, nt
             do j = 1, nlon
@@ -201,7 +203,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     end if
 
     if (mlat /= 0) then
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j) &
         !$OMP& SHARED(nt, nlon, imid, tsn, v, w, ve, we)
         do k = 1, nt
             do j = 1, nlon
@@ -230,7 +232,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     ! of the 170% error.
     ! =======================================================================
     if (ityp /= 2 .and. ityp /= 5 .and. ityp /= 8) then
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, mp1, np1) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, mp1, np1) &
         !$OMP& SHARED(nt, mmax, nlat, br, bi)
         do k = 1, nt
             do mp1 = 1, mmax
@@ -243,7 +245,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         !$OMP END PARALLEL DO
     end if
     if (ityp /= 1 .and. ityp /= 4 .and. ityp /= 7) then
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, mp1, np1) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, mp1, np1) &
         !$OMP& SHARED(nt, mmax, nlat, cr, ci)
         do k = 1, nt
             do mp1 = 1, mmax
@@ -262,7 +264,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     select case (itypp)
     case (1) ! ityp=0: no symmetries
         ! m=0
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, br_val_0, cr_val_0, zv_val) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, br_val_0, cr_val_0, zv_val) &
         !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, br, cr, zv, ve, we, vo, wo)
         do k = 1, nt
             do np1 = 2, ndo2, 2
@@ -300,7 +302,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 mr = 2 * mp1 - 2
                 mi = mr + 1
                 if (mp1 <= ndo1) then
-                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
+                    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
                     !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, mb, mr, mi, br, bi, cr, ci, zv, zw, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
@@ -334,7 +336,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                     !$OMP END PARALLEL DO
                 end if
                 if (mp2 <= ndo2) then
-                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
+                    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
                     !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, mb, mr, mi, br, bi, cr, ci, zv, zw, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
@@ -372,7 +374,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     case (2) ! ityp=1: no symmetries, cr=ci=0 (curl-free)
         ! m=0
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, br_val_0, zv_val) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, br_val_0, zv_val) &
         !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, br, zv, ve, vo)
         do k = 1, nt
             do np1 = 2, ndo2, 2
@@ -404,7 +406,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 mr = 2 * mp1 - 2
                 mi = mr + 1
                 if (mp1 <= ndo1) then
-                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, zv_val, zw_val) &
+                    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, zv_val, zw_val) &
                     !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, mb, mr, mi, br, bi, zv, zw, vo, we)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
@@ -430,7 +432,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                     !$OMP END PARALLEL DO
                 end if
                 if (mp2 <= ndo2) then
-                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, zv_val, zw_val) &
+                    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, zv_val, zw_val) &
                     !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, mb, mr, mi, br, bi, zv, zw, ve, wo)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
@@ -460,7 +462,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     case (3) ! ityp=2: no symmetries, br=bi=0 (divergence-free)
         ! m=0
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, cr_val_0, zv_val) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, cr_val_0, zv_val) &
         !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, cr, zv, we, wo)
         do k = 1, nt
             do np1 = 2, ndo2, 2
@@ -492,7 +494,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 mr = 2 * mp1 - 2
                 mi = mr + 1
                 if (mp1 <= ndo1) then
-                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, cr_val_m, ci_val_m, zv_val, zw_val) &
+                    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, mn, cr_val_m, ci_val_m, zv_val, zw_val) &
                     !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, mb, mr, mi, cr, ci, zv, zw, ve, wo)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
@@ -518,7 +520,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                     !$OMP END PARALLEL DO
                 end if
                 if (mp2 <= ndo2) then
-                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, cr_val_m, ci_val_m, zv_val, zw_val) &
+                    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, mn, cr_val_m, ci_val_m, zv_val, zw_val) &
                     !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, mb, mr, mi, cr, ci, zv, zw, vo, we)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2

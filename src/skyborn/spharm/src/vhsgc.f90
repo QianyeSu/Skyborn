@@ -300,6 +300,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     ! Local variables - computational parameters and loop indices
     integer :: nlp1, mlat, mlon, mmax, imm1, ndo1, ndo2, itypp
     integer :: k, j, i, np1, mp1, mp2, m, iv, iw
+    logical :: use_heavy_omp
 
     ! Pre-compute frequently used parameters for optimal performance
     nlp1 = nlat + 1                               ! Total latitudes plus 1
@@ -308,6 +309,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     mmax = min(nlat, (nlon + 1) / 2)              ! Maximum wavenumber
     imm1 = imid                                   ! Default hemisphere points
     if (mlat /= 0) imm1 = imid - 1                ! Adjust for odd latitudes
+    use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
 
     ! Initialize workspace arrays to zero with SIMD vectorization
     ! Critical for accumulation of harmonic coefficients
@@ -345,7 +347,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         call vbin(0, nlat, nlon, 0, vb, iv, wvbin)
 
         ! case m = 0 with SIMD optimization
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i) &
         !$OMP& SHARED(nt, ndo2, imid, br, cr, vb, iv, ve, we)
         do k = 1, nt
             do np1 = 2, ndo2, 2
@@ -358,7 +360,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         end do
         !$OMP END PARALLEL DO
 
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i) &
         !$OMP& SHARED(nt, ndo1, imm1, br, cr, vb, iv, vo, wo)
         do k = 1, nt
             do np1 = 3, ndo1, 2
@@ -380,7 +382,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 call wbin(0, nlat, nlon, m, wb, iw, wwbin)
 
                 if (mp1 <= ndo1) then
-                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+                    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i) &
                     !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, br, bi, cr, ci, vb, wb, iv, iw, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
@@ -407,7 +409,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end if
 
                 if (mp2 <= ndo2) then
-                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i) &
+                    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i) &
                     !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, br, bi, cr, ci, vb, wb, iv, iw, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
@@ -888,7 +890,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     ! Final processing with SIMD optimization
     if (ityp <= 2) then
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, imm1, nlp1, ve, vo, we, wo, v, w)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) SHARED(nt, nlon, imm1, nlp1, ve, vo, we, wo, v, w)
         do k = 1, nt
             do j = 1, nlon
                 !$omp simd
@@ -902,7 +904,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         end do
         !$OMP END PARALLEL DO
     else
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, imm1, ve, we, v, w)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) SHARED(nt, nlon, imm1, ve, we, v, w)
         do k = 1, nt
             do j = 1, nlon
                 !$omp simd
@@ -916,7 +918,7 @@ subroutine vhsgc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     end if
 
     if (mlat /= 0) then
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j) SHARED(nt, nlon, imid, ve, we, v, w)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j) SHARED(nt, nlon, imid, ve, we, v, w)
         do k = 1, nt
             do j = 1, nlon
                 v(imid, j, k) = 0.5 * ve(imid, j, k)

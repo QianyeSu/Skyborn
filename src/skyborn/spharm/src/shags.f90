@@ -252,13 +252,16 @@ subroutine shags1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
 
     ! Local variables
     integer :: k, i, j, mp1, np1, m, mp2, lm1, nl2, is, mn, ms, ns, lp1, mml1
+    logical :: use_heavy_omp
     real :: sfn, t1, t2
 
     ! External function interface
     external :: hrfftf
 
+    use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
+
     ! Copy gs array to internal g array.
-    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, lat, gs, g)
+    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) SHARED(nt, nlon, lat, gs, g)
     do k = 1, nt
         do j = 1, nlon
             !DIR$ VECTOR ALWAYS
@@ -276,7 +279,7 @@ subroutine shags1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
 
     ! Scale result with pre-computed factor
     sfn = 2.0 / real(nlon)
-    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, lat, sfn, g)
+    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) SHARED(nt, nlon, lat, sfn, g)
     do k = 1, nt
         do j = 1, nlon
             !DIR$ VECTOR ALWAYS
@@ -288,7 +291,7 @@ subroutine shags1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
     !$OMP END PARALLEL DO
 
     ! Initialize coefficients to zero.
-    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, mp1) SHARED(nt, nlat, l, a, b)
+    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, mp1) SHARED(nt, nlat, l, a, b)
     do k = 1, nt
         do np1 = 1, nlat
             !DIR$ VECTOR ALWAYS
@@ -323,7 +326,8 @@ contains
         ! overwrite g(i) with (g(i)+g(nlat-i+1))*wts(i)
         ! overwrite g(nlat-i+1) with (g(i)-g(nlat-i+1))*wts(i)
         nl2 = nlat / 2
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i, is, t1, t2) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+        !$OMP& PRIVATE(k, j, i, is, t1, t2) &
         !$OMP& SHARED(nt, nlon, nl2, nlat, late, g, wts)
         do k = 1, nt
             do j = 1, nlon
@@ -444,7 +448,8 @@ contains
 
         ! Half sphere: overwrite g(i) with wts(i)*(g(i)+g(i)) for i=1,...,nlate/2
         nl2 = nlat / 2
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
+        !$OMP& PRIVATE(k, j, i) &
         !$OMP& SHARED(nt, nlon, nl2, late, g, wts)
         do k = 1, nt
             do j = 1, nlon

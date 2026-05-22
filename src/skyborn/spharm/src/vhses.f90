@@ -334,6 +334,7 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     ! Local variables
     integer :: nlp1, mlat, mmax, imm1, ndo1, ndo2, itypp
     integer :: k, i, j, mp1, np1, m, mb, mp2, mn
+    logical :: use_heavy_omp
     real :: br_val, bi_val, cr_val, ci_val, vb_val, wb_val
     real :: ve_val, vo_val, we_val, wo_val
 
@@ -343,6 +344,7 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     mmax = min(nlat, (nlon + 1) / 2)
     imm1 = imid
     if (mlat /= 0) imm1 = imid - 1
+    use_heavy_omp = (nt >= 100 .and. nlat * nlon >= 300000)
 
     ! --- Initialize workspace arrays to zero ---
     ! Keep the explicit vo/wo clear for safety. The overlap-based legacy layout
@@ -379,7 +381,7 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     case (1) ! ityp=0: no symmetries
         ! m=0
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, br_val, cr_val, vb_val) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, br_val, cr_val, vb_val) &
         !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, br, cr, vb, ve, we, vo, wo)
         do k = 1, nt
             do np1 = 2, ndo2, 2
@@ -408,7 +410,7 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 m = mp1 - 1; mp2 = mp1 + 1
                 mb = m * (nlat - 1) - (m * (m - 1)) / 2
                 if (mp1 <= ndo1) then
-                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val, bi_val, cr_val, ci_val, vb_val, wb_val) &
+                    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, mn, br_val, bi_val, cr_val, ci_val, vb_val, wb_val) &
                     !$OMP& SHARED(nt, mp1, mb, ndo1, imm1, imid, mlat, br, bi, cr, ci, vb, wb, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
@@ -441,7 +443,7 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                     !$OMP END PARALLEL DO
                 end if
                 if (mp2 <= ndo2) then
-                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val, bi_val, cr_val, ci_val, vb_val, wb_val) &
+                    !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, np1, i, mn, br_val, bi_val, cr_val, ci_val, vb_val, wb_val) &
                     !$OMP& SHARED(nt, mp1, mp2, mb, ndo2, imm1, imid, mlat, br, bi, cr, ci, vb, wb, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
@@ -905,7 +907,7 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     end do
 
     if (ityp > 2) then
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, idv, ve, we, v, w)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i) SHARED(nt, nlon, idv, ve, we, v, w)
         do k = 1, nt
             do j = 1, nlon
                 !$OMP SIMD
@@ -917,7 +919,7 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         end do
         !$OMP END PARALLEL DO
     else
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i, ve_val, vo_val, we_val, wo_val) &
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j, i, ve_val, vo_val, we_val, wo_val) &
         !$OMP& SHARED(nt, nlon, imm1, nlp1, ve, vo, we, wo, v, w)
         do k = 1, nt
             do j = 1, nlon
@@ -938,7 +940,7 @@ subroutine vhses1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     end if
 
     if (mlat /= 0) then
-        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j) SHARED(nt, nlon, imid, ve, we, v, w)
+        !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) PRIVATE(k, j) SHARED(nt, nlon, imid, ve, we, v, w)
         do k = 1, nt
             do j = 1, nlon
                 v(imid, j, k) = 0.5 * ve(imid, j, k)
