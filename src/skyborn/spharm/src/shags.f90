@@ -257,17 +257,17 @@ subroutine shags1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
     ! External function interface
     external :: hrfftf
 
-    ! Copy gs array to internal g array with OpenMP optimization
-    ! PARALLEL DO COLLAPSE(3) IF(nt*lat*nlon > 10000) PRIVATE(k,j,i)
-    !DIR$ VECTOR ALWAYS
+    ! Copy gs array to internal g array.
+    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, lat, gs, g)
     do k = 1, nt
         do j = 1, nlon
+            !DIR$ VECTOR ALWAYS
             do i = 1, lat
                 g(i, j, k) = gs(i, j, k)
             end do
         end do
     end do
-    ! END PARALLEL DO
+    !$OMP END PARALLEL DO
 
     ! Perform Fourier transform - cannot be parallelized due to workspace sharing
     do k = 1, nt
@@ -276,29 +276,29 @@ subroutine shags1(nlat, nlon, l, lat, mode, gs, idg, jdg, nt, a, b, mdab, &
 
     ! Scale result with pre-computed factor
     sfn = 2.0 / real(nlon)
-    ! PARALLEL DO COLLAPSE(3) IF(nt*lat*nlon > 10000) PRIVATE(k,j,i)
-    !DIR$ VECTOR ALWAYS
+    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) SHARED(nt, nlon, lat, sfn, g)
     do k = 1, nt
         do j = 1, nlon
+            !DIR$ VECTOR ALWAYS
             do i = 1, lat
                 g(i, j, k) = sfn * g(i, j, k)
             end do
         end do
     end do
-    ! END PARALLEL DO
+    !$OMP END PARALLEL DO
 
-    ! Initialize coefficients to zero with OpenMP
-    ! PARALLEL DO COLLAPSE(3) IF(nt*nlat*l > 10000) PRIVATE(k,np1,mp1)
-    !DIR$ VECTOR ALWAYS
+    ! Initialize coefficients to zero.
+    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, mp1) SHARED(nt, nlat, l, a, b)
     do k = 1, nt
         do np1 = 1, nlat
+            !DIR$ VECTOR ALWAYS
             do mp1 = 1, l
                 a(mp1, np1, k) = 0.0
                 b(mp1, np1, k) = 0.0
             end do
         end do
     end do
-    ! END PARALLEL DO
+    !$OMP END PARALLEL DO
 
     ! Set mp1 limit on b(mp1) calculation
     lm1 = l
@@ -323,7 +323,8 @@ contains
         ! overwrite g(i) with (g(i)+g(nlat-i+1))*wts(i)
         ! overwrite g(nlat-i+1) with (g(i)-g(nlat-i+1))*wts(i)
         nl2 = nlat / 2
-        ! PARALLEL DO COLLAPSE(2) IF(nt*nlon > 5000) PRIVATE(k,j,i,is,t1,t2)
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i, is, t1, t2) &
+        !$OMP& SHARED(nt, nlon, nl2, nlat, late, g, wts)
         do k = 1, nt
             do j = 1, nlon
                 !DIR$ VECTOR ALWAYS
@@ -341,7 +342,7 @@ contains
                 end if
             end do
         end do
-        ! END PARALLEL DO
+        !$OMP END PARALLEL DO
 
         ! Set m = 0 coefficients first
         mp1 = 1
@@ -443,7 +444,8 @@ contains
 
         ! Half sphere: overwrite g(i) with wts(i)*(g(i)+g(i)) for i=1,...,nlate/2
         nl2 = nlat / 2
-        ! PARALLEL DO COLLAPSE(2) IF(nt*nlon > 5000) PRIVATE(k,j,i)
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) &
+        !$OMP& SHARED(nt, nlon, nl2, late, g, wts)
         do k = 1, nt
             do j = 1, nlon
                 !DIR$ VECTOR ALWAYS
@@ -457,7 +459,7 @@ contains
                 end if
             end do
         end do
-        ! END PARALLEL DO
+        !$OMP END PARALLEL DO
 
         ! Set m = 0 coefficients first
         mp1 = 1
