@@ -45,7 +45,7 @@ subroutine vhagc(nlat, nlon, ityp, nt, v, w, idvw, jdvw, br, bi, cr, ci, &
 
     ! Local variables
     integer :: imid, mmax, lzz1, labc, idv, lnl, ist
-    integer :: iw1, iw2, iw3, iw4, iw5, lwzvin, jw1, jw2, jw3
+    integer :: iw1, iw2, iw3, iw4, iw5, lwzvin, jw1, jw2, jw3, k
 
     ! --- Input validation ---
     if (nlat < 3) then; ierror = 1; return; end if
@@ -96,6 +96,32 @@ subroutine vhagc(nlat, nlon, ityp, nt, v, w, idvw, jdvw, br, bi, cr, ci, &
                 br, bi, cr, ci, idv, work, work(iw1), work(iw2), work(iw3), &
                 work(iw4), work(iw5), wvhagc, wvhagc(jw1), wvhagc(jw2), wvhagc(jw3))
 
+    if (ierror == 0 .and. nt > 0) then
+        ! Clear coefficient slots that SPHEREPACK vector analysis never writes.
+        do k = 1, nt
+            if (mmax < mdab) then
+                if (ityp /= 2) then
+                    br(mmax + 1:mdab, 1:ndab, k) = 0.0
+                    bi(mmax + 1:mdab, 1:ndab, k) = 0.0
+                end if
+                if (ityp /= 1) then
+                    cr(mmax + 1:mdab, 1:ndab, k) = 0.0
+                    ci(mmax + 1:mdab, 1:ndab, k) = 0.0
+                end if
+            end if
+            if (mod(nlat, 2) /= 0) then
+                if (ityp /= 2) then
+                    br(1:mmax:2, nlat, k) = 0.0
+                    bi(1:mmax:2, nlat, k) = 0.0
+                end if
+                if (ityp /= 1) then
+                    cr(1:mmax:2, nlat, k) = 0.0
+                    ci(1:mmax:2, nlat, k) = 0.0
+                end if
+            end if
+        end do
+    end if
+
 end subroutine vhagc
 
 
@@ -129,6 +155,8 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     ! --- Decompose grid into even and odd components about the equator ---
     if (ityp <= 2) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) &
+        !$OMP& SHARED(nt, nlon, imm1, nlp1, tsn, v, w, ve, vo, we, wo)
         do k = 1, nt
             do j = 1, nlon
                 do i = 1, imm1
@@ -139,7 +167,10 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     else
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) &
+        !$OMP& SHARED(nt, nlon, imm1, fsn, v, w, ve, vo, we, wo)
         do k = 1, nt
             do j = 1, nlon
                 do i = 1, imm1
@@ -150,15 +181,19 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
 
     if (mlat /= 0) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j) &
+        !$OMP& SHARED(nt, nlon, imid, tsn, v, w, ve, we)
         do k = 1, nt
             do j = 1, nlon
                 ve(imid, j, k) = tsn * v(imid, j, k)
                 we(imid, j, k) = tsn * w(imid, j, k)
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
 
     ! --- Perform Forward Fourier Transform ---
@@ -174,6 +209,8 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     ! --- CRITICAL FIX: Conditionally initialize spectral coefficient arrays ---
     if (ityp /= 2 .and. ityp /= 5 .and. ityp /= 8) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, mp1, np1) &
+        !$OMP& SHARED(nt, mmax, nlat, br, bi)
         do k = 1, nt
             do mp1 = 1, mmax
                 do np1 = mp1, nlat
@@ -182,8 +219,11 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
     if (ityp /= 1 .and. ityp /= 4 .and. ityp /= 7) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, mp1, np1) &
+        !$OMP& SHARED(nt, mmax, nlat, cr, ci)
         do k = 1, nt
             do mp1 = 1, mmax
                 do np1 = mp1, nlat
@@ -192,6 +232,7 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
 
     itypp = ityp + 1
@@ -202,6 +243,8 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     case (1) ! ityp=0: no symmetries
         call vbin(0, nlat, nlon, 0, vb, iv, wvbin)
         ! m=0
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, tv, tw) &
+        !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, wts, vb, iv, ve, we, vo, wo, br, cr)
         do k = 1, nt
             do np1 = 2, ndo2, 2
                 !$OMP SIMD
@@ -222,6 +265,7 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
         ! m>0
         if (mmax >= 2) then
             do mp1 = 2, mmax
@@ -230,6 +274,8 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 call vbin(0, nlat, nlon, m, vb, iv, wvbin)
                 call wbin(0, nlat, nlon, m, wb, iw, wwbin)
                 if (mp1 <= ndo1) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, tvo1, tvo2, tve1, tve2, two1, two2, twe1, twe2) &
+                    !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, wts, vb, wb, iv, iw, vo, ve, wo, we, br, bi, cr, ci)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
                             !$OMP SIMD
@@ -252,8 +298,11 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
                 if (mp2 <= ndo2) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, tvo1, tvo2, tve1, tve2, two1, two2, twe1, twe2) &
+                    !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, wts, vb, wb, iv, iw, vo, ve, wo, we, br, bi, cr, ci)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
                             !$OMP SIMD
@@ -276,6 +325,7 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
             end do
         end if
@@ -283,6 +333,8 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     case (2) ! ityp=1: no symmetries, cr=ci=0
         call vbin(0, nlat, nlon, 0, vb, iv, wvbin)
         ! m=0
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, tv) &
+        !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, wts, vb, iv, ve, vo, br)
         do k = 1, nt
             do np1 = 2, ndo2, 2
                 !$OMP SIMD
@@ -299,6 +351,7 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
         ! m>0
         if (mmax >= 2) then
             do mp1 = 2, mmax
@@ -306,6 +359,8 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 call vbin(0, nlat, nlon, m, vb, iv, wvbin)
                 call wbin(0, nlat, nlon, m, wb, iw, wwbin)
                 if (mp1 <= ndo1) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, tvo1, tvo2, twe1, twe2) &
+                    !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, wts, vb, wb, iv, iw, vo, we, br, bi)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
                             !$OMP SIMD
@@ -322,8 +377,11 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
                 if (mp2 <= ndo2) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, tve1, tve2, two1, two2) &
+                    !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, wts, vb, wb, iv, iw, ve, wo, br, bi)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
                             !$OMP SIMD
@@ -340,6 +398,7 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
             end do
         end if
@@ -347,6 +406,8 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     case (3) ! ityp=2: no symmetries, br=bi=0
         call vbin(0, nlat, nlon, 0, vb, iv, wvbin)
         ! m=0
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, tw) &
+        !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, wts, vb, iv, we, wo, cr)
         do k = 1, nt
             do np1 = 2, ndo2, 2
                 !$OMP SIMD
@@ -363,6 +424,7 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
         ! m>0
         if (mmax >= 2) then
             do mp1 = 2, mmax
@@ -370,6 +432,8 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 call vbin(0, nlat, nlon, m, vb, iv, wvbin)
                 call wbin(0, nlat, nlon, m, wb, iw, wwbin)
                 if (mp1 <= ndo1) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, tve1, tve2, two1, two2) &
+                    !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, wts, vb, wb, iv, iw, ve, wo, cr, ci)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
                             !$OMP SIMD
@@ -386,8 +450,11 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
                 if (mp2 <= ndo2) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, twe1, twe2, tvo1, tvo2) &
+                    !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, wts, vb, wb, iv, iw, we, vo, cr, ci)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
                             !$OMP SIMD
@@ -404,6 +471,7 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
             end do
         end if

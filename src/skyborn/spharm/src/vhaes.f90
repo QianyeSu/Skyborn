@@ -54,7 +54,7 @@ subroutine vhaes(nlat, nlon, ityp, nt, v, w, idvw, jdvw, br, bi, cr, ci, &
 
     ! Local variables
     integer :: imid, mmax, idz, lzimn, idv, lnl, ist
-    integer :: iw1, iw2, iw3, iw4, jw1, jw2
+    integer :: iw1, iw2, iw3, iw4, jw1, jw2, k
 
     ! --- Input validation ---
     if (nlat < 3) then; ierror = 1; return; end if
@@ -99,6 +99,32 @@ subroutine vhaes(nlat, nlon, ityp, nt, v, w, idvw, jdvw, br, bi, cr, ci, &
                 br, bi, cr, ci, idv, work, work(iw1), work(iw2), work(iw3), &
                 work(iw4), idz, wvhaes, wvhaes(jw1), wvhaes(jw2))
 
+    if (ierror == 0 .and. nt > 0) then
+        ! Clear coefficient slots that SPHEREPACK vector analysis never writes.
+        do k = 1, nt
+            if (mmax < mdab) then
+                if (ityp /= 2) then
+                    br(mmax + 1:mdab, 1:ndab, k) = 0.0
+                    bi(mmax + 1:mdab, 1:ndab, k) = 0.0
+                end if
+                if (ityp /= 1) then
+                    cr(mmax + 1:mdab, 1:ndab, k) = 0.0
+                    ci(mmax + 1:mdab, 1:ndab, k) = 0.0
+                end if
+            end if
+            if (mod(nlat, 2) /= 0) then
+                if (ityp /= 2) then
+                    br(1:mmax:2, nlat, k) = 0.0
+                    bi(1:mmax:2, nlat, k) = 0.0
+                end if
+                if (ityp /= 1) then
+                    cr(1:mmax:2, nlat, k) = 0.0
+                    ci(1:mmax:2, nlat, k) = 0.0
+                end if
+            end if
+        end do
+    end if
+
 end subroutine vhaes
 
 
@@ -126,9 +152,11 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     ! Local variables
     integer :: nlp1, mlat, mmax, imm1, ndo1, ndo2, itypp
     integer :: k, i, j, mp1, np1, m, mb, mp2
+    integer :: mr, mi, mn
     real :: tsn, fsn
     real :: br_val_0, cr_val_0
     real :: br_val_m, bi_val_m, cr_val_m, ci_val_m
+    real :: zv_val, zw_val
 
     ! --- Precompute constants ---
     nlp1 = nlat + 1
@@ -141,6 +169,8 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
 
     ! --- Decompose grid into even and odd components about the equator ---
     if (ityp <= 2) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) &
+        !$OMP& SHARED(nt, nlon, imm1, nlp1, tsn, v, w, ve, vo, we, wo)
         do k = 1, nt
             do j = 1, nlon
                 !$OMP SIMD
@@ -152,7 +182,10 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     else
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j, i) &
+        !$OMP& SHARED(nt, nlon, imm1, fsn, v, w, ve, vo, we, wo)
         do k = 1, nt
             do j = 1, nlon
                 !$OMP SIMD
@@ -164,15 +197,19 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
 
     if (mlat /= 0) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, j) &
+        !$OMP& SHARED(nt, nlon, imid, tsn, v, w, ve, we)
         do k = 1, nt
             do j = 1, nlon
                 ve(imid, j, k) = tsn * v(imid, j, k)
                 we(imid, j, k) = tsn * w(imid, j, k)
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
 
     ! --- Perform Forward Fourier Transform along longitude lines ---
@@ -193,6 +230,8 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     ! of the 170% error.
     ! =======================================================================
     if (ityp /= 2 .and. ityp /= 5 .and. ityp /= 8) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, mp1, np1) &
+        !$OMP& SHARED(nt, mmax, nlat, br, bi)
         do k = 1, nt
             do mp1 = 1, mmax
                 do np1 = mp1, nlat
@@ -201,8 +240,11 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
     if (ityp /= 1 .and. ityp /= 4 .and. ityp /= 7) then
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, mp1, np1) &
+        !$OMP& SHARED(nt, mmax, nlat, cr, ci)
         do k = 1, nt
             do mp1 = 1, mmax
                 do np1 = mp1, nlat
@@ -211,6 +253,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end do
             end do
         end do
+        !$OMP END PARALLEL DO
     end if
 
     itypp = ityp + 1
@@ -219,14 +262,17 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     select case (itypp)
     case (1) ! ityp=0: no symmetries
         ! m=0
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, br_val_0, cr_val_0, zv_val) &
+        !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, br, cr, zv, ve, we, vo, wo)
         do k = 1, nt
             do np1 = 2, ndo2, 2
                 br_val_0 = br(1, np1, k)
                 cr_val_0 = cr(1, np1, k)
-                !$OMP SIMD REDUCTION(+:br_val_0, cr_val_0)
+                !$OMP SIMD REDUCTION(+:br_val_0, cr_val_0) PRIVATE(zv_val)
                 do i = 1, imid
-                    br_val_0 = br_val_0 + zv(np1, i) * ve(i, 1, k)
-                    cr_val_0 = cr_val_0 - zv(np1, i) * we(i, 1, k)
+                    zv_val = zv(np1, i)
+                    br_val_0 = br_val_0 + zv_val * ve(i, 1, k)
+                    cr_val_0 = cr_val_0 - zv_val * we(i, 1, k)
                 end do
                 br(1, np1, k) = br_val_0
                 cr(1, np1, k) = cr_val_0
@@ -234,208 +280,268 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
             do np1 = 3, ndo1, 2
                 br_val_0 = br(1, np1, k)
                 cr_val_0 = cr(1, np1, k)
-                !$OMP SIMD REDUCTION(+:br_val_0, cr_val_0)
+                !$OMP SIMD REDUCTION(+:br_val_0, cr_val_0) PRIVATE(zv_val)
                 do i = 1, imm1
-                    br_val_0 = br_val_0 + zv(np1, i) * vo(i, 1, k)
-                    cr_val_0 = cr_val_0 - zv(np1, i) * wo(i, 1, k)
+                    zv_val = zv(np1, i)
+                    br_val_0 = br_val_0 + zv_val * vo(i, 1, k)
+                    cr_val_0 = cr_val_0 - zv_val * wo(i, 1, k)
                 end do
                 br(1, np1, k) = br_val_0
                 cr(1, np1, k) = cr_val_0
             end do
         end do
+        !$OMP END PARALLEL DO
         ! m>0
         if (mmax >= 2) then
             do mp1 = 2, mmax
                 m = mp1 - 1
                 mb = m * (nlat - 1) - (m * (m - 1)) / 2
                 mp2 = mp1 + 1
+                mr = 2 * mp1 - 2
+                mi = mr + 1
                 if (mp1 <= ndo1) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
+                    !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, mb, mr, mi, br, bi, cr, ci, zv, zw, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
+                            mn = np1 + mb
                             br_val_m = br(mp1, np1, k)
                             bi_val_m = bi(mp1, np1, k)
                             cr_val_m = cr(mp1, np1, k)
                             ci_val_m = ci(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m, cr_val_m, ci_val_m)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m, cr_val_m, ci_val_m) PRIVATE(zv_val, zw_val)
                             do i = 1, imm1
-                                br_val_m = br_val_m + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
-                                bi_val_m = bi_val_m + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
-                                cr_val_m = cr_val_m - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
-                                ci_val_m = ci_val_m - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
+                                zv_val = zv(mn, i)
+                                zw_val = zw(mn, i)
+                                br_val_m = br_val_m + zv_val * vo(i, mr, k) + zw_val * we(i, mi, k)
+                                bi_val_m = bi_val_m + zv_val * vo(i, mi, k) - zw_val * we(i, mr, k)
+                                cr_val_m = cr_val_m - zv_val * wo(i, mr, k) + zw_val * ve(i, mi, k)
+                                ci_val_m = ci_val_m - zv_val * wo(i, mi, k) - zw_val * ve(i, mr, k)
                             end do
                             br(mp1, np1, k) = br_val_m
                             bi(mp1, np1, k) = bi_val_m
                             cr(mp1, np1, k) = cr_val_m
                             ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
-                                br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid) * we(imid, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid) * we(imid, 2*mp1-2, k)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
+                                zw_val = zw(mn, imid)
+                                br(mp1, np1, k) = br(mp1, np1, k) + zw_val * we(imid, mi, k)
+                                bi(mp1, np1, k) = bi(mp1, np1, k) - zw_val * we(imid, mr, k)
+                                cr(mp1, np1, k) = cr(mp1, np1, k) + zw_val * ve(imid, mi, k)
+                                ci(mp1, np1, k) = ci(mp1, np1, k) - zw_val * ve(imid, mr, k)
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
                 if (mp2 <= ndo2) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
+                    !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, mb, mr, mi, br, bi, cr, ci, zv, zw, ve, vo, we, wo)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
+                            mn = np1 + mb
                             br_val_m = br(mp1, np1, k)
                             bi_val_m = bi(mp1, np1, k)
                             cr_val_m = cr(mp1, np1, k)
                             ci_val_m = ci(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m, cr_val_m, ci_val_m)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m, cr_val_m, ci_val_m) PRIVATE(zv_val, zw_val)
                             do i = 1, imm1
-                                br_val_m = br_val_m + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
-                                bi_val_m = bi_val_m + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
-                                cr_val_m = cr_val_m - zv(np1 + mb, i) * we(i, 2*mp1-2, k) + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
-                                ci_val_m = ci_val_m - zv(np1 + mb, i) * we(i, 2*mp1-1, k) - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
+                                zv_val = zv(mn, i)
+                                zw_val = zw(mn, i)
+                                br_val_m = br_val_m + zv_val * ve(i, mr, k) + zw_val * wo(i, mi, k)
+                                bi_val_m = bi_val_m + zv_val * ve(i, mi, k) - zw_val * wo(i, mr, k)
+                                cr_val_m = cr_val_m - zv_val * we(i, mr, k) + zw_val * vo(i, mi, k)
+                                ci_val_m = ci_val_m - zv_val * we(i, mi, k) - zw_val * vo(i, mr, k)
                             end do
                             br(mp1, np1, k) = br_val_m
                             bi(mp1, np1, k) = bi_val_m
                             cr(mp1, np1, k) = cr_val_m
                             ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
-                                br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, imid) * we(imid, 2*mp1-2, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, imid) * we(imid, 2*mp1-1, k)
+                                zv_val = zv(mn, imid)
+                                br(mp1, np1, k) = br(mp1, np1, k) + zv_val * ve(imid, mr, k)
+                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv_val * ve(imid, mi, k)
+                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv_val * we(imid, mr, k)
+                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv_val * we(imid, mi, k)
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
             end do
         end if
 
     case (2) ! ityp=1: no symmetries, cr=ci=0 (curl-free)
         ! m=0
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, br_val_0, zv_val) &
+        !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, br, zv, ve, vo)
         do k = 1, nt
             do np1 = 2, ndo2, 2
                 br_val_0 = br(1, np1, k)
-                !$OMP SIMD REDUCTION(+:br_val_0)
+                !$OMP SIMD REDUCTION(+:br_val_0) PRIVATE(zv_val)
                 do i = 1, imid
-                    br_val_0 = br_val_0 + zv(np1, i) * ve(i, 1, k)
+                    zv_val = zv(np1, i)
+                    br_val_0 = br_val_0 + zv_val * ve(i, 1, k)
                 end do
                 br(1, np1, k) = br_val_0
             end do
             do np1 = 3, ndo1, 2
                 br_val_0 = br(1, np1, k)
-                !$OMP SIMD REDUCTION(+:br_val_0)
+                !$OMP SIMD REDUCTION(+:br_val_0) PRIVATE(zv_val)
                 do i = 1, imm1
-                    br_val_0 = br_val_0 + zv(np1, i) * vo(i, 1, k)
+                    zv_val = zv(np1, i)
+                    br_val_0 = br_val_0 + zv_val * vo(i, 1, k)
                 end do
                 br(1, np1, k) = br_val_0
             end do
         end do
+        !$OMP END PARALLEL DO
         ! m>0
         if (mmax >= 2) then
             do mp1 = 2, mmax
                 m = mp1 - 1
                 mb = m * (nlat - 1) - (m * (m - 1)) / 2
                 mp2 = mp1 + 1
+                mr = 2 * mp1 - 2
+                mi = mr + 1
                 if (mp1 <= ndo1) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, zv_val, zw_val) &
+                    !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, mb, mr, mi, br, bi, zv, zw, vo, we)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
+                            mn = np1 + mb
                             br_val_m = br(mp1, np1, k)
                             bi_val_m = bi(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m) PRIVATE(zv_val, zw_val)
                             do i = 1, imm1
-                                br_val_m = br_val_m + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
-                                bi_val_m = bi_val_m + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
+                                zv_val = zv(mn, i)
+                                zw_val = zw(mn, i)
+                                br_val_m = br_val_m + zv_val * vo(i, mr, k) + zw_val * we(i, mi, k)
+                                bi_val_m = bi_val_m + zv_val * vo(i, mi, k) - zw_val * we(i, mr, k)
                             end do
                             br(mp1, np1, k) = br_val_m
                             bi(mp1, np1, k) = bi_val_m
                             if (mlat /= 0) then
-                                br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid) * we(imid, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid) * we(imid, 2*mp1-2, k)
+                                zw_val = zw(mn, imid)
+                                br(mp1, np1, k) = br(mp1, np1, k) + zw_val * we(imid, mi, k)
+                                bi(mp1, np1, k) = bi(mp1, np1, k) - zw_val * we(imid, mr, k)
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
                 if (mp2 <= ndo2) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, br_val_m, bi_val_m, zv_val, zw_val) &
+                    !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, mb, mr, mi, br, bi, zv, zw, ve, wo)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
+                            mn = np1 + mb
                             br_val_m = br(mp1, np1, k)
                             bi_val_m = bi(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m)
+                            !$OMP SIMD REDUCTION(+:br_val_m, bi_val_m) PRIVATE(zv_val, zw_val)
                             do i = 1, imm1
-                                br_val_m = br_val_m + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
-                                bi_val_m = bi_val_m + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
+                                zv_val = zv(mn, i)
+                                zw_val = zw(mn, i)
+                                br_val_m = br_val_m + zv_val * ve(i, mr, k) + zw_val * wo(i, mi, k)
+                                bi_val_m = bi_val_m + zv_val * ve(i, mi, k) - zw_val * wo(i, mr, k)
                             end do
                             br(mp1, np1, k) = br_val_m
                             bi(mp1, np1, k) = bi_val_m
                             if (mlat /= 0) then
-                                br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
+                                zv_val = zv(mn, imid)
+                                br(mp1, np1, k) = br(mp1, np1, k) + zv_val * ve(imid, mr, k)
+                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv_val * ve(imid, mi, k)
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
             end do
         end if
 
     case (3) ! ityp=2: no symmetries, br=bi=0 (divergence-free)
         ! m=0
+        !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, cr_val_0, zv_val) &
+        !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, cr, zv, we, wo)
         do k = 1, nt
             do np1 = 2, ndo2, 2
                 cr_val_0 = cr(1, np1, k)
-                !$OMP SIMD REDUCTION(+:cr_val_0)
+                !$OMP SIMD REDUCTION(+:cr_val_0) PRIVATE(zv_val)
                 do i = 1, imid
-                    cr_val_0 = cr_val_0 - zv(np1, i) * we(i, 1, k)
+                    zv_val = zv(np1, i)
+                    cr_val_0 = cr_val_0 - zv_val * we(i, 1, k)
                 end do
                 cr(1, np1, k) = cr_val_0
             end do
             do np1 = 3, ndo1, 2
                 cr_val_0 = cr(1, np1, k)
-                !$OMP SIMD REDUCTION(+:cr_val_0)
+                !$OMP SIMD REDUCTION(+:cr_val_0) PRIVATE(zv_val)
                 do i = 1, imm1
-                    cr_val_0 = cr_val_0 - zv(np1, i) * wo(i, 1, k)
+                    zv_val = zv(np1, i)
+                    cr_val_0 = cr_val_0 - zv_val * wo(i, 1, k)
                 end do
                 cr(1, np1, k) = cr_val_0
             end do
         end do
+        !$OMP END PARALLEL DO
         ! m>0
         if (mmax >= 2) then
             do mp1 = 2, mmax
                 m = mp1 - 1
                 mb = m * (nlat - 1) - (m * (m - 1)) / 2
                 mp2 = mp1 + 1
+                mr = 2 * mp1 - 2
+                mi = mr + 1
                 if (mp1 <= ndo1) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, cr_val_m, ci_val_m, zv_val, zw_val) &
+                    !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, mb, mr, mi, cr, ci, zv, zw, ve, wo)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
+                            mn = np1 + mb
                             cr_val_m = cr(mp1, np1, k)
                             ci_val_m = ci(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:cr_val_m, ci_val_m)
+                            !$OMP SIMD REDUCTION(+:cr_val_m, ci_val_m) PRIVATE(zv_val, zw_val)
                             do i = 1, imm1
-                                cr_val_m = cr_val_m - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
-                                ci_val_m = ci_val_m - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
+                                zv_val = zv(mn, i)
+                                zw_val = zw(mn, i)
+                                cr_val_m = cr_val_m - zv_val * wo(i, mr, k) + zw_val * ve(i, mi, k)
+                                ci_val_m = ci_val_m - zv_val * wo(i, mi, k) - zw_val * ve(i, mr, k)
                             end do
                             cr(mp1, np1, k) = cr_val_m
                             ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
-                                cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
+                                zw_val = zw(mn, imid)
+                                cr(mp1, np1, k) = cr(mp1, np1, k) + zw_val * ve(imid, mi, k)
+                                ci(mp1, np1, k) = ci(mp1, np1, k) - zw_val * ve(imid, mr, k)
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
                 if (mp2 <= ndo2) then
+                    !$OMP PARALLEL DO DEFAULT(NONE) PRIVATE(k, np1, i, mn, cr_val_m, ci_val_m, zv_val, zw_val) &
+                    !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, mb, mr, mi, cr, ci, zv, zw, vo, we)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
+                            mn = np1 + mb
                             cr_val_m = cr(mp1, np1, k)
                             ci_val_m = ci(mp1, np1, k)
-                            !$OMP SIMD REDUCTION(+:cr_val_m, ci_val_m)
+                            !$OMP SIMD REDUCTION(+:cr_val_m, ci_val_m) PRIVATE(zv_val, zw_val)
                             do i = 1, imm1
-                                cr_val_m = cr_val_m - zv(np1 + mb, i) * we(i, 2*mp1-2, k) + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
-                                ci_val_m = ci_val_m - zv(np1 + mb, i) * we(i, 2*mp1-1, k) - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
+                                zv_val = zv(mn, i)
+                                zw_val = zw(mn, i)
+                                cr_val_m = cr_val_m - zv_val * we(i, mr, k) + zw_val * vo(i, mi, k)
+                                ci_val_m = ci_val_m - zv_val * we(i, mi, k) - zw_val * vo(i, mr, k)
                             end do
                             cr(mp1, np1, k) = cr_val_m
                             ci(mp1, np1, k) = ci_val_m
                             if (mlat /= 0) then
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, imid) * we(imid, 2*mp1-2, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, imid) * we(imid, 2*mp1-1, k)
+                                zv_val = zv(mn, imid)
+                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv_val * we(imid, mr, k)
+                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv_val * we(imid, mi, k)
                             end if
                         end do
                     end do
+                    !$OMP END PARALLEL DO
                 end if
             end do
         end if

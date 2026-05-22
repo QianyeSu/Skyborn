@@ -127,7 +127,7 @@ subroutine vhaec(nlat, nlon, ityp, nt, v, w, idvw, jdvw, br, bi, cr, ci, &
 
     ! Local variables
     integer :: imid, mmax, lzz1, labc, idv, lnl, ist
-    integer :: iw1, iw2, iw3, iw4, iw5, lwzvin, jw1, jw2
+    integer :: iw1, iw2, iw3, iw4, iw5, lwzvin, jw1, jw2, k
 
     ! Enhanced input validation with descriptive error codes
     ! Each check corresponds exactly to original validation logic
@@ -197,6 +197,32 @@ subroutine vhaec(nlat, nlon, ityp, nt, v, w, idvw, jdvw, br, bi, cr, ci, &
     call vhaec1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, ndab, &
                 br, bi, cr, ci, idv, work, work(iw1), work(iw2), work(iw3), &
                 work(iw4), work(iw5), wvhaec, wvhaec(jw1), wvhaec(jw2))
+
+    if (ierror == 0 .and. nt > 0) then
+        ! Clear coefficient slots that SPHEREPACK vector analysis never writes.
+        do k = 1, nt
+            if (mmax < mdab) then
+                if (ityp /= 2) then
+                    br(mmax + 1:mdab, 1:ndab, k) = 0.0
+                    bi(mmax + 1:mdab, 1:ndab, k) = 0.0
+                end if
+                if (ityp /= 1) then
+                    cr(mmax + 1:mdab, 1:ndab, k) = 0.0
+                    ci(mmax + 1:mdab, 1:ndab, k) = 0.0
+                end if
+            end if
+            if (mod(nlat, 2) /= 0) then
+                if (ityp /= 2) then
+                    br(1:mmax:2, nlat, k) = 0.0
+                    bi(1:mmax:2, nlat, k) = 0.0
+                end if
+                if (ityp /= 1) then
+                    cr(1:mmax:2, nlat, k) = 0.0
+                    ci(1:mmax:2, nlat, k) = 0.0
+                end if
+            end if
+        end do
+    end if
 
 end subroutine vhaec
 
@@ -416,30 +442,39 @@ subroutine vhaec1_case0(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
     integer, intent(out) :: iv, iw
 
     integer :: k, i, mp1, np1, m, mp2
+    real :: br_val_0, cr_val_0
+    real :: br_val_m, bi_val_m, cr_val_m, ci_val_m
+    real :: zv_val, zw_val
 
     ! Case m=0 (original lines 421-436)
     call zvin(0, nlat, nlon, 0, zv, iv, wzvin)
 
-    ! OpenMP optimization for m=0 even terms
-    !$omp parallel do private(i, np1) if (nt >= 2 .and. imid*ndo2 >= 64)
+    !$omp parallel do default(none) private(k, np1, i, br_val_0, cr_val_0, zv_val) &
+    !$omp& shared(nt, ndo1, ndo2, imid, imm1, br, cr, zv, iv, ve, we, vo, wo)
     do k = 1, nt
-        do i = 1, imid
-            do np1 = 2, ndo2, 2
-                br(1, np1, k) = br(1, np1, k) + zv(i, np1, iv) * ve(i, 1, k)
-                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * we(i, 1, k)
+        do np1 = 2, ndo2, 2
+            br_val_0 = br(1, np1, k)
+            cr_val_0 = cr(1, np1, k)
+            !$omp simd reduction(+:br_val_0, cr_val_0) private(zv_val)
+            do i = 1, imid
+                zv_val = zv(i, np1, iv)
+                br_val_0 = br_val_0 + zv_val * ve(i, 1, k)
+                cr_val_0 = cr_val_0 - zv_val * we(i, 1, k)
             end do
+            br(1, np1, k) = br_val_0
+            cr(1, np1, k) = cr_val_0
         end do
-    end do
-    !$omp end parallel do
-
-    ! OpenMP optimization for m=0 odd terms
-    !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*ndo1 >= 64)
-    do k = 1, nt
-        do i = 1, imm1
-            do np1 = 3, ndo1, 2
-                br(1, np1, k) = br(1, np1, k) + zv(i, np1, iv) * vo(i, 1, k)
-                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * wo(i, 1, k)
+        do np1 = 3, ndo1, 2
+            br_val_0 = br(1, np1, k)
+            cr_val_0 = cr(1, np1, k)
+            !$omp simd reduction(+:br_val_0, cr_val_0) private(zv_val)
+            do i = 1, imm1
+                zv_val = zv(i, np1, iv)
+                br_val_0 = br_val_0 + zv_val * vo(i, 1, k)
+                cr_val_0 = cr_val_0 - zv_val * wo(i, 1, k)
             end do
+            br(1, np1, k) = br_val_0
+            cr(1, np1, k) = cr_val_0
         end do
     end do
     !$omp end parallel do
@@ -455,70 +490,72 @@ subroutine vhaec1_case0(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
 
         ! Handle odd harmonic terms if mp1 <= ndo1
         if (mp1 <= ndo1) then
-            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo1-mp1+1) >= 64)
+            !$omp parallel do default(none) private(k, np1, i, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
+            !$omp& shared(nt, mp1, ndo1, imm1, imid, mlat, br, bi, cr, ci, zv, zw, iv, iw, vo, we, wo, ve)
             do k = 1, nt
-                do i = 1, imm1
-                    do np1 = mp1, ndo1, 2
-                        br(mp1, np1, k) = br(mp1, np1, k) + zv(i, np1, iv) * vo(i, 2*mp1-2, k) &
-                                                          + zw(i, np1, iw) * we(i, 2*mp1-1, k)
-                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(i, np1, iv) * vo(i, 2*mp1-1, k) &
-                                                          - zw(i, np1, iw) * we(i, 2*mp1-2, k)
-                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-2, k) &
-                                                          + zw(i, np1, iw) * ve(i, 2*mp1-1, k)
-                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-1, k) &
-                                                          - zw(i, np1, iw) * ve(i, 2*mp1-2, k)
+                do np1 = mp1, ndo1, 2
+                    br_val_m = br(mp1, np1, k)
+                    bi_val_m = bi(mp1, np1, k)
+                    cr_val_m = cr(mp1, np1, k)
+                    ci_val_m = ci(mp1, np1, k)
+                    !$omp simd reduction(+:br_val_m, bi_val_m, cr_val_m, ci_val_m) private(zv_val, zw_val)
+                    do i = 1, imm1
+                        zv_val = zv(i, np1, iv)
+                        zw_val = zw(i, np1, iw)
+                        br_val_m = br_val_m + zv_val * vo(i, 2*mp1-2, k) + zw_val * we(i, 2*mp1-1, k)
+                        bi_val_m = bi_val_m + zv_val * vo(i, 2*mp1-1, k) - zw_val * we(i, 2*mp1-2, k)
+                        cr_val_m = cr_val_m - zv_val * wo(i, 2*mp1-2, k) + zw_val * ve(i, 2*mp1-1, k)
+                        ci_val_m = ci_val_m - zv_val * wo(i, 2*mp1-1, k) - zw_val * ve(i, 2*mp1-2, k)
                     end do
+                    br(mp1, np1, k) = br_val_m
+                    bi(mp1, np1, k) = bi_val_m
+                    cr(mp1, np1, k) = cr_val_m
+                    ci(mp1, np1, k) = ci_val_m
+                    if (mlat /= 0) then
+                        zw_val = zw(imid, np1, iw)
+                        br(mp1, np1, k) = br(mp1, np1, k) + zw_val * we(imid, 2*mp1-1, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) - zw_val * we(imid, 2*mp1-2, k)
+                        cr(mp1, np1, k) = cr(mp1, np1, k) + zw_val * ve(imid, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zw_val * ve(imid, 2*mp1-2, k)
+                    end if
                 end do
             end do
             !$omp end parallel do
-
-            ! Handle equator point for odd nlat
-            if (mlat /= 0) then
-                !$omp parallel do private(np1) if (nt >= 2 .and. (ndo1-mp1+1) >= 16)
-                do k = 1, nt
-                    do np1 = mp1, ndo1, 2
-                        br(mp1, np1, k) = br(mp1, np1, k) + zw(imid, np1, iw) * we(imid, 2*mp1-1, k)
-                        bi(mp1, np1, k) = bi(mp1, np1, k) - zw(imid, np1, iw) * we(imid, 2*mp1-2, k)
-                        cr(mp1, np1, k) = cr(mp1, np1, k) + zw(imid, np1, iw) * ve(imid, 2*mp1-1, k)
-                        ci(mp1, np1, k) = ci(mp1, np1, k) - zw(imid, np1, iw) * ve(imid, 2*mp1-2, k)
-                    end do
-                end do
-                !$omp end parallel do
-            end if
         end if
 
         ! Handle even harmonic terms if mp2 <= ndo2
         if (mp2 <= ndo2) then
-            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo2-mp2+1) >= 64)
+            !$omp parallel do default(none) private(k, np1, i, br_val_m, bi_val_m, cr_val_m, ci_val_m, zv_val, zw_val) &
+            !$omp& shared(nt, mp1, mp2, ndo2, imm1, imid, mlat, br, bi, cr, ci, zv, zw, iv, iw, ve, wo, we, vo)
             do k = 1, nt
-                do i = 1, imm1
-                    do np1 = mp2, ndo2, 2
-                        br(mp1, np1, k) = br(mp1, np1, k) + zv(i, np1, iv) * ve(i, 2*mp1-2, k) &
-                                                          + zw(i, np1, iw) * wo(i, 2*mp1-1, k)
-                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(i, np1, iv) * ve(i, 2*mp1-1, k) &
-                                                          - zw(i, np1, iw) * wo(i, 2*mp1-2, k)
-                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * we(i, 2*mp1-2, k) &
-                                                          + zw(i, np1, iw) * vo(i, 2*mp1-1, k)
-                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * we(i, 2*mp1-1, k) &
-                                                          - zw(i, np1, iw) * vo(i, 2*mp1-2, k)
+                do np1 = mp2, ndo2, 2
+                    br_val_m = br(mp1, np1, k)
+                    bi_val_m = bi(mp1, np1, k)
+                    cr_val_m = cr(mp1, np1, k)
+                    ci_val_m = ci(mp1, np1, k)
+                    !$omp simd reduction(+:br_val_m, bi_val_m, cr_val_m, ci_val_m) private(zv_val, zw_val)
+                    do i = 1, imm1
+                        zv_val = zv(i, np1, iv)
+                        zw_val = zw(i, np1, iw)
+                        br_val_m = br_val_m + zv_val * ve(i, 2*mp1-2, k) + zw_val * wo(i, 2*mp1-1, k)
+                        bi_val_m = bi_val_m + zv_val * ve(i, 2*mp1-1, k) - zw_val * wo(i, 2*mp1-2, k)
+                        cr_val_m = cr_val_m - zv_val * we(i, 2*mp1-2, k) + zw_val * vo(i, 2*mp1-1, k)
+                        ci_val_m = ci_val_m - zv_val * we(i, 2*mp1-1, k) - zw_val * vo(i, 2*mp1-2, k)
                     end do
+                    br(mp1, np1, k) = br_val_m
+                    bi(mp1, np1, k) = bi_val_m
+                    cr(mp1, np1, k) = cr_val_m
+                    ci(mp1, np1, k) = ci_val_m
+                    if (mlat /= 0) then
+                        zv_val = zv(imid, np1, iv)
+                        br(mp1, np1, k) = br(mp1, np1, k) + zv_val * ve(imid, 2*mp1-2, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv_val * ve(imid, 2*mp1-1, k)
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv_val * we(imid, 2*mp1-2, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv_val * we(imid, 2*mp1-1, k)
+                    end if
                 end do
             end do
             !$omp end parallel do
-
-            ! Handle equator point for odd nlat
-            if (mlat /= 0) then
-                !$omp parallel do private(np1) if (nt >= 2 .and. (ndo2-mp2+1) >= 16)
-                do k = 1, nt
-                    do np1 = mp2, ndo2, 2
-                        br(mp1, np1, k) = br(mp1, np1, k) + zv(imid, np1, iv) * ve(imid, 2*mp1-2, k)
-                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(imid, np1, iv) * ve(imid, 2*mp1-1, k)
-                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(imid, np1, iv) * we(imid, 2*mp1-2, k)
-                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(imid, np1, iv) * we(imid, 2*mp1-1, k)
-                    end do
-                end do
-                !$omp end parallel do
-            end if
         end if
     end do
 
@@ -542,26 +579,32 @@ subroutine vhaec1_case1(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
     integer, intent(out) :: iv, iw
 
     integer :: k, i, mp1, np1, m, mp2
+    real :: br_val_0, br_val_m, bi_val_m
+    real :: zv_val, zw_val
 
     ! Case m=0
     call zvin(0, nlat, nlon, 0, zv, iv, wzvin)
 
-    !$omp parallel do private(i, np1) if (nt >= 2 .and. imid*ndo2 >= 64)
+    !$omp parallel do default(none) private(k, np1, i, br_val_0, zv_val) &
+    !$omp& shared(nt, ndo1, ndo2, imid, imm1, br, zv, iv, ve, vo)
     do k = 1, nt
-        do i = 1, imid
-            do np1 = 2, ndo2, 2
-                br(1, np1, k) = br(1, np1, k) + zv(i, np1, iv) * ve(i, 1, k)
+        do np1 = 2, ndo2, 2
+            br_val_0 = br(1, np1, k)
+            !$omp simd reduction(+:br_val_0) private(zv_val)
+            do i = 1, imid
+                zv_val = zv(i, np1, iv)
+                br_val_0 = br_val_0 + zv_val * ve(i, 1, k)
             end do
+            br(1, np1, k) = br_val_0
         end do
-    end do
-    !$omp end parallel do
-
-    !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*ndo1 >= 64)
-    do k = 1, nt
-        do i = 1, imm1
-            do np1 = 3, ndo1, 2
-                br(1, np1, k) = br(1, np1, k) + zv(i, np1, iv) * vo(i, 1, k)
+        do np1 = 3, ndo1, 2
+            br_val_0 = br(1, np1, k)
+            !$omp simd reduction(+:br_val_0) private(zv_val)
+            do i = 1, imm1
+                zv_val = zv(i, np1, iv)
+                br_val_0 = br_val_0 + zv_val * vo(i, 1, k)
             end do
+            br(1, np1, k) = br_val_0
         end do
     end do
     !$omp end parallel do
@@ -576,55 +619,55 @@ subroutine vhaec1_case1(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
         call zwin(0, nlat, nlon, m, zw, iw, wzwin)
 
         if (mp1 <= ndo1) then
-            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo1-mp1+1) >= 64)
+            !$omp parallel do default(none) private(k, np1, i, br_val_m, bi_val_m, zv_val, zw_val) &
+            !$omp& shared(nt, mp1, ndo1, imm1, imid, mlat, br, bi, zv, zw, iv, iw, vo, we)
             do k = 1, nt
-                do i = 1, imm1
-                    do np1 = mp1, ndo1, 2
-                        br(mp1, np1, k) = br(mp1, np1, k) + zv(i, np1, iv) * vo(i, 2*mp1-2, k) &
-                                                          + zw(i, np1, iw) * we(i, 2*mp1-1, k)
-                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(i, np1, iv) * vo(i, 2*mp1-1, k) &
-                                                          - zw(i, np1, iw) * we(i, 2*mp1-2, k)
+                do np1 = mp1, ndo1, 2
+                    br_val_m = br(mp1, np1, k)
+                    bi_val_m = bi(mp1, np1, k)
+                    !$omp simd reduction(+:br_val_m, bi_val_m) private(zv_val, zw_val)
+                    do i = 1, imm1
+                        zv_val = zv(i, np1, iv)
+                        zw_val = zw(i, np1, iw)
+                        br_val_m = br_val_m + zv_val * vo(i, 2*mp1-2, k) + zw_val * we(i, 2*mp1-1, k)
+                        bi_val_m = bi_val_m + zv_val * vo(i, 2*mp1-1, k) - zw_val * we(i, 2*mp1-2, k)
                     end do
+                    br(mp1, np1, k) = br_val_m
+                    bi(mp1, np1, k) = bi_val_m
+                    if (mlat /= 0) then
+                        zw_val = zw(imid, np1, iw)
+                        br(mp1, np1, k) = br(mp1, np1, k) + zw_val * we(imid, 2*mp1-1, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) - zw_val * we(imid, 2*mp1-2, k)
+                    end if
                 end do
             end do
             !$omp end parallel do
-
-            if (mlat /= 0) then
-                !$omp parallel do private(np1) if (nt >= 2)
-                do k = 1, nt
-                    do np1 = mp1, ndo1, 2
-                        br(mp1, np1, k) = br(mp1, np1, k) + zw(imid, np1, iw) * we(imid, 2*mp1-1, k)
-                        bi(mp1, np1, k) = bi(mp1, np1, k) - zw(imid, np1, iw) * we(imid, 2*mp1-2, k)
-                    end do
-                end do
-                !$omp end parallel do
-            end if
         end if
 
         if (mp2 <= ndo2) then
-            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo2-mp2+1) >= 64)
+            !$omp parallel do default(none) private(k, np1, i, br_val_m, bi_val_m, zv_val, zw_val) &
+            !$omp& shared(nt, mp1, mp2, ndo2, imm1, imid, mlat, br, bi, zv, zw, iv, iw, ve, wo)
             do k = 1, nt
-                do i = 1, imm1
-                    do np1 = mp2, ndo2, 2
-                        br(mp1, np1, k) = br(mp1, np1, k) + zv(i, np1, iv) * ve(i, 2*mp1-2, k) &
-                                                          + zw(i, np1, iw) * wo(i, 2*mp1-1, k)
-                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(i, np1, iv) * ve(i, 2*mp1-1, k) &
-                                                          - zw(i, np1, iw) * wo(i, 2*mp1-2, k)
+                do np1 = mp2, ndo2, 2
+                    br_val_m = br(mp1, np1, k)
+                    bi_val_m = bi(mp1, np1, k)
+                    !$omp simd reduction(+:br_val_m, bi_val_m) private(zv_val, zw_val)
+                    do i = 1, imm1
+                        zv_val = zv(i, np1, iv)
+                        zw_val = zw(i, np1, iw)
+                        br_val_m = br_val_m + zv_val * ve(i, 2*mp1-2, k) + zw_val * wo(i, 2*mp1-1, k)
+                        bi_val_m = bi_val_m + zv_val * ve(i, 2*mp1-1, k) - zw_val * wo(i, 2*mp1-2, k)
                     end do
+                    br(mp1, np1, k) = br_val_m
+                    bi(mp1, np1, k) = bi_val_m
+                    if (mlat /= 0) then
+                        zv_val = zv(imid, np1, iv)
+                        br(mp1, np1, k) = br(mp1, np1, k) + zv_val * ve(imid, 2*mp1-2, k)
+                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv_val * ve(imid, 2*mp1-1, k)
+                    end if
                 end do
             end do
             !$omp end parallel do
-
-            if (mlat /= 0) then
-                !$omp parallel do private(np1) if (nt >= 2)
-                do k = 1, nt
-                    do np1 = mp2, ndo2, 2
-                        br(mp1, np1, k) = br(mp1, np1, k) + zv(imid, np1, iv) * ve(imid, 2*mp1-2, k)
-                        bi(mp1, np1, k) = bi(mp1, np1, k) + zv(imid, np1, iv) * ve(imid, 2*mp1-1, k)
-                    end do
-                end do
-                !$omp end parallel do
-            end if
         end if
     end do
 
@@ -651,28 +694,33 @@ subroutine vhaec1_case2(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
     integer, intent(out) :: iv, iw
 
     integer :: k, i, mp1, np1, m, mp2
+    real :: cr_val_0, cr_val_m, ci_val_m
+    real :: zv_val, zw_val
 
     ! Case m=0 - only compute curl coefficients
     call zvin(0, nlat, nlon, 0, zv, iv, wzvin)
 
     ! m=0 even terms for curl
-    !$omp parallel do private(i, np1) if (nt >= 2 .and. imid*ndo2 >= 64)
+    !$omp parallel do default(none) private(k, np1, i, cr_val_0, zv_val) &
+    !$omp& shared(nt, ndo1, ndo2, imid, imm1, cr, zv, iv, we, wo)
     do k = 1, nt
-        do i = 1, imid
-            do np1 = 2, ndo2, 2
-                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * we(i, 1, k)
+        do np1 = 2, ndo2, 2
+            cr_val_0 = cr(1, np1, k)
+            !$omp simd reduction(+:cr_val_0) private(zv_val)
+            do i = 1, imid
+                zv_val = zv(i, np1, iv)
+                cr_val_0 = cr_val_0 - zv_val * we(i, 1, k)
             end do
+            cr(1, np1, k) = cr_val_0
         end do
-    end do
-    !$omp end parallel do
-
-    ! m=0 odd terms for curl
-    !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*ndo1 >= 64)
-    do k = 1, nt
-        do i = 1, imm1
-            do np1 = 3, ndo1, 2
-                cr(1, np1, k) = cr(1, np1, k) - zv(i, np1, iv) * wo(i, 1, k)
+        do np1 = 3, ndo1, 2
+            cr_val_0 = cr(1, np1, k)
+            !$omp simd reduction(+:cr_val_0) private(zv_val)
+            do i = 1, imm1
+                zv_val = zv(i, np1, iv)
+                cr_val_0 = cr_val_0 - zv_val * wo(i, 1, k)
             end do
+            cr(1, np1, k) = cr_val_0
         end do
     end do
     !$omp end parallel do
@@ -688,58 +736,56 @@ subroutine vhaec1_case2(nlat, nlon, nt, imid, imm1, mmax, ndo1, ndo2, mlat, &
 
         ! Odd harmonic terms
         if (mp1 <= ndo1) then
-            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo1-mp1+1) >= 64)
+            !$omp parallel do default(none) private(k, np1, i, cr_val_m, ci_val_m, zv_val, zw_val) &
+            !$omp& shared(nt, mp1, ndo1, imm1, imid, mlat, cr, ci, zv, zw, iv, iw, wo, ve)
             do k = 1, nt
-                do i = 1, imm1
-                    do np1 = mp1, ndo1, 2
-                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-2, k) &
-                                                          + zw(i, np1, iw) * ve(i, 2*mp1-1, k)
-                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * wo(i, 2*mp1-1, k) &
-                                                          - zw(i, np1, iw) * ve(i, 2*mp1-2, k)
+                do np1 = mp1, ndo1, 2
+                    cr_val_m = cr(mp1, np1, k)
+                    ci_val_m = ci(mp1, np1, k)
+                    !$omp simd reduction(+:cr_val_m, ci_val_m) private(zv_val, zw_val)
+                    do i = 1, imm1
+                        zv_val = zv(i, np1, iv)
+                        zw_val = zw(i, np1, iw)
+                        cr_val_m = cr_val_m - zv_val * wo(i, 2*mp1-2, k) + zw_val * ve(i, 2*mp1-1, k)
+                        ci_val_m = ci_val_m - zv_val * wo(i, 2*mp1-1, k) - zw_val * ve(i, 2*mp1-2, k)
                     end do
+                    cr(mp1, np1, k) = cr_val_m
+                    ci(mp1, np1, k) = ci_val_m
+                    if (mlat /= 0) then
+                        zw_val = zw(imid, np1, iw)
+                        cr(mp1, np1, k) = cr(mp1, np1, k) + zw_val * ve(imid, 2*mp1-1, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zw_val * ve(imid, 2*mp1-2, k)
+                    end if
                 end do
             end do
             !$omp end parallel do
-
-            ! Equator point for odd nlat
-            if (mlat /= 0) then
-                !$omp parallel do private(np1) if (nt >= 2)
-                do k = 1, nt
-                    do np1 = mp1, ndo1, 2
-                        cr(mp1, np1, k) = cr(mp1, np1, k) + zw(imid, np1, iw) * ve(imid, 2*mp1-1, k)
-                        ci(mp1, np1, k) = ci(mp1, np1, k) - zw(imid, np1, iw) * ve(imid, 2*mp1-2, k)
-                    end do
-                end do
-                !$omp end parallel do
-            end if
         end if
 
         ! Even harmonic terms
         if (mp2 <= ndo2) then
-            !$omp parallel do private(i, np1) if (nt >= 2 .and. imm1*(ndo2-mp2+1) >= 64)
+            !$omp parallel do default(none) private(k, np1, i, cr_val_m, ci_val_m, zv_val, zw_val) &
+            !$omp& shared(nt, mp1, mp2, ndo2, imm1, imid, mlat, cr, ci, zv, zw, iv, iw, we, vo)
             do k = 1, nt
-                do i = 1, imm1
-                    do np1 = mp2, ndo2, 2
-                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(i, np1, iv) * we(i, 2*mp1-2, k) &
-                                                          + zw(i, np1, iw) * vo(i, 2*mp1-1, k)
-                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(i, np1, iv) * we(i, 2*mp1-1, k) &
-                                                          - zw(i, np1, iw) * vo(i, 2*mp1-2, k)
+                do np1 = mp2, ndo2, 2
+                    cr_val_m = cr(mp1, np1, k)
+                    ci_val_m = ci(mp1, np1, k)
+                    !$omp simd reduction(+:cr_val_m, ci_val_m) private(zv_val, zw_val)
+                    do i = 1, imm1
+                        zv_val = zv(i, np1, iv)
+                        zw_val = zw(i, np1, iw)
+                        cr_val_m = cr_val_m - zv_val * we(i, 2*mp1-2, k) + zw_val * vo(i, 2*mp1-1, k)
+                        ci_val_m = ci_val_m - zv_val * we(i, 2*mp1-1, k) - zw_val * vo(i, 2*mp1-2, k)
                     end do
+                    cr(mp1, np1, k) = cr_val_m
+                    ci(mp1, np1, k) = ci_val_m
+                    if (mlat /= 0) then
+                        zv_val = zv(imid, np1, iv)
+                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv_val * we(imid, 2*mp1-2, k)
+                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv_val * we(imid, 2*mp1-1, k)
+                    end if
                 end do
             end do
             !$omp end parallel do
-
-            ! Equator point for odd nlat
-            if (mlat /= 0) then
-                !$omp parallel do private(np1) if (nt >= 2)
-                do k = 1, nt
-                    do np1 = mp2, ndo2, 2
-                        cr(mp1, np1, k) = cr(mp1, np1, k) - zv(imid, np1, iv) * we(imid, 2*mp1-2, k)
-                        ci(mp1, np1, k) = ci(mp1, np1, k) - zv(imid, np1, iv) * we(imid, 2*mp1-1, k)
-                    end do
-                end do
-                !$omp end parallel do
-            end if
         end if
     end do
 
