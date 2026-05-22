@@ -1795,7 +1795,10 @@ subroutine ddelta_pressure_hybrid_pa(psfc, dph, hbcofa, hbcofb, p0, ncol, nlev, 
     real(real64), intent(in) :: psfc(ncol), hbcofa(nlev), hbcofb(nlev), p0
     real(real64), intent(out) :: dph(nlevo, ncol)
     integer :: col, k
+    logical :: use_heavy_omp
     real(real64) :: delta_a(nlevo), delta_b(nlevo)
+
+    use_heavy_omp = (ncol >= 300000)
 
     do k = 1, nlevo
         delta_a(k) = hbcofa(k) - hbcofa(k + 1)
@@ -1803,7 +1806,7 @@ subroutine ddelta_pressure_hybrid_pa(psfc, dph, hbcofa, hbcofb, p0, ncol, nlev, 
     end do
 
     !$omp parallel do default(none) private(col, k) shared(ncol, nlevo, dph, psfc, delta_a, delta_b, p0) &
-    !$omp& if (ncol >= 1024) schedule(static)
+    !$omp& if (use_heavy_omp) schedule(static)
     do col = 1, ncol
         do k = 1, nlevo
             dph(k, col) = abs(p0 * delta_a(k) + delta_b(k) * psfc(col))
@@ -1892,10 +1895,13 @@ subroutine dgeopotential_height_hybrid_corder_pa_into( &
     real(real64), intent(in) :: p0
 
     integer :: base_in, base_out, col_idx, inner, outer
+    logical :: use_heavy_omp
+
+    use_heavy_omp = (nouter * ninner >= 300000)
 
     !$omp parallel do collapse(2) default(none) private(outer, inner, base_in, base_out, col_idx) &
     !$omp& shared(nouter, ninner, nlev, temp_flat, q_flat, z3_flat, psfc, phis, hyai, hybi, p0) &
-    !$omp& if (nouter * ninner >= 1024) schedule(static)
+    !$omp& if (use_heavy_omp) schedule(static)
     do outer = 0, nouter - 1
         do inner = 1, ninner
             base_in = outer * nlev * ninner
