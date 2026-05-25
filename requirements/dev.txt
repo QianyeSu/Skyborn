@@ -3,5 +3,5 @@ pytest-cov>=4.0.0
 black>=22.0.0
 flake8>=5.0.4
 mypy>=1.19.1
-jupyterlab>=3.0.0
+jupyterlab>=3.6.8
 pymannkendall>=1.4.3
