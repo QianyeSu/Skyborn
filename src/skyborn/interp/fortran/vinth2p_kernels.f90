@@ -12,7 +12,6 @@
 !
 module vinth2p_kernels_core
     use, intrinsic :: iso_fortran_env, only : real64
-    use omp_lib, only : omp_get_max_threads
     implicit none
     private
 
@@ -1794,25 +1793,8 @@ subroutine ddelta_pressure_hybrid_pa(psfc, dph, hbcofa, hbcofb, p0, ncol, nlev, 
     integer, intent(in) :: ncol, nlev, nlevo
     real(real64), intent(in) :: psfc(ncol), hbcofa(nlev), hbcofb(nlev), p0
     real(real64), intent(out) :: dph(nlevo, ncol)
-    integer :: col, k
-    logical :: use_heavy_omp
-    real(real64) :: delta_a(nlevo), delta_b(nlevo)
 
-    use_heavy_omp = (ncol >= 300000)
-
-    do k = 1, nlevo
-        delta_a(k) = hbcofa(k) - hbcofa(k + 1)
-        delta_b(k) = hbcofb(k) - hbcofb(k + 1)
-    end do
-
-    !$omp parallel do default(none) private(col, k) shared(ncol, nlevo, dph, psfc, delta_a, delta_b, p0) &
-    !$omp& if (use_heavy_omp) schedule(static)
-    do col = 1, ncol
-        do k = 1, nlevo
-            dph(k, col) = abs(p0 * delta_a(k) + delta_b(k) * psfc(col))
-        end do
-    end do
-    !$omp end parallel do
+    call compute_delta_pressure_columns(psfc, hbcofa, hbcofb, p0, dph)
 end subroutine ddelta_pressure_hybrid_pa
 
 
@@ -1895,17 +1877,11 @@ subroutine dgeopotential_height_hybrid_corder_pa_into( &
     real(real64), intent(in) :: p0
 
     integer :: base_in, base_out, col_idx, inner, outer
-    logical :: use_heavy_omp
 
-    use_heavy_omp = (nouter * ninner >= 300000)
-
-    !$omp parallel do collapse(2) default(none) private(outer, inner, base_in, base_out, col_idx) &
-    !$omp& shared(nouter, ninner, nlev, temp_flat, q_flat, z3_flat, psfc, phis, hyai, hybi, p0) &
-    !$omp& if (use_heavy_omp) schedule(static)
     do outer = 0, nouter - 1
+        base_in = outer * nlev * ninner
+        base_out = outer * nlev * ninner
         do inner = 1, ninner
-            base_in = outer * nlev * ninner
-            base_out = outer * nlev * ninner
             col_idx = outer * ninner + inner
             call compute_geopotential_height_flat_column( &
                 temp_flat, q_flat, z3_flat, psfc(col_idx), phis(col_idx), hyai, hybi, p0, &
@@ -1913,7 +1889,6 @@ subroutine dgeopotential_height_hybrid_corder_pa_into( &
             )
         end do
     end do
-    !$omp end parallel do
 end subroutine dgeopotential_height_hybrid_corder_pa_into
 
 
