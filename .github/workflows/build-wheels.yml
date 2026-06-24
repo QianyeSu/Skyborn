@@ -191,7 +191,7 @@ jobs:
       - name: Build wheels (Windows)
         if: matrix.buildplat[1] == 'win_amd64'
         # uses: pypa/cibuildwheel@v2.21.3
-        uses: pypa/cibuildwheel@8d2b08b68458a16aeb24b64e68a09ab1c8e82084 # v3.4.1
+        uses: pypa/cibuildwheel@f03ac7617d6cff873ccf24cc0d567ef5ba5a9e6d # v4.0.0
         with:
           output-dir: wheelhouse
         env:
@@ -205,7 +205,7 @@ jobs:
 
       - name: Build wheels (macOS x86_64)
         if: matrix.buildplat[1] == 'macosx_x86_64'
-        uses: pypa/cibuildwheel@v3.4.1
+        uses: pypa/cibuildwheel@v4.0.0
         with:
           output-dir: wheelhouse
         env:
@@ -219,7 +219,7 @@ jobs:
 
       - name: Build wheels (macOS arm64)
         if: matrix.buildplat[1] == 'macosx_arm64'
-        uses: pypa/cibuildwheel@v3.4.1
+        uses: pypa/cibuildwheel@v4.0.0
         with:
           output-dir: wheelhouse
         env:
@@ -234,7 +234,7 @@ jobs:
       - name: Build wheels (Linux x86_64)
         if: matrix.buildplat[1] == 'manylinux_x86_64'
         # uses: pypa/cibuildwheel@v2.21.3
-        uses: pypa/cibuildwheel@8d2b08b68458a16aeb24b64e68a09ab1c8e82084 # v3.4.1
+        uses: pypa/cibuildwheel@f03ac7617d6cff873ccf24cc0d567ef5ba5a9e6d # v4.0.0
         with:
           output-dir: wheelhouse
         env:
@@ -249,7 +249,7 @@ jobs:
 
       - name: Build wheels (Linux manylinux2014 x86_64)
         if: matrix.buildplat[1] == 'manylinux2014_x86_64'
-        uses: pypa/cibuildwheel@8d2b08b68458a16aeb24b64e68a09ab1c8e82084 # v3.4.1
+        uses: pypa/cibuildwheel@f03ac7617d6cff873ccf24cc0d567ef5ba5a9e6d # v4.0.0
         with:
           output-dir: wheelhouse
         env:
@@ -267,7 +267,7 @@ jobs:
       # Build wheels (Linux aarch64) - Temporarily disabled due to Python version availability
       # - name: Build wheels (Linux aarch64)
       #   if: matrix.buildplat[1] == 'manylinux_aarch64'
-      #   uses: pypa/cibuildwheel@8d2b08b68458a16aeb24b64e68a09ab1c8e82084 # v3.4.1
+      #   uses: pypa/cibuildwheel@f03ac7617d6cff873ccf24cc0d567ef5ba5a9e6d # v4.0.0
       #   with:
       #     output-dir: wheelhouse
       #   env:
