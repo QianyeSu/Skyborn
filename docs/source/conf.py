@@ -38,7 +38,7 @@ except (ImportError, AttributeError) as e:
             content = f.read()
             match = re.search(
                 r'__version__\s*=\s*[\'"]([^\'"]+)[\'"]', content)
-            release = match.group(1) if match else '0.4.1'
+            release = match.group(1) if match else '0.4.2'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
