@@ -367,7 +367,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: always() && steps.run_tests_with_coverage.outcome != 'skipped'
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml
           flags: unittests
