@@ -96,11 +96,7 @@ jobs:
           echo "MACOS_F77=${F_BIN}" >> "$GITHUB_ENV"
           echo "MACOS_F90=${F_BIN}" >> "$GITHUB_ENV"
 
-          if [[ "${{ matrix.buildplat[1] }}" == "macosx_x86_64" ]]; then
-            echo "MACOSX_DEPLOYMENT_TARGET=15.0" >> "$GITHUB_ENV"
-          else
-            echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "$GITHUB_ENV"
-          fi
+          echo "MACOSX_DEPLOYMENT_TARGET=15.0" >> "$GITHUB_ENV"
 
       # Setup for Linux (install gfortran in container)
       - name: Setup Linux environment
