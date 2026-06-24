@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..nclcurly_native import (
+from ..nclcurly_core import (
     compute_display_cell_valid as _compute_display_cell_valid_native,
 )
-from ..nclcurly_native import sample_display_grid as _sample_display_grid_native
+from ..nclcurly_core import sample_display_grid as _sample_display_grid_native
 
 
 def _map_ncl_display_points_to_viewport(display_points, viewport):

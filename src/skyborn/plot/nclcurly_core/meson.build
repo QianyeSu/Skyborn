@@ -1,5 +1,5 @@
 project(
-    'skyborn-plot-nclcurly-native',
+    'skyborn-plot-nclcurly-core',
     'c',
     version: '1.0.0',
     default_options: ['warning_level=2', 'buildtype=release', 'b_lto=true'],
@@ -15,7 +15,7 @@ endif
 
 py.install_sources(
     ['__init__.py'],
-    subdir: 'skyborn/plot/nclcurly_native',
+    subdir: 'skyborn/plot/nclcurly_core',
 )
 
 incdir_numpy_cmd = run_command(
@@ -121,7 +121,7 @@ nclcurly_ext = py.extension_module(
     dependencies: [py_dep],
     c_args: c_args,
     install: true,
-    install_dir: get_option('python.purelibdir') / 'skyborn' / 'plot' / 'nclcurly_native',
+    install_dir: get_option('python.purelibdir') / 'skyborn' / 'plot' / 'nclcurly_core',
     build_by_default: true,
 )
 
@@ -157,7 +157,7 @@ for built_file_str in sorted(set(built_files)):
         shutil.copy2(str(built_file), str(target))
 
 with open("''' + '@OUTPUT@' + '''", "w", encoding="utf-8") as marker:
-    marker.write("nclcurly native inplace copy completed\\n")
+    marker.write("nclcurly core inplace copy completed\\n")
 ''',
     ],
     build_by_default: true,

@@ -35,7 +35,7 @@ jobs:
           - [ubuntu-latest, manylinux2014_x86_64] # manylinux2014 (glibc 2.17) for older servers
           # - [ubuntu-22.04, manylinux_aarch64]  # ARM64 Linux support - disabled due to Python version availability
           - [macos-15-intel, macosx_x86_64] # macOS Intel
-          - [macos-14, macosx_arm64] # macOS Apple Silicon
+          - [macos-15, macosx_arm64] # macOS Apple Silicon
           - [windows-2022, win_amd64]
         python: ["cp39", "cp310", "cp311", "cp312", "cp313", "cp314"]
         # exclude:
@@ -402,7 +402,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-14, macos-15-intel]
+        os: [ubuntu-latest, windows-latest, macos-15, macos-15-intel]
         python: ["cp39", "cp310", "cp311", "cp312", "cp313", "cp314"]
     steps:
       - name: Map abi tag to python version
@@ -447,7 +447,7 @@ jobs:
             # Install only minimal deps required for importing skyborn.
             pip install numpy xarray matplotlib scipy dask statsmodels tqdm metpy scikit-learn
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            if [[ "${{ matrix.os }}" == "macos-14" ]]; then
+            if [[ "${{ matrix.os }}" == "macos-15" ]]; then
               WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-macosx*_arm64.whl | head -n 1)
             elif [[ "${{ matrix.os }}" == "macos-15-intel" ]]; then
               WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl | head -n 1)

@@ -1,4 +1,4 @@
-"""Native C helpers for Skyborn NCL-like curly-vector tracing.
+"""Compiled C helpers for Skyborn NCL-like curly-vector tracing.
 
 Author: Qianye Su <suqianye2000@gmail.com>
 Copyright (c) 2025-2026 Qianye Su

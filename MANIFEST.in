@@ -22,7 +22,8 @@ prune src/skyborn/calc/GPI/build
 prune src/skyborn/calc/growth_rate/build
 prune src/skyborn/calc/geostrophic/build
 prune src/skyborn/calc/troposphere/build
-prune src/skyborn/plot/nclcurly_native/build
+prune src/skyborn/plot/nclcurly_core/build
+prune src/skyborn/plot/contour_core/build
 prune src/skyborn/*/build_*
 prune src/skyborn/*/*/build_*
 prune src/skyborn/*/*/*/build_*

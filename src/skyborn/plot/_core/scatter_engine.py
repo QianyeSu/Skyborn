@@ -16,10 +16,8 @@ from .._core.thinning import (
 )
 from .._shared import coords as _coord_helpers
 from .._shared.style import _resolve_scatter_aliases
-from ..nclcurly_native import (
-    generate_cell_candidates as _generate_cell_candidates_native,
-)
-from ..nclcurly_native import thin_display_candidates as _thin_display_candidates
+from ..nclcurly_core import generate_cell_candidates as _generate_cell_candidates_native
+from ..nclcurly_core import thin_display_candidates as _thin_display_candidates
 
 
 def _resolve_spacing_fraction(

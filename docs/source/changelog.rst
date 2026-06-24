@@ -1,7 +1,63 @@
 Changelog
 =========
 
-Version 0.4.1 (Current)
+Version 0.4.2 (Current)
+------------------------
+
+**New Features**
+
+* **Gradient Fill Between Curves**: Added
+  ``skyborn.plot.gradient_fill_between`` for smoothly filling the area between
+  two line series with a relative, curve-following gradient. The helper
+  supports datetime axes, NaN-separated segments, automatic display-resolution
+  sampling, and removable Matplotlib artists, making it suitable for
+  OHC/SST-style climate time-series figures.
+* **Directional Contour Lines**: Added ``skyborn.plot.arrow_contour`` for
+  Matplotlib-style contour lines with integrated ``->`` arrowheads on the
+  contour geometry itself. Positive and negative closed contours can use
+  opposite circulation directions, with support for reversed positive-flow
+  convention and display-coordinate orientation for inverted pressure axes or
+  map projections.
+* **Shadowed Filled Contours**: Added ``skyborn.plot.shadow_contourf`` for
+  filled-contour plots with layered, path-effect, or overlay shadows. The
+  helper keeps ordinary ``contourf`` usage while adding publication-style depth
+  cues for meteorological shading fields.
+
+**Improvements**
+
+* **Spherical Harmonic OpenMP Acceleration**: Added OpenMP parallelization and
+  heavy-workload guards across key scalar and vector spherical-harmonic
+  synthesis / analysis kernels, including ``shags1`` and the ``vha*`` / ``vhs*``
+  routine families, to reduce runtime on larger grids while keeping small-grid
+  overhead controlled.
+* **Vector Harmonic Initialization Robustness**: Improved ``vhagc`` and
+  ``vhags`` workspace initialization with explicit coefficient clearing and
+  parallelized setup loops to avoid stale workspace values in repeated
+  Gaussian-grid workflows.
+* **Precision Handling Modernization**: Updated spharm and windspharm paths to
+  use ``precision="auto"`` semantics where appropriate, improving dtype
+  consistency between spherical-harmonic transforms and higher-level vector
+  wind diagnostics.
+
+**Build and Packaging**
+
+* **Wheel Build Workflow Updates**: Refreshed the multi-platform wheel build
+  workflow and added a PyPI publish check so release validation catches
+  packaging issues earlier.
+* **Dependency Refresh**: Updated the documented / optional dependency set for
+  ``skyborn-cdo``, ``sphinx-copybutton``, and ``jupyterlab``.
+
+**Bug Fixes**
+
+* **Interpolation Build Stability**: Reverted the experimental OpenMP changes
+  in ``vinth2p_kernels`` and its Meson configuration after validation showed
+  the interpolation backend should stay on the conservative non-OpenMP path for
+  this release.
+* **Regression Coverage**: Added focused tests for high-resolution regular-grid
+  scalar initialization, vector-wind precision handling, and the new plotting
+  helpers for gradient fills, arrowed contours, and shadowed filled contours.
+
+Version 0.4.1
 ------------------------
 
 **Bug Fixes**
@@ -282,7 +338,7 @@ Version 0.3.16
 * **CI/CD Infrastructure Updates**:
 
   - **Removed macOS Intel Support**: Dropped deprecated macos-13 (Intel) builds following GitHub's architecture policy changes
-  - **Apple Silicon Focus**: Now exclusively building for macos-14 (Apple Silicon) for better performance and compatibility
+  - **Apple Silicon Focus**: Now exclusively building on macos-15 (Apple Silicon) for better performance and compatibility
   - **Simplified Deployment**: Streamlined macOS build configuration by removing conditional logic
 
 * **Academic Metadata Enhancement**:

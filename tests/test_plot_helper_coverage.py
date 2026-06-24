@@ -118,7 +118,7 @@ from skyborn.plot._shared.style import (
     _resolve_curly_style_aliases,
     _resolve_scatter_aliases,
 )
-from skyborn.plot.nclcurly_native import (
+from skyborn.plot.nclcurly_core import (
     build_filled_arrow_polygons,
     build_open_arrow_segments,
 )

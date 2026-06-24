@@ -134,22 +134,20 @@ _extract_regular_grid_from_regridded_vectors = (
 )
 _regrid_cartopy_vectors = _cartopy_adapter._regrid_cartopy_vectors
 
-from .nclcurly_native import (
+from .nclcurly_core import (
     build_filled_arrow_polygons as _build_filled_arrow_polygons_native,
 )
-from .nclcurly_native import (
+from .nclcurly_core import (
     build_open_arrow_segments as _build_open_arrow_segments_native,
 )
-from .nclcurly_native import sample_grid_field as _sample_grid_field_native
-from .nclcurly_native import sample_grid_field_array as _sample_grid_field_array_native
-from .nclcurly_native import (
+from .nclcurly_core import sample_grid_field as _sample_grid_field_native
+from .nclcurly_core import sample_grid_field_array as _sample_grid_field_array_native
+from .nclcurly_core import (
     thin_display_candidates as _thin_ncl_display_candidates_native,
 )
-from .nclcurly_native import (
-    thin_mapped_candidates as _thin_ncl_mapped_candidates_native,
-)
-from .nclcurly_native import trace_ncl_direction as _trace_ncl_direction_native
-from .nclcurly_native import validate_display_curve as _validate_display_curve_native
+from .nclcurly_core import thin_mapped_candidates as _thin_ncl_mapped_candidates_native
+from .nclcurly_core import trace_ncl_direction as _trace_ncl_direction_native
+from .nclcurly_core import validate_display_curve as _validate_display_curve_native
 
 
 def _normalize_ncl_preset(ncl_preset):

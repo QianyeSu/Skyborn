@@ -5,12 +5,13 @@ This module tests the plotting functionality in skyborn.plot.plotting,
 including matplotlib integration and image comparison tests.
 """
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from matplotlib.image import AxesImage
+from matplotlib.patches import PathPatch
 
-from skyborn.plot.plotting import add_equal_axes, createFigure
+from skyborn.plot.plotting import add_equal_axes, createFigure, gradient_fill_between
 
 
 class TestCreateFigure:
@@ -159,7 +160,7 @@ class TestAddEqualAxes:
         Z = np.exp(-(X**2 + Y**2))
 
         # Main contour plot
-        cs = ax.contourf(X, Y, Z, levels=20, cmap="viridis")
+        ax.contourf(X, Y, Z, levels=20, cmap="viridis")
         ax.set_xlabel("X coordinate")
         ax.set_ylabel("Y coordinate")
         ax.set_title("2D Gaussian")
@@ -210,7 +211,7 @@ class TestAddEqualAxes:
         # Central heatmap
         np.random.seed(123)
         data = np.random.randn(20, 20)
-        im = ax.imshow(data, cmap="RdBu_r", aspect="equal")
+        ax.imshow(data, cmap="RdBu_r", aspect="equal")
         ax.set_title("Central Heatmap")
         ax.set_xlabel("X index")
         ax.set_ylabel("Y index")
@@ -273,6 +274,122 @@ class TestAddEqualAxes:
         # Check that axes were created successfully
         assert ax_new1 is not None
         assert ax_new2 is not None
+
+        plt.close(fig)
+
+
+class TestGradientFillBetween:
+    """Test smooth gradient filling between curves."""
+
+    def test_gradient_fill_between_basic(self):
+        fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+        x = np.linspace(0, 10, 20)
+        y1 = 1 + 0.2 * np.sin(x)
+        y2 = 4 + 0.3 * np.cos(x)
+
+        result = gradient_fill_between(
+            ax,
+            x,
+            y1,
+            y2,
+            cmap="YlOrBr",
+            resolution=(32, 24),
+            zorder=2,
+        )
+
+        assert len(result.images) == 1
+        assert len(result.clip_paths) == 1
+        assert isinstance(result.images[0], AxesImage)
+        assert isinstance(result.clip_paths[0], PathPatch)
+        assert result.images[0].get_zorder() == 2
+        assert result.images[0].get_array().shape == (24, 32)
+
+        plt.close(fig)
+
+    def test_gradient_fill_between_is_relative_to_curves(self):
+        fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+        x = np.array([0.0, 1.0, 2.0])
+        y1 = np.array([0.0, 10.0, 20.0])
+        y2 = y1 + 10.0
+
+        result = gradient_fill_between(
+            ax,
+            x,
+            y1,
+            y2,
+            resolution=(3, 31),
+            interpolation="nearest",
+        )
+        values = np.asarray(result.images[0].get_array())
+
+        assert values[5, 0] == pytest.approx(0.5)
+        assert values[15, 1] == pytest.approx(0.5)
+        assert values[25, 2] == pytest.approx(0.5)
+
+        plt.close(fig)
+
+    def test_gradient_fill_between_datetime_x(self):
+        fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+        x = np.array(["2000-01-01", "2001-01-01", "2002-01-01"], dtype="datetime64[D]")
+        y1 = np.array([0.0, 1.0, 0.0])
+        y2 = np.array([2.0, 3.0, 2.0])
+
+        result = gradient_fill_between(ax, x, y1, y2, resolution=16)
+
+        xmin, xmax, ymin, ymax = result.images[0].get_extent()
+        assert xmax > xmin
+        assert ymin == pytest.approx(0.0)
+        assert ymax == pytest.approx(3.0)
+
+        plt.close(fig)
+
+    def test_gradient_fill_between_splits_nan_runs(self):
+        fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+        x = np.arange(6.0)
+        y1 = np.array([0.0, 0.2, np.nan, 0.5, 0.6, 0.8])
+        y2 = y1 + 2.0
+
+        result = gradient_fill_between(ax, x, y1, y2, resolution=12)
+
+        assert len(result.images) == 2
+        assert len(result.clip_paths) == 2
+
+        plt.close(fig)
+
+    def test_gradient_fill_between_auto_resolution(self):
+        fig, ax = plt.subplots(figsize=(2, 1.5), dpi=80)
+        x = np.linspace(0, 1, 5)
+        result = gradient_fill_between(ax, x, x, x + 1)
+
+        ny, nx = result.images[0].get_array().shape
+        assert nx >= 128
+        assert ny >= 128
+
+        plt.close(fig)
+
+    def test_gradient_fill_between_remove(self):
+        fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+        x = np.linspace(0, 1, 5)
+        result = gradient_fill_between(ax, x, x, x + 1, resolution=8)
+
+        result.remove()
+
+        assert result.images[0] not in ax.images
+        assert result.clip_paths[0] not in ax.patches
+
+        plt.close(fig)
+
+    def test_gradient_fill_between_validation(self):
+        fig, ax = plt.subplots()
+
+        with pytest.raises(ValueError, match="x and y1"):
+            gradient_fill_between(ax, [0, 1], [0, 1, 2])
+        with pytest.raises(ValueError, match="edge_mode"):
+            gradient_fill_between(ax, [0, 1], [0, 1], [1, 2], edge_mode="bad")
+        with pytest.raises(ValueError, match="at least two finite"):
+            gradient_fill_between(ax, [0, 1], [np.nan, 1], [1, 2])
+        with pytest.raises(ValueError, match="resolution"):
+            gradient_fill_between(ax, [0, 1], [0, 1], [1, 2], resolution=1)
 
         plt.close(fig)
 

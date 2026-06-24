@@ -9,7 +9,7 @@ import xarray as xr
 from matplotlib.collections import PathCollection
 
 from skyborn.plot import scatter as public_scatter
-from skyborn.plot.nclcurly_native import thin_display_candidates, thin_mapped_candidates
+from skyborn.plot.nclcurly_core import thin_display_candidates, thin_mapped_candidates
 from skyborn.plot.scatter import _array_scatter as array_scatter
 
 
