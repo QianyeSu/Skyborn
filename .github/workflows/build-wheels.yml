@@ -338,6 +338,9 @@ jobs:
           find dist-artifacts -name "*.tar.gz" -exec cp {} dist/ \;
           (cd dist && sha256sum * > SHA256SUMS.txt)
           ls -la dist/
+          mkdir -p pypi-dist
+          find dist -maxdepth 1 \( -name "skyborn-*.whl" -o -name "skyborn-*.tar.gz" \) -exec cp {} pypi-dist/ \;
+          ls -la pypi-dist/
 
       - name: Upload distributions to GitHub release
         uses: softprops/action-gh-release@v3
@@ -399,6 +402,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: pypi-dist
 
   # Test installation (multi-platform, multi-Python)
   test_install:
