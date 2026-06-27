@@ -7,11 +7,13 @@ Tippett (2025, J. Climate).
 The module provides:
 
 - Vertical wind shear (VWS) between 200 and 850 hPa
+- Air-sea entropy disequilibrium (from PI diagnostics)
 - Entropy deficit (Chi) at 600 hPa
 - Ventilation index (VI = VWS * Chi / PI)
 - Ventilated potential intensity (vPI) via analytic cubic solution
 - Clipped 850-hPa absolute vorticity (eta_c)
 - Ventilated genesis potential index (GPIv)
+- High-level pipeline ``ventilation_components`` combining all steps
 
 References
 ----------
@@ -30,8 +32,10 @@ Astrophys. J., 898, 115.
 from .ventilation import (
     VI_MAX,
     absolute_vorticity_850,
+    air_sea_disequilibrium,
     entropy_deficit,
     genesis_potential_index,
+    ventilation_components,
     ventilated_pi,
     ventilation_index,
     vertical_wind_shear,
@@ -42,8 +46,10 @@ __version__ = "1.0.0"
 __all__ = [
     "VI_MAX",
     "absolute_vorticity_850",
+    "air_sea_disequilibrium",
     "entropy_deficit",
     "genesis_potential_index",
+    "ventilation_components",
     "ventilated_pi",
     "ventilation_index",
     "vertical_wind_shear",

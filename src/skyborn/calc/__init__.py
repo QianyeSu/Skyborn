@@ -77,10 +77,18 @@ _OBJECT_EXPORTS = {
         "skyborn.calc.ventilation",
         "absolute_vorticity_850",
     ),
+    "air_sea_disequilibrium": (
+        "skyborn.calc.ventilation",
+        "air_sea_disequilibrium",
+    ),
     "entropy_deficit": ("skyborn.calc.ventilation", "entropy_deficit"),
     "genesis_potential_index": (
         "skyborn.calc.ventilation",
         "genesis_potential_index",
+    ),
+    "ventilation_components": (
+        "skyborn.calc.ventilation",
+        "ventilation_components",
     ),
     "ventilated_pi": ("skyborn.calc.ventilation", "ventilated_pi"),
     "ventilation_index": ("skyborn.calc.ventilation", "ventilation_index"),

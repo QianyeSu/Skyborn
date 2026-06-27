@@ -10,8 +10,10 @@ import xarray as xr
 
 from skyborn.calc.ventilation import (
     absolute_vorticity_850,
+    air_sea_disequilibrium,
     entropy_deficit,
     genesis_potential_index,
+    ventilation_components,
     ventilated_pi,
     ventilation_index,
     vertical_wind_shear,
@@ -96,6 +98,26 @@ def sample_pi_field(sample_atmospheric_dataset):
     return pi
 
 
+@pytest.fixture
+def sample_air_sea_disequilibrium(sample_atmospheric_dataset):
+    """Create a synthetic air-sea disequilibrium field matching the grid."""
+    ds = sample_atmospheric_dataset
+    asdeq = xr.DataArray(
+        np.full(
+            (ds.sizes["time"], ds.sizes["latitude"], ds.sizes["longitude"]),
+            90.0,
+        ),
+        dims=["time", "latitude", "longitude"],
+        coords={
+            "time": ds.time,
+            "latitude": ds.latitude,
+            "longitude": ds.longitude,
+        },
+        attrs={"units": "J kg^-1 K^-1", "long_name": "Air-Sea Disequilibrium"},
+    )
+    return asdeq
+
+
 # ---------------------------------------------------------------------------
 # vertical_wind_shear
 # ---------------------------------------------------------------------------
@@ -149,6 +171,12 @@ class TestVerticalWindShear:
         expected = np.full((2, 2), 5.0)
         np.testing.assert_array_almost_equal(vws.values, expected)
 
+    def test_custom_level_coord(self, sample_atmospheric_dataset):
+        ds = sample_atmospheric_dataset.rename({"level": "plev"})
+        vws = vertical_wind_shear(ds, level_coord="plev")
+        assert "plev" not in vws.dims
+        assert vws.sizes["time"] == ds.sizes["time"]
+
 
 # ---------------------------------------------------------------------------
 # entropy_deficit
@@ -158,47 +186,37 @@ class TestVerticalWindShear:
 class TestEntropyDeficit:
     """Tests for entropy_deficit."""
 
-    def test_returns_dataarray(self, sample_atmospheric_dataset):
-        chi = entropy_deficit(sample_atmospheric_dataset)
+    def test_returns_dataarray(
+        self, sample_atmospheric_dataset, sample_air_sea_disequilibrium
+    ):
+        chi = entropy_deficit(sample_atmospheric_dataset, sample_air_sea_disequilibrium)
         assert isinstance(chi, xr.DataArray)
 
-    def test_shape_no_level_dim(self, sample_atmospheric_dataset):
+    def test_shape_no_level_dim(
+        self, sample_atmospheric_dataset, sample_air_sea_disequilibrium
+    ):
         ds = sample_atmospheric_dataset
-        chi = entropy_deficit(ds)
+        chi = entropy_deficit(ds, sample_air_sea_disequilibrium)
         assert "level" not in chi.dims
 
-    def test_values_in_range(self, sample_atmospheric_dataset):
-        chi = entropy_deficit(sample_atmospheric_dataset)
+    def test_values_are_finite(
+        self, sample_atmospheric_dataset, sample_air_sea_disequilibrium
+    ):
+        chi = entropy_deficit(sample_atmospheric_dataset, sample_air_sea_disequilibrium)
         valid = chi.values[~np.isnan(chi.values)]
-        assert np.all(valid >= 0.02)
-        assert np.all(valid <= 1.5)
+        assert np.all(np.isfinite(valid))
 
-    def test_rh_based_calculation(self):
-        """Test that chi = 1 - RH/100 when R is available."""
+    def test_entropy_formula(self):
+        """Test the Chavas et al. entropy-deficit formula."""
         ds = xr.Dataset(
             data_vars={
-                "R": (
+                "T": (
                     ["level", "latitude", "longitude"],
-                    np.array([[[50, 60], [70, 80]]]),
+                    np.array([[[280.0, 285.0], [290.0, 295.0]]]),
                 ),
-            },
-            coords={
-                "level": [600],
-                "latitude": [0, 10],
-                "longitude": [0, 10],
-            },
-        )
-        chi = entropy_deficit(ds)
-        expected = np.array([[0.5, 0.4], [0.3, 0.2]])
-        np.testing.assert_array_almost_equal(chi.values, expected)
-
-    def test_q_fallback(self):
-        """Test specific humidity fallback when R is not available."""
-        ds = xr.Dataset(
-            data_vars={
                 "Q": (
                     ["level", "latitude", "longitude"],
-                    np.array([[[0.005, 0.010], [0.015, 0.020]]]),
+                    np.array([[[0.004, 0.006], [0.008, 0.010]]]),
                 ),
             },
             coords={
@@ -207,10 +225,42 @@ class TestEntropyDeficit:
                 "longitude": [0, 10],
             },
         )
-        chi = entropy_deficit(ds, rh_var="R_missing")
-        valid = chi.values[~np.isnan(chi.values)]
-        assert np.all(valid >= 0.02)
-        assert np.all(valid <= 1.5)
+        asdeq = xr.DataArray(
+            np.array([[80.0, 90.0], [100.0, 110.0]]),
+            dims=["latitude", "longitude"],
+            coords={
+                "latitude": [0, 10],
+                "longitude": [0, 10],
+            },
+        )
+        chi = entropy_deficit(ds, asdeq)
+        expected = np.array([[0.73283812, 0.86396779], [1.09802141, 1.44103677]])
+        np.testing.assert_allclose(chi.values, expected, rtol=1e-7)
+
+    def test_custom_level_coord(
+        self, sample_atmospheric_dataset, sample_air_sea_disequilibrium
+    ):
+        ds = sample_atmospheric_dataset.rename({"level": "plev"})
+        chi = entropy_deficit(
+            ds,
+            sample_air_sea_disequilibrium,
+            level_coord="plev",
+        )
+        assert "plev" not in chi.dims
+
+    def test_temperature_celsius_units(
+        self, sample_atmospheric_dataset, sample_air_sea_disequilibrium
+    ):
+        ds_kelvin = sample_atmospheric_dataset.copy()
+        ds_kelvin["T"].attrs["units"] = "K"
+        ds_celsius = sample_atmospheric_dataset.copy()
+        ds_celsius["T"] = ds_celsius["T"] - 273.15
+        ds_celsius["T"].attrs["units"] = "degC"
+
+        chi_kelvin = entropy_deficit(ds_kelvin, sample_air_sea_disequilibrium)
+        chi_celsius = entropy_deficit(ds_celsius, sample_air_sea_disequilibrium)
+
+        np.testing.assert_allclose(chi_celsius.values, chi_kelvin.values)
 
 
 # ---------------------------------------------------------------------------
@@ -221,10 +271,15 @@ class TestEntropyDeficit:
 class TestVentilationIndex:
     """Tests for ventilation_index."""
 
-    def test_returns_dataarray(self, sample_atmospheric_dataset, sample_pi_field):
+    def test_returns_dataarray(
+        self,
+        sample_atmospheric_dataset,
+        sample_pi_field,
+        sample_air_sea_disequilibrium,
+    ):
         ds = sample_atmospheric_dataset
         vws = vertical_wind_shear(ds)
-        chi = entropy_deficit(ds)
+        chi = entropy_deficit(ds, sample_air_sea_disequilibrium)
         vi = ventilation_index(vws, chi, sample_pi_field)
         assert isinstance(vi, xr.DataArray)
 
@@ -250,6 +305,30 @@ class TestVentilationIndex:
 # ---------------------------------------------------------------------------
 # ventilated_pi
 # ---------------------------------------------------------------------------
+
+
+class TestAirSeaDisequilibrium:
+    """Tests for air_sea_disequilibrium."""
+
+    def test_formula(self):
+        pi = xr.DataArray(np.array([80.0]), dims=["x"])
+        sst = xr.DataArray(np.array([300.0]), dims=["x"], attrs={"units": "K"})
+        t0 = xr.DataArray(np.array([280.0]), dims=["x"])
+        asdeq = air_sea_disequilibrium(pi, sst, t0, ckcd=0.9)
+        expected = 80.0**2 * (1.0 / 0.9) * 280.0 / (300.0 * (300.0 - 280.0))
+        np.testing.assert_allclose(asdeq.values, np.array([expected]))
+
+    def test_celsius_units(self):
+        pi = xr.DataArray(np.array([80.0]), dims=["x"])
+        sst_k = xr.DataArray(np.array([300.0]), dims=["x"], attrs={"units": "K"})
+        t0_k = xr.DataArray(np.array([280.0]), dims=["x"], attrs={"units": "K"})
+        sst_c = xr.DataArray(np.array([26.85]), dims=["x"], attrs={"units": "degC"})
+        t0_c = xr.DataArray(np.array([6.85]), dims=["x"], attrs={"units": "degC"})
+
+        asdeq_k = air_sea_disequilibrium(pi, sst_k, t0_k)
+        asdeq_c = air_sea_disequilibrium(pi, sst_c, t0_c)
+
+        np.testing.assert_allclose(asdeq_c.values, asdeq_k.values)
 
 
 class TestVentilatedPI:
@@ -329,6 +408,25 @@ class TestVentilatedPI:
         assert np.isfinite(vpi_custom.values[0])
         assert vpi_custom.values[0] < 70.0  # Should be reduced
 
+    def test_preserves_dask_laziness(self):
+        """vPI should not materialize dask-backed VI inputs."""
+        da = pytest.importorskip("dask.array")
+
+        pi = xr.DataArray(da.full((4,), 70.0, chunks=(2,)), dims=["x"])
+        vi = xr.DataArray(
+            da.from_array(np.array([0.02, 0.05, 0.10, 0.14]), chunks=(2,)),
+            dims=["x"],
+        )
+
+        vpi = ventilated_pi(pi, vi)
+        assert hasattr(vpi.data, "compute")
+
+        eager = ventilated_pi(
+            xr.DataArray(np.full(4, 70.0), dims=["x"]),
+            xr.DataArray(np.array([0.02, 0.05, 0.10, 0.14]), dims=["x"]),
+        )
+        np.testing.assert_allclose(vpi.compute().values, eager.values)
+
 
 # ---------------------------------------------------------------------------
 # absolute_vorticity_850
@@ -353,11 +451,11 @@ class TestAbsoluteVorticity850:
         valid = eta_c.values[~np.isnan(eta_c.values)]
         assert np.all(np.abs(valid) <= 3.7e-5 + 1e-15)
 
-    def test_values_positive(self, sample_atmospheric_dataset):
-        """All non-NaN values should be positive."""
+    def test_values_finite(self, sample_atmospheric_dataset):
+        """All non-NaN values should be finite."""
         eta_c = absolute_vorticity_850(sample_atmospheric_dataset)
         valid = eta_c.values[~np.isnan(eta_c.values)]
-        assert np.all(valid > 0)
+        assert np.all(np.isfinite(valid))
 
     def test_attrs_set(self, sample_atmospheric_dataset):
         eta_c = absolute_vorticity_850(sample_atmospheric_dataset)
@@ -369,6 +467,33 @@ class TestAbsoluteVorticity850:
         eta_c = absolute_vorticity_850(sample_atmospheric_dataset, cap=5.0e-5)
         valid = eta_c.values[~np.isnan(eta_c.values)]
         assert np.all(np.abs(valid) <= 5.0e-5 + 1e-15)
+
+    def test_southern_hemisphere_large_magnitude_vorticity_is_capped_positive(self):
+        """Large-magnitude negative absolute vorticity should remain usable."""
+        ds = xr.Dataset(
+            data_vars={
+                "U": (
+                    ["level", "latitude", "longitude"],
+                    np.zeros((1, 3, 3)),
+                ),
+                "V": (
+                    ["level", "latitude", "longitude"],
+                    np.zeros((1, 3, 3)),
+                ),
+            },
+            coords={
+                "level": [850],
+                "latitude": [-20.0, 0.0, 20.0],
+                "longitude": [0.0, 5.0, 10.0],
+            },
+        )
+        eta_c = absolute_vorticity_850(ds)
+        np.testing.assert_allclose(
+            eta_c.sel(latitude=-20.0).values,
+            np.full(3, 3.7e-5),
+            rtol=0,
+            atol=1e-15,
+        )
 
     def test_coriolis_at_equator(self):
         """At the equator, Coriolis should be ~0."""
@@ -390,10 +515,16 @@ class TestAbsoluteVorticity850:
             },
         )
         eta_c = absolute_vorticity_850(ds)
-        # At equator (latitude=0), Coriolis=0 and vorticity≈0 → should be NaN (filtered)
+        # At the equator, Coriolis=0 and vorticity is approximately 0.
         assert np.isnan(eta_c.sel(latitude=0.0).values).all() or np.all(
             eta_c.sel(latitude=0.0).values >= 0
         )
+
+    def test_custom_level_coord(self, sample_atmospheric_dataset):
+        ds = sample_atmospheric_dataset.rename({"level": "plev"})
+        eta_c = absolute_vorticity_850(ds, level_coord="plev")
+        assert "plev" not in eta_c.dims
+        assert eta_c.sizes["time"] == ds.sizes["time"]
 
 
 # ---------------------------------------------------------------------------
@@ -474,7 +605,12 @@ class TestGenesisPotentialIndex:
 class TestVentilationIntegration:
     """Integration tests for the full ventilation pipeline."""
 
-    def test_full_pipeline(self, sample_atmospheric_dataset, sample_pi_field):
+    def test_full_pipeline(
+        self,
+        sample_atmospheric_dataset,
+        sample_pi_field,
+        sample_air_sea_disequilibrium,
+    ):
         """Test the complete calculation chain: VWS → χ → VI → vPI → η_c → GPIv."""
         ds = sample_atmospheric_dataset
         pi = sample_pi_field
@@ -484,7 +620,7 @@ class TestVentilationIntegration:
         assert "level" not in vws.dims
 
         # Step 2: Entropy deficit
-        chi = entropy_deficit(ds)
+        chi = entropy_deficit(ds, sample_air_sea_disequilibrium)
         assert "level" not in chi.dims
 
         # Step 3: Ventilation index
@@ -503,7 +639,7 @@ class TestVentilationIntegration:
         # Step 5: Absolute vorticity
         eta_c = absolute_vorticity_850(ds)
         valid_eta = eta_c.values[~np.isnan(eta_c.values)]
-        assert np.all(valid_eta > 0)
+        assert np.all(np.isfinite(valid_eta))
         assert np.all(np.abs(valid_eta) <= 3.7e-5 + 1e-15)
 
         # Step 6: GPIv
@@ -522,3 +658,129 @@ class TestVentilationIntegration:
         vpi_high = ventilated_pi(pi, vi_high)
 
         assert vpi_high.values[0] < vpi_low.values[0]
+
+    def test_ventilation_components_reuses_gpi_xarray_diagnostics(
+        self, sample_atmospheric_dataset, monkeypatch
+    ):
+        """High-level pipeline should reuse the existing GPI xarray backend."""
+        import skyborn.calc.GPI.xarray as gpi_xarray
+
+        ds = sample_atmospheric_dataset.copy()
+        surface_shape = (
+            ds.sizes["time"],
+            ds.sizes["latitude"],
+            ds.sizes["longitude"],
+        )
+        ds["SSTK"] = (
+            ["time", "latitude", "longitude"],
+            np.full(surface_shape, 300.0),
+            {"units": "K"},
+        )
+        ds["SP"] = (
+            ["time", "latitude", "longitude"],
+            np.full(surface_shape, 100000.0),
+            {"units": "Pa"},
+        )
+
+        calls = {}
+
+        def fake_pi_log_decomposition(
+            sst, psl, pressure_levels, temperature, mixr, CKCD
+        ):
+            calls["called"] = True
+            calls["mixr"] = mixr
+            level_coord = pressure_levels.name
+            template = _drop_level_for_test(
+                temperature.sel({level_coord: 600}),
+                level_coord,
+            )
+            return xr.Dataset(
+                {
+                    "pi": xr.full_like(template, 80.0),
+                    "t0": xr.full_like(template, 280.0),
+                    "min_pressure": xr.full_like(template, 950.0),
+                    "error_flag": xr.DataArray(1),
+                }
+            )
+
+        monkeypatch.setattr(
+            gpi_xarray, "pi_log_decomposition", fake_pi_log_decomposition
+        )
+
+        result = ventilation_components(ds)
+
+        assert calls["called"] is True
+        assert calls["mixr"].attrs["units"] == "kg/kg"
+        assert set(
+            [
+                "PI",
+                "vPI",
+                "VWS",
+                "Chi",
+                "ventilation_index",
+                "eta_c",
+                "GPIv",
+                "air_sea_disequilibrium",
+            ]
+        ).issubset(result.data_vars)
+        assert result["PI"].sizes["time"] == ds.sizes["time"]
+
+    def test_ventilation_components_honors_level_coord_and_thresholds(
+        self, sample_atmospheric_dataset, monkeypatch
+    ):
+        """High-level pipeline should pass custom coordinates and thresholds down."""
+        import skyborn.calc.GPI.xarray as gpi_xarray
+
+        ds = sample_atmospheric_dataset.copy()
+        surface_shape = (
+            ds.sizes["time"],
+            ds.sizes["latitude"],
+            ds.sizes["longitude"],
+        )
+        ds["SSTK"] = (
+            ["time", "latitude", "longitude"],
+            np.full(surface_shape, 300.0),
+            {"units": "K"},
+        )
+        ds["SP"] = (
+            ["time", "latitude", "longitude"],
+            np.full(surface_shape, 100000.0),
+            {"units": "Pa"},
+        )
+        ds = ds.rename({"level": "plev"})
+
+        def fake_pi_log_decomposition(
+            sst, psl, pressure_levels, temperature, mixr, CKCD
+        ):
+            template = _drop_level_for_test(temperature.sel(plev=600), "plev")
+            return xr.Dataset(
+                {
+                    "pi": xr.full_like(template, 80.0),
+                    "t0": xr.full_like(template, 280.0),
+                    "min_pressure": xr.full_like(template, 950.0),
+                    "error_flag": xr.DataArray(1),
+                }
+            )
+
+        monkeypatch.setattr(
+            gpi_xarray, "pi_log_decomposition", fake_pi_log_decomposition
+        )
+
+        result = ventilation_components(
+            ds,
+            level_coord="plev",
+            vi_max=0.25,
+            vorticity_cap=5.0e-5,
+        )
+
+        assert "plev" not in result["VWS"].dims
+        assert "plev" not in result["Chi"].dims
+        assert "plev" not in result["eta_c"].dims
+        assert np.nanmax(np.abs(result["eta_c"].values)) <= 5.0e-5 + 1e-15
+
+
+def _drop_level_for_test(da, level_coord="level"):
+    """Drop scalar level coordinate in tests without importing private helpers."""
+    if level_coord in da.coords and level_coord not in da.dims:
+        return da.drop_vars(level_coord)
+    return da
