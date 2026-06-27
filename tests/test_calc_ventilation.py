@@ -234,8 +234,8 @@ class TestEntropyDeficit:
             },
         )
         chi = entropy_deficit(ds, asdeq)
-        expected = np.array([[0.73283812, 0.86396779], [1.09802141, 1.44103677]])
-        np.testing.assert_allclose(chi.values, expected, rtol=1e-7)
+        expected = np.array([[0.732269, 0.863263], [1.096719, 1.438259]])
+        np.testing.assert_allclose(chi.values, expected, rtol=1e-5)
 
     def test_custom_level_coord(
         self, sample_atmospheric_dataset, sample_air_sea_disequilibrium

@@ -62,14 +62,18 @@ def _temperature_to_kelvin(da: xr.DataArray) -> xr.DataArray:
 
 def _mixing_ratio_from_specific_humidity(q: xr.DataArray) -> xr.DataArray:
     """Convert specific humidity [kg/kg] to water-vapor mixing ratio [kg/kg]."""
-    return q / (1.0 - q)
+    mpcalc = _get_metpy_calc()
+    w = mpcalc.mixing_ratio_from_specific_humidity(q)
+    if hasattr(w, "metpy"):
+        w = w.metpy.dequantify()
+    return w
 
 
 def _saturation_vapor_pressure(temperature: xr.DataArray) -> xr.DataArray:
     """Calculate saturation vapor pressure over liquid water [Pa]."""
-    return 611.2 * np.exp(
-        17.67 * (temperature - TRIPLE_POINT_TEMPERATURE) / (temperature - 29.65)
-    )
+    mpcalc = _get_metpy_calc()
+    t = _with_default_units(temperature, "K").metpy.quantify()
+    return mpcalc.saturation_vapor_pressure(t).metpy.dequantify()
 
 
 def _moist_entropy(
@@ -78,12 +82,14 @@ def _moist_entropy(
     mixing_ratio: xr.DataArray,
 ) -> xr.DataArray:
     """Calculate moist entropy [J kg^-1 K^-1]."""
-    vapor_density_factor = DRY_AIR_GAS_CONSTANT + (
-        mixing_ratio * WATER_VAPOR_GAS_CONSTANT
-    )
-    moist_air_density = pressure / (temperature * vapor_density_factor)
-    vapor_pressure = mixing_ratio * moist_air_density * WATER_VAPOR_GAS_CONSTANT
-    vapor_pressure = vapor_pressure * temperature
+    mpcalc = _get_metpy_calc()
+    from metpy.units import units
+
+    p = pressure * units.Pa
+    t = _with_default_units(temperature, "K").metpy.quantify()
+    w = _with_default_units(mixing_ratio, "kg/kg").metpy.quantify()
+
+    vapor_pressure = mpcalc.vapor_pressure(p, w).metpy.dequantify()
     saturation_pressure = _saturation_vapor_pressure(temperature)
     relative_humidity = (vapor_pressure / saturation_pressure).clip(min=1e-10)
     dry_air_pressure = pressure - vapor_pressure
@@ -101,14 +107,15 @@ def _saturation_entropy(
     temperature: xr.DataArray,
 ) -> xr.DataArray:
     """Calculate saturation moist entropy [J kg^-1 K^-1]."""
+    mpcalc = _get_metpy_calc()
+    from metpy.units import units
+
+    p = pressure * units.Pa
+    t = _with_default_units(temperature, "K").metpy.quantify()
+
     saturation_pressure = _saturation_vapor_pressure(temperature)
+    saturation_mixing_ratio = mpcalc.saturation_mixing_ratio(p, t).metpy.dequantify()
     dry_air_pressure = pressure - saturation_pressure
-    saturation_mixing_ratio = (
-        DRY_AIR_GAS_CONSTANT
-        / WATER_VAPOR_GAS_CONSTANT
-        * saturation_pressure
-        / dry_air_pressure
-    )
 
     return (
         DRY_AIR_CP * np.log(temperature / TRIPLE_POINT_TEMPERATURE)
