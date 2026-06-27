@@ -27,6 +27,7 @@ _SUBMODULE_EXPORTS = {
     "growth_rate",
     "mann_kendall",
     "troposphere",
+    "ventilation",
 }
 
 _OBJECT_EXPORTS = {
