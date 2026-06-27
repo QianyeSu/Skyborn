@@ -72,6 +72,19 @@ _OBJECT_EXPORTS = {
     "geostrophic_uv": ("skyborn.calc.geostrophic", "geostrophic_uv"),
     "geostrophic_wind": ("skyborn.calc.geostrophic", "geostrophic_wind"),
     "potential_intensity": ("skyborn.calc.GPI.core", "potential_intensity"),
+    # Tropical cyclone ventilation index (Chavas et al. 2025).
+    "absolute_vorticity_850": (
+        "skyborn.calc.ventilation",
+        "absolute_vorticity_850",
+    ),
+    "entropy_deficit": ("skyborn.calc.ventilation", "entropy_deficit"),
+    "genesis_potential_index": (
+        "skyborn.calc.ventilation",
+        "genesis_potential_index",
+    ),
+    "ventilated_pi": ("skyborn.calc.ventilation", "ventilated_pi"),
+    "ventilation_index": ("skyborn.calc.ventilation", "ventilation_index"),
+    "vertical_wind_shear": ("skyborn.calc.ventilation", "vertical_wind_shear"),
     "baroc_growth_rate": ("skyborn.calc.growth_rate", "baroc_growth_rate"),
     "barot_growth_rate": ("skyborn.calc.growth_rate", "barot_growth_rate"),
     "trop_wmo": ("skyborn.calc.troposphere", "trop_wmo"),

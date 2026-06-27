@@ -28,6 +28,7 @@ Astrophys. J., 898, 115.
 """
 
 from .ventilation import (
+    VI_MAX,
     absolute_vorticity_850,
     entropy_deficit,
     genesis_potential_index,
@@ -39,6 +40,7 @@ from .ventilation import (
 __version__ = "1.0.0"
 
 __all__ = [
+    "VI_MAX",
     "absolute_vorticity_850",
     "entropy_deficit",
     "genesis_potential_index",

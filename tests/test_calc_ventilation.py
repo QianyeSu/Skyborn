@@ -18,7 +18,6 @@ from skyborn.calc.ventilation import (
 )
 from skyborn.calc.ventilation.ventilation import VI_MAX
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -276,7 +275,9 @@ class TestVentilatedPI:
         vi = xr.DataArray(np.array([VI_MAX]), dims=["x"])
         vpi = ventilated_pi(pi, vi)
         expected_ratio = 1.0 / np.sqrt(3.0)
-        np.testing.assert_almost_equal(vpi.values[0], pi_val * expected_ratio, decimal=3)
+        np.testing.assert_almost_equal(
+            vpi.values[0], pi_val * expected_ratio, decimal=3
+        )
 
     def test_vi_above_vimax_is_nan(self):
         """VI > VI_MAX should produce NaN."""

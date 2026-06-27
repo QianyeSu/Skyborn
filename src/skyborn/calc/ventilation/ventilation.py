@@ -140,9 +140,11 @@ def ventilated_pi(
     Cardano formula, matching Eqs. (5)-(6) of Chavas et al. (2025) and
     the reference implementation in tcvpigpiv v0.3.x.
 
-    At VI = 0, vPI = PI (no reduction).
-    At VI = VI_max, vPI = PI / sqrt(3) ≈ 0.5774 * PI.
-    For VI > VI_max, vPI = 0 (genesis impossible).
+    Boundary behaviour:
+
+    - VI → 0⁺:  vPI → PI  (no reduction)
+    - VI = VI_max:  vPI = PI / √3 ≈ 0.5774 × PI
+    - VI ≤ 0 or VI > VI_max:  vPI = NaN  (genesis impossible)
 
     Parameters
     ----------
@@ -158,19 +160,25 @@ def ventilated_pi(
     xr.DataArray
         Ventilated potential intensity [m/s].
     """
-    vi_limited = vi.where(vi <= vi_max)
+    vi_vals = np.asarray(vi.values, dtype=float)
 
-    def _ratio(v):
-        if not np.isfinite(v) or v <= 0 or v > vi_max:
-            return np.nan
-        ratio = v / vi_max
-        term1 = (ratio**2 - 1.0) ** 0.5
-        term2 = (term1 - ratio) ** (1.0 / 3.0)
+    # Normalized ventilation ratio
+    r = vi_vals / vi_max
+
+    # Solve the cubic y³ - y + 2r/(3√3) = 0  for  y = vPI / PI
+    # using np.lib.scimath for type-safe complex intermediate values.
+    with np.errstate(invalid="ignore"):
+        term1 = np.lib.scimath.sqrt(r**2 - 1.0)
+        term2 = np.lib.scimath.power(term1 - r, 1.0 / 3.0)
         x = (1.0 / np.sqrt(3.0)) * term2
-        return float(np.real(x + 1.0 / (3.0 * x)))
+        ratio = np.real(x + 1.0 / (3.0 * x))
 
-    ratio = xr.apply_ufunc(_ratio, vi_limited, vectorize=True, output_dtypes=[float])
-    vpi = pi * ratio
+    # Mask invalid VI values
+    mask = np.isfinite(vi_vals) & (vi_vals > 0) & (vi_vals <= vi_max)
+    ratio = np.where(mask, ratio, np.nan)
+
+    ratio_da = xr.DataArray(ratio, coords=vi.coords, dims=vi.dims)
+    vpi = pi * ratio_da
     vpi = vpi.where(np.isfinite(vpi) & (vpi > 0))
     vpi.attrs = {"long_name": "Ventilated Potential Intensity", "units": "m/s"}
     return vpi
@@ -187,11 +195,15 @@ def absolute_vorticity_850(
     Following Chavas et al. (2025), Eq. (7):
 
     .. math::
-       \\eta_c = \\min(3.7 \\times 10^{-5}, |f + \\zeta_{850}|)
+       \\eta_c = \\begin{cases}
+         \\min(\\text{cap},\\, f + \\zeta_{850}) & \\text{if } f + \\zeta_{850} > 0 \\\\
+         \\text{NaN} & \\text{otherwise}
+       \\end{cases}
 
-    where f is the Coriolis parameter and zeta_850 is the 850-hPa
-    relative vorticity.  Values are clipped to ±cap and only positive
-    values are retained.
+    where *f* is the Coriolis parameter, ζ₈₅₀ is the 850-hPa relative
+    vorticity (approximate — the metric term *u tan(φ)/r* is omitted),
+    and cap = 3.7 × 10⁻⁵ s⁻¹.  Negative absolute vorticity values are
+    masked out (NaN), consistent with the reference implementation.
 
     Parameters
     ----------
