@@ -800,6 +800,33 @@ subroutine vhaes_c(v, w, nlat, nlon, nt, ityp, wvhaes, lvhaes, lwork, br, bi, cr
     deallocate(work)
 end subroutine vhaes_c
 
+subroutine vhaesdiv_c(v, w, nlat, nlon, nt, wvhaes, lvhaes, nbatch, lwork, br, bi, ierror) bind(C, name="vhaesdiv_c")
+    type(c_ptr), value, intent(in) :: v, w, wvhaes, br, bi
+    integer(c_int), value, intent(in) :: nlat, nlon, nt, lvhaes, nbatch, lwork
+    integer(c_int), intent(out) :: ierror
+
+    real(c_float), pointer :: v_view(:, :, :)
+    real(c_float), pointer :: w_view(:, :, :)
+    real(c_float), pointer :: br_view(:, :, :)
+    real(c_float), pointer :: bi_view(:, :, :)
+    real(c_float), pointer :: wvhaes_view(:)
+    real(c_float), allocatable :: work(:)
+    integer :: ierror_f
+
+    call c_f_pointer(v, v_view, [int(nlat), int(nlon), int(nt)])
+    call c_f_pointer(w, w_view, [int(nlat), int(nlon), int(nt)])
+    call c_f_pointer(br, br_view, [int(nlat), int(nlat), int(nt)])
+    call c_f_pointer(bi, bi_view, [int(nlat), int(nlat), int(nt)])
+    call c_f_pointer(wvhaes, wvhaes_view, [int(lvhaes)])
+    allocate(work(int(lwork)))
+    call vhaesdiv( &
+        int(nlat), int(nlon), int(nt), v_view, w_view, int(nlat), int(nlon), &
+        br_view, bi_view, int(nlat), int(nlat), wvhaes_view, int(lvhaes), &
+        int(nbatch), work, int(lwork), ierror_f)
+    ierror = int(ierror_f, kind=c_int)
+    deallocate(work)
+end subroutine vhaesdiv_c
+
 subroutine vhags_c(v, w, nlat, nlon, nt, ityp, wvhags, lvhags, lwork, br, bi, cr, ci, ierror) bind(C, name="vhags_c")
     type(c_ptr), value, intent(in) :: v, w, wvhags, br, bi, cr, ci
     integer(c_int), value, intent(in) :: nlat, nlon, nt, ityp, lvhags, lwork

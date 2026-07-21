@@ -309,6 +309,24 @@ class TestSpharmtVectorOperations:
         np.testing.assert_allclose(divspec, divspec_pair, rtol=0, atol=0)
 
     @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
+    @pytest.mark.parametrize("extra_shape", [(25,), (7, 7)])
+    def test_regular_stored_getdivspec_supports_more_than_one_workspace_block(
+        self, extra_shape
+    ):
+        """Divergence-only analysis should support arbitrary trailing field counts."""
+        sht = Spharmt(nlon=36, nlat=19, gridtype="regular", legfunc="stored")
+        rng = np.random.default_rng(20260721)
+        shape = (sht.nlat, sht.nlon) + extra_shape
+        u = rng.standard_normal(shape).astype(np.float32)
+        v = rng.standard_normal(shape).astype(np.float32)
+
+        _, expected = sht.getvrtdivspec(u, v)
+        actual = sht.getdivspec(u, v)
+
+        assert actual.shape == expected.shape
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=0)
+
+    @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")
     @pytest.mark.parametrize(("gridtype", "legfunc"), _VECTOR_BACKEND_CASES)
     def test_even_nlon_vector_tail_coefficients_are_zero(self, gridtype, legfunc):
         """Unsupported even-nlon vector tail slots should not leak undefined values."""

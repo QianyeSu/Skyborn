@@ -2,6 +2,7 @@
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
+#include <limits.h>
 #include <string.h>
 
 extern PyMethodDef reduced_module_methods[];
@@ -47,6 +48,7 @@ void vhagci_c(int nlat, int nlon, int lvhagc, int ldwork, void *wvhagc, int *ier
 void vhseci_c(int nlat, int nlon, int lvhsec, int ldwork, void *wvhsec, int *ierror);
 void vhsgci_c(int nlat, int nlon, int lvhsgc, int ldwork, void *wvhsgc, int *ierror);
 void vhaes_c(void *v, void *w, int nlat, int nlon, int nt, int ityp, void *wvhaes, int lvhaes, int lwork, void *br, void *bi, void *cr, void *ci, int *ierror);
+void vhaesdiv_c(void *v, void *w, int nlat, int nlon, int nt, void *wvhaes, int lvhaes, int nbatch, int lwork, void *br, void *bi, int *ierror);
 void vhags_c(void *v, void *w, int nlat, int nlon, int nt, int ityp, void *wvhags, int lvhags, int lwork, void *br, void *bi, void *cr, void *ci, int *ierror);
 void vhaec_c(void *v, void *w, int nlat, int nlon, int nt, int ityp, void *wvhaec, int lvhaec, int lwork, void *br, void *bi, void *cr, void *ci, int *ierror);
 void vhagc_c(void *v, void *w, int nlat, int nlon, int nt, int ityp, void *wvhagc, int lvhagc, int lwork, void *br, void *bi, void *cr, void *ci, int *ierror);
@@ -1071,7 +1073,7 @@ static PyObject *py_vhagc(PyObject *self, PyObject *args) {
     return py_vha_like(args, 0, vhagc_c);
 }
 
-static PyObject *py_vha_component_like(PyObject *args, int ityp, int needs_special_lwork,
+static PyObject *py_vha_component_like(PyObject *args, int ityp,
                                        void (*func)(void *, void *, int, int, int, int, void *, int, int, void *, void *, void *, void *, int *),
                                        int return_div) {
     PyObject *v_obj = NULL, *w_obj = NULL, *wvha_obj = NULL;
@@ -1083,11 +1085,7 @@ static PyObject *py_vha_component_like(PyObject *args, int ityp, int needs_speci
     npy_intp dims_full[3] = {1, 1, 1};
     npy_intp dims_dummy[3] = {1, 1, 1};
 
-    if (needs_special_lwork) {
-        if (!PyArg_ParseTuple(args, "OOO", &v_obj, &w_obj, &wvha_obj)) return NULL;
-    } else {
-        if (!PyArg_ParseTuple(args, "OOOi", &v_obj, &w_obj, &wvha_obj, &lwork)) return NULL;
-    }
+    if (!PyArg_ParseTuple(args, "OOOi", &v_obj, &w_obj, &wvha_obj, &lwork)) return NULL;
     if (as_real32_3d_fortran(v_obj, &v_arr, &nlat_v, &nlon_v, &nt_v) != 0) return NULL;
     if (as_real32_3d_fortran(w_obj, &w_arr, &nlat_w, &nlon_w, &nt_w) != 0) goto fail;
     if (nlat_v != nlat_w || nlon_v != nlon_w || nt_v != nt_w) {
@@ -1096,10 +1094,6 @@ static PyObject *py_vha_component_like(PyObject *args, int ityp, int needs_speci
     }
     wvha_arr = as_real32_1d_aligned(wvha_obj);
     if (wvha_arr == NULL) goto fail;
-    if (needs_special_lwork) {
-        const int nbatch = 24;
-        lwork = (2 * nbatch + 1) * nlat_v * nlon_v;
-    }
     dims_full[0] = nlat_v;
     dims_full[1] = nlat_v;
     dims_full[2] = nt_v;
@@ -1142,43 +1136,94 @@ fail:
 }
 
 static PyObject *py_vhaesdiv(PyObject *self, PyObject *args) {
+    PyObject *v_obj = NULL, *w_obj = NULL, *wvha_obj = NULL;
+    PyArrayObject *v_arr = NULL, *w_arr = NULL, *wvha_arr = NULL;
+    PyArrayObject *br_arr = NULL, *bi_arr = NULL;
+    int nlat_v, nlon_v, nt_v;
+    int nlat_w, nlon_w, nt_w;
+    const int nbatch = 24;
+    int lwork, ierror = 0;
+    long long lwork64;
+    npy_intp dims[3];
+
     (void)self;
-    return py_vha_component_like(args, 1, 1, vhaes_c, 1);
+    if (!PyArg_ParseTuple(args, "OOO", &v_obj, &w_obj, &wvha_obj)) return NULL;
+    if (as_real32_3d_fortran(v_obj, &v_arr, &nlat_v, &nlon_v, &nt_v) != 0) return NULL;
+    if (as_real32_3d_fortran(w_obj, &w_arr, &nlat_w, &nlon_w, &nt_w) != 0) goto fail;
+    if (nlat_v != nlat_w || nlon_v != nlon_w || nt_v != nt_w) {
+        PyErr_SetString(PyExc_ValueError, "v and w must have the same 3D shape");
+        goto fail;
+    }
+    wvha_arr = as_real32_1d_aligned(wvha_obj);
+    if (wvha_arr == NULL) goto fail;
+
+    lwork64 = (2LL * nbatch + 1LL) * nlat_v * nlon_v;
+    if (lwork64 > INT_MAX) {
+        PyErr_SetString(PyExc_OverflowError, "vhaesdiv workspace size exceeds C int range");
+        goto fail;
+    }
+    lwork = (int)lwork64;
+
+    dims[0] = nlat_v;
+    dims[1] = nlat_v;
+    dims[2] = nt_v;
+    br_arr = (PyArrayObject *)PyArray_EMPTY(3, dims, NPY_FLOAT32, 1);
+    bi_arr = (PyArrayObject *)PyArray_EMPTY(3, dims, NPY_FLOAT32, 1);
+    if (br_arr == NULL || bi_arr == NULL) goto fail;
+
+    vhaesdiv_c(
+        PyArray_DATA(v_arr), PyArray_DATA(w_arr), nlat_v, nlon_v, nt_v,
+        PyArray_DATA(wvha_arr), (int)PyArray_DIM(wvha_arr, 0), nbatch, lwork,
+        PyArray_DATA(br_arr), PyArray_DATA(bi_arr), &ierror
+    );
+
+    Py_DECREF(v_arr);
+    Py_DECREF(w_arr);
+    Py_DECREF(wvha_arr);
+    return Py_BuildValue("NNi", br_arr, bi_arr, ierror);
+
+fail:
+    Py_XDECREF(v_arr);
+    Py_XDECREF(w_arr);
+    Py_XDECREF(wvha_arr);
+    Py_XDECREF(br_arr);
+    Py_XDECREF(bi_arr);
+    return NULL;
 }
 
 static PyObject *py_vhaesvrt(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vha_component_like(args, 2, 0, vhaes_c, 0);
+    return py_vha_component_like(args, 2, vhaes_c, 0);
 }
 
 static PyObject *py_vhagsdiv(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vha_component_like(args, 1, 0, vhags_c, 1);
+    return py_vha_component_like(args, 1, vhags_c, 1);
 }
 
 static PyObject *py_vhagsvrt(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vha_component_like(args, 2, 0, vhags_c, 0);
+    return py_vha_component_like(args, 2, vhags_c, 0);
 }
 
 static PyObject *py_vhaecdiv(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vha_component_like(args, 1, 0, vhaec_c, 1);
+    return py_vha_component_like(args, 1, vhaec_c, 1);
 }
 
 static PyObject *py_vhaecvrt(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vha_component_like(args, 2, 0, vhaec_c, 0);
+    return py_vha_component_like(args, 2, vhaec_c, 0);
 }
 
 static PyObject *py_vhagcdiv(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vha_component_like(args, 1, 0, vhagc_c, 1);
+    return py_vha_component_like(args, 1, vhagc_c, 1);
 }
 
 static PyObject *py_vhagcvrt(PyObject *self, PyObject *args) {
     (void)self;
-    return py_vha_component_like(args, 2, 0, vhagc_c, 0);
+    return py_vha_component_like(args, 2, vhagc_c, 0);
 }
 
 static PyObject *py_vhs_like(PyObject *args, int default_ityp,

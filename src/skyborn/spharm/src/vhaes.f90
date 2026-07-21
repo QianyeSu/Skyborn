@@ -911,7 +911,7 @@ subroutine vhaesdiv(nlat, nlon, nt, v, w, idvw, jdvw, br, bi, mdab, ndab, &
     integer, intent(out) :: ierror
 
     integer :: imid, mmax, idz, lzimn, block_nt, active_lnl
-    integer :: jw1, jw2, iw1, iw2, iw3, iw4, kstart, kstop, nblk
+    integer :: jw1, jw2, iw1, iw2, iw3, iw4, kstart, kstop, nblk, k
     real :: dummy_cr(1, 1, max(1, min(nt, max(1, nbatch))))
     real :: dummy_ci(1, 1, max(1, min(nt, max(1, nbatch))))
 
@@ -959,5 +959,16 @@ subroutine vhaesdiv(nlat, nlon, nt, v, w, idvw, jdvw, br, bi, mdab, ndab, &
             dummy_cr(:, :, 1:nblk), dummy_ci(:, :, 1:nblk), &
             nlat, work, work(iw1), work(iw2), work(iw3), work(iw4), idz, &
             wvhaes, wvhaes(jw1), wvhaes(jw2))
+    end do
+
+    do k = 1, nt
+        if (mmax < mdab) then
+            br(mmax + 1:mdab, 1:ndab, k) = 0.0
+            bi(mmax + 1:mdab, 1:ndab, k) = 0.0
+        end if
+        if (mod(nlat, 2) /= 0) then
+            br(1:mmax:2, nlat, k) = 0.0
+            bi(1:mmax:2, nlat, k) = 0.0
+        end if
     end do
 end subroutine vhaesdiv

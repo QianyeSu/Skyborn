@@ -50,11 +50,14 @@ def _resolve_artist_coordinate_context(axes, transform):
     return axes.transData, artist_inverse_transform, True
 
 
-def _default_ncl_max_length_px(axes_bbox, density):
-    density_xy = np.broadcast_to(np.asarray(density, dtype=float), 2).astype(float)
-    density_xy = np.maximum(density_xy, 0.1)
-    nx = max(30.0 * density_xy[0], 1.0)
-    ny = max(30.0 * density_xy[1], 1.0)
+def _default_ncl_max_length_px(axes_bbox, grid):
+    """Return NCL's default maximum glyph length for the source grid.
+
+    NCL derives the default length from the plotted data-grid dimensions,
+    rather than from the streamline start-point density.
+    """
+    nx = max(float(grid.nx), 1.0)
+    ny = max(float(grid.ny), 1.0)
     sx = float(axes_bbox.width) / nx
     sy = float(axes_bbox.height) / ny
     return max(np.sqrt((sx * sx + sy * sy) / 2.0), 1.0)
@@ -806,7 +809,7 @@ def _curly_vector_ncl_impl(
         )
         line_width_default = float(np.mean(finite_line_width_values))
 
-    default_max_length_px = _default_ncl_max_length_px(axes.bbox, density)
+    default_max_length_px = _default_ncl_max_length_px(axes.bbox, grid)
     requested_ref_length_px = (
         0.0 if ref_length is None else max(axes.bbox.width * float(ref_length), 1.0)
     )

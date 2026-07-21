@@ -41,6 +41,7 @@ from skyborn.plot._core.vector_engine import (
     Grid,
     _default_ncl_box_center_candidates,
     _default_ncl_candidate_shape,
+    _default_ncl_max_length_px,
     _density_xy,
     _ncl_step_length_px,
 )
@@ -1040,6 +1041,36 @@ class TestCurlyVector:
         assert sparse.shape == (225, 2)
         assert dense.shape == (3600, 2)
         assert dense.shape[0] > sparse.shape[0]
+
+    def test_default_ncl_max_length_uses_source_grid_not_density(self):
+        """NCL's default glyph length should follow nx/ny, not density."""
+        grid = Grid(np.linspace(0.0, 10.0, 144), np.linspace(0.0, 10.0, 73))
+        bbox = Bbox.from_bounds(0.0, 0.0, 697.5, 346.5)
+
+        expected = np.sqrt(
+            ((bbox.width / grid.nx) ** 2 + (bbox.height / grid.ny) ** 2) / 2.0
+        )
+
+        assert _default_ncl_max_length_px(bbox, grid) == pytest.approx(expected)
+        assert _default_ncl_max_length_px(bbox, grid) == pytest.approx(4.7954088222)
+
+    def test_density_changes_glyph_count_not_default_reference_length(self):
+        """Density should change sampling without rescaling default glyph length."""
+        x = np.linspace(0.0, 60.0, 61)
+        y = np.linspace(-15.0, 15.0, 31)
+        u = np.ones((len(y), len(x)))
+        v = np.zeros_like(u)
+
+        low_fig, low_ax = plt.subplots(figsize=(8, 4), dpi=100)
+        high_fig, high_ax = plt.subplots(figsize=(8, 4), dpi=100)
+        low = curly_vector(low_ax, x, y, u, v, density=0.5, color="black")
+        high = curly_vector(high_ax, x, y, u, v, density=2.0, color="black")
+
+        assert low.ref_length_fraction == pytest.approx(high.ref_length_fraction)
+        assert len(low.lines.get_paths()) < len(high.lines.get_paths())
+
+        plt.close(low_fig)
+        plt.close(high_fig)
 
     def test_profile_spacing_fraction_still_tracks_density(self):
         """Profile preset should remain density-aware instead of pinning one fixed spacing."""
