@@ -2,7 +2,26 @@
 
 from __future__ import annotations
 
+import math
+import warnings
+
 import numpy as np
+
+_MIN_ACCEPTED_TRACE_STEP_PX = 0.2
+_MAX_NATIVE_TRACE_STEPS = 4096
+
+
+def _trace_step_budget(max_length_px):
+    """Return enough native steps to cover the requested display length."""
+    max_length_px = float(max_length_px)
+    if not np.isfinite(max_length_px) or max_length_px <= 0.0:
+        return 1
+
+    required_steps = max(
+        int(math.ceil(max_length_px / _MIN_ACCEPTED_TRACE_STEP_PX)) + 1,
+        1,
+    )
+    return min(required_steps, _MAX_NATIVE_TRACE_STEPS)
 
 
 def _native_field_array(field):
@@ -166,19 +185,25 @@ def _call_native_trace_ncl_direction(
     if native_trace_context is None:
         return None
 
-    curve = native_tracer(
-        **_trace_kwargs(
-            native_trace_context,
-            start_point,
-            max_length_px,
-            direction_sign,
-            step_px,
-            speed_scale,
-        )
+    trace_kwargs = _trace_kwargs(
+        native_trace_context,
+        start_point,
+        max_length_px,
+        direction_sign,
+        step_px,
+        speed_scale,
     )
+    curve = native_tracer(**trace_kwargs)
     if curve is None:
         return None
     curve = np.asarray(curve, dtype=float)
+    if curve.ndim == 2 and curve.shape[0] == trace_kwargs["max_steps"] + 1:
+        warnings.warn(
+            "curly-vector tracing reached max_steps; the returned curve may "
+            "be truncated",
+            RuntimeWarning,
+            stacklevel=3,
+        )
     return (
         curve
         if curve.ndim == 2 and curve.shape[0] >= 2 and curve.shape[1] == 2
@@ -213,7 +238,7 @@ def _trace_kwargs(
         "viewport_y0": native_trace_context.viewport_y0,
         "viewport_x1": native_trace_context.viewport_x1,
         "viewport_y1": native_trace_context.viewport_y1,
-        "max_steps": 512,
+        "max_steps": _trace_step_budget(max_length_px),
     }
 
 
@@ -229,15 +254,16 @@ def _call_native_trace_ncl_direction_with_display(
     if native_trace_context is None:
         return None
 
+    trace_kwargs = _trace_kwargs(
+        native_trace_context,
+        start_point,
+        max_length_px,
+        direction_sign,
+        step_px,
+        speed_scale,
+    )
     traced = native_tracer(
-        **_trace_kwargs(
-            native_trace_context,
-            start_point,
-            max_length_px,
-            direction_sign,
-            step_px,
-            speed_scale,
-        ),
+        **trace_kwargs,
         return_display=True,
     )
     if traced is None:
@@ -254,6 +280,16 @@ def _call_native_trace_ncl_direction_with_display(
         or curve.shape[1] != 2
     ):
         return None
+    travelled_px = np.linalg.norm(np.diff(display_curve, axis=0), axis=1).sum()
+    if curve.shape[0] == trace_kwargs["max_steps"] + 1 and travelled_px + 1e-6 < float(
+        max_length_px
+    ):
+        warnings.warn(
+            "curly-vector tracing reached max_steps before the requested "
+            "display length; the returned curve is truncated",
+            RuntimeWarning,
+            stacklevel=3,
+        )
     return curve, display_curve
 
 

@@ -415,11 +415,15 @@ def _array_curly_vector(
     integration_direction : {'forward', 'backward', 'both'}, default: 'both'
         Integrate the streamline in forward, backward or both directions.
     grains : int, default: 15
-        Number of grains used in streamline integration.
+        Deprecated compatibility parameter retained for existing callers. The
+        NCL-like renderer does not use streamline grains; non-default values
+        emit a ``FutureWarning``. Use ``density`` and ``min_distance`` to
+        control glyph placement.
     broken_streamlines : boolean, default: True
-        If False, forces streamlines to continue until they
-        leave the plot domain.  If True, they may be terminated if they
-        come too close to another streamline.
+        Deprecated compatibility parameter retained for existing callers. The
+        NCL-like renderer draws independent curved glyphs and does not use a
+        Matplotlib-style streamline occupancy mask; ``False`` emits a
+        ``FutureWarning``.
     allow_non_uniform_grid : boolean, default: False
         If True, allows non-uniform grids like vertical profiles. The function
         will attempt to create a uniform interpolation grid for streamline calculation.
@@ -1129,11 +1133,11 @@ def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
     integration_direction : {'forward', 'backward', 'both'}, optional
         Integrate the glyph shape in the forward, backward, or both directions.
     grains : int, optional
-        Number of grains used during streamline-style integration.
+        Deprecated compatibility parameter. Non-default values emit a
+        ``FutureWarning`` and do not alter NCL-like glyph geometry.
     broken_streamlines : bool, optional
-        If ``False``, forces traces to continue until they leave the domain. If
-        ``True``, traces may terminate early when they come too close to
-        another glyph.
+        Deprecated compatibility parameter. ``False`` emits a
+        ``FutureWarning`` and does not alter NCL-like glyph geometry.
     anchor : {'tail', 'center', 'head'} or None, optional
         Anchor point for the NCL-like curved-glyph renderer. If omitted, the
         anchor is inferred from ``integration_direction``.

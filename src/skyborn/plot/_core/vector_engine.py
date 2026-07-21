@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import matplotlib as mpl
 import matplotlib.collections as mcollections
 import matplotlib.colors as mcolors
@@ -28,6 +30,26 @@ def _finite_plot_field_values(field, field_name):
             f"{field_name} field must contain at least one finite value after masking"
         )
     return finite_values
+
+
+def _warn_legacy_streamline_controls(grains, broken_streamlines):
+    """Warn when compatibility-only legacy integrator controls are requested."""
+    try:
+        grains_is_default = np.ndim(grains) == 0 and float(grains) == 15.0
+    except (TypeError, ValueError):
+        grains_is_default = False
+
+    if grains_is_default and bool(broken_streamlines):
+        return
+
+    warnings.warn(
+        "'grains' and 'broken_streamlines' are compatibility-only parameters "
+        "for the NCL-like curly-vector renderer and do not alter its geometry. "
+        "Use 'density', 'min_distance', and 'ref_length' to control glyph "
+        "placement and length.",
+        FutureWarning,
+        stacklevel=3,
+    )
 
 
 def _resolve_artist_coordinate_context(axes, transform):
@@ -710,6 +732,7 @@ def _curly_vector_ncl_impl(
     result_cls=None,
 ):
     grid = grid_cls(x, y, allow_non_uniform=allow_non_uniform_grid)
+    _warn_legacy_streamline_controls(grains, broken_streamlines)
 
     if zorder is None:
         zorder = mlines.Line2D.zorder

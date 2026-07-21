@@ -688,16 +688,17 @@ class TestDatasetCurlyVector:
         """Test curly_vector with different grains settings."""
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        result = curly_vector(
-            sample_data,
-            x="x",
-            y="y",
-            u="u",
-            v="v",
-            ax=ax,
-            grains=20,
-            broken_streamlines=False,
-        )
+        with pytest.warns(FutureWarning, match="compatibility-only"):
+            result = curly_vector(
+                sample_data,
+                x="x",
+                y="y",
+                u="u",
+                v="v",
+                ax=ax,
+                grains=20,
+                broken_streamlines=False,
+            )
 
         assert isinstance(result, CurlyVectorPlotSet)
         plt.close(fig)

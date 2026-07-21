@@ -709,6 +709,145 @@ class TestNativeHelpers:
             is None
         )
 
+    def test_native_trace_step_budget_scales_with_requested_length(self):
+        captured = {}
+        context = SimpleNamespace(
+            u=np.ones((2, 2)),
+            v=np.ones((2, 2)),
+            display_grid=np.ones((2, 2, 2)),
+            cell_valid=np.ones((1, 1), dtype=bool),
+            x_origin=0.0,
+            y_origin=0.0,
+            dx=1.0,
+            dy=1.0,
+            viewport_x0=0.0,
+            viewport_y0=0.0,
+            viewport_x1=1.0,
+            viewport_y1=1.0,
+        )
+
+        def tracer(**kwargs):
+            captured.update(kwargs)
+            return np.array([[0.0, 0.0], [1.0, 1.0]])
+
+        curve = _call_native_trace_ncl_direction(
+            tracer,
+            context,
+            np.array([0.0, 0.0]),
+            496.0,
+            1.0,
+            1.0,
+            1.0,
+        )
+
+        assert curve is not None
+        assert captured["max_steps"] == 2481
+
+    def test_native_trace_long_slow_curve_reaches_requested_length(self):
+        nx, ny = 2001, 2
+        x = np.arange(nx, dtype=float)
+        y = np.array([0.0, 1.0])
+        xx, yy = np.meshgrid(x, y)
+        context = SimpleNamespace(
+            u=np.ones((ny, nx), dtype=float),
+            v=np.zeros((ny, nx), dtype=float),
+            display_grid=np.stack([xx, yy * 100.0], axis=-1),
+            cell_valid=np.ones((ny - 1, nx - 1), dtype=bool),
+            x_origin=0.0,
+            y_origin=0.0,
+            dx=1.0,
+            dy=1.0,
+            viewport_x0=0.0,
+            viewport_y0=0.0,
+            viewport_x1=2000.0,
+            viewport_y1=100.0,
+        )
+
+        legacy_curve, legacy_display_curve = vector_module._trace_ncl_direction_native(
+            u=context.u,
+            v=context.v,
+            display_grid=context.display_grid,
+            cell_valid=context.cell_valid,
+            x_origin=context.x_origin,
+            y_origin=context.y_origin,
+            dx=context.dx,
+            dy=context.dy,
+            start_x=100.0,
+            start_y=0.5,
+            max_length_px=60.0,
+            direction_sign=1.0,
+            step_px=1.5,
+            speed_scale=100.0,
+            viewport_x0=context.viewport_x0,
+            viewport_y0=context.viewport_y0,
+            viewport_x1=context.viewport_x1,
+            viewport_y1=context.viewport_y1,
+            max_steps=512,
+            return_display=True,
+        )
+        compatible_trace = _call_native_trace_ncl_direction_with_display(
+            vector_module._trace_ncl_direction_native,
+            context,
+            np.array([100.0, 0.5]),
+            60.0,
+            1.0,
+            1.5,
+            100.0,
+        )
+        assert compatible_trace is not None
+        compatible_curve, compatible_display_curve = compatible_trace
+        np.testing.assert_array_equal(compatible_curve, legacy_curve)
+        np.testing.assert_array_equal(compatible_display_curve, legacy_display_curve)
+
+        traced = _call_native_trace_ncl_direction_with_display(
+            vector_module._trace_ncl_direction_native,
+            context,
+            np.array([100.0, 0.5]),
+            500.0,
+            1.0,
+            1.5,
+            100.0,
+        )
+
+        assert traced is not None
+        _, display_curve = traced
+        length_px = np.linalg.norm(np.diff(display_curve, axis=0), axis=1).sum()
+        assert length_px > 499.0
+
+    def test_native_trace_wrapper_warns_if_safety_cap_is_exhausted(self):
+        context = SimpleNamespace(
+            u=np.ones((2, 2)),
+            v=np.ones((2, 2)),
+            display_grid=np.ones((2, 2, 2)),
+            cell_valid=np.ones((1, 1), dtype=bool),
+            x_origin=0.0,
+            y_origin=0.0,
+            dx=1.0,
+            dy=1.0,
+            viewport_x0=0.0,
+            viewport_y0=0.0,
+            viewport_x1=1.0,
+            viewport_y1=1.0,
+        )
+
+        def exhausted_tracer(**kwargs):
+            count = kwargs["max_steps"] + 1
+            curve = np.column_stack([np.arange(count, dtype=float), np.zeros(count)])
+            return curve, curve.copy()
+
+        with pytest.warns(RuntimeWarning, match="returned curve is truncated"):
+            traced = _call_native_trace_ncl_direction_with_display(
+                exhausted_tracer,
+                context,
+                np.array([0.0, 0.0]),
+                10000.0,
+                1.0,
+                1.0,
+                1.0,
+            )
+
+        assert traced is not None
+
     def test_call_native_build_arrow_helpers_validate_shapes(self):
         assert (
             vector_module._native_helpers._call_native_build_open_arrow_segments(

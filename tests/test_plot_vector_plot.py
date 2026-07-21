@@ -2317,22 +2317,23 @@ class TestIntegration:
         fig, ax = plt.subplots(figsize=(10, 8))
 
         # Test with multiple parameters
-        result = curly_vector(
-            ax,
-            x,
-            y,
-            u,
-            v,
-            density=1.5,
-            linewidth=1.5,
-            color=np.sqrt(u**2 + v**2),  # Color by speed
-            cmap="plasma",
-            arrowsize=1.2,
-            arrowstyle="->",
-            integration_direction="both",
-            grains=20,
-            broken_streamlines=True,
-        )
+        with pytest.warns(FutureWarning, match="compatibility-only"):
+            result = curly_vector(
+                ax,
+                x,
+                y,
+                u,
+                v,
+                density=1.5,
+                linewidth=1.5,
+                color=np.sqrt(u**2 + v**2),  # Color by speed
+                cmap="plasma",
+                arrowsize=1.2,
+                arrowstyle="->",
+                integration_direction="both",
+                grains=20,
+                broken_streamlines=True,
+            )
 
         # Verify result
         assert isinstance(result, CurlyVectorPlotSet)
