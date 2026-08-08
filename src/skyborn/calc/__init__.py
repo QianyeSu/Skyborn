@@ -22,13 +22,14 @@ from typing import Any
 
 _SUBMODULE_EXPORTS = {
     "GPI",
+    "cape",
     "dcape",
     "geostrophic",
     "growth_rate",
     "mann_kendall",
+    "srh",
     "troposphere",
 }
-
 _OBJECT_EXPORTS = {
     # Statistical calculations.
     "calculate_potential_temperature": (
@@ -45,6 +46,21 @@ _OBJECT_EXPORTS = {
     "spatial_correlation": ("skyborn.calc.calculations", "spatial_correlation"),
     "spearman_correlation": ("skyborn.calc.calculations", "spearman_correlation"),
     "calculate_dcape": ("skyborn.calc.dcape", "calculate_dcape"),
+    # CAPE/CIN diagnostics (Fortran/C extension).
+    "calculate_cape_cin": ("skyborn.calc.cape", "calculate_cape_cin"),
+    "calculate_parcel_profile": ("skyborn.calc.cape", "calculate_parcel_profile"),
+    "calculate_most_unstable_parcel": (
+        "skyborn.calc.cape",
+        "calculate_most_unstable_parcel",
+    ),
+    "calculate_most_unstable_cape_cin": (
+        "skyborn.calc.cape",
+        "calculate_most_unstable_cape_cin",
+    ),
+    "calculate_storm_relative_helicity": (
+        "skyborn.calc.srh",
+        "calculate_storm_relative_helicity",
+    ),
     # Emergent constraints.
     "calc_GAUSSIAN_PDF": (
         "skyborn.calc.emergent_constraints",
