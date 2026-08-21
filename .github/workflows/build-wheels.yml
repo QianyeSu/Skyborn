@@ -254,6 +254,7 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BEFORE_BUILD_LINUX: |
             yum install -y gcc-gfortran || echo 'gfortran install failed'
+            pip install "numpy<2.5"
           CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
           # Skip wheel test: manylinux2014 test env lacks binary wheels for heavy deps
           # (scipy, cartopy, netCDF4, etc.) and source builds fail on old CentOS7 libraries.
