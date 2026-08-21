@@ -43,14 +43,15 @@ jobs:
           # interpreters; cp311+ builds are unreliable on that image.
           # Users on Python 3.11+ almost always have glibc > 2.17 and can use
           # manylinux_2_28 wheels.
-          - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-            python: "cp311"
-          - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-            python: "cp312"
-          - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-            python: "cp313"
-          - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-            python: "cp314"
+          # DISABLED: We support manylinux2014 for all Python versions with numpy<2.4.5 constraint
+          # - buildplat: [ubuntu-latest, manylinux2014_x86_64]
+          #   python: "cp311"
+          # - buildplat: [ubuntu-latest, manylinux2014_x86_64]
+          #   python: "cp312"
+          # - buildplat: [ubuntu-latest, manylinux2014_x86_64]
+          #   python: "cp313"
+          # - buildplat: [ubuntu-latest, manylinux2014_x86_64]
+          #   python: "cp314"
         #   # Exclude unsupported Python versions on ARM64 Linux
         #   - buildplat: [ubuntu-22.04, manylinux_aarch64]
         #     python: "cp39"  # Python 3.9 not available in ARM64 images
