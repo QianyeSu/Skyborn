@@ -43,7 +43,6 @@ from skyborn.plot._core.vector_engine import (
     _default_ncl_candidate_shape,
     _default_ncl_max_length_px,
     _density_xy,
-    _ncl_step_length_px,
 )
 from skyborn.plot._core.vector_engine import (
     _select_ncl_centers as _select_ncl_centers_core,
@@ -915,12 +914,6 @@ class TestCurlyVector:
             curly_vector(ax, x, y, u, v, arrowstyle="fancy")
 
         plt.close(fig)
-
-    def test_ncl_step_length_scales_with_local_speed(self):
-        """The NCL-like stepper should shorten steps rapidly in weaker flow."""
-        assert _ncl_step_length_px(5.0, 10.0, 10.0) == pytest.approx(5.0)
-        assert _ncl_step_length_px(5.0, 5.0, 10.0) == pytest.approx(1.25)
-        assert _ncl_step_length_px(5.0, 0.1, 10.0) == pytest.approx(0.35)
 
     def test_sample_grid_field_prefers_native_when_available(self, monkeypatch):
         """Scalar sampling should use the native helper when it returns a value."""

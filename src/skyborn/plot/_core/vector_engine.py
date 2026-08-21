@@ -301,12 +301,6 @@ def _resolve_curly_anchor(anchor, integration_direction):
     return anchor
 
 
-def _ncl_step_length_px(base_step_px, local_speed, speed_scale):
-    speed_scale = max(float(speed_scale), 1e-12)
-    speed_fraction = np.clip(float(local_speed) / speed_scale, 0.0, 1.0)
-    return max(0.35, float(base_step_px) * speed_fraction * speed_fraction)
-
-
 def _corrected_ncl_display_origin(current_display, previous_display):
     if previous_display is None:
         return np.asarray(current_display, dtype=float)

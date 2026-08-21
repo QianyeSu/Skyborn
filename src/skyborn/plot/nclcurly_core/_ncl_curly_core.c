@@ -466,32 +466,23 @@ static int display_step_to_data(
 }
 
 /*
- * Match the Python renderer's NCL-like speed-dependent pixel step law.
+ * NCL behavior: constant step length regardless of wind speed.
  *
- * Faster local wind gets longer steps, but the quadratic scaling keeps weak
- * flow from producing overly long, noisy wiggles. The hard floor prevents the
- * branch from stalling completely in very small but still valid flow regions.
+ * All vectors are normalized to VNML=0.333 before tracing in NCL,
+ * resulting in DUV = (DU²+DV²)/VNML² = 1.0 for all points.
+ * Reference: NCL stdrcv.f:283-290, 561, 574
+ *
+ * This prevents high wind speed regions from using overly large steps
+ * that would cause tracing to fail at boundaries or near land/NaN regions.
+ *
+ * Parameters local_speed and speed_scale are kept for API compatibility
+ * but are not used in the calculation.
  */
 static double ncl_step_length_px(double base_step_px, double local_speed, double speed_scale)
 {
-    double speed_fraction;
-    if (speed_scale <= 1e-12)
-    {
-        speed_scale = 1e-12;
-    }
-    speed_fraction = local_speed / speed_scale;
-    if (speed_fraction < 0.0)
-    {
-        speed_fraction = 0.0;
-    }
-    else if (speed_fraction > 1.0)
-    {
-        speed_fraction = 1.0;
-    }
-    {
-        double step = base_step_px * speed_fraction * speed_fraction;
-        return (step > 0.35) ? step : 0.35;
-    }
+    (void)local_speed;   /* unused */
+    (void)speed_scale;   /* unused */
+    return base_step_px;
 }
 
 static int point_within_grid_data(const GridInfo *grid, double x, double y)
