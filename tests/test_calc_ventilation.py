@@ -13,8 +13,8 @@ from skyborn.calc.ventilation import (
     air_sea_disequilibrium,
     entropy_deficit,
     genesis_potential_index,
-    ventilation_components,
     ventilated_pi,
+    ventilation_components,
     ventilation_index,
     vertical_wind_shear,
 )
@@ -784,3 +784,103 @@ def _drop_level_for_test(da, level_coord="level"):
     if level_coord in da.coords and level_coord not in da.dims:
         return da.drop_vars(level_coord)
     return da
+
+
+def test_drop_scalar_coord_no_scalar_case():
+    """Test _drop_scalar_coord when coordinate is not a scalar (else branch)."""
+    from skyborn.calc.ventilation.ventilation import _drop_scalar_coord
+
+    # Create a DataArray where the coordinate is a dimension (not scalar)
+    da = xr.DataArray(
+        np.random.randn(5, 3),
+        dims=["level", "lat"],
+        coords={
+            "level": [1000, 850, 500, 300, 200],
+            "lat": [10, 20, 30],
+        },
+    )
+
+    # When 'level' is a dimension (not scalar), _drop_scalar_coord should return unchanged
+    result = _drop_scalar_coord(da, "level")
+    assert result is da  # Should return the same object
+    assert "level" in result.coords
+    assert "level" in result.dims
+
+
+def test_drop_scalar_coord_missing_coord():
+    """Test _drop_scalar_coord when coordinate doesn't exist (else branch)."""
+    from skyborn.calc.ventilation.ventilation import _drop_scalar_coord
+
+    # Create a DataArray without the specified coordinate
+    da = xr.DataArray(
+        np.random.randn(5, 3),
+        dims=["level", "lat"],
+        coords={
+            "level": [1000, 850, 500, 300, 200],
+            "lat": [10, 20, 30],
+        },
+    )
+
+    # When 'nonexistent' is not in coords, _drop_scalar_coord should return unchanged
+    result = _drop_scalar_coord(da, "nonexistent")
+    assert result is da  # Should return the same object
+
+
+def test_vorticity_with_metpy_crs():
+    """Test that metpy_crs is properly removed from vorticity calculation."""
+    import metpy.calc as mpcalc
+
+    # Create a dataset with MetPy CRS coordinate
+    ds = xr.Dataset(
+        {
+            "U": (
+                ["level", "latitude", "longitude"],
+                np.random.randn(5, 10, 10),
+                {"units": "m/s"},
+            ),
+            "V": (
+                ["level", "latitude", "longitude"],
+                np.random.randn(5, 10, 10),
+                {"units": "m/s"},
+            ),
+        },
+        coords={
+            "level": [1000, 850, 700, 500, 300],
+            "latitude": np.linspace(-10, 10, 10),
+            "longitude": np.linspace(100, 120, 10),
+        },
+    )
+
+    # Use metpy to add CRS information
+    ds = ds.metpy.parse_cf()
+
+    # Calculate vorticity - this will add metpy_crs coordinate
+    # We'll use the internal function to ensure metpy_crs gets created
+    u_850 = ds["U"].sel(level=850)
+    v_850 = ds["V"].sel(level=850)
+
+    # MetPy's absolute_vorticity adds metpy_crs coordinate
+    eta_with_crs = mpcalc.absolute_vorticity(
+        u_850.metpy.quantify(),
+        v_850.metpy.quantify(),
+    ).metpy.dequantify()
+
+    # Verify metpy_crs was added by MetPy
+    if "metpy_crs" in eta_with_crs.coords:
+        # Now test that our function removes it
+        from skyborn.calc.ventilation.ventilation import vorticity
+
+        result = vorticity(
+            ds["U"],
+            ds["V"],
+            level=850,
+            level_coord="level",
+            lat_coord="latitude",
+            lon_coord="longitude",
+        )
+
+        # metpy_crs should be removed
+        assert "metpy_crs" not in result.coords
+        assert (
+            "absolute_vorticity" in result.name or result.name == "absolute_vorticity"
+        )

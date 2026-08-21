@@ -72,8 +72,9 @@ def test_srh_grid_matches_backend_and_xarray():
     h3, u3, v3 = _sample_grid()
 
     grid = srh_core.srh_grid(h3, u3, v3, 1000.0, 0.0, 7.0, 7.0)
-    profile = srh_core.srh_profile(h3[:, 0, 0], u3[:, 0, 0], v3[:, 0, 0],
-                                   1000.0, 0.0, 7.0, 7.0)
+    profile = srh_core.srh_profile(
+        h3[:, 0, 0], u3[:, 0, 0], v3[:, 0, 0], 1000.0, 0.0, 7.0, 7.0
+    )
     for i, arr in enumerate(grid):
         assert_allclose(arr[0, 0], profile[i], rtol=1e-12, atol=1e-12)
 
@@ -134,5 +135,37 @@ def test_srh_input_validation():
             np.ones((2, 2), dtype=float),
             np.ones((2, 2), dtype=float),
             np.ones((2, 2), dtype=float),
+            1000.0,
+        )
+
+
+def test_srh_profile_shape_mismatch():
+    """Test that srh_profile rejects mismatched shapes."""
+    with pytest.raises(ValueError, match="height, u, and v must share a shape"):
+        srh_core.srh_profile(
+            np.ones(5, dtype=float),
+            np.ones(6, dtype=float),
+            np.ones(5, dtype=float),
+            1000.0,
+        )
+
+
+def test_srh_grid_validation():
+    """Test validation for srh_grid: must be 3D and shapes must match."""
+    # Test non-3D input
+    with pytest.raises(ValueError, match="height must be 3D"):
+        srh_core.srh_grid(
+            np.ones((5,), dtype=float),
+            np.ones((5,), dtype=float),
+            np.ones((5,), dtype=float),
+            1000.0,
+        )
+
+    # Test shape mismatch
+    with pytest.raises(ValueError, match="height, u, and v must share a shape"):
+        srh_core.srh_grid(
+            np.ones((5, 3, 4), dtype=float),
+            np.ones((5, 3, 5), dtype=float),
+            np.ones((5, 3, 4), dtype=float),
             1000.0,
         )

@@ -14,25 +14,104 @@ import skyborn.calc.cape.core as cape_core
 # ---------------------------------------------------------------------------
 _SOUNDING_P = np.array(
     [
-        1008.0, 1000.0, 950.0, 900.0, 850.0, 800.0, 750.0, 700.0, 650.0, 600.0,
-        550.0, 500.0, 450.0, 400.0, 350.0, 300.0, 250.0, 200.0,
-        175.0, 150.0, 125.0, 100.0, 80.0, 70.0, 60.0, 50.0,
-        40.0, 30.0, 25.0, 20.0,
+        1008.0,
+        1000.0,
+        950.0,
+        900.0,
+        850.0,
+        800.0,
+        750.0,
+        700.0,
+        650.0,
+        600.0,
+        550.0,
+        500.0,
+        450.0,
+        400.0,
+        350.0,
+        300.0,
+        250.0,
+        200.0,
+        175.0,
+        150.0,
+        125.0,
+        100.0,
+        80.0,
+        70.0,
+        60.0,
+        50.0,
+        40.0,
+        30.0,
+        25.0,
+        20.0,
     ]
 )
 _SOUNDING_T = np.array(
     [
-        29.3, 28.1, 23.5, 20.9, 18.4, 15.9, 13.1, 10.1, 6.7, 3.1,
-        -0.5, -4.5, -9.0, -14.8, -21.5, -29.7, -40.0, -52.4,
-        -59.2, -66.5, -74.1, -78.5, -76.0, -71.6, -66.7, -61.3,
-        -56.3, -51.7, -50.7, -47.5,
+        29.3,
+        28.1,
+        23.5,
+        20.9,
+        18.4,
+        15.9,
+        13.1,
+        10.1,
+        6.7,
+        3.1,
+        -0.5,
+        -4.5,
+        -9.0,
+        -14.8,
+        -21.5,
+        -29.7,
+        -40.0,
+        -52.4,
+        -59.2,
+        -66.5,
+        -74.1,
+        -78.5,
+        -76.0,
+        -71.6,
+        -66.7,
+        -61.3,
+        -56.3,
+        -51.7,
+        -50.7,
+        -47.5,
     ]
 )
 _SOUNDING_RH = np.array(
     [
-        0.85, 0.65, 0.36, 0.39, 0.82, 0.72, 0.75, 0.86, 0.65, 0.22, 0.52,
-        0.66, 0.64, 0.20, 0.05, 0.75, 0.76, 0.45, 0.25, 0.48, 0.76, 0.88,
-        0.56, 0.88, 0.39, 0.67, 0.15, 0.04, 0.94, 0.35,
+        0.85,
+        0.65,
+        0.36,
+        0.39,
+        0.82,
+        0.72,
+        0.75,
+        0.86,
+        0.65,
+        0.22,
+        0.52,
+        0.66,
+        0.64,
+        0.20,
+        0.05,
+        0.75,
+        0.76,
+        0.45,
+        0.25,
+        0.48,
+        0.76,
+        0.88,
+        0.56,
+        0.88,
+        0.39,
+        0.67,
+        0.15,
+        0.04,
+        0.94,
+        0.35,
     ]
 )
 
@@ -53,16 +132,73 @@ def _sounding_dewpoint():
 def _sample_profile():
     """Compact unstable profile with non-zero CIN (stable low levels)."""
     pressure = np.array(
-        [1000.0, 950.0, 900.0, 850.0, 800.0, 750.0, 700.0, 650.0, 600.0,
-         550.0, 500.0, 450.0, 400.0, 350.0, 300.0, 250.0, 200.0, 150.0, 100.0]
+        [
+            1000.0,
+            950.0,
+            900.0,
+            850.0,
+            800.0,
+            750.0,
+            700.0,
+            650.0,
+            600.0,
+            550.0,
+            500.0,
+            450.0,
+            400.0,
+            350.0,
+            300.0,
+            250.0,
+            200.0,
+            150.0,
+            100.0,
+        ]
     )
     temperature = np.array(
-        [30.0, 29.0, 28.0, 27.0, 18.0, 15.0, 12.0, 9.0, 6.0, 3.0, 0.0,
-         -4.0, -9.0, -15.0, -23.0, -33.0, -46.0, -64.0, -80.0]
+        [
+            30.0,
+            29.0,
+            28.0,
+            27.0,
+            18.0,
+            15.0,
+            12.0,
+            9.0,
+            6.0,
+            3.0,
+            0.0,
+            -4.0,
+            -9.0,
+            -15.0,
+            -23.0,
+            -33.0,
+            -46.0,
+            -64.0,
+            -80.0,
+        ]
     )
     dewpoint = np.array(
-        [24.0, 23.0, 22.0, 21.0, 14.0, 11.0, 8.0, 5.0, 2.0, -1.0, -4.0,
-         -8.0, -13.0, -19.0, -27.0, -37.0, -50.0, -68.0, -85.0]
+        [
+            24.0,
+            23.0,
+            22.0,
+            21.0,
+            14.0,
+            11.0,
+            8.0,
+            5.0,
+            2.0,
+            -1.0,
+            -4.0,
+            -8.0,
+            -13.0,
+            -19.0,
+            -27.0,
+            -37.0,
+            -50.0,
+            -68.0,
+            -85.0,
+        ]
     )
     return pressure, temperature, dewpoint
 
@@ -136,9 +272,7 @@ def test_most_unstable_grid_matches_profile():
     prof = cape_package.calculate_most_unstable_parcel(
         pressure, temperature, dewpoint, depth=300.0
     )
-    grid = cape_package.calculate_most_unstable_parcel(
-        p3, t3, td3, depth=300.0
-    )
+    grid = cape_package.calculate_most_unstable_parcel(p3, t3, td3, depth=300.0)
     # grid returns (p3, t3, td3, idx3): the index field stores the selected
     # level index at that level's position; other levels stay -1
     assert grid[3][int(prof[3]), 0, 0] == prof[3]
@@ -179,8 +313,11 @@ def test_cape_public_api_matches_backend_grid_and_xarray():
     pressure_xr = xr.DataArray(
         pressure_3d,
         dims=["level", "lat", "lon"],
-        coords={"level": pressure_3d[:, 0, 0], "lat": [0.0, 10.0],
-                "lon": [100.0, 110.0, 120.0]},
+        coords={
+            "level": pressure_3d[:, 0, 0],
+            "lat": [0.0, 10.0],
+            "lon": [100.0, 110.0, 120.0],
+        },
         attrs={"units": "hPa"},
     )
     temperature_xr = xr.DataArray(temperature_3d, dims=["level", "lat", "lon"])
@@ -283,8 +420,15 @@ def test_parcel_profile_matches_metpy_reference():
     profile = cape_package.calculate_parcel_profile(pressure, temperature, dewpoint)
 
     # metpy 1.7.1 parcel profile at the first levels (degC)
-    metpy_first = np.array([29.3, 28.61221951574845, 25.174081108824907,
-                            23.410446413478496, 21.5304966888134])
+    metpy_first = np.array(
+        [
+            29.3,
+            28.61221951574845,
+            25.174081108824907,
+            23.410446413478496,
+            21.5304966888134,
+        ]
+    )
     assert_allclose(profile[:5], metpy_first, rtol=0.02, atol=0.5)
 
 
@@ -294,9 +438,7 @@ def test_parcel_profile_grid_matches_backend():
     public = cape_package.calculate_parcel_profile(
         pressure_3d, temperature_3d, dewpoint_3d
     )
-    backend = cape_core.parcel_profile_grid(
-        pressure_3d, temperature_3d, dewpoint_3d
-    )
+    backend = cape_core.parcel_profile_grid(pressure_3d, temperature_3d, dewpoint_3d)
     assert_allclose(public, backend, rtol=1e-12, atol=1e-12)
 
 
@@ -324,3 +466,190 @@ def test_cape_input_validation():
             np.ones(6, dtype=float),
             np.ones(5, dtype=float),
         )
+
+
+def test_cape_grid_validation_3d():
+    """Test validation for cape_grid: must be 3D and shapes must match."""
+    # Test non-3D input
+    with pytest.raises(ValueError, match="pressure must be 3D"):
+        cape_core.cape_grid(
+            np.ones((5,), dtype=float),
+            np.ones((5,), dtype=float),
+            np.ones((5,), dtype=float),
+        )
+
+    # Test shape mismatch
+    with pytest.raises(ValueError, match="must share a shape"):
+        cape_core.cape_grid(
+            np.ones((5, 3, 4), dtype=float),
+            np.ones((5, 3, 5), dtype=float),
+            np.ones((5, 3, 4), dtype=float),
+        )
+
+
+def test_parcel_profile_validation():
+    """Test validation for parcel_profile: must be 1D and shapes must match."""
+    # Test non-1D input
+    with pytest.raises(ValueError, match="pressure must be 1D"):
+        cape_core.parcel_profile(
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+        )
+
+    # Test shape mismatch
+    with pytest.raises(ValueError, match="must share a shape"):
+        cape_core.parcel_profile(
+            np.ones(5, dtype=float),
+            np.ones(6, dtype=float),
+            np.ones(5, dtype=float),
+        )
+
+
+def test_parcel_profile_grid_validation():
+    """Test validation for parcel_profile_grid: must be 3D and shapes must match."""
+    # Test non-3D input
+    with pytest.raises(ValueError, match="pressure must be 3D"):
+        cape_core.parcel_profile_grid(
+            np.ones((5,), dtype=float),
+            np.ones((5,), dtype=float),
+            np.ones((5,), dtype=float),
+        )
+
+    # Test shape mismatch
+    with pytest.raises(ValueError, match="must share a shape"):
+        cape_core.parcel_profile_grid(
+            np.ones((5, 3, 4), dtype=float),
+            np.ones((5, 3, 5), dtype=float),
+            np.ones((5, 3, 4), dtype=float),
+        )
+
+
+def test_calculate_parcel_profile_invalid_dimension():
+    """Test that calculate_parcel_profile rejects 2D input."""
+    with pytest.raises(ValueError, match="pressure must be 1D or 3D"):
+        cape_package.calculate_parcel_profile(
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+        )
+
+
+def test_most_unstable_parcel_validation():
+    """Test validation for most_unstable_parcel: must be 1D and shapes must match."""
+    # Test non-1D input
+    with pytest.raises(ValueError, match="pressure must be 1D"):
+        cape_core.most_unstable_parcel(
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+        )
+
+    # Test shape mismatch
+    with pytest.raises(ValueError, match="must share a shape"):
+        cape_core.most_unstable_parcel(
+            np.ones(5, dtype=float),
+            np.ones(6, dtype=float),
+            np.ones(5, dtype=float),
+        )
+
+
+def test_most_unstable_parcel_grid_validation():
+    """Test validation for most_unstable_parcel_grid: must be 3D and shapes must match."""
+    # Test non-3D input
+    with pytest.raises(ValueError, match="pressure must be 3D"):
+        cape_core.most_unstable_parcel_grid(
+            np.ones((5,), dtype=float),
+            np.ones((5,), dtype=float),
+            np.ones((5,), dtype=float),
+        )
+
+    # Test shape mismatch
+    with pytest.raises(ValueError, match="must share a shape"):
+        cape_core.most_unstable_parcel_grid(
+            np.ones((5, 3, 4), dtype=float),
+            np.ones((5, 3, 5), dtype=float),
+            np.ones((5, 3, 4), dtype=float),
+        )
+
+
+def test_most_unstable_cape_cin_validation():
+    """Test validation for most_unstable_cape_cin: must be 1D and shapes must match."""
+    # Test non-1D input
+    with pytest.raises(ValueError, match="pressure must be 1D"):
+        cape_core.most_unstable_cape_cin(
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+        )
+
+    # Test shape mismatch
+    with pytest.raises(ValueError, match="must share a shape"):
+        cape_core.most_unstable_cape_cin(
+            np.ones(5, dtype=float),
+            np.ones(6, dtype=float),
+            np.ones(5, dtype=float),
+        )
+
+
+def test_most_unstable_cape_cin_grid_validation():
+    """Test validation for most_unstable_cape_cin_grid: must be 3D and shapes must match."""
+    # Test non-3D input
+    with pytest.raises(ValueError, match="pressure must be 3D"):
+        cape_core.most_unstable_cape_cin_grid(
+            np.ones((5,), dtype=float),
+            np.ones((5,), dtype=float),
+            np.ones((5,), dtype=float),
+        )
+
+    # Test shape mismatch
+    with pytest.raises(ValueError, match="must share a shape"):
+        cape_core.most_unstable_cape_cin_grid(
+            np.ones((5, 3, 4), dtype=float),
+            np.ones((5, 3, 5), dtype=float),
+            np.ones((5, 3, 4), dtype=float),
+        )
+
+
+def test_calculate_most_unstable_parcel_invalid_dimension():
+    """Test that calculate_most_unstable_parcel rejects 2D input."""
+    with pytest.raises(ValueError, match="pressure must be 1D or 3D"):
+        cape_package.calculate_most_unstable_parcel(
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+        )
+
+
+def test_calculate_most_unstable_cape_cin_invalid_dimension():
+    """Test that calculate_most_unstable_cape_cin rejects 2D input."""
+    with pytest.raises(ValueError, match="pressure must be 1D or 3D"):
+        cape_package.calculate_most_unstable_cape_cin(
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+            np.ones((5, 3), dtype=float),
+        )
+
+
+def test_xarray_3d_wrapping_with_missing_coords():
+    """Test _wrap_xarray_3d when some dimensions have no coordinates."""
+    pressure_3d, temperature_3d, dewpoint_3d = _sample_grid()
+
+    # Create xarray without coordinates for one dimension
+    p_xr = xr.DataArray(
+        pressure_3d,
+        dims=["level", "lat", "lon"],
+        coords={
+            "level": np.arange(pressure_3d.shape[0]),
+            # 'lat' intentionally missing
+            "lon": np.arange(pressure_3d.shape[2]),
+        },
+    )
+    t_xr = xr.DataArray(temperature_3d, dims=["level", "lat", "lon"])
+    td_xr = xr.DataArray(dewpoint_3d, dims=["level", "lat", "lon"])
+
+    # This should work without error - missing coords are just not copied
+    profile = cape_package.calculate_parcel_profile(p_xr, t_xr, td_xr)
+    assert isinstance(profile, xr.DataArray)
+    assert "level" in profile.coords
+    assert "lon" in profile.coords

@@ -1,7 +1,58 @@
 Changelog
 =========
 
-Version 0.4.2 (Current)
+Version 0.4.3 (Current)
+------------------------
+
+**New Features**
+
+* **Ventilation Index Module for Tropical Cyclone Research**: Added comprehensive ``skyborn.calc.ventilation`` module implementing the ventilated potential intensity (vPI) framework and ventilated genesis potential index (GPIv) from Chavas, Camargo & Tippett (2025, J. Climate)
+
+  - ``vertical_wind_shear``: 200-850 hPa vertical wind shear magnitude calculation
+  - ``entropy_deficit``: 600-hPa relative humidity-based entropy deficit proxy (Chi)
+  - ``ventilation_index``: VI = VWS * Chi / PI following Tang & Emanuel (2012)
+  - ``ventilated_pi``: Analytic cubic solution for ventilated potential intensity using Cardano formula, with verified ratio=1/√3 at VI_MAX (0.145)
+  - ``absolute_vorticity_850``: Clipped 850-hPa absolute vorticity for genesis index
+  - ``genesis_potential_index``: GPIv = (102.1 * vPI * eta_c)^4.90 * cos(lat) * dx * dy
+  - All functions accept and return xarray.DataArray for seamless gridded data workflows
+  - 16x performance boost through NumPy vectorization with complex number support
+  - 44 unit tests covering formula correctness, edge cases, thermodynamic accuracy, and full integration
+  - MetPy-backed thermodynamic calculations for improved accuracy and maintainability
+
+* **CAPE/CIN and Storm-Relative Helicity Diagnostics**: Added high-performance multi-dimensional convective diagnostics with Fortran/C backends following the DCAPE module pattern
+
+  - **``skyborn.calc.cape``**: Surface-based and most-unstable CAPE/CIN calculations
+
+    * ``calculate_cape_cin``: Surface-based convective available potential energy and convective inhibition
+    * ``calculate_most_unstable_parcel``: Most-unstable parcel identification using Bolton equivalent potential temperature search
+    * ``calculate_most_unstable_cape_cin``: CAPE/CIN for the most-unstable parcel
+    * ``calculate_parcel_profile``: Full parcel temperature and dewpoint profiles along moist adiabats
+    * Bolton LCL formulation with fixed-step RK4 moist adiabat integration
+    * MetPy-compatible LFC/EL intersection handling and CIN sign convention (≤ 0)
+    * Multi-dimensional support: 1D profiles → scalars, 3D grids → 2D fields
+    * Validation: CAPE within +1.1% of MetPy 1.7.1 (expected difference due to Bolton vs Romps LCL and RK4 vs LSODA integration)
+    * Performance: ~10,000 profiles/second, 195× faster than MetPy's per-profile loops
+
+  - **``skyborn.calc.srh``**: Storm-relative helicity with layer specification and component splitting
+
+    * ``calculate_storm_relative_helicity``: Storm-relative helicity with AGL height conversion
+    * Layer subsampling with boundary interpolation matching MetPy's ``interpolate_1d`` NaN semantics
+    * Positive/negative/total helicity split for left-moving and right-moving storm analysis
+    * Validation: Bit-for-bit identical to MetPy 1.7.1 reference soundings
+    * Performance: ~2,000,000 profiles/second, 5258× faster than MetPy's per-profile loops
+
+  - 27 comprehensive tests validating numerical accuracy and edge case handling
+  - Full xarray metadata preservation for coordinate-aware workflows
+
+**Build and Packaging**
+
+* **Restored Python 3.11-3.14 Support on manylinux2014**: Reverted restrictive Python version exclusions from manylinux2014 wheel builds while maintaining NumPy <2.4.5 constraint for GCC 10.2.1 compatibility
+
+  - manylinux2014 wheels now available for all supported Python versions (3.9-3.14)
+  - Ensures compatibility with older Linux servers (glibc ≥ 2.17, CentOS 7, RHEL 7) across the full Python version matrix
+  - NumPy <2.4.5 constraint applied via ``PIP_CONSTRAINT`` environment variable to prevent build failures on systems with GCC 10.2.1
+
+Version 0.4.2
 ------------------------
 
 **New Features**
