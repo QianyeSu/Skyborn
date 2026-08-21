@@ -38,7 +38,7 @@ jobs:
           - [macos-15, macosx_arm64] # macOS Apple Silicon
           - [windows-2022, win_amd64]
         python: ["cp39", "cp310", "cp311", "cp312", "cp313", "cp314"]
-        exclude:
+        # exclude:
           # manylinux2014 (CentOS7/glibc 2.17) only ships cp39 and cp310
           # interpreters; cp311+ builds are unreliable on that image.
           # Users on Python 3.11+ almost always have glibc > 2.17 and can use
