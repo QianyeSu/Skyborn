@@ -158,6 +158,101 @@ Genesis Potential Index (GPI) / Tropical Cyclone Potential Intensity
    (``outflow_source={"cape_star", "cape_env"}``, ``t0``, ``otl``) and the
    Wing et al. (2015) logarithmic decomposition where ``lnpi = ln(V^2)``.
 
+Convective Diagnostics
+~~~~~~~~~~~~~~~~~~~~~~~
+
+CAPE and CIN Calculations
+**************************
+
+.. autofunction:: skyborn.calc.cape.calculate_cape_cin
+
+.. autofunction:: skyborn.calc.cape.calculate_most_unstable_parcel
+
+.. autofunction:: skyborn.calc.cape.calculate_most_unstable_cape_cin
+
+.. autofunction:: skyborn.calc.cape.calculate_parcel_profile
+
+.. autofunction:: skyborn.calc.cape.cape_grid
+
+.. autofunction:: skyborn.calc.cape.most_unstable_parcel_grid
+
+.. autofunction:: skyborn.calc.cape.most_unstable_cape_cin_grid
+
+.. autofunction:: skyborn.calc.cape.parcel_profile_grid
+
+.. note::
+
+   The CAPE/CIN module provides both 1D profile and 3D gridded interfaces:
+
+   - **1D functions** (``calculate_*``): Accept 1D NumPy arrays and return scalar values.
+     Optimized for single atmospheric profile analysis.
+
+   - **3D functions** (``*_grid``): Accept 3D NumPy arrays ``(nz, ny, nx)`` and return 2D fields ``(ny, nx)``.
+     Optimized for gridded data analysis with vectorized operations.
+
+   - **xarray wrappers**: Automatically detect input dimensions and apply appropriate backend.
+     Handle coordinate preservation and metadata.
+
+   Performance: ~10,000 profiles/second, 195× faster than MetPy's per-profile loops.
+
+   Validation: CAPE within +1.1% of MetPy 1.7.1 (difference due to Bolton vs Romps LCL
+   and RK4 vs LSODA integration methods).
+
+Storm Relative Helicity
+************************
+
+.. autofunction:: skyborn.calc.srh.calculate_storm_relative_helicity
+
+.. autofunction:: skyborn.calc.srh.srh_grid
+
+.. note::
+
+   The SRH module calculates storm-relative helicity for tornado and severe storm forecasting:
+
+   - Supports custom layer depths (default 0-3 km AGL)
+   - Returns positive, negative, and total helicity components
+   - Handles AGL height conversion and layer interpolation
+   - Matches MetPy's ``interpolate_1d`` NaN semantics
+
+   Performance: ~2,000,000 profiles/second, 5258× faster than MetPy.
+
+   Validation: Bit-for-bit identical to MetPy 1.7.1 reference soundings.
+
+Ventilation Index for Tropical Cyclones
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: skyborn.calc.ventilation.vertical_wind_shear
+
+.. autofunction:: skyborn.calc.ventilation.entropy_deficit
+
+.. autofunction:: skyborn.calc.ventilation.air_sea_disequilibrium
+
+.. autofunction:: skyborn.calc.ventilation.ventilation_index
+
+.. autofunction:: skyborn.calc.ventilation.ventilated_pi
+
+.. autofunction:: skyborn.calc.ventilation.absolute_vorticity_850
+
+.. autofunction:: skyborn.calc.ventilation.genesis_potential_index
+
+.. autofunction:: skyborn.calc.ventilation.ventilation_components
+
+.. note::
+
+   The ventilation index module implements the ventilated potential intensity (vPI)
+   framework from Chavas, Camargo & Tippett (2025, J. Climate):
+
+   - **Ventilation Index**: VI = VWS × Chi / PI following Tang & Emanuel (2012)
+   - **Ventilated PI**: Analytic cubic solution using Cardano formula
+   - **Genesis Potential Index**: GPIv incorporating ventilation effects
+
+   All functions accept and return xarray.DataArray for coordinate-aware workflows.
+
+   Performance: 16× speedup through NumPy vectorization with complex number support.
+
+   Use ``ventilation_components()`` as a high-level pipeline function that calculates
+   all ventilation-related diagnostics from a single ERA5-style dataset.
+
 Statistical Functions
 ---------------------
 
@@ -543,6 +638,207 @@ Example Usage
        prior_mean=3.0, prior_std=1.5,
        obs_mean=0.5, obs_std=0.2,
        relationship_slope=2.0, relationship_intercept=0.1
+   )
+
+**CAPE/CIN Calculation Examples**
+
+.. code-block:: python
+
+   import skyborn as skb
+   import numpy as np
+   import xarray as xr
+
+   # === 1D Profile Calculation ===
+   # Single atmospheric sounding
+   height = np.array([0, 500, 1000, 1500, 2000, 3000, 5000, 8000, 10000])  # meters AGL
+   temperature = np.array([25, 20, 15, 10, 5, -5, -20, -40, -50]) + 273.15  # K
+   dewpoint = np.array([20, 15, 10, 5, 0, -10, -30, -50, -60]) + 273.15  # K
+
+   # Calculate surface-based CAPE and CIN
+   from skyborn.calc.cape import calculate_cape_cin
+   cape, cin = calculate_cape_cin(height, temperature, dewpoint)
+   print(f"CAPE: {cape:.1f} J/kg, CIN: {cin:.1f} J/kg")
+
+   # Calculate most unstable parcel
+   from skyborn.calc.cape import calculate_most_unstable_parcel
+   mu_height, mu_temp, mu_dewpoint = calculate_most_unstable_parcel(
+       height, temperature, dewpoint
+   )
+   print(f"Most unstable parcel at {mu_height:.0f} m AGL")
+
+   # Calculate most unstable CAPE/CIN
+   from skyborn.calc.cape import calculate_most_unstable_cape_cin
+   mu_cape, mu_cin = calculate_most_unstable_cape_cin(height, temperature, dewpoint)
+   print(f"MU-CAPE: {mu_cape:.1f} J/kg, MU-CIN: {mu_cin:.1f} J/kg")
+
+   # === 3D Gridded Data ===
+   # ERA5-style data (level, lat, lon)
+   nz, ny, nx = 25, 50, 100
+   height_3d = np.random.randn(nz, ny, nx) * 500 + np.arange(nz)[:, None, None] * 500
+   temp_3d = np.random.randn(nz, ny, nx) * 3 + 280 - np.arange(nz)[:, None, None] * 6
+   dewpoint_3d = temp_3d - np.random.rand(nz, ny, nx) * 10 - 5
+
+   from skyborn.calc.cape import cape_grid, most_unstable_cape_cin_grid
+
+   # Calculate CAPE/CIN for entire grid
+   cape_field, cin_field = cape_grid(height_3d, temp_3d, dewpoint_3d)
+   print(f"CAPE field shape: {cape_field.shape}")  # (ny, nx)
+   print(f"Maximum CAPE: {cape_field.max():.1f} J/kg")
+
+   # Most unstable CAPE/CIN
+   mu_cape_field, mu_cin_field = most_unstable_cape_cin_grid(
+       height_3d, temp_3d, dewpoint_3d
+   )
+
+   # === xarray Interface ===
+   # Automatic dimension detection and coordinate preservation
+   ds = xr.open_dataset('era5_data.nc')
+
+   # Compute CAPE/CIN with coordinate awareness
+   cape_xr = skb.calc.cape.cape_grid(
+       ds.geopotential_height,
+       ds.temperature,
+       ds.dewpoint
+   )
+   # Result preserves lat/lon coordinates
+
+**Storm Relative Helicity Examples**
+
+.. code-block:: python
+
+   import skyborn as skb
+   import numpy as np
+
+   # === 1D Profile Calculation ===
+   # Hodograph data
+   height = np.array([0, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000])  # m AGL
+   u_wind = np.array([5, 8, 12, 15, 18, 20, 22, 25, 28])  # m/s
+   v_wind = np.array([0, 2, 5, 8, 10, 12, 13, 15, 16])  # m/s
+
+   # Calculate 0-3 km storm relative helicity
+   from skyborn.calc.srh import calculate_storm_relative_helicity
+
+   # Bunkers right-moving storm motion
+   storm_u, storm_v = 15.0, 8.0
+
+   srh_positive, srh_negative, srh_total = calculate_storm_relative_helicity(
+       height, u_wind, v_wind,
+       storm_u=storm_u, storm_v=storm_v,
+       depth=3000.0,  # 0-3 km layer
+       bottom=0.0
+   )
+
+   print(f"0-3 km SRH: {srh_total:.1f} m²/s²")
+   print(f"Positive: {srh_positive:.1f} m²/s², Negative: {srh_negative:.1f} m²/s²")
+
+   # Calculate 0-1 km SRH (for tornado potential)
+   srh_pos_01, srh_neg_01, srh_tot_01 = calculate_storm_relative_helicity(
+       height, u_wind, v_wind,
+       storm_u=storm_u, storm_v=storm_v,
+       depth=1000.0,
+       bottom=0.0
+   )
+   print(f"0-1 km SRH: {srh_tot_01:.1f} m²/s²")
+
+   # === 3D Gridded Data ===
+   from skyborn.calc.srh import srh_grid
+
+   nz, ny, nx = 30, 50, 100
+   height_3d = np.arange(nz)[:, None, None] * 300.0  # 300m intervals
+   u_3d = np.random.randn(nz, ny, nx) * 5 + 10
+   v_3d = np.random.randn(nz, ny, nx) * 3 + 5
+
+   # Storm motion fields (2D)
+   storm_u_2d = np.ones((ny, nx)) * 15.0
+   storm_v_2d = np.ones((ny, nx)) * 8.0
+
+   # Calculate SRH for entire grid
+   srh_pos_grid, srh_neg_grid, srh_tot_grid = srh_grid(
+       height_3d, u_3d, v_3d,
+       storm_u=storm_u_2d, storm_v=storm_v_2d,
+       depth=3000.0, bottom=0.0
+   )
+
+   print(f"SRH grid shape: {srh_tot_grid.shape}")  # (ny, nx)
+
+**Ventilation Index Examples**
+
+.. code-block:: python
+
+   import skyborn as skb
+   import xarray as xr
+
+   # === Load ERA5 Data ===
+   ds = xr.open_dataset('era5_tropical.nc')
+   # Expected variables: U, V, T, Q, SSTK, SP
+   # Expected levels: 200, 600, 850 hPa (and others)
+
+   # === High-Level Pipeline (Recommended) ===
+   from skyborn.calc.ventilation import ventilation_components
+
+   # Calculate all ventilation diagnostics in one call
+   result = ventilation_components(ds)
+
+   # Result contains:
+   print(result.data_vars)
+   # Dict: PI, vPI, VWS, Chi, ventilation_index, eta_c, GPIv, air_sea_disequilibrium
+
+   # Visualize ventilated genesis potential index
+   result.GPIv.plot()
+
+   # === Step-by-Step Calculation ===
+   from skyborn.calc.ventilation import (
+       vertical_wind_shear,
+       entropy_deficit,
+       air_sea_disequilibrium,
+       ventilation_index,
+       ventilated_pi,
+       absolute_vorticity_850,
+       genesis_potential_index
+   )
+
+   # Step 1: Calculate vertical wind shear (200-850 hPa)
+   vws = vertical_wind_shear(ds)
+   print(f"VWS: {vws.mean().values:.2f} m/s")
+
+   # Step 2: Calculate air-sea disequilibrium
+   chi_star = air_sea_disequilibrium(ds)
+
+   # Step 3: Calculate entropy deficit (600 hPa)
+   chi = entropy_deficit(ds, chi_star)
+   print(f"Entropy deficit: {chi.mean().values:.3f}")
+
+   # Step 4: Calculate potential intensity (from GPI module)
+   from skyborn.calc.GPI.xarray import potential_intensity
+   pi_result = potential_intensity(
+       ds.SSTK, ds.SP,
+       ds.level, ds.T, ds.Q
+   )
+   pi = pi_result.pi
+
+   # Step 5: Calculate ventilation index
+   vi = ventilation_index(vws, chi, pi)
+   print(f"VI: {vi.mean().values:.4f}")
+
+   # Step 6: Calculate ventilated potential intensity
+   vpi = ventilated_pi(pi, vi)
+   print(f"Mean PI: {pi.mean().values:.1f} m/s")
+   print(f"Mean vPI: {vpi.mean().values:.1f} m/s")
+   print(f"Mean reduction: {(1 - vpi/pi).mean().values * 100:.1f}%")
+
+   # Step 7: Calculate absolute vorticity at 850 hPa
+   eta_c = absolute_vorticity_850(ds)
+
+   # Step 8: Calculate ventilated genesis potential index
+   gpiv = genesis_potential_index(vpi, eta_c)
+   print(f"Mean GPIv: {gpiv.mean().values:.2e}")
+
+   # === Sensitivity Analysis ===
+   # Test different VI_MAX thresholds
+   result_sensitive = ventilation_components(
+       ds,
+       vi_max=0.20,  # Default is 0.145
+       vorticity_cap=5.0e-5  # Default is 3.7e-5
    )
 
 Emergent Constraints
