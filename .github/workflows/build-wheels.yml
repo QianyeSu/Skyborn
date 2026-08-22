@@ -334,6 +334,9 @@ jobs:
           path: dist-artifacts
           merge-multiple: true
 
+      - name: Checkout repository for release notes
+        uses: actions/checkout@v6
+
       - name: Prepare dist directory
         run: |
           mkdir -p dist
@@ -345,10 +348,49 @@ jobs:
           find dist -maxdepth 1 \( -name "skyborn-*.whl" -o -name "skyborn-*.tar.gz" \) -exec cp {} pypi-dist/ \;
           ls -la pypi-dist/
 
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION_NUM="${VERSION#v}"
+          RELEASE_DATE=$(date '+%B %d, %Y')
+
+          # Check if there's a pre-written release notes file
+          if [ -f "release_notes_${VERSION_NUM}.md" ]; then
+            echo "Using pre-written release notes"
+            cp "release_notes_${VERSION_NUM}.md" release_body.md
+          else
+            # Generate release notes from changelog
+            echo "# ${VERSION} (${RELEASE_DATE})" > release_body.md
+            echo "" >> release_body.md
+
+            # Extract version section from changelog
+            if [ -f "docs/source/changelog.rst" ]; then
+              # Try to extract the current version section from changelog
+              # This is a simple extraction; adjust based on your changelog format
+              sed -n "/Version ${VERSION_NUM}/,/Version [0-9]/p" docs/source/changelog.rst | \
+                head -n -1 >> release_body.md || echo "See CHANGELOG for details." >> release_body.md
+            else
+              echo "See [CHANGELOG](https://skyborn.readthedocs.io/en/latest/changelog.html) for details." >> release_body.md
+            fi
+
+            echo "" >> release_body.md
+            echo "---" >> release_body.md
+            echo "" >> release_body.md
+            echo "**Installation:**" >> release_body.md
+            echo '```bash' >> release_body.md
+            echo "pip install --upgrade skyborn==${VERSION_NUM}" >> release_body.md
+            echo '```' >> release_body.md
+          fi
+
+          cat release_body.md
+
       - name: Upload distributions to GitHub release
         uses: softprops/action-gh-release@v3
         with:
+          name: ${{ github.ref_name }} (${{ steps.release_notes.outputs.RELEASE_DATE || env.RELEASE_DATE }})
           tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+          body_path: release_body.md
           files: dist/*
           overwrite_files: true
 
