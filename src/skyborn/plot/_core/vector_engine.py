@@ -709,6 +709,7 @@ def _curly_vector_ncl_impl(
     anchor=None,
     ref_magnitude=None,
     ref_length=None,
+    ref_length_px=None,
     min_frac_length=0.0,
     min_distance=None,
     allow_non_uniform_grid=False,
@@ -827,9 +828,15 @@ def _curly_vector_ncl_impl(
         line_width_default = float(np.mean(finite_line_width_values))
 
     default_max_length_px = _default_ncl_max_length_px(axes.bbox, grid)
-    requested_ref_length_px = (
-        0.0 if ref_length is None else max(axes.bbox.width * float(ref_length), 1.0)
-    )
+
+    # Priority: ref_length_px (absolute) > ref_length (relative to axes width)
+    if ref_length_px is not None:
+        requested_ref_length_px = max(float(ref_length_px), 1.0)
+    elif ref_length is not None:
+        requested_ref_length_px = max(axes.bbox.width * float(ref_length), 1.0)
+    else:
+        requested_ref_length_px = 0.0
+
     ref_mag = 0.0 if ref_magnitude is None else float(ref_magnitude)
     min_frac_length = float(np.clip(min_frac_length, 0.0, 1.0))
     min_mag = float(np.min(valid_magnitude))

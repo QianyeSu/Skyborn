@@ -83,6 +83,7 @@ _ARRAY_CURLY_VECTOR_KWARG_NAMES = (
     "pivot",
     "ref_magnitude",
     "ref_length",
+    "ref_length_px",
     "min_frac_length",
     "min_distance",
     "ncl_preset",
@@ -110,6 +111,7 @@ _CURLY_VECTOR_NCL_KWARG_NAMES = (
     "anchor",
     "ref_magnitude",
     "ref_length",
+    "ref_length_px",
     "min_frac_length",
     "min_distance",
     "allow_non_uniform_grid",
@@ -342,6 +344,7 @@ def _array_curly_vector(
     pivot: str | None = None,
     ref_magnitude: float | None = None,
     ref_length: float | None = None,
+    ref_length_px: float | None = None,
     min_frac_length: float = 0.0,
     min_distance: float | None = None,
     ncl_preset: str | None = None,
@@ -441,7 +444,14 @@ def _array_curly_vector(
     ref_length : float or None, default: None
         Reference glyph length as a fraction of the axes width for
         the NCL-like curved-glyph renderer. If omitted, a NCL-like default scaled by
-        ``arrowsize`` is used.
+        ``arrowsize`` is used. Mutually exclusive with ``ref_length_px``.
+    ref_length_px : float or None, default: None
+        Reference glyph length in absolute display pixels for cross-figure comparison.
+        When specified, vectors with magnitude equal to ``ref_magnitude`` will be
+        rendered with this exact pixel length, regardless of figure size or axes width.
+        This enables consistent visual comparison of vector magnitudes across different
+        plots, subplots, or figure sizes. Takes priority over ``ref_length`` if both
+        are provided.
     min_frac_length : float, default: 0.0
         Minimum glyph length as a fraction of the reference length for
         the NCL-like curved-glyph renderer.
@@ -579,6 +589,7 @@ def _curly_vector_ncl(
     anchor=None,
     ref_magnitude=None,
     ref_length=None,
+    ref_length_px=None,
     min_frac_length=0.0,
     min_distance=None,
     allow_non_uniform_grid=False,
@@ -676,6 +687,7 @@ def _curly_vector_ncl(
         anchor=anchor,
         ref_magnitude=ref_magnitude,
         ref_length=ref_length,
+        ref_length_px=ref_length_px,
         min_frac_length=min_frac_length,
         min_distance=min_distance,
         allow_non_uniform_grid=allow_non_uniform_grid,
@@ -1149,7 +1161,15 @@ def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
         used.
     ref_length : float, optional
         Reference glyph length as a fraction of the axes width. If omitted, a
-        NCL-like default scaled by ``arrowsize`` is used.
+        NCL-like default scaled by ``arrowsize`` is used. Mutually exclusive
+        with ``ref_length_px``.
+    ref_length_px : float, optional
+        Reference glyph length in absolute display pixels for cross-figure
+        comparison. When specified, vectors with magnitude equal to
+        ``ref_magnitude`` will be rendered with this exact pixel length,
+        regardless of figure size or axes width. This enables consistent visual
+        comparison of vector magnitudes across different plots, subplots, or
+        figure sizes. Takes priority over ``ref_length`` if both are provided.
     min_frac_length : float, optional
         Minimum glyph length as a fraction of the reference length.
     min_distance : float, optional
