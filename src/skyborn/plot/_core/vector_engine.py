@@ -830,12 +830,15 @@ def _curly_vector_ncl_impl(
     default_max_length_px = _default_ncl_max_length_px(axes.bbox, grid)
 
     # Priority: ref_length_px (absolute) > ref_length (relative to axes width)
-    if ref_length_px is not None:
-        requested_ref_length_px = max(float(ref_length_px), 1.0)
-    elif ref_length is not None:
-        requested_ref_length_px = max(axes.bbox.width * float(ref_length), 1.0)
-    else:
-        requested_ref_length_px = 0.0
+    requested_ref_length_px = (
+        max(float(ref_length_px), 1.0)
+        if ref_length_px is not None
+        else (
+            max(axes.bbox.width * float(ref_length), 1.0)
+            if ref_length is not None
+            else 0.0
+        )
+    )
 
     ref_mag = 0.0 if ref_magnitude is None else float(ref_magnitude)
     min_frac_length = float(np.clip(min_frac_length, 0.0, 1.0))
