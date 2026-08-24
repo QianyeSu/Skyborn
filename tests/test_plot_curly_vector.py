@@ -762,6 +762,31 @@ class TestDatasetCurlyVector:
 
         plt.close(fig)
 
+    @patch("skyborn.plot.vector._array_curly_vector")
+    def test_curly_vector_forwards_ref_length_px(self, mock_curly_vector, sample_data):
+        """Test forwarding of ref_length_px for cross-figure comparison."""
+        mock_result = Mock(spec=CurlyVectorPlotSet)
+        mock_curly_vector.return_value = mock_result
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        curly_vector(
+            sample_data,
+            x="x",
+            y="y",
+            u="u",
+            v="v",
+            ax=ax,
+            ref_magnitude=10.0,
+            ref_length_px=50.0,
+        )
+
+        call_args = mock_curly_vector.call_args
+        assert call_args[1]["ref_magnitude"] == 10.0
+        assert call_args[1]["ref_length_px"] == 50.0
+
+        plt.close(fig)
+
     def test_curly_vector_no_longer_accepts_render_mode_argument(self, sample_data):
         """The wrapper should expose only the NCL-like path."""
         fig, ax = plt.subplots(figsize=(8, 6))
