@@ -20,6 +20,7 @@ from matplotlib.contour import ContourSet, QuadContourSet
 
 from ._core.contour_arrows import (
     _add_contour_arrows,
+    _arrow_contour_label_positions,
     _install_arrow_remove_hook,
     _validate_contour_direction,
     _validate_positive_float,
@@ -27,7 +28,7 @@ from ._core.contour_arrows import (
 )
 from ._shared.axes import _looks_like_axes
 
-__all__ = ["arrow_contour", "shadow_contourf"]
+__all__ = ["arrow_contour", "arrow_contour_clabel", "shadow_contourf"]
 
 
 class _PrecomputedQuadContourSet(QuadContourSet):
@@ -98,64 +99,12 @@ def _apply_artist_filter(artist: Any, agg_filter: Any) -> None:
         artist.set_agg_filter(agg_filter)
 
 
-def _set_path_effects(contour_set: Any, effects: List[Any]) -> None:
-    if hasattr(contour_set, "set_path_effects"):
-        contour_set.set_path_effects(effects)
-
-    for collection in getattr(contour_set, "collections", ()):
-        if hasattr(collection, "set_path_effects"):
-            collection.set_path_effects(effects)
-
-
 def _hide_contour_artists(contour_set: Any) -> None:
     if hasattr(contour_set, "set_visible"):
         contour_set.set_visible(False)
 
     for collection in getattr(contour_set, "collections", ()):
         collection.set_visible(False)
-
-
-def _overlay_shadow_kwargs(
-    kwargs: dict[str, Any], color: Any, alpha: float
-) -> dict[str, Any]:
-    shadow_kwargs = dict(kwargs)
-    shadow_kwargs.pop("cmap", None)
-    shadow_kwargs.pop("norm", None)
-    shadow_kwargs.pop("vmin", None)
-    shadow_kwargs.pop("vmax", None)
-    shadow_kwargs["colors"] = color
-    shadow_kwargs["alpha"] = alpha
-
-    zorder = shadow_kwargs.get("zorder", None)
-    if isinstance(zorder, (int, float)):
-        shadow_kwargs["zorder"] = zorder - 0.1
-
-    return shadow_kwargs
-
-
-def _apply_overlay_shadow_style(
-    contour_set: Any,
-    ax: Any,
-    offset: tuple[float, float],
-    blur: float,
-) -> None:
-    dx, dy = offset
-    transform = contour_set.get_transform()
-    offset_transform = mtransforms.ScaledTranslation(
-        dx / 72.0,
-        dy / 72.0,
-        ax.figure.dpi_scale_trans,
-    )
-    contour_set.set_transform(transform + offset_transform)
-
-    agg_filter = _blur_filter_factory(float(blur))
-    if agg_filter is not None and hasattr(contour_set, "set_agg_filter"):
-        contour_set.set_agg_filter(agg_filter)
-
-    for collection in getattr(contour_set, "collections", ()):
-        collection.set_transform(collection.get_transform() + offset_transform)
-        if agg_filter is not None and hasattr(collection, "set_agg_filter"):
-            collection.set_agg_filter(agg_filter)
 
 
 def _iter_contour_layers(contour_set: Any):
@@ -174,6 +123,45 @@ def _iter_contour_layers(contour_set: Any):
         hatch = hatches[index % len(hatches)] if hatches else collection.get_hatch()
         for path in collection.get_paths():
             yield path, facecolor, hatch
+
+
+def _path_touches_view_boundary(path: Any, ax: Any, margin: float = 0.1) -> bool:
+    """Check if a path touches or extends beyond the axes view limits.
+
+    Parameters
+    ----------
+    path : matplotlib.path.Path
+        The path to check.
+    ax : matplotlib.axes.Axes
+        The axes containing the view limits.
+    margin : float, default: 0.1
+        Margin in data coordinates. Paths within this margin of the boundary
+        are considered to touch it.
+
+    Returns
+    -------
+    bool
+        True if the path touches or extends beyond the view boundary.
+    """
+    vertices = path.vertices
+    if len(vertices) == 0:
+        return False
+
+    x_coords = vertices[:, 0]
+    y_coords = vertices[:, 1]
+
+    x_min, x_max = ax.get_xlim()
+    y_min, y_max = ax.get_ylim()
+
+    # Check if any vertex is near or beyond the boundaries
+    touches = (
+        np.any(x_coords <= x_min + margin)
+        or np.any(x_coords >= x_max - margin)
+        or np.any(y_coords <= y_min + margin)
+        or np.any(y_coords >= y_max - margin)
+    )
+
+    return touches
 
 
 def _add_layered_shadow_artists(
@@ -198,26 +186,38 @@ def _add_layered_shadow_artists(
     fill_alpha = contour_set.get_alpha()
     for index, (path, facecolor, hatch) in enumerate(_iter_contour_layers(contour_set)):
         layer_zorder = base_zorder + index * 0.02
-        shadow_collection = PathCollection(
-            [path],
-            facecolors=color,
-            edgecolors="none",
-            alpha=alpha,
-            transform=transform + offset_transform,
-            zorder=layer_zorder,
-        )
-        _apply_artist_filter(shadow_collection, agg_filter)
-        ax.add_collection(shadow_collection)
-        artists.append(shadow_collection)
+
+        # Only add shadow for paths that don't touch the view boundary
+        # to avoid artifacts from truncated contours
+        if not _path_touches_view_boundary(path, ax, margin=0.1):
+            shadow_collection = PathCollection(
+                [path],
+                facecolors=color,
+                edgecolors="none",
+                alpha=alpha,
+                transform=transform + offset_transform,
+                zorder=layer_zorder,
+            )
+            _apply_artist_filter(shadow_collection, agg_filter)
+            ax.add_collection(shadow_collection)
+            artists.append(shadow_collection)
+
+        # Use matching edge color to eliminate white gaps between adjacent layers
+        # caused by antialiasing artifacts. Disable antialiasing on fills to
+        # eliminate gaps, but keep edges smooth with matching color and width.
+        edge_color = mpl.rcParams["hatch.color"] if hatch else facecolor
+        edge_width = 0 if hatch else 1.0
 
         fill_collection = PathCollection(
             [path],
             facecolors=[facecolor],
-            edgecolors=mpl.rcParams["hatch.color"] if hatch else "none",
+            edgecolors=[edge_color],
+            linewidths=edge_width,
             hatch=hatch,
             alpha=fill_alpha,
             transform=transform,
             zorder=layer_zorder + 0.01,
+            antialiaseds=False,  # Disable AA to eliminate white line gaps
         )
         ax.add_collection(fill_collection)
         artists.append(fill_collection)
@@ -534,8 +534,16 @@ def arrow_contour(*args: Any, **kwargs: Any):
         Arrowhead width relative to the local arrowhead length.
     arrow_length_fraction : float, default: 0.035
         Fraction of the contour-segment length used for each arrow body.
+        Mutually exclusive with ``arrow_length_points``.
+    arrow_length_points : float, optional
+        Absolute arrowhead length in points for cross-figure comparison. When
+        specified, all arrows will have this exact length regardless of contour
+        segment length, enabling consistent visual comparison across different
+        plots. Takes priority over ``arrow_length_fraction`` if both are provided.
     arrow_max_length : float, default: 10.0
-        Maximum arrowhead side length in points.
+        Maximum arrowhead side length in points. Only used when
+        ``arrow_length_fraction`` is active (ignored if ``arrow_length_points``
+        is specified).
     positive_direction : {"clockwise", "counterclockwise"}, default: "clockwise"
         Direction used for positive closed contours. Negative closed contours
         use the opposite direction. Direction is evaluated in the current
@@ -547,6 +555,27 @@ def arrow_contour(*args: Any, **kwargs: Any):
         Arrow line width. Defaults to the matching contour line width.
     arrow_zorder : float, optional
         Arrow z-order. Defaults to slightly above the contour line.
+    arrow_style : {"swept", "line", "filled"}, default: "swept"
+        Arrow rendering style.
+        "swept" uses NCL/NCAR Graphics-style swept-back barbs (see
+        ``drwvec.f`` in NCAR Graphics, default style): both barbs originate
+        at the arrow tip and sweep back at ``arrow_angle`` degrees from the
+        reversed shaft direction, giving a narrow, sharp look.
+        "line" uses a flat-backed V-shaped line segment (original style),
+        with both barbs fanning out perpendicular to the shaft from its
+        base.
+        "filled" uses solid triangular arrowheads.
+    arrow_angle : float, default: 22.5
+        Sweep-back angle in degrees for each barb, measured from the
+        reversed shaft direction. Only used when ``arrow_style="swept"``.
+        NCAR Graphics uses 22.5 degrees by default.
+    arrow_min_spacing : float, optional
+        Minimum spacing in display pixels between arrows, both within the same
+        contour line and across nearby contour lines. When contour lines are
+        densely packed (e.g., tight gradients), this prevents arrow crowding by
+        skipping arrows that would be too close to existing ones. Similar to NCL's
+        ``vcMinDistanceF``. If not specified, uses an automatic spacing based on
+        arrow length (typically 2.5× arrow length).
 
     Returns
     -------
@@ -562,6 +591,11 @@ def arrow_contour(*args: Any, **kwargs: Any):
         kwargs.pop("arrow_length_fraction", 0.035),
         "arrow_length_fraction",
     )
+    arrow_length_points = kwargs.pop("arrow_length_points", None)
+    if arrow_length_points is not None:
+        arrow_length_points = _validate_positive_float(
+            arrow_length_points, "arrow_length_points"
+        )
     arrow_max_length = _validate_positive_float(
         kwargs.pop("arrow_max_length", 10.0),
         "arrow_max_length",
@@ -573,6 +607,17 @@ def arrow_contour(*args: Any, **kwargs: Any):
     arrow_color = kwargs.pop("arrow_color", None)
     arrow_linewidth = kwargs.pop("arrow_linewidth", None)
     arrow_zorder = kwargs.pop("arrow_zorder", None)
+    arrow_style = kwargs.pop("arrow_style", "swept")
+    if arrow_style not in {"filled", "line", "swept"}:
+        raise ValueError("arrow_style must be 'line', 'swept', or 'filled'")
+    arrow_angle = _validate_positive_float(
+        kwargs.pop("arrow_angle", 22.5), "arrow_angle"
+    )
+    arrow_min_spacing = kwargs.pop("arrow_min_spacing", None)
+    if arrow_min_spacing is not None:
+        arrow_min_spacing = _validate_positive_float(
+            arrow_min_spacing, "arrow_min_spacing"
+        )
 
     remaining_args = list(args)
     if remaining_args and _looks_like_axes(remaining_args[0]):
@@ -594,11 +639,15 @@ def arrow_contour(*args: Any, **kwargs: Any):
             arrow_count=arrow_count,
             arrow_size=arrow_size,
             arrow_length_fraction=arrow_length_fraction,
+            arrow_length_points=arrow_length_points,
             arrow_max_length=arrow_max_length,
             positive_direction=positive_direction,
             arrow_color=arrow_color,
             arrow_linewidth=arrow_linewidth,
             zorder=arrow_zorder,
+            arrow_style=arrow_style,
+            arrow_angle=arrow_angle,
+            arrow_min_spacing=arrow_min_spacing,
         )
         _install_arrow_remove_hook(contour_set, arrow_artists)
         _hide_contour_artists(contour_set)
@@ -606,6 +655,36 @@ def arrow_contour(*args: Any, **kwargs: Any):
     contour_set._skyborn_arrow_contour_artists = arrow_artists
     contour_set._skyborn_contour_arrows = arrow_artists
     return contour_set
+
+
+def arrow_contour_clabel(contour_set: Any, *args: Any, **kwargs: Any):
+    """Label ``arrow_contour`` lines, placing labels clear of the arrowheads.
+
+    This is a thin wrapper around ``Axes.clabel``. For each contour line
+    produced by :func:`arrow_contour`, it picks a label anchor point (by arc
+    length along the line) that is as far as possible from that line's
+    arrowheads, then passes those anchors to ``clabel`` via ``manual=``. This
+    mirrors NCL's behavior of routing contour labels around vector/arrow
+    glyphs so labels and arrowheads do not overlap.
+
+    Parameters
+    ----------
+    contour_set : matplotlib.contour.QuadContourSet
+        The contour set returned by :func:`arrow_contour`.
+    *args, **kwargs :
+        Forwarded to ``Axes.clabel``. If ``manual`` is already supplied, it is
+        used as-is and no automatic label placement is performed.
+
+    Returns
+    -------
+    dict
+        The mapping of label text artists returned by ``Axes.clabel``.
+    """
+    if "manual" not in kwargs:
+        label_positions = _arrow_contour_label_positions(contour_set)
+        if label_positions:
+            kwargs["manual"] = label_positions
+    return contour_set.axes.clabel(contour_set, *args, **kwargs)
 
 
 def shadow_contourf(*args: Any, **kwargs: Any):
@@ -623,35 +702,20 @@ def shadow_contourf(*args: Any, **kwargs: Any):
         may also be supplied as the first positional argument.
     shadow : bool, default: True
         Whether to draw the shadow.
-    shadow_method : {"layered", "path_effect", "overlay"}, default: "layered"
-        ``"layered"`` computes contour geometry once, then interleaves one
-        shadow collection and one filled collection per contour layer. This
-        preserves the internal stepped-shadow effect without recomputing
-        ``contourf`` for every level. ``"path_effect"`` uses one ``contourf``
-        call and draws a simpler outer shadow through Matplotlib's path-effect
-        renderer.
-        ``"overlay"`` draws one additional contour set underneath the main plot
-        and can apply a soft Gaussian blur through an Agg filter.
     shadow_offset : tuple of float, default: (2.0, -2.0)
         Shadow offset in points. Positive x moves right and positive y moves up.
     shadow_alpha : float, default: 0.35
         Shadow opacity.
     shadow_color : color-like, default: "black"
         Shadow color.
-    shadow_rho : float, default: 0.3
-        Matplotlib ``SimplePatchShadow`` rho value used by ``shadow_method`` =
-        ``"path_effect"``.
     shadow_blur : float, default: 1.2
-        Blur radius in points used by ``shadow_method="layered"`` and
-        ``shadow_method="overlay"``. Use ``0`` for a sharper and faster
-        stepped shadow.
+        Blur radius in points. Use ``0`` for a sharper and faster stepped shadow.
     shadow_backend : {"standard", "fast", "auto"}, default: "standard"
-        Geometry backend used for the main filled contour when
-        ``shadow_method="layered"``. ``"standard"`` follows Matplotlib's
-        ordinary ``Axes.contourf`` path. ``"fast"`` precomputes supported
-        filled-contour geometry before building the visible layers. ``"auto"``
-        uses the fast path when supported and otherwise falls back to the
-        standard path.
+        Geometry backend used for the main filled contour. ``"standard"`` follows
+        Matplotlib's ordinary ``Axes.contourf`` path. ``"fast"`` precomputes
+        supported filled-contour geometry before building the visible layers.
+        ``"auto"`` uses the fast path when supported and otherwise falls back to
+        the standard path.
 
     Returns
     -------
@@ -660,19 +724,25 @@ def shadow_contourf(*args: Any, **kwargs: Any):
     """
     ax = kwargs.pop("ax", None)
     shadow = bool(kwargs.pop("shadow", True))
-    shadow_method = kwargs.pop("shadow_method", "layered")
     shadow_offset = _validate_shadow_offset(kwargs.pop("shadow_offset", (2.0, -2.0)))
     shadow_alpha = float(kwargs.pop("shadow_alpha", 0.35))
     shadow_color = kwargs.pop("shadow_color", "black")
-    shadow_rho = float(kwargs.pop("shadow_rho", 0.3))
     shadow_blur = float(kwargs.pop("shadow_blur", 1.2))
     if "shadow_backend" in kwargs and "shadow_engine" in kwargs:
         raise TypeError(
             "shadow_contourf() received both shadow_backend and shadow_engine"
         )
-    shadow_backend_name = (
-        "shadow_engine" if "shadow_engine" in kwargs else "shadow_backend"
-    )
+    if "shadow_engine" in kwargs:
+        import warnings
+
+        warnings.warn(
+            "shadow_engine is deprecated, use shadow_backend instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        shadow_backend_name = "shadow_engine"
+    else:
+        shadow_backend_name = "shadow_backend"
     shadow_backend = _normalize_shadow_backend(
         kwargs.pop(shadow_backend_name, "standard"),
         shadow_backend_name,
@@ -689,28 +759,16 @@ def shadow_contourf(*args: Any, **kwargs: Any):
     if ax is None:
         ax = plt.gca()
 
-    if shadow_method not in {"layered", "path_effect", "overlay"}:
-        raise ValueError(
-            "shadow_method must be one of: 'layered', 'path_effect', 'overlay'"
-        )
-    shadow_set = None
     contour_kwargs = dict(kwargs)
-    if shadow and shadow_method == "overlay":
-        shadow_set = ax.contourf(
-            *remaining_args,
-            **_overlay_shadow_kwargs(contour_kwargs, shadow_color, shadow_alpha),
-        )
-        _apply_overlay_shadow_style(shadow_set, ax, shadow_offset, shadow_blur)
-
     contour_set = None
-    if shadow_method == "layered" and shadow_backend in {"fast", "auto"}:
+    if shadow_backend in {"fast", "auto"}:
         contour_set = _contourpy_contourf(ax, remaining_args, contour_kwargs)
 
     if contour_set is None:
         contour_set = ax.contourf(*remaining_args, **contour_kwargs)
 
     shadow_artists: List[Any] = []
-    if shadow and shadow_method == "layered":
+    if shadow:
         shadow_artists = _add_layered_shadow_artists(
             contour_set,
             ax,
@@ -720,20 +778,7 @@ def shadow_contourf(*args: Any, **kwargs: Any):
             shadow_blur,
         )
         _install_layered_remove_hook(contour_set, shadow_artists)
-    elif shadow and shadow_method == "path_effect":
-        effects = [
-            mpatheffects.SimplePatchShadow(
-                offset=shadow_offset,
-                shadow_rgbFace=shadow_color,
-                alpha=shadow_alpha,
-                rho=shadow_rho,
-            ),
-            mpatheffects.Normal(),
-        ]
-        _set_path_effects(contour_set, effects)
 
-    contour_set._skyborn_shadow_contour_set = shadow_set
-    contour_set._skyborn_shadow_method = shadow_method if shadow else None
     contour_set._skyborn_shadow_artists = shadow_artists
     contour_set._skyborn_shadow_backend = (
         "fast" if isinstance(contour_set, _PrecomputedQuadContourSet) else "standard"

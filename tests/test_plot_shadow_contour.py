@@ -509,8 +509,6 @@ def test_shadow_contourf_accepts_matplotlib_contourf_arguments():
 
     assert isinstance(result, QuadContourSet)
     assert result.extend == "both"
-    assert result._skyborn_shadow_contour_set is None
-    assert result._skyborn_shadow_method == "layered"
     assert len(result._skyborn_shadow_artists) >= 2 * (len(result.levels) - 1)
     assert len(result._skyborn_shadow_artists) % 2 == 0
     assert not result.get_visible()
@@ -552,7 +550,6 @@ def test_shadow_contourf_fast_backend_returns_quad_contour_set():
     assert isinstance(result, QuadContourSet)
     assert result._skyborn_shadow_backend == "fast"
     assert result._skyborn_shadow_engine == "contourpy"
-    assert result._skyborn_shadow_method == "layered"
     assert len(result.get_paths()) == len(levels) - 1
     assert len(result._skyborn_shadow_artists) >= 2 * (len(levels) - 1)
     assert not result.get_visible()
@@ -690,32 +687,6 @@ def test_shadow_contourf_accepts_legacy_shadow_engine_alias():
     plt.close(fig)
 
 
-def test_shadow_contourf_path_effect_method_draws_with_path_effects():
-    x, y, z = _sample_field()
-    fig, ax = plt.subplots()
-
-    result = shadow_contourf(
-        x,
-        y,
-        z,
-        levels=np.linspace(-2.0, 2.0, 9),
-        ax=ax,
-        shadow_method="path_effect",
-        shadow_offset=(3.0, -4.0),
-        shadow_alpha=0.4,
-    )
-
-    assert result._skyborn_shadow_method == "path_effect"
-    assert result._skyborn_shadow_artists == []
-
-    effects = result.get_path_effects()
-    assert isinstance(effects[0], mpatheffects.SimplePatchShadow)
-    assert isinstance(effects[1], mpatheffects.Normal)
-
-    fig.canvas.draw()
-    plt.close(fig)
-
-
 def test_shadow_contourf_layered_preserves_alpha_and_hatches():
     x, y, z = _sample_field()
     fig, ax = plt.subplots()
@@ -764,34 +735,6 @@ def test_shadow_contourf_rejects_duplicate_axes():
     plt.close(fig)
 
 
-def test_shadow_contourf_overlay_uses_single_shadow_contour_set():
-    x, y, z = _sample_field()
-    fig, ax = plt.subplots()
-
-    result = shadow_contourf(
-        x,
-        y,
-        z,
-        levels=np.linspace(-2.0, 2.0, 7),
-        cmap="plasma",
-        ax=ax,
-        shadow_method="overlay",
-        shadow_offset=(4.0, -3.0),
-        shadow_alpha=0.25,
-        shadow_blur=1.5,
-    )
-
-    shadow_set = result._skyborn_shadow_contour_set
-    assert isinstance(result, QuadContourSet)
-    assert isinstance(shadow_set, QuadContourSet)
-    assert shadow_set is not result
-    assert shadow_set.get_agg_filter() is not None
-    assert result._skyborn_shadow_artists == []
-
-    fig.canvas.draw()
-    plt.close(fig)
-
-
 def test_shadow_contourf_accepts_cartopy_transform_when_available():
     cartopy = pytest.importorskip("cartopy.crs")
     x, y, z = _sample_field()
@@ -809,7 +752,6 @@ def test_shadow_contourf_accepts_cartopy_transform_when_available():
     )
 
     assert isinstance(result, QuadContourSet)
-    assert result._skyborn_shadow_method == "layered"
 
     fig.canvas.draw()
     plt.close(fig)
@@ -821,8 +763,7 @@ def test_shadow_contourf_can_disable_shadow():
 
     result = shadow_contourf(x, y, z, levels=4, ax=ax, shadow=False)
 
-    assert result._skyborn_shadow_method is None
-    assert result._skyborn_shadow_contour_set is None
+    assert isinstance(result, QuadContourSet)
     assert result._skyborn_shadow_artists == []
     assert result.get_path_effects() in (None, [])
 
@@ -833,9 +774,6 @@ def test_shadow_contourf_can_disable_shadow():
 def test_shadow_contourf_validates_shadow_options():
     x, y, z = _sample_field()
     fig, ax = plt.subplots()
-
-    with pytest.raises(ValueError, match="shadow_method"):
-        shadow_contourf(x, y, z, ax=ax, shadow_method="bad")
 
     with pytest.raises(ValueError, match="shadow_offset"):
         shadow_contourf(x, y, z, ax=ax, shadow_offset=(1.0, 2.0, 3.0))
@@ -852,6 +790,8 @@ def test_shadow_contourf_validates_shadow_options():
             shadow_backend="fast",
             shadow_engine="contourpy",
         )
+
+    plt.close(fig)
 
 
 def test_arrow_contour_accepts_arrow_length_points():
