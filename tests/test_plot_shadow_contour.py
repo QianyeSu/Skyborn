@@ -671,16 +671,17 @@ def test_shadow_contourf_accepts_legacy_shadow_engine_alias():
     x, y, z = _sample_field()
     fig, ax = plt.subplots()
 
-    result = shadow_contourf(
-        x,
-        y,
-        z,
-        levels=np.linspace(-2.0, 2.0, 9),
-        cmap="viridis",
-        ax=ax,
-        shadow_blur=0.0,
-        shadow_engine="contourpy",
-    )
+    with pytest.warns(DeprecationWarning, match="shadow_engine is deprecated"):
+        result = shadow_contourf(
+            x,
+            y,
+            z,
+            levels=np.linspace(-2.0, 2.0, 9),
+            cmap="viridis",
+            ax=ax,
+            shadow_blur=0.0,
+            shadow_engine="contourpy",
+        )
 
     assert result._skyborn_shadow_backend == "fast"
     assert result._skyborn_shadow_engine == "contourpy"
@@ -851,5 +852,191 @@ def test_shadow_contourf_validates_shadow_options():
             shadow_backend="fast",
             shadow_engine="contourpy",
         )
+
+
+def test_arrow_contour_accepts_arrow_length_points():
+    """Test that arrow_contour accepts arrow_length_points parameter."""
+    x, y, z = _sample_signed_circles()
+    fig, ax = plt.subplots()
+
+    result = arrow_contour(
+        x,
+        y,
+        z,
+        levels=[0.5],
+        ax=ax,
+        arrow_count=2,
+        arrow_length_points=15.0,
+    )
+
+    assert hasattr(result, "_skyborn_contour_arrows")
+    assert len(result._skyborn_contour_arrows) > 0
+    fig.canvas.draw()
+    plt.close(fig)
+
+
+def test_arrow_contour_arrow_length_points_takes_priority():
+    """Test that arrow_length_points takes priority over arrow_length_fraction."""
+    x, y, z = _sample_signed_circles()
+    fig, ax = plt.subplots()
+
+    # Both parameters specified - arrow_length_points should win
+    result = arrow_contour(
+        x,
+        y,
+        z,
+        levels=[0.5],
+        ax=ax,
+        arrow_count=2,
+        arrow_length_points=20.0,
+        arrow_length_fraction=0.1,  # Should be ignored
+    )
+
+    assert hasattr(result, "_skyborn_contour_arrows")
+    fig.canvas.draw()
+    plt.close(fig)
+
+
+def test_arrow_contour_validates_arrow_length_points():
+    """Test that arrow_length_points must be positive."""
+    x, y, z = _sample_signed_circles()
+    fig, ax = plt.subplots()
+
+    with pytest.raises(ValueError, match="arrow_length_points"):
+        arrow_contour(
+            x,
+            y,
+            z,
+            levels=[0.5],
+            ax=ax,
+            arrow_length_points=-5.0,
+        )
+
+    with pytest.raises(ValueError, match="arrow_length_points"):
+        arrow_contour(
+            x,
+            y,
+            z,
+            levels=[0.5],
+            ax=ax,
+            arrow_length_points=0.0,
+        )
+
+    plt.close(fig)
+
+
+def test_arrow_contour_default_style_is_line():
+    """Test that the default arrow_style remains the flat-backed V ("line")."""
+    x, y, z = _sample_signed_circles()
+    fig, ax = plt.subplots()
+
+    result = arrow_contour(x, y, z, levels=[0.5], ax=ax, arrow_count=2)
+
+    assert len(result._skyborn_contour_arrows) > 0
+    arrow_line = result._skyborn_contour_arrows[0]
+    # "line" style draws everything as a single LineCollection (no PolyCollection)
+    assert isinstance(arrow_line, LineCollection)
+    fig.canvas.draw()
+    plt.close(fig)
+
+
+def test_arrow_contour_accepts_swept_style():
+    """Test that arrow_style="swept" produces NCL-style swept-back arrowheads."""
+    x, y, z = _sample_signed_circles()
+    fig, ax = plt.subplots()
+
+    result = arrow_contour(
+        x,
+        y,
+        z,
+        levels=[0.5],
+        ax=ax,
+        arrow_count=2,
+        arrow_style="swept",
+    )
+
+    assert len(result._skyborn_contour_arrows) > 0
+    arrow_line = result._skyborn_contour_arrows[0]
+    assert isinstance(arrow_line, LineCollection)
+    assert len(arrow_line._skyborn_contour_arrow_segments) > 0
+    fig.canvas.draw()
+    plt.close(fig)
+
+
+def test_arrow_contour_swept_angle_changes_geometry():
+    """Test that a wider arrow_angle produces a wider swept-back barb spread."""
+    x, y, z = _sample_signed_circles()
+
+    fig_narrow, ax_narrow = plt.subplots()
+    result_narrow = arrow_contour(
+        x,
+        y,
+        z,
+        levels=[0.5],
+        ax=ax_narrow,
+        arrow_count=1,
+        arrow_style="swept",
+        arrow_angle=10.0,
+    )
+
+    fig_wide, ax_wide = plt.subplots()
+    result_wide = arrow_contour(
+        x,
+        y,
+        z,
+        levels=[0.5],
+        ax=ax_wide,
+        arrow_count=1,
+        arrow_style="swept",
+        arrow_angle=60.0,
+    )
+
+    narrow_segments = result_narrow._skyborn_contour_arrows[0].get_segments()
+    wide_segments = result_wide._skyborn_contour_arrows[0].get_segments()
+
+    # Barb segments come after the main contour path segment.
+    narrow_barb = narrow_segments[1]
+    wide_barb = wide_segments[1]
+    narrow_spread = float(np.hypot(*(narrow_barb[1] - narrow_barb[0])))
+    wide_spread = float(np.hypot(*(wide_barb[1] - wide_barb[0])))
+    assert wide_spread > narrow_spread
+
+    plt.close(fig_narrow)
+    plt.close(fig_wide)
+
+
+def test_arrow_contour_validates_arrow_style():
+    """Test that arrow_style only accepts 'line', 'swept', or 'filled'."""
+    x, y, z = _sample_signed_circles()
+    fig, ax = plt.subplots()
+
+    with pytest.raises(ValueError, match="arrow_style"):
+        arrow_contour(x, y, z, levels=[0.5], ax=ax, arrow_style="bogus")
+
+    plt.close(fig)
+
+
+def test_arrow_contour_accepts_filled_style():
+    """Test that arrow_style="filled" draws a separate PolyCollection for heads."""
+    x, y, z = _sample_signed_circles()
+    fig, ax = plt.subplots()
+
+    result = arrow_contour(
+        x,
+        y,
+        z,
+        levels=[0.5],
+        ax=ax,
+        arrow_count=2,
+        arrow_style="filled",
+    )
+
+    kinds = {
+        getattr(artist, "_skyborn_contour_kind", None)
+        for artist in result._skyborn_contour_arrows
+    }
+    assert "arrow_contour_heads" in kinds
+    fig.canvas.draw()
+    plt.close(fig)
 
     plt.close(fig)
