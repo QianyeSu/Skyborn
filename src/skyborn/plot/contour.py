@@ -171,6 +171,7 @@ def _add_layered_shadow_artists(
     color: Any,
     alpha: float,
     blur: float,
+    boundary_margin: float = 0.1,
 ) -> List[Any]:
     transform = contour_set.get_transform()
     base_zorder = contour_set.get_zorder()
@@ -189,7 +190,7 @@ def _add_layered_shadow_artists(
 
         # Only add shadow for paths that don't touch the view boundary
         # to avoid artifacts from truncated contours
-        if not _path_touches_view_boundary(path, ax, margin=0.1):
+        if not _path_touches_view_boundary(path, ax, margin=boundary_margin):
             shadow_collection = PathCollection(
                 [path],
                 facecolors=color,
@@ -719,6 +720,10 @@ def shadow_contourf(*args: Any, **kwargs: Any):
         Shadow color.
     shadow_blur : float, default: 1.2
         Blur radius in points. Use ``0`` for a sharper and faster stepped shadow.
+    shadow_boundary_margin : float, default: 0.1
+        Margin in data coordinates for detecting paths near axes boundaries.
+        Shadows are not drawn for contours within this distance of the view
+        boundary to avoid artifacts from truncated paths.
     shadow_backend : {"standard", "fast", "auto"}, default: "standard"
         Geometry backend used for the main filled contour. ``"standard"`` follows
         Matplotlib's ordinary ``Axes.contourf`` path. ``"fast"`` precomputes
@@ -737,6 +742,7 @@ def shadow_contourf(*args: Any, **kwargs: Any):
     shadow_alpha = float(kwargs.pop("shadow_alpha", 0.35))
     shadow_color = kwargs.pop("shadow_color", "black")
     shadow_blur = float(kwargs.pop("shadow_blur", 1.2))
+    shadow_boundary_margin = float(kwargs.pop("shadow_boundary_margin", 0.1))
     if "shadow_backend" in kwargs and "shadow_engine" in kwargs:
         raise TypeError(
             "shadow_contourf() received both shadow_backend and shadow_engine"
@@ -785,6 +791,7 @@ def shadow_contourf(*args: Any, **kwargs: Any):
             shadow_color,
             shadow_alpha,
             shadow_blur,
+            shadow_boundary_margin,
         )
         _install_layered_remove_hook(contour_set, shadow_artists)
 

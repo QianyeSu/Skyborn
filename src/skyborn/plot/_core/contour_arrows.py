@@ -620,31 +620,44 @@ def _arrow_contour_label_positions(contour_set: Any) -> List[tuple[float, float]
     positions: List[tuple[float, float]] = []
 
     for line in arrow_artists:
-        get_segments = getattr(line, "get_segments", None)
-        segments = get_segments() if get_segments is not None else []
-        if not segments:
-            continue
-        main_path = np.asarray(segments[0], dtype=float)
-        if main_path.shape[0] < 2:
-            continue
-        display_path = transform.transform(main_path)
-        closed = _is_closed_path(main_path)
+        try:
+            get_segments = getattr(line, "get_segments", None)
+            segments = get_segments() if get_segments is not None else []
+            if not segments:
+                continue
+            main_path = np.asarray(segments[0], dtype=float)
+            if main_path.shape[0] < 2:
+                continue
+            display_path = transform.transform(main_path)
+            closed = _is_closed_path(main_path)
 
-        arrow_spans = getattr(line, "_skyborn_contour_arrow_segments", None) or []
-        midpoints_display = []
-        for start, end in arrow_spans:
-            start_arr = np.asarray(start, dtype=float)
-            end_arr = np.asarray(end, dtype=float)
-            midpoint_data = (start_arr + end_arr) / 2.0
-            midpoints_display.append(transform.transform(midpoint_data))
+            arrow_spans = getattr(line, "_skyborn_contour_arrow_segments", None) or []
+            midpoints_display = []
+            for start, end in arrow_spans:
+                start_arr = np.asarray(start, dtype=float)
+                end_arr = np.asarray(end, dtype=float)
+                midpoint_data = (start_arr + end_arr) / 2.0
+                midpoints_display.append(transform.transform(midpoint_data))
 
-        anchor_display = _label_anchor_away_from_arrows(
-            display_path, midpoints_display, closed
-        )
-        if anchor_display is None:
+            anchor_display = _label_anchor_away_from_arrows(
+                display_path, midpoints_display, closed
+            )
+            if anchor_display is None:
+                continue
+            anchor_data = inverted_transform.transform(anchor_display)
+            positions.append((float(anchor_data[0]), float(anchor_data[1])))
+        except Exception as e:
+            # Silently skip problematic contour lines rather than failing
+            # the entire label placement. This can happen if the line geometry
+            # is degenerate or if coordinate transforms fail.
+            import warnings
+
+            warnings.warn(
+                f"Failed to compute label position for contour line: {e}",
+                RuntimeWarning,
+                stacklevel=3,
+            )
             continue
-        anchor_data = inverted_transform.transform(anchor_display)
-        positions.append((float(anchor_data[0]), float(anchor_data[1])))
 
     return positions
 
