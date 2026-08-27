@@ -36,6 +36,7 @@ static inline double clip_double(double value, double lower, double upper) {
  */
 static PyObject* point_at_distance(PyObject* self, PyObject* args) {
     PyArrayObject *vertices_obj;
+    PyArrayObject *vertices_contiguous = NULL;
     double distance;
 
     if (!PyArg_ParseTuple(args, "O!d", &PyArray_Type, &vertices_obj, &distance)) {
@@ -47,8 +48,24 @@ static PyObject* point_at_distance(PyObject* self, PyObject* args) {
         return NULL;
     }
 
+    /* Check dtype - must be float64 */
+    if (PyArray_TYPE(vertices_obj) != NPY_DOUBLE) {
+        PyErr_SetString(PyExc_TypeError, "vertices must be float64 (np.float64) array");
+        return NULL;
+    }
+
+    /* Ensure array is contiguous for safe stride calculation */
+    if (!PyArray_ISCARRAY_RO(vertices_obj) && !PyArray_ISFARRAY_RO(vertices_obj)) {
+        vertices_contiguous = (PyArrayObject*)PyArray_GETCONTIGUOUS(vertices_obj);
+        if (!vertices_contiguous) {
+            return NULL;
+        }
+        vertices_obj = vertices_contiguous;
+    }
+
     npy_intp n = PyArray_DIM(vertices_obj, 0);
     if (n < 2) {
+        Py_XDECREF(vertices_contiguous);
         Py_RETURN_NONE;
     }
 
@@ -69,6 +86,7 @@ static PyObject* point_at_distance(PyObject* self, PyObject* args) {
     }
 
     if (total <= 0.0) {
+        Py_XDECREF(vertices_contiguous);
         Py_RETURN_NONE;
     }
 
@@ -97,6 +115,7 @@ static PyObject* point_at_distance(PyObject* self, PyObject* args) {
             result_data[0] = x0 + ratio * dx;
             result_data[1] = y0 + ratio * dy;
 
+            Py_XDECREF(vertices_contiguous);
             return (PyObject*)result;
         }
 
@@ -112,6 +131,7 @@ static PyObject* point_at_distance(PyObject* self, PyObject* args) {
     result_data[0] = vertices[(n - 1) * stride0];
     result_data[1] = vertices[(n - 1) * stride0 + stride1];
 
+    Py_XDECREF(vertices_contiguous);
     return (PyObject*)result;
 }
 
@@ -337,6 +357,7 @@ static int compare_scored_desc(const void *a, const void *b) {
  */
 static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
     PyArrayObject *vertices_obj;
+    PyArrayObject *vertices_contiguous = NULL;
     double total_length, arrow_length;
     int arrow_count;
     PyObject *min_spacing_obj = NULL;
@@ -346,16 +367,35 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
         return NULL;
     }
 
+    /* Check dtype - must be float64 */
+    if (PyArray_TYPE(vertices_obj) != NPY_DOUBLE) {
+        PyErr_SetString(PyExc_TypeError, "vertices must be float64 (np.float64) array");
+        return NULL;
+    }
+
+    /* Ensure array is contiguous for safe stride calculation */
+    if (!PyArray_ISCARRAY_RO(vertices_obj) && !PyArray_ISFARRAY_RO(vertices_obj)) {
+        vertices_contiguous = (PyArrayObject*)PyArray_GETCONTIGUOUS(vertices_obj);
+        if (!vertices_contiguous) {
+            return NULL;
+        }
+        vertices_obj = vertices_contiguous;
+    }
+
     if (arrow_count <= 1) {
         /* Simple uniform spacing */
         npy_intp dims[1] = {arrow_count};
         PyArrayObject *result = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
-        if (!result) return NULL;
+        if (!result) {
+            Py_XDECREF(vertices_contiguous);
+            return NULL;
+        }
 
         double *result_data = (double*)PyArray_DATA(result);
         if (arrow_count == 1) {
             result_data[0] = total_length / 2.0;
         }
+        Py_XDECREF(vertices_contiguous);
         return (PyObject*)result;
     }
 
@@ -366,13 +406,17 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
         /* Fallback to uniform */
         npy_intp dims[1] = {arrow_count};
         PyArrayObject *result = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
-        if (!result) return NULL;
+        if (!result) {
+            Py_XDECREF(vertices_contiguous);
+            return NULL;
+        }
 
         double *result_data = (double*)PyArray_DATA(result);
         double spacing = total_length / (arrow_count + 1.0);
         for (int i = 0; i < arrow_count; i++) {
             result_data[i] = spacing * (i + 1);
         }
+        Py_XDECREF(vertices_contiguous);
         return (PyObject*)result;
     }
 
@@ -380,6 +424,7 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
     int sample_count = (arrow_count * 28 > 64) ? (arrow_count * 28) : 64;
     ScoredCandidate *scored = malloc(sizeof(ScoredCandidate) * sample_count);
     if (!scored) {
+        Py_XDECREF(vertices_contiguous);
         PyErr_NoMemory();
         return NULL;
     }
@@ -408,6 +453,7 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
 
     if (valid_count == 0) {
         free(scored);
+        Py_XDECREF(vertices_contiguous);
         /* Fallback to uniform */
         npy_intp dims[1] = {arrow_count};
         PyArrayObject *result = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
@@ -430,6 +476,7 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
         min_spacing = PyFloat_AsDouble(min_spacing_obj);
         if (PyErr_Occurred()) {
             free(scored);
+            Py_XDECREF(vertices_contiguous);
             return NULL;
         }
     } else {
@@ -441,6 +488,7 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
     double *selected = malloc(sizeof(double) * arrow_count);
     if (!selected) {
         free(scored);
+        Py_XDECREF(vertices_contiguous);
         PyErr_NoMemory();
         return NULL;
     }
@@ -500,6 +548,7 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
     PyArrayObject *result = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
     if (!result) {
         free(selected);
+        Py_XDECREF(vertices_contiguous);
         return NULL;
     }
 
@@ -509,6 +558,7 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
     }
 
     free(selected);
+    Py_XDECREF(vertices_contiguous);
     return (PyObject*)result;
 }
 

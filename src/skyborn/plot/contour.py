@@ -206,7 +206,16 @@ def _add_layered_shadow_artists(
         # caused by antialiasing artifacts. Disable antialiasing on fills to
         # eliminate gaps, but keep edges smooth with matching color and width.
         edge_color = mpl.rcParams["hatch.color"] if hatch else facecolor
-        edge_width = 0 if hatch else 1.0
+
+        # Compute adaptive edge width based on figure DPI for consistent appearance
+        # across different display densities. Use 0 for hatched contours.
+        if hatch:
+            edge_width = 0
+        else:
+            # Get DPI-aware edge width: 1pt at 72dpi, scales with DPI
+            # Clamp to [0.25, 1.0] points to avoid too thick/thin edges
+            fig_dpi = ax.figure.dpi if hasattr(ax, "figure") else 72.0
+            edge_width = np.clip(72.0 / fig_dpi, 0.25, 1.0)
 
         fill_collection = PathCollection(
             [path],
