@@ -13,7 +13,7 @@ endif
 
 # Install Python sources
 py.install_sources(
-    ['__init__.py', 'lanczos.py', 'README.md'],
+    ['__init__.py', 'lanczos.py'],
     subdir: 'skyborn/calc/filter',
 )
 
