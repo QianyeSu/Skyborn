@@ -1,7 +1,32 @@
 Changelog
 =========
 
-Version 0.4.3 (Current)
+Version 0.4.4 (Current)
+------------------------
+
+**Bug Fixes**
+
+* **Shadow Contour Plotting Improvements**: Enhanced robustness and configurability of ``skyborn.plot.shadow_contourf``
+
+  - Added ``shadow_boundary_margin`` parameter (default 0.1) to control view-boundary filtering threshold for shadow artists
+  - Fixed potential crashes when contour label anchor computation fails due to degenerate geometry or transform errors
+  - Label position calculation now uses defensive exception handling with ``RuntimeWarning`` for problematic contour lines
+  - Improved test assertions to account for boundary-filtered shadow artists in edge cases
+
+* **Build System Fixes**: Resolved package installation failures in CI/CD environments
+
+  - Fixed ``meson.build`` error in ``skyborn.calc.filter`` module by removing reference to non-existent ``README.md`` file
+  - Ensures successful editable installation and extension module compilation across all platforms
+
+**Improvements**
+
+* **Memory Safety and DPI Consistency**: Resolved critical issues in contour plotting and rendering pipeline
+
+  - Fixed memory management issues in shadow artist generation
+  - Improved DPI consistency across different rendering backends
+  - Enhanced stability for high-resolution figure exports
+
+Version 0.4.3
 ------------------------
 
 **New Features**

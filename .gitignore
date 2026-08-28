@@ -71,6 +71,21 @@ openspec/
 *.swp
 *.swo
 
+# Development notes and reports (not to be committed)
+/*.md
+!README.md
+
+# Temporary scripts and tools
+/tools/
+/analyze_coverage.py
+/check_lanczos_coverage.py
+/compile_and_test.bat
+/compile_contour_core.py
+/gpi_benchmark_test.py
+/test_shadow_contourf_quick.py
+/tmp_*.py
+/coverage.json
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
