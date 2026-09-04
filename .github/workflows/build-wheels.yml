@@ -399,6 +399,9 @@ jobs:
             echo '```' >> release_body.md
           fi
 
+          # Release titles already identify the version; omit changelog status labels.
+          sed -i -E 's/^(Version [0-9]+\.[0-9]+\.[0-9]+) \(Current\)$/\1/' release_body.md
+
           echo "RELEASE_DATE=${RELEASE_DATE}" >> "$GITHUB_OUTPUT"
           cat release_body.md
 
