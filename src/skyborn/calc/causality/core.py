@@ -27,7 +27,7 @@ from importlib import util as importlib_util
 from importlib.machinery import EXTENSION_SUFFIXES
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from scipy import fft as scipy_fft
@@ -90,7 +90,7 @@ def _require_liang_backend() -> ModuleType:
 
 def _liang_single_backend(
     y1: np.ndarray, y2: np.ndarray, npt: int
-) -> tuple[float, float, float, float, float]:
+) -> Tuple[float, float, float, float, float]:
     """Run the compiled Liang kernel for one pair of time series."""
     backend = _require_liang_backend()
     return tuple(
@@ -105,7 +105,7 @@ def _liang_single_backend(
 
 def _liang_batch_backend(
     y1: np.ndarray, y2: np.ndarray, npt: int
-) -> tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """Run the compiled Liang kernel over surrogate columns."""
     backend = _require_liang_backend()
     t21, tau21 = backend.liang_batch(
@@ -777,7 +777,7 @@ def liang(y1: np.ndarray, y2: np.ndarray, npt: int = 1) -> Dict[str, float]:
 
 def _liang_batch(
     y1: np.ndarray, y2: np.ndarray, npt: int
-) -> tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """Calculate T21 and tau21 for a matrix of surrogate series."""
     y1 = np.asarray(y1, dtype=np.float64)
     y2 = np.asarray(y2, dtype=np.float64)
@@ -802,10 +802,10 @@ def signif_isopersist(
     y2: np.ndarray,
     method: str,
     nsim: int = 1000,
-    qs: list[float] = [0.005, 0.025, 0.05, 0.95, 0.975, 0.995],
+    qs: List[float] = [0.005, 0.025, 0.05, 0.95, 0.975, 0.995],
     surrogate_backend: str = "auto",
     **kwargs,
-) -> dict[str, np.ndarray]:
+) -> Dict[str, np.ndarray]:
     """significance test with AR(1) with same persistence
 
     Parameters
@@ -885,9 +885,9 @@ def signif_isospec(
     y2: np.ndarray,
     method: str,
     nsim: int = 1000,
-    qs: list[float] = [0.005, 0.025, 0.05, 0.95, 0.975, 0.995],
+    qs: List[float] = [0.005, 0.025, 0.05, 0.95, 0.975, 0.995],
     **kwargs,
-) -> dict[str, np.ndarray]:
+) -> Dict[str, np.ndarray]:
     """significance test with surrogates with randomized phases
 
     Parameters
