@@ -370,7 +370,7 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION_NUM="${VERSION#v}"
-          RELEASE_DATE=$(date '+%B %d, %Y')
+          RELEASE_DATE="$(LC_ALL=C date '+%b %d, %Y')"
 
           # Check if there's a pre-written release notes file
           if [ -f "release_notes_${VERSION_NUM}.md" ]; then
@@ -378,8 +378,7 @@ jobs:
             cp "release_notes_${VERSION_NUM}.md" release_body.md
           else
             # Generate release notes from changelog
-            echo "# ${VERSION} (${RELEASE_DATE})" > release_body.md
-            echo "" >> release_body.md
+            : > release_body.md
 
             # Extract version section from changelog
             if [ -f "docs/source/changelog.rst" ]; then
@@ -400,6 +399,7 @@ jobs:
             echo '```' >> release_body.md
           fi
 
+          echo "RELEASE_DATE=${RELEASE_DATE}" >> "$GITHUB_OUTPUT"
           cat release_body.md
 
       - name: Upload distributions to GitHub release
