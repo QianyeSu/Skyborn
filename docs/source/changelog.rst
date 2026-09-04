@@ -1,7 +1,45 @@
 Changelog
 =========
 
-Version 0.4.4 (Current)
+Version 0.4.5 (Current)
+------------------------
+
+**Improvements**
+
+* **Causality Module Migration and Native Liang Backend**: Moved the
+  maintained implementation to ``skyborn.calc.causality`` while preserving
+  ``skyborn.causality`` as a compatibility import
+
+  - Added direct Fortran/C + Meson bindings for Liang-Kleeman information-flow
+    calculations
+  - Added batched Liang evaluation for surrogate ensembles with OpenMP
+    parallelization
+  - Released the Python GIL during native Liang calculations
+  - Tuned OpenMP activation and static scheduling to avoid thread overhead on
+    small surrogate batches
+
+* **Surrogate Generation Optimization**: Reduced Python-side overhead in
+  causality significance testing
+
+  - Batched phase-randomized surrogate generation through vectorized FFT
+    operations
+  - Vectorized AR(1) surrogate filtering through the statsmodels batch API
+  - Returned Fortran-contiguous surrogate matrices to avoid redundant
+    Python-to-Fortran data copies
+  - Preserved the historical seeded surrogate output and Liang reference
+    behavior
+
+**Testing**
+
+* Added numerical comparisons between the native Liang backend and the
+  Python reference implementation
+* Added seeded regression tests for AR(1) and phase-randomized surrogates
+* Added focused validation for the migrated import paths and native fallback
+  behavior
+* The maintained causality module reaches 100% line and branch coverage in
+  the focused test suite
+
+Version 0.4.4
 ------------------------
 
 **Bug Fixes**

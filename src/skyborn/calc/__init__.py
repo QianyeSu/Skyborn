@@ -23,6 +23,7 @@ from typing import Any
 _SUBMODULE_EXPORTS = {
     "GPI",
     "cape",
+    "causality",
     "dcape",
     "geostrophic",
     "growth_rate",
@@ -47,6 +48,17 @@ _OBJECT_EXPORTS = {
     "spatial_correlation": ("skyborn.calc.calculations", "spatial_correlation"),
     "spearman_correlation": ("skyborn.calc.calculations", "spearman_correlation"),
     "calculate_dcape": ("skyborn.calc.dcape", "calculate_dcape"),
+    "ar1_fit_evenly": ("skyborn.calc.causality", "ar1_fit_evenly"),
+    "sm_ar1_sim": ("skyborn.calc.causality", "sm_ar1_sim"),
+    "granger_causality": ("skyborn.calc.causality", "granger_causality"),
+    "phaseran": ("skyborn.calc.causality", "phaseran"),
+    "liang": ("skyborn.calc.causality", "liang"),
+    "liang_causality": ("skyborn.calc.causality", "liang_causality"),
+    "signif_isopersist": (
+        "skyborn.calc.causality",
+        "signif_isopersist",
+    ),
+    "signif_isospec": ("skyborn.calc.causality", "signif_isospec"),
     # CAPE/CIN diagnostics (Fortran/C extension).
     "calculate_cape_cin": ("skyborn.calc.cape", "calculate_cape_cin"),
     "calculate_parcel_profile": ("skyborn.calc.cape", "calculate_parcel_profile"),

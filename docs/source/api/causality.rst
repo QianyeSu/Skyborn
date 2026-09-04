@@ -1,7 +1,7 @@
 Causality
 ==================
 
-.. automodule:: skyborn.causality
+.. automodule:: skyborn.calc.causality
    :members:
    :undoc-members:
    :show-inheritance:
@@ -10,7 +10,7 @@ Causality
 Overview
 --------
 
-The ``skyborn.causality`` module provides methods for analyzing causal relationships between time series in atmospheric and climate data. This module implements both Granger causality and Liang-Kleeman information flow methods with comprehensive significance testing.
+The ``skyborn.calc.causality`` module provides methods for analyzing causal relationships between time series in atmospheric and climate data. This module implements both Granger causality and Liang-Kleeman information flow methods with comprehensive significance testing. ``skyborn.causality`` remains available as a compatibility import.
 
 Key Features
 ------------
@@ -21,29 +21,76 @@ Key Features
 - **AR(1) Modeling**: Autoregressive model fitting for red noise generation
 - **Phase Randomization**: Surrogate data generation for null hypothesis testing
 
+Implementation and Build
+------------------------
+
+The maintained Python implementation is in
+``src/skyborn/calc/causality/core.py``. The public package exports are defined
+in ``src/skyborn/calc/causality/__init__.py``. The historical
+``skyborn.causality`` module remains a thin compatibility entry point.
+
+Liang information flow and the batch surrogate calculations use a direct
+C/Fortran extension built by ``src/skyborn/calc/causality/meson.build``:
+
+.. code-block:: text
+
+   src/skyborn/calc/causality/
+   |-- __init__.py
+   |-- core.py
+   |-- causality_core_module.c
+   |-- fortran/
+   |   |-- causality_core.f90
+   |   `-- causality_core_bindings.f90
+   `-- meson.build
+
+There is deliberately no Python ``bindings.py`` file. The C extension is the
+thin NumPy boundary, and the Fortran bindings are compiled as part of the
+Meson target.
+
+Surrogate generation is also batched at the Python/NumPy boundary:
+
+* ``phaseran`` uses batched real FFTs and preserves the historical random
+  phase stream.
+* ``sm_ar1_sim`` uses one vectorized statsmodels AR(1) filtering call while
+  preserving the historical per-surrogate random stream.
+* Liang significance calculations pass the generated surrogate matrices to
+  the Fortran/OpenMP batch kernel.
+
+On Windows, build and test this module from the ``skyborn_dev`` Anaconda
+environment:
+
+.. code-block:: powershell
+
+   $env:CC = "F:\Anaconda3\envs\skyborn_dev\Library\bin\gcc.exe"
+   $env:FC = "F:\Anaconda3\envs\skyborn_dev\Library\bin\gfortran.exe"
+   $env:PATH = "F:\Anaconda3\envs\skyborn_dev\Library\bin;$env:PATH"
+   $env:PYTHONPATH = "D:\Skyborn\src"
+   F:\Anaconda3\envs\skyborn_dev\python.exe -m mesonbuild.mesonmain compile -C src\skyborn\calc\causality\build_gfortran
+   F:\Anaconda3\envs\skyborn_dev\python.exe -m pytest -q -o addopts= tests\test_causality.py
+
 Methods Available
 -----------------
 
 Causality Analysis
 ~~~~~~~~~~~~~~~~~~
 
-.. autofunction:: skyborn.causality.granger_causality
+.. autofunction:: skyborn.calc.causality.granger_causality
 
-.. autofunction:: skyborn.causality.liang_causality
+.. autofunction:: skyborn.calc.causality.liang_causality
 
 Significance Testing
 ~~~~~~~~~~~~~~~~~~~~
 
-.. autofunction:: skyborn.causality.signif_isopersist
+.. autofunction:: skyborn.calc.causality.signif_isopersist
 
-.. autofunction:: skyborn.causality.signif_isospec
+.. autofunction:: skyborn.calc.causality.signif_isospec
 
 Utility Functions
 ~~~~~~~~~~~~~~~~~
 
-.. autofunction:: skyborn.causality.ar1_fit_evenly
+.. autofunction:: skyborn.calc.causality.ar1_fit_evenly
 
-.. autofunction:: skyborn.causality.phaseran
+.. autofunction:: skyborn.calc.causality.phaseran
 
 Theoretical Background
 ----------------------
@@ -88,7 +135,7 @@ Basic Granger Causality Test
 
 .. code-block:: python
 
-   import skyborn.causality as scaus
+   import skyborn.calc.causality as scaus
    import numpy as np
 
    # Generate sample atmospheric time series
@@ -117,7 +164,7 @@ Liang Information Flow Analysis
 
 .. code-block:: python
 
-   import skyborn.causality as scaus
+   import skyborn.calc.causality as scaus
    import numpy as np
 
    # Generate coupled time series
@@ -156,7 +203,7 @@ Atmospheric Science Application
 
 .. code-block:: python
 
-   import skyborn.causality as scaus
+   import skyborn.calc.causality as scaus
    import numpy as np
    import matplotlib.pyplot as plt
 

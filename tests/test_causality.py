@@ -1,5 +1,5 @@
 """
-Tests for skyborn.causality module.
+Tests for skyborn.calc.causality module.
 
 This module tests causality analysis functionality including Granger
 causality and Liang information flow analysis for time series data.
@@ -10,8 +10,10 @@ import warnings
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_almost_equal
+from statsmodels.tsa.arima_process import arma_generate_sample
 
-from skyborn.causality import (
+import skyborn.calc.causality.core as causality_core
+from skyborn.calc.causality import (
     ar1_fit_evenly,
     granger_causality,
     liang,
@@ -21,6 +23,105 @@ from skyborn.causality import (
     signif_isospec,
     sm_ar1_sim,
 )
+from skyborn.calc.causality.core import (
+    _liang_backend_available,
+    _liang_batch,
+    _liang_batch_backend,
+    _liang_python,
+    _load_liang_backend,
+    _require_liang_backend,
+)
+
+
+class TestBackendLoading:
+    """Test compiled backend discovery and failure handling."""
+
+    @staticmethod
+    def _fake_path(exists):
+        class FakePath:
+            def resolve(self):
+                return self
+
+            @property
+            def parent(self):
+                return self
+
+            def __truediv__(self, _other):
+                return self
+
+            def exists(self):
+                return exists
+
+        return FakePath()
+
+    def test_load_backend_uses_import_fallback(self, monkeypatch):
+        sentinel = object()
+        monkeypatch.setattr(
+            causality_core,
+            "Path",
+            lambda _path: self._fake_path(exists=False),
+        )
+        monkeypatch.setattr(causality_core, "import_module", lambda _name: sentinel)
+
+        assert _load_liang_backend() is sentinel
+
+    def test_load_backend_returns_none_when_import_fails(self, monkeypatch):
+        monkeypatch.setattr(
+            causality_core,
+            "Path",
+            lambda _path: self._fake_path(exists=False),
+        )
+
+        def fail_import(_name):
+            raise ImportError("backend unavailable")
+
+        monkeypatch.setattr(causality_core, "import_module", fail_import)
+        assert _load_liang_backend() is None
+
+    def test_load_backend_skips_invalid_spec(self, monkeypatch):
+        monkeypatch.setattr(
+            causality_core,
+            "Path",
+            lambda _path: self._fake_path(exists=True),
+        )
+        monkeypatch.setattr(
+            causality_core.importlib_util,
+            "spec_from_file_location",
+            lambda *_args: None,
+        )
+        monkeypatch.setattr(causality_core, "import_module", lambda _name: None)
+
+        assert _load_liang_backend() is None
+
+    def test_load_backend_skips_loader_exception(self, monkeypatch):
+        class FailingLoader:
+            def exec_module(self, _module):
+                raise RuntimeError("load failed")
+
+        class FakeSpec:
+            loader = FailingLoader()
+
+        monkeypatch.setattr(
+            causality_core,
+            "Path",
+            lambda _path: self._fake_path(exists=True),
+        )
+        monkeypatch.setattr(
+            causality_core.importlib_util,
+            "spec_from_file_location",
+            lambda *_args: FakeSpec(),
+        )
+
+        def fail_import(_name):
+            raise ImportError("backend unavailable")
+
+        monkeypatch.setattr(causality_core, "import_module", fail_import)
+        assert _load_liang_backend() is None
+
+    def test_require_backend_raises_when_missing(self, monkeypatch):
+        monkeypatch.setattr(causality_core, "_LIANG_BACKEND", None)
+        with pytest.raises(ImportError, match="backend is unavailable"):
+            _require_liang_backend()
 
 
 class TestAR1Functions:
@@ -58,6 +159,25 @@ class TestAR1Functions:
         ar1_coeff = ar1_fit_evenly(persistent)
         assert ar1_coeff > 0.5  # Should be high
 
+    def test_ar1_fit_caps_coefficient_above_one(self, monkeypatch, capsys):
+        """AR(1) fitting should cap an out-of-range fitted coefficient."""
+
+        class FakeFit:
+            params = np.array([0.0, 0.0, 1.5])
+
+        class FakeARIMA:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def fit(self):
+                return FakeFit()
+
+        monkeypatch.setattr(causality_core, "ARIMA", FakeARIMA)
+        result = ar1_fit_evenly(np.arange(10.0))
+
+        assert result == 1.0 - np.spacing(1.0) ** (1 / 4)
+        assert "greater than 1" in capsys.readouterr().out
+
     def test_sm_ar1_sim(self):
         """Test AR(1) simulation function."""
         n = 100
@@ -69,6 +189,7 @@ class TestAR1Functions:
 
         # Check output shape
         assert ar1_sims.shape == (n, p)
+        assert ar1_sims.flags.f_contiguous
 
         # Check that simulated series have approximately correct properties
         mean_std = np.mean(np.std(ar1_sims, axis=0))
@@ -78,9 +199,94 @@ class TestAR1Functions:
         fitted_ar1 = ar1_fit_evenly(ar1_sims[:, 0])
         assert abs(fitted_ar1 - g) < 0.3  # Should be reasonably close
 
+    def test_sm_ar1_sim_matches_legacy_random_stream(self):
+        """Batch AR(1) generation should preserve the historical output."""
+        n = 64
+        p = 5
+        g = 0.6
+        sig = 2.0
+        ar = np.r_[1, -g]
+        ma = np.r_[1, 0.0]
+        sig_n = sig * np.sqrt(1 - g**2)
+
+        np.random.seed(123)
+        actual = sm_ar1_sim(n, p, g, sig)
+
+        np.random.seed(123)
+        expected = np.empty((n, p))
+        for index in range(p):
+            expected[:, index] = arma_generate_sample(
+                ar=ar,
+                ma=ma,
+                nsample=n,
+                burnin=50,
+                scale=sig_n,
+            )
+
+        assert_allclose(actual, expected, rtol=0.0, atol=0.0)
+
+    def test_sm_ar1_sim_zero_surrogates(self):
+        """Zero requested surrogates should return an empty matrix."""
+        result = sm_ar1_sim(n=32, p=0, g=0.6, sig=2.0)
+        assert result.shape == (32, 0)
+
 
 class TestPhaseRandomization:
     """Test phase randomization for surrogate generation."""
+
+    @staticmethod
+    def _legacy_phaseran(recblk, nsurr):
+        recblk = np.asarray(recblk, dtype=np.float64)
+        was_1d = recblk.ndim == 1
+        if was_1d:
+            recblk = recblk[:, np.newaxis]
+
+        nfrms = recblk.shape[0]
+        if nfrms % 2 == 0:
+            nfrms -= 1
+            recblk = recblk[:nfrms]
+
+        len_ser = int((nfrms - 1) / 2)
+        fft_recblk = np.fft.fft(recblk, axis=0)
+        surrblk = np.zeros((nfrms, recblk.shape[1], nsurr))
+        for k in range(nsurr):
+            ph_rnd = np.random.rand(len_ser, 1)
+            ph_interv1 = np.exp(2 * np.pi * 1j * ph_rnd)
+            ph_interv2 = np.conj(np.flipud(ph_interv1))
+            fft_recblk_surr = np.copy(fft_recblk)
+            fft_recblk_surr[1 : len_ser + 1] = fft_recblk[1 : len_ser + 1] * ph_interv1
+            fft_recblk_surr[len_ser + 1 :] = fft_recblk[len_ser + 1 :] * ph_interv2
+            surrblk[:, :, k] = np.real(np.fft.ifft(fft_recblk_surr, axis=0))
+
+        if was_1d:
+            return surrblk[:, 0, :]
+        return surrblk
+
+    def test_phaseran_matches_legacy_random_stream(self):
+        """Batch FFT generation should preserve the historical phase stream."""
+        rng = np.random.default_rng(7)
+        data = rng.normal(size=(101, 2))
+
+        np.random.seed(123)
+        expected = self._legacy_phaseran(data, 17)
+        np.random.seed(123)
+        actual = phaseran(data, 17)
+
+        assert_allclose(actual, expected, rtol=0.0, atol=1e-14)
+
+    def test_phaseran_multiple_batches(self):
+        """Surrogate counts above the block size should use all blocks."""
+        rng = np.random.default_rng(8)
+        data = rng.normal(size=(33, 2))
+        nsurr = 257
+
+        np.random.seed(321)
+        expected = self._legacy_phaseran(data, nsurr)
+        np.random.seed(321)
+        actual = phaseran(data, nsurr)
+
+        assert actual.shape == (33, 2, nsurr)
+        assert_allclose(actual, expected, rtol=0.0, atol=1e-14)
 
     def test_phaseran_basic(self):
         """Test basic phase randomization functionality."""
@@ -92,17 +298,24 @@ class TestPhaseRandomization:
         surrogates = phaseran(x.reshape(-1, 1), nsurr)
 
         # Check output shape
-        assert surrogates.shape == (99, nsurr)  # One less due to odd requirement
+        assert surrogates.shape == (99, 1, nsurr)  # One less due to odd requirement
 
         # Surrogates should have same mean (approximately)
         orig_mean = np.mean(x[:-1])  # Adjusted for length
-        surr_means = np.mean(surrogates, axis=0)
+        surr_means = np.mean(surrogates[:, 0, :], axis=0)
         assert np.allclose(surr_means, orig_mean, atol=0.5)
 
         # Surrogates should have same variance (approximately)
         orig_var = np.var(x[:-1])
-        surr_vars = np.var(surrogates, axis=0)
+        surr_vars = np.var(surrogates[:, 0, :], axis=0)
         assert np.allclose(surr_vars, orig_var, rtol=0.3)
+
+    def test_phaseran_1d_output_is_fortran_contiguous(self):
+        """The 1D batch layout should be ready for the native Liang kernel."""
+        surrogates = phaseran(np.arange(33.0), nsurr=4)
+
+        assert surrogates.shape == (33, 4)
+        assert surrogates.flags.f_contiguous
 
     def test_phaseran_multiple_series(self):
         """Test phase randomization with multiple time series."""
@@ -116,7 +329,15 @@ class TestPhaseRandomization:
 
         # Should work with 2D input
         surrogates = phaseran(data, nsurr)
-        assert surrogates.shape == (101, nsurr)
+        assert surrogates.shape == (101, 2, nsurr)
+
+    def test_phaseran_input_validation(self):
+        """Phase randomization should reject unsupported inputs."""
+        with pytest.raises(ValueError, match="1D or 2D"):
+            phaseran(np.zeros((2, 2, 2)), 3)
+
+        with pytest.raises(ValueError, match="positive integer"):
+            phaseran(np.zeros(9), 0)
 
 
 class TestGrangerCausality:
@@ -152,8 +373,9 @@ class TestGrangerCausality:
             expected_tests = ["ssr_ftest", "ssr_chi2test", "lrtest", "params_ftest"]
             for test in expected_tests:
                 assert test in test_results
-                assert "statistic" in test_results[test]
-                assert "pvalue" in test_results[test]
+                assert len(test_results[test]) >= 2
+                assert np.isfinite(test_results[test][0])
+                assert 0 <= test_results[test][1] <= 1
 
     def test_granger_causality_no_causality(self):
         """Test Granger causality with independent series."""
@@ -171,7 +393,7 @@ class TestGrangerCausality:
         result = granger_causality(y1, y2, maxlag=1, verbose=False)
 
         # p-values should generally be high (non-significant)
-        pvalue = result[1][0]["ssr_ftest"]["pvalue"]
+        pvalue = result[1][0]["ssr_ftest"][1]
         # Note: Due to randomness, we can't guarantee high p-value,
         # but the test should complete successfully
         assert 0 <= pvalue <= 1
@@ -311,6 +533,87 @@ class TestLiangCausality:
             assert np.isfinite(result["tau21"])
             assert result["Z"] > 0
 
+    @pytest.mark.skipif(
+        not _liang_backend_available(),
+        reason="compiled Liang backend is not available",
+    )
+    def test_compiled_liang_matches_python_reference(self):
+        """Compiled single and batch kernels should match the reference path."""
+        rng = np.random.default_rng(1234)
+        y1 = rng.normal(size=256)
+        y2 = 0.4 * y1 + rng.normal(size=256)
+
+        compiled = liang(y1, y2, npt=2)
+        reference = _liang_python(y1, y2, npt=2)
+        for key in ("T21", "tau21", "Z", "dH1_star", "dH1_noise"):
+            assert_allclose(compiled[key], reference[key], rtol=1e-10, atol=1e-12)
+
+        batch_y1 = np.column_stack([y1, rng.normal(size=256), rng.normal(size=256)])
+        batch_y2 = np.column_stack([y2, rng.normal(size=256), rng.normal(size=256)])
+        t21, tau21 = _liang_batch_backend(batch_y1, batch_y2, npt=2)
+        expected_t21 = np.array(
+            [
+                _liang_python(batch_y1[:, i], batch_y2[:, i], npt=2)["T21"]
+                for i in range(3)
+            ]
+        )
+        expected_tau21 = np.array(
+            [
+                _liang_python(batch_y1[:, i], batch_y2[:, i], npt=2)["tau21"]
+                for i in range(3)
+            ]
+        )
+        assert_allclose(t21, expected_t21, rtol=1e-10, atol=1e-12)
+        assert_allclose(tau21, expected_tau21, rtol=1e-10, atol=1e-12)
+
+    def test_python_liang_input_validation(self):
+        """The Python Liang reference should validate all input constraints."""
+        with pytest.raises(ValueError, match="1D arrays"):
+            _liang_python(np.zeros((4, 1)), np.zeros(4))
+        with pytest.raises(ValueError, match="share a length"):
+            _liang_python(np.zeros(4), np.zeros(5))
+        with pytest.raises(ValueError, match="at least two"):
+            _liang_python(np.zeros(2), np.zeros(2), npt=1)
+        with pytest.raises(ValueError, match="finite"):
+            _liang_python(np.array([1.0, np.nan, 2.0]), np.arange(3.0))
+
+    def test_python_liang_singular_covariance(self):
+        """The Python Liang reference should reject singular covariance."""
+        y = np.arange(10.0)
+        with pytest.raises(ValueError, match="singular covariance"):
+            _liang_python(y, y)
+
+    def test_liang_input_validation(self):
+        """The public Liang function should validate all input constraints."""
+        with pytest.raises(ValueError, match="1D arrays"):
+            liang(np.zeros((4, 1)), np.zeros(4))
+        with pytest.raises(ValueError, match="share a length"):
+            liang(np.zeros(4), np.zeros(5))
+        with pytest.raises(ValueError, match="at least two"):
+            liang(np.zeros(2), np.zeros(2), npt=1)
+        with pytest.raises(ValueError, match="finite"):
+            liang(np.array([1.0, np.nan, 2.0]), np.arange(3.0))
+
+    def test_liang_python_fallback_and_batch_fallback(self, monkeypatch):
+        """The uncompiled Liang paths should remain functional and validated."""
+        rng = np.random.default_rng(11)
+        y1 = rng.normal(size=32)
+        y2 = rng.normal(size=32)
+        batch_y1 = np.column_stack([y1, rng.normal(size=32)])
+        batch_y2 = np.column_stack([y2, rng.normal(size=32)])
+
+        monkeypatch.setattr(causality_core, "_LIANG_BACKEND", None)
+        result = liang(y1, y2)
+        reference = _liang_python(y1, y2)
+        assert_allclose(result["T21"], reference["T21"])
+
+        t21, tau21 = _liang_batch(batch_y1, batch_y2, npt=1)
+        assert t21.shape == (2,)
+        assert tau21.shape == (2,)
+
+        with pytest.raises(ValueError, match="2D arrays"):
+            _liang_batch(batch_y1[:, :1], batch_y2, npt=1)
+
 
 class TestSignificanceTesting:
     """Test significance testing functions."""
@@ -370,6 +673,13 @@ class TestSignificanceTesting:
 
         with pytest.raises(KeyError, match="is not a valid method"):
             signif_isospec(y1, y2, method="invalid_method")
+
+    def test_liang_causality_invalid_significance_method(self):
+        """Liang causality should reject unknown significance methods."""
+        y1 = np.random.default_rng(12).normal(size=32)
+        y2 = np.random.default_rng(13).normal(size=32)
+        with pytest.raises(KeyError, match="not a valid significance"):
+            liang_causality(y1, y2, signif_test="invalid")
 
 
 class TestCausalityIntegration:
@@ -433,7 +743,7 @@ class TestCausalityIntegration:
 
         # Test Granger causality
         result_granger = granger_causality(y1, y2, maxlag=1, verbose=False)
-        pvalue_granger = result_granger[1][0]["ssr_ftest"]["pvalue"]
+        pvalue_granger = result_granger[1][0]["ssr_ftest"][1]
 
         # Test Liang causality
         with warnings.catch_warnings():
@@ -492,12 +802,10 @@ class TestCausalityEdgeCases:
         n = 100
         y = np.random.randn(n)
 
-        # Test with identical series
-        result_liang = liang(y, y, npt=1)
-
-        # Should handle this case (perfect correlation)
-        assert np.isfinite(result_liang["T21"])
-        # Note: actual values may vary due to numerical precision
+        # Perfectly correlated inputs make the Liang covariance inversion
+        # undefined and should fail with a clear validation error.
+        with pytest.raises(ValueError, match="singular covariance"):
+            liang(y, y, npt=1)
 
     def test_causality_constant_series(self):
         """Test causality with constant time series."""

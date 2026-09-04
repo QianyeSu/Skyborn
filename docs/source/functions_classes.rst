@@ -283,7 +283,7 @@ Causality Analysis
 Causality Functions
 ~~~~~~~~~~~~~~~~~~~
 
-.. currentmodule:: skyborn.causality
+.. currentmodule:: skyborn.calc.causality
 
 .. list-table::
    :header-rows: 1
@@ -292,9 +292,9 @@ Causality Functions
 
    * - Function
      - Description
-   * - :func:`skyborn.causality.granger_causality`
+   * - :func:`skyborn.calc.causality.granger_causality`
      - Granger causality analysis
-   * - :func:`skyborn.causality.liang_causality`
+   * - :func:`skyborn.calc.causality.liang_causality`
      - Liang information flow analysis
 
 Spherical Harmonics
@@ -587,9 +587,9 @@ Function Usage Categories
      - Zonal gradients
    * - **Causality Analysis**
      -
-   * - :func:`skyborn.causality.liang_causality`
+   * - :func:`skyborn.calc.causality.liang_causality`
      - Information flow analysis
-   * - :func:`skyborn.causality.granger_causality`
+   * - :func:`skyborn.calc.causality.granger_causality`
      - Granger causality testing
    * - **Vector Analysis**
      -

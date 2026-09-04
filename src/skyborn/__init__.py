@@ -68,8 +68,8 @@ _OBJECT_EXPORTS = {
     "trend_analysis": ("skyborn.calc.mann_kendall", "trend_analysis"),
     "troposphere": ("skyborn.calc", "troposphere"),
     # Top-level science utilities.
-    "granger_causality": ("skyborn.causality", "granger_causality"),
-    "liang_causality": ("skyborn.causality", "liang_causality"),
+    "granger_causality": ("skyborn.calc.causality", "granger_causality"),
+    "liang_causality": ("skyborn.calc.causality", "liang_causality"),
     "calculate_gradient": ("skyborn.gradients", "calculate_gradient"),
     "calculate_meridional_gradient": (
         "skyborn.gradients",

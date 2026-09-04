@@ -41,10 +41,13 @@ def test_legacy_top_level_export_resolves_lazily():
     with _isolated_skyborn_imports():
         skyborn = importlib.import_module("skyborn")
 
+        from skyborn.calc.causality import liang_causality as calc_liang_causality
         from skyborn.causality import liang_causality
 
         assert skyborn.liang_causality is liang_causality
+        assert calc_liang_causality is liang_causality
         assert "skyborn.causality" in sys.modules
+        assert "skyborn.calc.causality" in sys.modules
 
 
 def test_common_top_level_exports_do_not_import_entire_calc_package():
@@ -84,6 +87,15 @@ def test_calc_lazy_exports_resolve_submodules_and_objects():
 
         assert calc.pearson_correlation is pearson_correlation
         assert "skyborn.calc.calculations" in sys.modules
+
+
+def test_calc_causality_lazy_exports_resolve():
+    with _isolated_skyborn_imports():
+        calc = importlib.import_module("skyborn.calc")
+
+        causality_module = calc.causality
+        assert causality_module.__name__ == "skyborn.calc.causality"
+        assert calc.liang is causality_module.liang
 
 
 def test_calc_unknown_attribute_raises_attribute_error():
