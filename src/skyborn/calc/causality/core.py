@@ -73,7 +73,7 @@ def _liang_backend_available() -> bool:
     return _LIANG_BACKEND is not None
 
 
-def _ar1_backend_available() -> bool:
+def _ar1_native_available() -> bool:
     """Return whether the compiled AR(1) filtering entry point is available."""
     return _LIANG_BACKEND is not None and hasattr(_LIANG_BACKEND, "ar1_filter_batch")
 
@@ -151,7 +151,7 @@ def ar1_fit_evenly(y: np.ndarray) -> float:
     return g
 
 
-def _ar1_filter_backend(innovations: np.ndarray, g: float, nout: int) -> np.ndarray:
+def _ar1_filter_native(innovations: np.ndarray, g: float, nout: int) -> np.ndarray:
     """Filter AR(1) innovations through the compiled Fortran backend."""
     backend = _require_liang_backend()
     if not hasattr(backend, "ar1_filter_batch"):
@@ -223,7 +223,7 @@ def sm_ar1_sim(
         return np.empty(shape=(n, 0), order="F")
 
     burnin = 50
-    native_available = _ar1_backend_available()
+    native_available = _ar1_native_available()
     if backend in {"fortran", "native"}:
         if not native_available:
             raise ImportError(
@@ -241,7 +241,7 @@ def sm_ar1_sim(
         innovations = np.asfortranarray(
             np.random.normal(scale=sig_n, size=(p, n + burnin)).T
         )
-        return _ar1_filter_backend(innovations, g, n)
+        return _ar1_filter_native(innovations, g, n)
 
     # The Python path remains the exact compatibility implementation.
     return np.asfortranarray(

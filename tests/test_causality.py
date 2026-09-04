@@ -25,7 +25,7 @@ from skyborn.calc.causality import (
     sm_ar1_sim,
 )
 from skyborn.calc.causality.core import (
-    _ar1_backend_available,
+    _ar1_native_available,
     _liang_backend_available,
     _liang_batch,
     _liang_batch_backend,
@@ -244,7 +244,7 @@ class TestAR1Functions:
             sm_ar1_sim(32, -1, 0.6, 2.0)
 
     @pytest.mark.skipif(
-        not _ar1_backend_available(),
+        not _ar1_native_available(),
         reason="compiled AR(1) backend is not available",
     )
     def test_sm_ar1_sim_fortran_matches_legacy_random_stream(self):
@@ -283,10 +283,10 @@ class TestAR1Functions:
         result = sm_ar1_sim(32, 32, 0.6, 2.0, backend="auto")
         assert result.shape == (32, 32)
 
-    def test_ar1_filter_backend_requires_entry_point(self, monkeypatch):
+    def test_ar1_filter_native_requires_entry_point(self, monkeypatch):
         monkeypatch.setattr(causality_core, "_LIANG_BACKEND", object())
         with pytest.raises(ImportError, match="AR\\(1\\) filtering backend"):
-            causality_core._ar1_filter_backend(
+            causality_core._ar1_filter_native(
                 np.ones((51, 1), dtype=np.float64),
                 0.2,
                 1,
