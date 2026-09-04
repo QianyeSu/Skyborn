@@ -327,11 +327,18 @@ jobs:
       contents: write # Upload distributions to the GitHub release
       id-token: write # Use trusted publishing
     steps:
-      - name: Download all artifacts
+      - name: Download wheel artifacts
         uses: actions/download-artifact@v8
         with:
-          pattern: "*"
-          path: dist-artifacts
+          pattern: "wheel-*"
+          path: dist-artifacts/wheels
+          merge-multiple: true
+
+      - name: Download source distribution artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: sdist
+          path: dist-artifacts/sdist
           merge-multiple: true
 
       - name: Checkout repository for release notes
@@ -339,9 +346,18 @@ jobs:
 
       - name: Prepare dist directory
         run: |
+          set -euo pipefail
+          echo "Downloaded artifacts:"
+          find dist-artifacts -maxdepth 3 -type f -print | sort
+          wheel_count="$(find dist-artifacts/wheels -type f -name '*.whl' | wc -l)"
+          sdist_count="$(find dist-artifacts/sdist -type f -name '*.tar.gz' | wc -l)"
+          if [[ "$wheel_count" -eq 0 || "$sdist_count" -eq 0 ]]; then
+            echo "Expected wheel and sdist artifacts, found ${wheel_count} wheels and ${sdist_count} sdists." >&2
+            exit 1
+          fi
           mkdir -p dist
-          find dist-artifacts -name "*.whl" -exec cp {} dist/ \;
-          find dist-artifacts -name "*.tar.gz" -exec cp {} dist/ \;
+          find dist-artifacts/wheels -type f -name "*.whl" -exec cp {} dist/ \;
+          find dist-artifacts/sdist -type f -name "*.tar.gz" -exec cp {} dist/ \;
           (cd dist && sha256sum * > SHA256SUMS.txt)
           ls -la dist/
           mkdir -p pypi-dist
