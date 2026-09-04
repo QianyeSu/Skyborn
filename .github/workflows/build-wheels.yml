@@ -328,6 +328,9 @@ jobs:
       contents: write # Upload distributions to the GitHub release
       id-token: write # Use trusted publishing
     steps:
+      - name: Checkout repository for release notes
+        uses: actions/checkout@v7
+
       - name: Download wheel artifacts
         uses: actions/download-artifact@v8
         with:
@@ -341,9 +344,6 @@ jobs:
           name: sdist
           path: dist-artifacts/sdist
           merge-multiple: true
-
-      - name: Checkout repository for release notes
-        uses: actions/checkout@v7
 
       - name: Prepare dist directory
         run: |
