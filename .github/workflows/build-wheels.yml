@@ -370,7 +370,7 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION_NUM="${VERSION#v}"
-          RELEASE_DATE="$(LC_ALL=C date '+%b %d, %Y')"
+          RELEASE_DATE="$(LC_ALL=C date '+%b %d, %Y' | sed 's/^Sep /Sept /')"
 
           # Check if there's a pre-written release notes file
           if [ -f "release_notes_${VERSION_NUM}.md" ]; then
