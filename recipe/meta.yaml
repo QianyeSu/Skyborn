@@ -1,6 +1,6 @@
 {% set name = "skyborn" %}
-{% set version = "0.3.22" %}
-{% set commit = "c5f9e0f9bf87b1139335d4eb0a987e412c9607af" %}
+{% set version = "0.4.4" %}
+{% set commit = "53a1a0fccbe7bff459ade7a3d881f2976c85d214" %}
 
 package:
   name: {{ name|lower }}
@@ -8,7 +8,7 @@ package:
 
 source:
   url: https://github.com/QianyeSu/Skyborn/archive/{{ commit }}.tar.gz
-  sha256: 7ac26f07bceca32ec25863e70b26011046339eb6c7069a90197179523f0b2f51
+  sha256: 4018d809218c96b9e36c759f23b9021a5e322097d83cac998fee976080149944
 
 build:
   number: 0

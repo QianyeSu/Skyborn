@@ -1,6 +1,6 @@
 # Skyborn `conda-forge/staged-recipes` Submission Checklist
 
-This checklist is specific to the current Skyborn `0.3.20` packaging state.
+This checklist is specific to the current Skyborn `0.4.4` packaging state.
 
 ## 1. Prepare the staged-recipes working tree
 
@@ -36,14 +36,14 @@ D:\Skyborn\recipe-local\
 That local recipe uses `source.path: ..` and is only for local Windows
 validation.
 
-## 3. Source archive details for `0.3.20`
+## 3. Source archive details for `0.4.4`
 
-Current release source in `meta.yaml`:
+Current source commit in `meta.yaml`:
 
 ```yaml
 source:
-  url: https://github.com/QianyeSu/Skyborn/archive/refs/tags/v0.3.20.tar.gz
-  sha256: f1d6b063283a50ae58181d6ac25627a0a25b685c782232d21be58edf424b7c95
+  url: https://github.com/QianyeSu/Skyborn/archive/53a1a0fccbe7bff459ade7a3d881f2976c85d214.tar.gz
+  sha256: 4018d809218c96b9e36c759f23b9021a5e322097d83cac998fee976080149944
 ```
 
 If the source artifact changes, regenerate `sha256` before submission.
@@ -87,7 +87,7 @@ Local checks already completed in this repository:
 
 - `conda render` passed for the submission recipe
 - `conda build` passed locally on Windows using the local validation recipe
-- `conda install --use-local skyborn=0.3.20` succeeded
+- `conda install --use-local skyborn=0.4.4` succeeded
 - smoke import passed:
   - `skyborn`
   - `skyborn.calc`
@@ -127,7 +127,8 @@ Useful concise points:
 
 - Skyborn is an atmospheric-science package with Python, Fortran, and Cython
   extensions.
-- The recipe uses the public GitHub `v0.3.20` tag tarball.
+- The recipe uses the public GitHub source archive for the current `0.4.4`
+  commit until the `v0.4.4` release tag is created.
 - The package is not `noarch` because it builds compiled extensions.
 - Local Windows validation was completed with Meson + F2PY extensions and a
   successful `conda install --use-local` smoke test.

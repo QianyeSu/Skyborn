@@ -227,7 +227,7 @@ def get_version_from_init():
             if version_match:
                 return version_match.group(1)
 
-    return "0.4.0"  # fallback version
+    return "0.4.4"  # fallback version
 
 
 def setup_entrance_page(app, exception):

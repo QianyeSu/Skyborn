@@ -3,14 +3,14 @@
 - This PR adds `skyborn` as a new `conda-forge` package.
 - Skyborn is an atmospheric-science utilities package with compiled Python,
   Fortran, and Cython extensions.
-- The current submission targets version `0.3.20`.
+- The current submission targets version `0.4.4`.
 
 ## Upstream
 
 - Home: https://github.com/QianyeSu/Skyborn
 - Documentation: https://skyborn.readthedocs.io/
 - Source used by this recipe:
-  - `https://github.com/QianyeSu/Skyborn/archive/refs/tags/v0.3.20.tar.gz`
+  - `https://github.com/QianyeSu/Skyborn/archive/53a1a0fccbe7bff459ade7a3d881f2976c85d214.tar.gz`
 
 ## Packaging Notes
 
@@ -23,7 +23,7 @@
 
 - `conda build recipe-local -c conda-forge`
 - `conda build recipe-local --output -c conda-forge`
-- `conda install --use-local skyborn=0.3.20`
+- `conda install --use-local skyborn=0.4.4`
 - Import smoke checks passed for:
   - `skyborn`
   - `skyborn.calc`
