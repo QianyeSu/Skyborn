@@ -324,6 +324,7 @@ jobs:
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
     permissions:
+      actions: read # Download wheel and sdist artifacts from this workflow run
       contents: write # Upload distributions to the GitHub release
       id-token: write # Use trusted publishing
     steps:
