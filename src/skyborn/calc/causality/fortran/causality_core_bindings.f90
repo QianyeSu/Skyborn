@@ -47,3 +47,29 @@ subroutine liang_batch_c(y1, y2, t21, tau21, nm, nsim, npt, ierr) &
     )
     ierr = int(ierr_f, kind=c_int)
 end subroutine liang_batch_c
+
+
+subroutine ar1_filter_batch_c( &
+    innovations, output, g, burnin, nnoise, nsim, nout, ierr &
+) bind(C, name="ar1_filter_batch_c")
+    use, intrinsic :: iso_c_binding, only : c_double, c_f_pointer, c_int, c_ptr
+    use causality_core_mod, only : ar1_filter_batch
+    implicit none
+
+    type(c_ptr), value, intent(in) :: innovations, output
+    real(c_double), value, intent(in) :: g
+    integer(c_int), value, intent(in) :: burnin, nnoise, nsim, nout
+    integer(c_int), intent(out) :: ierr
+    integer :: ierr_f
+
+    real(c_double), pointer :: innovations_view(:, :)
+    real(c_double), pointer :: output_view(:, :)
+
+    call c_f_pointer(innovations, innovations_view, [int(nnoise), int(nsim)])
+    call c_f_pointer(output, output_view, [int(nout), int(nsim)])
+    call ar1_filter_batch( &
+        innovations_view, output_view, int(nnoise), int(nsim), int(nout), &
+        int(burnin), g, ierr_f &
+    )
+    ierr = int(ierr_f, kind=c_int)
+end subroutine ar1_filter_batch_c

@@ -13,6 +13,7 @@ https://github.com/LinkedEarth/Pyleoclim_util
 __all__ = [
     "ar1_fit_evenly",
     "sm_ar1_sim",
+    "Surrogate",
     "granger_causality",
     "phaseran",
     "liang_causality",
@@ -70,6 +71,11 @@ _LIANG_BACKEND = _load_liang_backend()
 def _liang_backend_available() -> bool:
     """Return whether the compiled Liang backend is importable."""
     return _LIANG_BACKEND is not None
+
+
+def _ar1_backend_available() -> bool:
+    """Return whether the compiled AR(1) filtering entry point is available."""
+    return _LIANG_BACKEND is not None and hasattr(_LIANG_BACKEND, "ar1_filter_batch")
 
 
 def _require_liang_backend() -> ModuleType:
@@ -145,8 +151,30 @@ def ar1_fit_evenly(y: np.ndarray) -> float:
     return g
 
 
-def sm_ar1_sim(n: int, p: int, g: float, sig: float) -> np.ndarray:
-    """Produce p realizations of an AR1 process of length n with lag-1 autocorrelation g using statsmodels
+def _ar1_filter_backend(innovations: np.ndarray, g: float, nout: int) -> np.ndarray:
+    """Filter AR(1) innovations through the compiled Fortran backend."""
+    backend = _require_liang_backend()
+    if not hasattr(backend, "ar1_filter_batch"):
+        raise ImportError("The compiled AR(1) filtering backend is unavailable")
+    return np.asarray(
+        backend.ar1_filter_batch(
+            np.asfortranarray(innovations, dtype=np.float64),
+            float(g),
+            int(nout),
+        ),
+        dtype=np.float64,
+    )
+
+
+def sm_ar1_sim(
+    n: int,
+    p: int,
+    g: float,
+    sig: float,
+    *,
+    backend: str = "auto",
+) -> np.ndarray:
+    """Produce p realizations of an AR1 process of length n.
 
     Parameters
     ----------
@@ -160,6 +188,11 @@ def sm_ar1_sim(n: int, p: int, g: float, sig: float) -> np.ndarray:
 
     sig : float
         the standard deviation of the original time series
+    backend : {"auto", "python", "fortran", "native"}, optional
+        ``"auto"`` uses the Fortran/OpenMP filter for sufficiently large
+        surrogate ensembles when it is available. ``"python"`` preserves the
+        statsmodels implementation. ``"fortran"`` and ``"native"`` require
+        the compiled filter.
 
     Returns
     -------
@@ -173,29 +206,51 @@ def sm_ar1_sim(n: int, p: int, g: float, sig: float) -> np.ndarray:
     skyborn.causality.liang_causality : Liang information flow analysis
 
     """
-    # specify model parameters (statsmodel wants lag0 coefficents as unity)
+    if backend not in {"auto", "python", "fortran", "native"}:
+        raise ValueError(
+            "backend must be one of: 'auto', 'python', 'fortran', 'native'"
+        )
+    if n < 1 or p < 0:
+        raise ValueError("n must be positive and p must be non-negative")
+
+    # Specify model parameters (statsmodels wants lag-0 coefficients as unity).
     ar = np.r_[1, -g]  # AR model parameter
     ma = np.r_[1, 0.0]  # MA model parameters
     # theoretical noise variance for red to achieve the same variance as X
     sig_n = sig * np.sqrt(1 - g**2)
 
     if p == 0:
-        return np.empty(shape=(n, 0))
+        return np.empty(shape=(n, 0), order="F")
 
-    # Generate one row per surrogate so the random stream remains grouped in
-    # the same way as the historical per-column loop. Filtering all rows in a
-    # single statsmodels call removes the Python loop without changing the AR
-    # process or its burn-in behavior.
-    # The Liang batch backend consumes columns through a Fortran-contiguous
-    # pointer. Materialize that layout here so the later native dispatch does
-    # not copy both surrogate matrices again.
+    burnin = 50
+    native_available = _ar1_backend_available()
+    if backend in {"fortran", "native"}:
+        if not native_available:
+            raise ImportError(
+                "The compiled AR(1) filtering backend is unavailable. "
+                "Build src/skyborn/calc/causality with Meson first."
+            )
+        use_native = True
+    else:
+        use_native = backend == "auto" and p >= 32 and native_available
+
+    if use_native:
+        # Draw innovations in the same row-major order as the historical
+        # per-column statsmodels loop, then let Fortran perform burn-in and
+        # recurrence in parallel across surrogate columns.
+        innovations = np.asfortranarray(
+            np.random.normal(scale=sig_n, size=(p, n + burnin)).T
+        )
+        return _ar1_filter_backend(innovations, g, n)
+
+    # The Python path remains the exact compatibility implementation.
     return np.asfortranarray(
         arma_generate_sample(
             ar=ar,
             ma=ma,
             nsample=(p, n),
             axis=1,
-            burnin=50,
+            burnin=burnin,
             scale=sig_n,
         ).T
     )
@@ -374,6 +429,84 @@ def phaseran(recblk: np.ndarray, nsurr: int) -> np.ndarray:
     return surrblk
 
 
+class Surrogate:
+    """Generate null-model surrogate ensembles for causality analysis.
+
+    Parameters
+    ----------
+    data : array-like
+        One-dimensional time series for AR(1) or phase-randomized surrogates,
+        or a two-dimensional ``(time, series)`` block for phase
+        randomization.
+
+    Notes
+    -----
+    The class is a small state-free facade over the existing generation
+    functions. It keeps surrogate construction separate from the Liang
+    significance calculation while preserving the historical function APIs.
+    """
+
+    def __init__(self, data: np.ndarray):
+        data = np.asarray(data, dtype=np.float64)
+        if data.ndim not in (1, 2):
+            raise ValueError("Surrogate data must be a 1D or 2D array")
+        if data.shape[0] < 1:
+            raise ValueError("Surrogate data must contain at least one sample")
+        if not np.all(np.isfinite(data)):
+            raise ValueError("Surrogate data must contain only finite values")
+        self.data = data
+
+    def phase_randomized(self, nsurr: int) -> np.ndarray:
+        """Return phase-randomized surrogates for the stored data."""
+        return phaseran(self.data, nsurr)
+
+    def ar1(
+        self,
+        nsurr: int,
+        *,
+        g: Optional[float] = None,
+        sig: Optional[float] = None,
+        backend: str = "auto",
+    ) -> np.ndarray:
+        """Return AR(1) surrogates fitted to the stored one-dimensional data."""
+        if self.data.ndim != 1:
+            raise ValueError("AR(1) surrogates require one-dimensional data")
+        if g is None:
+            g = ar1_fit_evenly(self.data)
+        if sig is None:
+            sig = float(np.std(self.data))
+        return sm_ar1_sim(
+            self.data.size,
+            nsurr,
+            float(g),
+            float(sig),
+            backend=backend,
+        )
+
+    def generate(
+        self,
+        method: str,
+        nsurr: int,
+        *,
+        backend: str = "auto",
+        **kwargs: Any,
+    ) -> np.ndarray:
+        """Generate surrogates using a named null model.
+
+        Accepted method names are ``"isospec"``, ``"phase_randomized"``,
+        ``"isopersist"``, and ``"ar1"``.
+        """
+        normalized = method.lower()
+        if normalized in {"isospec", "phase_randomized"}:
+            if kwargs:
+                unexpected = next(iter(kwargs))
+                raise TypeError(f"Unexpected keyword argument: {unexpected}")
+            return self.phase_randomized(nsurr)
+        if normalized in {"isopersist", "ar1"}:
+            return self.ar1(nsurr, backend=backend, **kwargs)
+        raise KeyError(f"{method} is not a valid surrogate method")
+
+
 def liang_causality(
     y1: np.ndarray,
     y2: np.ndarray,
@@ -381,6 +514,7 @@ def liang_causality(
     signif_test: str = "isospec",
     nsim: int = 1000,
     qs: List[float] = [0.005, 0.025, 0.05, 0.95, 0.975, 0.995],
+    surrogate_backend: str = "auto",
 ) -> Dict[str, Any]:
     """Liang-Kleeman information flow
 
@@ -403,6 +537,9 @@ def liang_causality(
         the number of AR(1) surrogates for significance test
     qs : list
         the quantiles for significance test
+    surrogate_backend : {"auto", "python", "fortran", "native"}, optional
+        Backend used for AR(1) surrogate filtering when
+        ``signif_test="isopersist"``.
 
     Returns
     -------
@@ -454,7 +591,13 @@ def liang_causality(
     y1_signif = y1[:-npt]
     y2_signif = y2[:-npt]
     signif_dict = signif_test_func[signif_test](
-        y1_signif, y2_signif, method="liang", nsim=nsim, qs=qs, npt=npt
+        y1_signif,
+        y2_signif,
+        method="liang",
+        nsim=nsim,
+        qs=qs,
+        npt=npt,
+        surrogate_backend=surrogate_backend,
     )
     T21_noise_qs = signif_dict["T21_noise_qs"]
     tau21_noise_qs = signif_dict["tau21_noise_qs"]
@@ -660,6 +803,7 @@ def signif_isopersist(
     method: str,
     nsim: int = 1000,
     qs: list[float] = [0.005, 0.025, 0.05, 0.95, 0.975, 0.995],
+    surrogate_backend: str = "auto",
     **kwargs,
 ) -> dict[str, np.ndarray]:
     """significance test with AR(1) with same persistence
@@ -677,6 +821,8 @@ def signif_isopersist(
 
     qs : list
         the quantiles for significance test
+    surrogate_backend : {"auto", "python", "fortran", "native"}, optional
+        Backend used for AR(1) surrogate filtering.
 
     Returns
     -------
@@ -702,8 +848,20 @@ def signif_isopersist(
     sig1 = np.std(y1)
     sig2 = np.std(y2)
     n = np.size(y1)
-    noise1 = sm_ar1_sim(n, nsim, g1, sig1)
-    noise2 = sm_ar1_sim(n, nsim, g2, sig2)
+    noise1 = Surrogate(y1).generate(
+        "isopersist",
+        nsim,
+        backend=surrogate_backend,
+        g=g1,
+        sig=sig1,
+    )
+    noise2 = Surrogate(y2).generate(
+        "isopersist",
+        nsim,
+        backend=surrogate_backend,
+        g=g2,
+        sig=sig2,
+    )
 
     if method == "liang":
         npt = kwargs["npt"] if "npt" in kwargs else 1
@@ -763,8 +921,8 @@ def signif_isospec(
 
     """
 
-    noise1 = phaseran(y1, nsim)
-    noise2 = phaseran(y2, nsim)
+    noise1 = Surrogate(y1).generate("isospec", nsim)
+    noise2 = Surrogate(y2).generate("isospec", nsim)
 
     if method == "liang":
         npt = kwargs["npt"] if "npt" in kwargs else 1
@@ -776,7 +934,6 @@ def signif_isospec(
             "tau21_noise_qs": tau21_noise_qs,
             "T21_noise_qs": T21_noise_qs,
         }
-    # TODO Recode with Surrogate class
     else:
         raise KeyError(f"{method} is not a valid method")
 

@@ -70,6 +70,7 @@ _OBJECT_EXPORTS = {
     # Top-level science utilities.
     "granger_causality": ("skyborn.calc.causality", "granger_causality"),
     "liang_causality": ("skyborn.calc.causality", "liang_causality"),
+    "Surrogate": ("skyborn.calc.causality", "Surrogate"),
     "calculate_gradient": ("skyborn.gradients", "calculate_gradient"),
     "calculate_meridional_gradient": (
         "skyborn.gradients",

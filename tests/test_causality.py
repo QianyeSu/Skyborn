@@ -14,6 +14,7 @@ from statsmodels.tsa.arima_process import arma_generate_sample
 
 import skyborn.calc.causality.core as causality_core
 from skyborn.calc.causality import (
+    Surrogate,
     ar1_fit_evenly,
     granger_causality,
     liang,
@@ -24,6 +25,7 @@ from skyborn.calc.causality import (
     sm_ar1_sim,
 )
 from skyborn.calc.causality.core import (
+    _ar1_backend_available,
     _liang_backend_available,
     _liang_batch,
     _liang_batch_backend,
@@ -229,6 +231,66 @@ class TestAR1Functions:
         """Zero requested surrogates should return an empty matrix."""
         result = sm_ar1_sim(n=32, p=0, g=0.6, sig=2.0)
         assert result.shape == (32, 0)
+        assert result.flags.f_contiguous
+
+    def test_sm_ar1_sim_rejects_invalid_backend(self):
+        with pytest.raises(ValueError, match="backend must be one of"):
+            sm_ar1_sim(32, 4, 0.6, 2.0, backend="invalid")
+
+    def test_sm_ar1_sim_rejects_invalid_dimensions(self):
+        with pytest.raises(ValueError, match="n must be positive"):
+            sm_ar1_sim(0, 4, 0.6, 2.0)
+        with pytest.raises(ValueError, match="n must be positive"):
+            sm_ar1_sim(32, -1, 0.6, 2.0)
+
+    @pytest.mark.skipif(
+        not _ar1_backend_available(),
+        reason="compiled AR(1) backend is not available",
+    )
+    def test_sm_ar1_sim_fortran_matches_legacy_random_stream(self):
+        n = 64
+        p = 48
+        g = 0.6
+        sig = 2.0
+        ar = np.r_[1, -g]
+        ma = np.r_[1, 0.0]
+        sig_n = sig * np.sqrt(1 - g**2)
+
+        np.random.seed(123)
+        actual = sm_ar1_sim(n, p, g, sig, backend="fortran")
+
+        np.random.seed(123)
+        expected = np.empty((n, p))
+        for index in range(p):
+            expected[:, index] = arma_generate_sample(
+                ar=ar,
+                ma=ma,
+                nsample=n,
+                burnin=50,
+                scale=sig_n,
+            )
+
+        assert_allclose(actual, expected, rtol=0.0, atol=0.0)
+
+    def test_sm_ar1_sim_fortran_requires_compiled_backend(self, monkeypatch):
+        monkeypatch.setattr(causality_core, "_LIANG_BACKEND", None)
+        with pytest.raises(ImportError, match="compiled AR"):
+            sm_ar1_sim(32, 4, 0.6, 2.0, backend="fortran")
+
+    def test_sm_ar1_sim_auto_falls_back_without_backend(self, monkeypatch):
+        monkeypatch.setattr(causality_core, "_LIANG_BACKEND", None)
+        np.random.seed(123)
+        result = sm_ar1_sim(32, 32, 0.6, 2.0, backend="auto")
+        assert result.shape == (32, 32)
+
+    def test_ar1_filter_backend_requires_entry_point(self, monkeypatch):
+        monkeypatch.setattr(causality_core, "_LIANG_BACKEND", object())
+        with pytest.raises(ImportError, match="AR\\(1\\) filtering backend"):
+            causality_core._ar1_filter_backend(
+                np.ones((51, 1), dtype=np.float64),
+                0.2,
+                1,
+            )
 
 
 class TestPhaseRandomization:
@@ -338,6 +400,53 @@ class TestPhaseRandomization:
 
         with pytest.raises(ValueError, match="positive integer"):
             phaseran(np.zeros(9), 0)
+
+
+class TestSurrogate:
+    """Test the unified surrogate-generation facade."""
+
+    def test_phase_randomized_alias_preserves_output(self):
+        data = np.random.default_rng(41).normal(size=33)
+        np.random.seed(123)
+        expected = phaseran(data, 4)
+        np.random.seed(123)
+        actual = Surrogate(data).generate("phase_randomized", 4)
+        assert_allclose(actual, expected, rtol=0.0, atol=1e-14)
+
+    def test_ar1_generation_and_alias(self):
+        data = np.random.default_rng(42).normal(size=64)
+        surrogate = Surrogate(data)
+        result = surrogate.generate(
+            "ar1",
+            4,
+            backend="python",
+            g=0.4,
+            sig=1.5,
+        )
+        assert result.shape == (64, 4)
+        assert result.flags.f_contiguous
+
+    def test_ar1_generation_fits_defaults(self):
+        data = np.random.default_rng(43).normal(size=64)
+        result = Surrogate(data).ar1(2, backend="python")
+        assert result.shape == (64, 2)
+
+    def test_surrogate_validation(self):
+        with pytest.raises(ValueError, match="1D or 2D"):
+            Surrogate(np.zeros((2, 2, 2)))
+        with pytest.raises(ValueError, match="at least one"):
+            Surrogate(np.empty((0,)))
+        with pytest.raises(ValueError, match="finite"):
+            Surrogate(np.array([0.0, np.nan]))
+        with pytest.raises(ValueError, match="one-dimensional"):
+            Surrogate(np.zeros((8, 2))).ar1(2, g=0.2, sig=1.0)
+
+    def test_surrogate_method_and_keyword_validation(self):
+        surrogate = Surrogate(np.arange(9.0))
+        with pytest.raises(KeyError, match="valid surrogate"):
+            surrogate.generate("unknown", 2)
+        with pytest.raises(TypeError, match="Unexpected keyword"):
+            surrogate.generate("isospec", 2, g=0.2)
 
 
 class TestGrangerCausality:

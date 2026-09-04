@@ -50,6 +50,7 @@ _OBJECT_EXPORTS = {
     "calculate_dcape": ("skyborn.calc.dcape", "calculate_dcape"),
     "ar1_fit_evenly": ("skyborn.calc.causality", "ar1_fit_evenly"),
     "sm_ar1_sim": ("skyborn.calc.causality", "sm_ar1_sim"),
+    "Surrogate": ("skyborn.calc.causality", "Surrogate"),
     "granger_causality": ("skyborn.calc.causality", "granger_causality"),
     "phaseran": ("skyborn.calc.causality", "phaseran"),
     "liang": ("skyborn.calc.causality", "liang"),

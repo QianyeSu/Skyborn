@@ -23,11 +23,16 @@ Version 0.4.5 (Current)
 
   - Batched phase-randomized surrogate generation through vectorized FFT
     operations
-  - Vectorized AR(1) surrogate filtering through the statsmodels batch API
+  - Added a Fortran/OpenMP AR(1) filtering path while retaining the
+    statsmodels-compatible Python fallback
   - Returned Fortran-contiguous surrogate matrices to avoid redundant
     Python-to-Fortran data copies
   - Preserved the historical seeded surrogate output and Liang reference
     behavior
+
+* **Surrogate API**: Added the ``Surrogate`` facade with explicit
+  ``phase_randomized`` and ``ar1`` generation methods, plus named
+  ``generate`` aliases used by the significance workflows
 
 **Testing**
 

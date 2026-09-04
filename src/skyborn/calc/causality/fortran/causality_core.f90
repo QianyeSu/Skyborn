@@ -6,6 +6,7 @@ module causality_core_mod
 
     public :: liang_single
     public :: liang_batch
+    public :: ar1_filter_batch
 
 contains
 
@@ -156,5 +157,35 @@ subroutine liang_batch(y1, y2, nm, nsim, npt, t21, tau21, ierr)
     end do
     !$omp end parallel do
 end subroutine liang_batch
+
+
+subroutine ar1_filter_batch(innovations, output, nnoise, nsim, nout, burnin, g, ierr)
+    integer, intent(in) :: nnoise, nsim, nout, burnin
+    real(real64), intent(in) :: innovations(nnoise, nsim), g
+    real(real64), intent(out) :: output(nout, nsim)
+    integer, intent(out) :: ierr
+
+    integer :: i, j
+    real(real64) :: state
+
+    ierr = 0
+    if (nnoise < 1 .or. nsim < 1 .or. nout < 1 .or. burnin < 0 .or. &
+        burnin + nout > nnoise) then
+        ierr = 1
+        return
+    end if
+
+    !$omp parallel do private(i, j, state) if(nsim >= 32) schedule(static)
+    do j = 1, nsim
+        state = 0.0_real64
+        do i = 1, nnoise
+            state = g * state + innovations(i, j)
+            if (i > burnin .and. i <= burnin + nout) then
+                output(i - burnin, j) = state
+            end if
+        end do
+    end do
+    !$omp end parallel do
+end subroutine ar1_filter_batch
 
 end module causality_core_mod

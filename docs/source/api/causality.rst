@@ -51,10 +51,16 @@ Surrogate generation is also batched at the Python/NumPy boundary:
 
 * ``phaseran`` uses batched real FFTs and preserves the historical random
   phase stream.
-* ``sm_ar1_sim`` uses one vectorized statsmodels AR(1) filtering call while
-  preserving the historical per-surrogate random stream.
+* ``sm_ar1_sim`` preserves the historical random stream and can use a
+  Fortran/OpenMP AR(1) filtering kernel for larger surrogate ensembles.
 * Liang significance calculations pass the generated surrogate matrices to
   the Fortran/OpenMP batch kernel.
+
+The :class:`~skyborn.calc.causality.Surrogate` facade provides a common
+``generate`` entry point for ``isospec`` phase-randomized and ``isopersist``
+AR(1) null models. The AR(1) native path accelerates filtering after NumPy has
+generated the innovations; this keeps seeded output compatible with the
+historical statsmodels implementation.
 
 On Windows, build and test this module from the ``skyborn_dev`` Anaconda
 environment:
@@ -89,6 +95,9 @@ Utility Functions
 ~~~~~~~~~~~~~~~~~
 
 .. autofunction:: skyborn.calc.causality.ar1_fit_evenly
+
+.. autoclass:: skyborn.calc.causality.Surrogate
+   :members:
 
 .. autofunction:: skyborn.calc.causality.phaseran
 

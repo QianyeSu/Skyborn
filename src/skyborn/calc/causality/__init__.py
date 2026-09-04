@@ -1,6 +1,7 @@
 """Causality analysis with an optional compiled Liang information-flow core."""
 
 from .core import (
+    Surrogate,
     ar1_fit_evenly,
     granger_causality,
     liang,
@@ -14,6 +15,7 @@ from .core import (
 __all__ = [
     "ar1_fit_evenly",
     "sm_ar1_sim",
+    "Surrogate",
     "granger_causality",
     "phaseran",
     "liang",

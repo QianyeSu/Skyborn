@@ -12,6 +12,10 @@ void liang_batch_c(
     void *y1, void *y2, void *t21, void *tau21,
     int nm, int nsim, int npt, int *ierr
 );
+void ar1_filter_batch_c(
+    void *innovations, void *output, double g, int burnin,
+    int nnoise, int nsim, int nout, int *ierr
+);
 
 static void set_liang_error(const char *context, int ierr)
 {
@@ -34,6 +38,11 @@ static void set_liang_error(const char *context, int ierr)
         PyErr_SetString(
             PyExc_ValueError,
             "Liang information flow normalization is undefined"
+        );
+    } else if (ierr == 5) {
+        PyErr_SetString(
+            PyExc_ValueError,
+            "AR(1) filter dimensions are invalid"
         );
     } else {
         PyErr_Format(
@@ -180,9 +189,79 @@ fail:
     return result;
 }
 
+static PyObject *py_ar1_filter_batch(PyObject *self, PyObject *args)
+{
+    PyObject *innovations_obj = NULL;
+    PyArrayObject *innovations = NULL;
+    PyArrayObject *output = NULL;
+    PyObject *result = NULL;
+    npy_intp shape[2];
+    double g = 0.0;
+    int nout = 0;
+    int burnin = 50;
+    int nnoise = 0;
+    int nsim = 0;
+    int ierr = 0;
+
+    (void) self;
+    if (!PyArg_ParseTuple(args, "Odi", &innovations_obj, &g, &nout)) {
+        return NULL;
+    }
+
+    innovations = as_double_2d_fortran(innovations_obj);
+    if (innovations == NULL) {
+        return NULL;
+    }
+    if (PyArray_NDIM(innovations) != 2) {
+        PyErr_SetString(
+            PyExc_ValueError,
+            "AR(1) filter innovations must be a 2D array"
+        );
+        goto fail;
+    }
+
+    nnoise = (int) PyArray_DIM(innovations, 0);
+    nsim = (int) PyArray_DIM(innovations, 1);
+    if (nout < 1 || nnoise < burnin + nout || nsim < 1) {
+        PyErr_SetString(
+            PyExc_ValueError,
+            "AR(1) filter dimensions are invalid"
+        );
+        goto fail;
+    }
+
+    shape[0] = nout;
+    shape[1] = nsim;
+    output = (PyArrayObject *) PyArray_EMPTY(2, shape, NPY_FLOAT64, 1);
+    if (output == NULL) {
+        goto fail;
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    ar1_filter_batch_c(
+        PyArray_DATA(innovations), PyArray_DATA(output), g, burnin,
+        nnoise, nsim, nout, &ierr
+    );
+    Py_END_ALLOW_THREADS
+
+    if (ierr != 0) {
+        set_liang_error("AR(1) filter kernel", ierr + 4);
+        goto fail;
+    }
+
+    result = (PyObject *) output;
+    output = NULL;
+
+fail:
+    Py_XDECREF(innovations);
+    Py_XDECREF(output);
+    return result;
+}
+
 static PyMethodDef module_methods[] = {
     {"liang_single", py_liang_single, METH_VARARGS, "Calculate one Liang flow."},
     {"liang_batch", py_liang_batch, METH_VARARGS, "Calculate Liang flows by column."},
+    {"ar1_filter_batch", py_ar1_filter_batch, METH_VARARGS, "Filter AR(1) innovations by column."},
     {NULL, NULL, 0, NULL}
 };
 
