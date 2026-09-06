@@ -46,6 +46,23 @@ def test_point_at_distance_handles_non_contiguous():
     assert result.dtype == np.float64
 
 
+def test_local_tangent_at_distance_matches_display_space_geometry():
+    """The tangent API should return the normalized forward local direction."""
+    from skyborn.plot._core.contour_arrows_core import local_tangent_at_distance
+
+    vertices = np.array(
+        [[0.0, 0.0], [5.0, 0.0], [6.0, 2.0], [7.0, 0.0], [12.0, 0.0]],
+        dtype=np.float64,
+    )
+    total_length = float(np.sum(np.hypot(*np.diff(vertices, axis=0).T)))
+    distance = 2.5
+
+    tangent = local_tangent_at_distance(vertices, distance, total_length, 0.5)
+
+    np.testing.assert_allclose(tangent, [1.0, 0.0], atol=1e-12)
+    assert tangent.dtype == np.float64
+
+
 def test_select_arrow_end_distances_requires_float64():
     """Test that select_arrow_end_distances rejects non-float64 arrays."""
     from skyborn.plot._core.contour_arrows_core import select_arrow_end_distances
@@ -82,6 +99,24 @@ def test_select_arrow_end_distances_handles_non_contiguous():
     result = select_arrow_end_distances(vertices_strided, 3.0, 2, 0.5, None)
     assert result is not None
     assert result.dtype == np.float64
+
+
+def test_select_single_arrow_prefers_straight_section_over_midpoint():
+    """A single arrow should use the best local tangent, not a fixed midpoint."""
+    from skyborn.plot._core.contour_arrows_core import select_arrow_end_distances
+
+    # The path midpoint lies on a sharp bend. Long straight sections exist on
+    # both sides, so a straightness-aware selector should avoid that midpoint.
+    vertices = np.array(
+        [[0.0, 0.0], [5.0, 0.0], [6.0, 2.0], [7.0, 0.0], [12.0, 0.0]],
+        dtype=np.float64,
+    )
+    total_length = float(np.sum(np.hypot(*np.diff(vertices, axis=0).T)))
+
+    result = select_arrow_end_distances(vertices, total_length, 1, 1.5, None)
+
+    assert result.shape == (1,)
+    assert abs(float(result[0]) - total_length / 2.0) > 1.0
 
 
 def test_local_straightness_score_requires_float64():

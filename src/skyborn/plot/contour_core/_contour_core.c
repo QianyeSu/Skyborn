@@ -81,6 +81,39 @@ static double total_length(const double *vertices, npy_intp nvertices) {
     return total;
 }
 
+static int local_tangent_at_distance(
+    const double *vertices,
+    npy_intp nvertices,
+    double distance,
+    double path_length,
+    double probe,
+    double *out_tx,
+    double *out_ty
+) {
+    double before_x, before_y, after_x, after_y;
+    const double effective_probe = fmax(probe, 1.0);
+    const double before_distance = fmax(0.0, distance - effective_probe);
+    const double after_distance = fmin(path_length, distance + effective_probe);
+
+    if (!point_at_distance(
+            vertices, nvertices, before_distance, &before_x, &before_y) ||
+        !point_at_distance(
+            vertices, nvertices, after_distance, &after_x, &after_y)) {
+        return 0;
+    }
+
+    const double tx = after_x - before_x;
+    const double ty = after_y - before_y;
+    const double length = hypot2(tx, ty);
+    if (length <= 0.0) {
+        return 0;
+    }
+
+    *out_tx = tx / length;
+    *out_ty = ty / length;
+    return 1;
+}
+
 static double local_straightness_score(
     const double *vertices,
     npy_intp nvertices,
@@ -317,8 +350,17 @@ static PyObject *build_arrow_segments(PyObject *self, PyObject *args) {
         if (vector_length <= 0.0) {
             continue;
         }
-        const double tx = vx / vector_length;
-        const double ty = vy / vector_length;
+        double tx = vx / vector_length;
+        double ty = vy / vector_length;
+        local_tangent_at_distance(
+            vertices,
+            nvertices,
+            distances[i],
+            path_length,
+            arrow_length * 0.25,
+            &tx,
+            &ty
+        );
         const double nx = -ty;
         const double ny = tx;
         const double width = vector_length * arrow_size;

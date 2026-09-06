@@ -13,6 +13,9 @@ from ..contour_core import build_arrow_segments as _native_build_arrow_segments
 
 # Import C-accelerated functions
 from .contour_arrows_core import local_straightness_score as _local_straightness_score_c
+from .contour_arrows_core import (
+    local_tangent_at_distance as _local_tangent_at_distance_c,
+)
 from .contour_arrows_core import point_at_distance as _point_at_distance_c
 from .contour_arrows_core import (
     select_arrow_end_distances as _select_arrow_end_distances_c,
@@ -211,7 +214,14 @@ def _build_arrow_triangles_python(
         vector_length = float(np.hypot(vector[0], vector[1]))
         if vector_length <= 0.0:
             continue
-        tangent = vector / vector_length
+        tangent = _local_tangent_at_distance_c(
+            display_vertices,
+            float(end_distance),
+            total_length,
+            arrow_length * 0.25,
+        )
+        if tangent is None:
+            tangent = vector / vector_length
         normal = np.array([-tangent[1], tangent[0]])
         width = vector_length * arrow_size
         base = start
@@ -259,7 +269,14 @@ def _build_arrow_segments_python(
         vector_length = float(np.hypot(vector[0], vector[1]))
         if vector_length <= 0.0:
             continue
-        tangent = vector / vector_length
+        tangent = _local_tangent_at_distance_c(
+            display_vertices,
+            float(end_distance),
+            total_length,
+            arrow_length * 0.25,
+        )
+        if tangent is None:
+            tangent = vector / vector_length
         normal = np.array([-tangent[1], tangent[0]])
         width = vector_length * arrow_size
         base = start
@@ -318,7 +335,14 @@ def _build_arrow_segments_swept_python(
         vector_length = float(np.hypot(vector[0], vector[1]))
         if vector_length <= 0.0:
             continue
-        tangent = vector / vector_length
+        tangent = _local_tangent_at_distance_c(
+            display_vertices,
+            float(end_distance),
+            total_length,
+            arrow_length * 0.25,
+        )
+        if tangent is None:
+            tangent = vector / vector_length
         normal = np.array([-tangent[1], tangent[0]])
         barb_length = vector_length * arrow_size
 

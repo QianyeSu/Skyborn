@@ -2,7 +2,8 @@
  * contour_arrows_core.c
  *
  * C-accelerated core functions for arrow_contour.
- * Provides point_at_distance, local_straightness_score, and select_arrow_end_distances.
+ * Provides point_at_distance, local_tangent_at_distance,
+ * local_straightness_score, and select_arrow_end_distances.
  */
 
 #define PY_SSIZE_T_CLEAN
@@ -133,6 +134,96 @@ static PyObject* point_at_distance(PyObject* self, PyObject* args) {
 
     Py_XDECREF(vertices_contiguous);
     return (PyObject*)result;
+}
+
+/*
+ * local_tangent_at_distance(vertices, distance, total_length, probe) -> ndarray or None
+ *
+ * Estimate the forward tangent around a point on a display-space path.
+ * The implementation mirrors the former Python helper exactly.
+ */
+static PyObject* local_tangent_at_distance(PyObject* self, PyObject* args) {
+    PyArrayObject *vertices_obj;
+    double distance, total_length, probe;
+
+    if (!PyArg_ParseTuple(
+            args,
+            "O!ddd",
+            &PyArray_Type,
+            &vertices_obj,
+            &distance,
+            &total_length,
+            &probe
+        )) {
+        return NULL;
+    }
+
+    if (PyArray_NDIM(vertices_obj) != 2 ||
+        PyArray_DIM(vertices_obj, 1) != 2) {
+        PyErr_SetString(PyExc_ValueError, "vertices must be (N, 2) array");
+        return NULL;
+    }
+    if (PyArray_TYPE(vertices_obj) != NPY_DOUBLE) {
+        PyErr_SetString(
+            PyExc_TypeError,
+            "vertices must be float64 (np.float64) array"
+        );
+        return NULL;
+    }
+
+    const double effective_probe = fmax(probe, 1.0);
+    const double before_distance = fmax(0.0, distance - effective_probe);
+    const double after_distance = fmin(total_length, distance + effective_probe);
+
+    PyObject *before_args = Py_BuildValue("(Od)", vertices_obj, before_distance);
+    PyObject *after_args = Py_BuildValue("(Od)", vertices_obj, after_distance);
+    if (!before_args || !after_args) {
+        Py_XDECREF(before_args);
+        Py_XDECREF(after_args);
+        return NULL;
+    }
+
+    PyObject *before_obj = point_at_distance(self, before_args);
+    PyObject *after_obj = point_at_distance(self, after_args);
+    Py_DECREF(before_args);
+    Py_DECREF(after_args);
+
+    if (!before_obj || !after_obj) {
+        Py_XDECREF(before_obj);
+        Py_XDECREF(after_obj);
+        return NULL;
+    }
+    if (before_obj == Py_None || after_obj == Py_None) {
+        Py_DECREF(before_obj);
+        Py_DECREF(after_obj);
+        Py_RETURN_NONE;
+    }
+
+    const double *before = (const double *)PyArray_DATA((PyArrayObject *)before_obj);
+    const double *after = (const double *)PyArray_DATA((PyArrayObject *)after_obj);
+    const double tx = after[0] - before[0];
+    const double ty = after[1] - before[1];
+    const double length = hypot2(tx, ty);
+    if (length <= 0.0) {
+        Py_DECREF(before_obj);
+        Py_DECREF(after_obj);
+        Py_RETURN_NONE;
+    }
+
+    npy_intp dims[1] = {2};
+    PyArrayObject *result = (PyArrayObject *)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
+    if (!result) {
+        Py_DECREF(before_obj);
+        Py_DECREF(after_obj);
+        return NULL;
+    }
+    double *result_data = (double *)PyArray_DATA(result);
+    result_data[0] = tx / length;
+    result_data[1] = ty / length;
+
+    Py_DECREF(before_obj);
+    Py_DECREF(after_obj);
+    return (PyObject *)result;
 }
 
 /*
@@ -382,23 +473,6 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
         vertices_obj = vertices_contiguous;
     }
 
-    if (arrow_count <= 1) {
-        /* Simple uniform spacing */
-        npy_intp dims[1] = {arrow_count};
-        PyArrayObject *result = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
-        if (!result) {
-            Py_XDECREF(vertices_contiguous);
-            return NULL;
-        }
-
-        double *result_data = (double*)PyArray_DATA(result);
-        if (arrow_count == 1) {
-            result_data[0] = total_length / 2.0;
-        }
-        Py_XDECREF(vertices_contiguous);
-        return (PyObject*)result;
-    }
-
     double lower = fmin(total_length, arrow_length * 1.1);
     double upper = fmax(lower, total_length - arrow_length * 0.5);
 
@@ -566,6 +640,8 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
 static PyMethodDef ContourArrowsCoreMethods[] = {
     {"point_at_distance", point_at_distance, METH_VARARGS,
      "Find point at given arc-length distance along path"},
+    {"local_tangent_at_distance", local_tangent_at_distance, METH_VARARGS,
+     "Estimate the forward tangent at a path distance"},
     {"local_straightness_score", local_straightness_score, METH_VARARGS,
      "Score straightness at given distance for arrow placement"},
     {"select_arrow_end_distances", select_arrow_end_distances, METH_VARARGS,

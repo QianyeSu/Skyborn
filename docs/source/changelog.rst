@@ -1,8 +1,40 @@
 Changelog
 =========
 
-Version 0.4.4 (Current)
+Version 0.4.5 (Current)
 ------------------------
+
+**Plotting Improvements**
+
+* **Directional Contour Refinement**: Improved ``skyborn.plot.arrow_contour``
+  arrow placement on curved and irregular contour segments
+
+  - Selects straighter local sections for clearer ``->`` arrowheads
+  - Computes local tangent direction from the contour geometry so arrowheads
+    remain aligned with the line
+  - Preserves clockwise / counterclockwise sign conventions, including the
+    reversed positive-flow option and map-projection display orientation
+
+* **Native Arrow Geometry Acceleration**: Moved contour-arrow geometry
+  calculations, including local straightness screening and arrowhead segment
+  generation, into the C backend while preserving the Python behavior
+
+* **Shadowed Filled Contours**: Improved
+  ``skyborn.plot.shadow_contourf`` boundary handling, artist cleanup, and
+  compatibility with Matplotlib-style contourf arguments
+
+**Testing**
+
+* Expanded focused contour, arrow-contour, shadow-contourf, and vector-engine
+  coverage tests
+* The maintained contour and vector helper modules now reach 99% line
+  coverage, with the complete ``skyborn.plot`` package reaching 98% in the
+  independent plot coverage run
+* Added regression coverage for curved arrow placement, local tangent
+  consistency, native fallback behavior, and shadow artist edge cases
+
+Version 0.4.4
+-------------
 
 **Bug Fixes**
 
