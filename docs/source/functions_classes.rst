@@ -257,6 +257,10 @@ Core Plotting Functions
      - Description
    * - :func:`skyborn.plot.add_equal_axes`
      - Add a new Axes with equal height or width next to the original Axes
+   * - :func:`skyborn.plot.add_centered_axes`
+     - Add a colorbar Axes centered across two existing Axes
+   * - :func:`skyborn.plot.gradient_fill_between`
+     - Fill the area between two curves with a smooth relative gradient
    * - :func:`skyborn.plot.createFigure`
      - Create a figure with specified size and DPI
 
@@ -276,6 +280,12 @@ Specialized Plotting
      - Add an NCL-like reference-vector annotation matched to curly-vector scaling
    * - :func:`skyborn.plot.scatter`
      - Plot Matplotlib-compatible scatter points with optional NCL-style display-space thinning for gridded stippling masks
+   * - :func:`skyborn.plot.arrow_contour`
+     - Plot contour lines with arrowheads integrated into the contour geometry
+   * - :func:`skyborn.plot.arrow_contour_clabel`
+     - Label arrowed contours while avoiding arrowhead locations
+   * - :func:`skyborn.plot.shadow_contourf`
+     - Plot filled contours with optional layered shadow effects
 
 Causality Analysis
 ------------------

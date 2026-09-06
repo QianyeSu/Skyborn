@@ -11,6 +11,7 @@ import pytest
 from matplotlib.image import AxesImage
 from matplotlib.patches import PathPatch
 
+from skyborn.plot import plotting as plotting_module
 from skyborn.plot.plotting import (
     add_centered_axes,
     add_equal_axes,
@@ -318,6 +319,22 @@ class TestAddCenteredAxes:
         assert right_position.y1 == pytest.approx(0.6)
         plt.close(fig)
 
+    def test_add_centered_axes_left(self):
+        fig, axes = plt.subplots(1, 2, figsize=(8, 3))
+        axes[0].set_position([0.2, 0.2, 0.25, 0.6])
+        axes[1].set_position([0.55, 0.3, 0.25, 0.4])
+
+        cax = add_centered_axes(
+            axes[0], axes[1], loc="left", pad=0.04, width=0.03, length=0.4
+        )
+        position = cax.get_position()
+
+        assert position.x0 == pytest.approx(0.13)
+        assert position.x1 == pytest.approx(0.16)
+        assert position.y0 == pytest.approx(0.3)
+        assert position.y1 == pytest.approx(0.7)
+        plt.close(fig)
+
     def test_add_centered_axes_validates_inputs(self):
         fig, ax = plt.subplots()
         other_fig, other_ax = plt.subplots()
@@ -355,6 +372,30 @@ class TestAddCenteredAxes:
 
 class TestGradientFillBetween:
     """Test smooth gradient filling between curves."""
+
+    def test_gradient_fill_between_object_x_falls_back_to_float(self):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        x = np.array([0.0, 1.0, 2.0], dtype=object)
+
+        result = gradient_fill_between(
+            ax, x, [0.0, 1.0, 0.0], [2.0, 3.0, 2.0], resolution=8
+        )
+
+        assert result.images[0].get_extent()[:2] == [0.0, 2.0]
+        plt.close(fig)
+
+    def test_gradient_fill_between_edge_modes(self):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        x = np.array([0.0, 1.0, 2.0])
+        y1 = np.array([0.0, 2.0, 0.0])
+        y2 = np.array([3.0, 1.0, 3.0])
+
+        y1_result = gradient_fill_between(ax, x, y1, y2, edge_mode="y1", resolution=8)
+        y2_result = gradient_fill_between(ax, x, y1, y2, edge_mode="y2", resolution=8)
+
+        assert y1_result.images[0].get_array().shape == (8, 8)
+        assert y2_result.images[0].get_array().shape == (8, 8)
+        plt.close(fig)
 
     def test_gradient_fill_between_basic(self):
         fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
@@ -454,9 +495,26 @@ class TestGradientFillBetween:
 
         plt.close(fig)
 
+    def test_gradient_fill_between_remove_ignores_already_removed_artists(self):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        result = gradient_fill_between(
+            ax, np.linspace(0, 1, 5), np.linspace(0, 1, 5), np.linspace(1, 2, 5)
+        )
+
+        class AlreadyRemoved:
+            def remove(self):
+                raise ValueError("artist is already removed")
+
+        result.images = [AlreadyRemoved()]
+        result.clip_paths = []
+        result.remove()
+        plt.close(fig)
+
     def test_gradient_fill_between_validation(self):
         fig, ax = plt.subplots()
 
+        with pytest.raises(TypeError, match="Axes"):
+            gradient_fill_between(object(), [0, 1], [0, 1])
         with pytest.raises(ValueError, match="x and y1"):
             gradient_fill_between(ax, [0, 1], [0, 1, 2])
         with pytest.raises(ValueError, match="edge_mode"):
@@ -465,6 +523,27 @@ class TestGradientFillBetween:
             gradient_fill_between(ax, [0, 1], [np.nan, 1], [1, 2])
         with pytest.raises(ValueError, match="resolution"):
             gradient_fill_between(ax, [0, 1], [0, 1], [1, 2], resolution=1)
+        with pytest.raises(ValueError, match="resolution"):
+            gradient_fill_between(ax, [0, 1], [0, 1], [1, 2], resolution=(1,))
+        with pytest.raises(ValueError, match="at least 2"):
+            gradient_fill_between(ax, [0, 1], [0, 1], [1, 2], resolution=(1, 2))
+        with pytest.raises(ValueError, match="non-zero"):
+            gradient_fill_between(ax, [1, 1], [0, 1], [1, 2], resolution=8)
+        plt.close(fig)
+
+    def test_gradient_fill_between_empty_valid_runs(self):
+        valid = np.array([False, False])
+        assert list(plotting_module._iter_valid_runs(valid)) == []
+
+    def test_gradient_fill_between_defensive_y2_shape_check(self, monkeypatch):
+        fig, ax = plt.subplots()
+
+        def wrong_shape_broadcast(array, shape):
+            return np.array([0.0])
+
+        monkeypatch.setattr(plotting_module.np, "broadcast_to", wrong_shape_broadcast)
+        with pytest.raises(ValueError, match="y2 must be scalar"):
+            gradient_fill_between(ax, [0, 1], [0, 1], [1, 2])
 
         plt.close(fig)
 

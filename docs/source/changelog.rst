@@ -27,15 +27,22 @@ Version 0.4.5 (Current)
   ``skyborn.plot.add_centered_axes`` for creating a colorbar Axes centered
   across two panels, with configurable side, padding, thickness, and length
 
-**Testing**
+* **Plotting API Documentation**: Documented the public contour, gradient-fill,
+  centered-layout, curly-vector, and stippling entry points with examples
 
-* Expanded focused contour, arrow-contour, shadow-contourf, and vector-engine
-  coverage tests
-* The maintained contour and vector helper modules now reach 99% line
-  coverage, with the complete ``skyborn.plot`` package reaching 98% in the
-  independent plot coverage run
-* Added regression coverage for curved arrow placement, local tangent
-  consistency, native fallback behavior, and shadow artist edge cases
+**Build and Release**
+
+* **GitHub Release Artifacts**: Updated the wheel workflow to collect wheels
+  and source distributions, upload them to the GitHub release, and generate
+  release notes from the matching changelog section
+* **Release Metadata**: Improved release-note date formatting and removed
+  duplicate version/status headings from generated release bodies
+
+**Testing and Compatibility**
+
+* Expanded focused regression tests for curved arrow placement, local tangent
+  consistency, native fallback behavior, centered axes placement, gradient
+  fills, and shadow artist edge cases
 
 Version 0.4.4
 -------------

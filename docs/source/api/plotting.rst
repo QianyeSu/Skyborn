@@ -8,7 +8,100 @@ Plotting Utilities
 
 .. autofunction:: skyborn.plot.add_equal_axes
 
+.. autofunction:: skyborn.plot.add_centered_axes
+
 .. autofunction:: skyborn.plot.createFigure
+
+.. autofunction:: skyborn.plot.gradient_fill_between
+
+``add_centered_axes`` is useful for a shared colorbar spanning two panels:
+
+.. code-block:: python
+
+   import matplotlib.pyplot as plt
+   import skyborn as skb
+
+   fig, (ax1, ax2) = plt.subplots(1, 2, constrained_layout=False)
+   # Draw data on ax1 and ax2, then create one centered colorbar axes.
+   cax = skb.plot.add_centered_axes(
+       ax1, ax2, loc="bottom", pad=0.04, width=0.025, length=0.72
+   )
+   fig.colorbar(mappable, cax=cax, orientation="horizontal")
+
+Gradient Curve Fills
+--------------------
+
+``gradient_fill_between`` creates one clipped gradient image per continuous
+finite segment. It follows the two input curves, so it remains smooth without
+stacking many narrow ``fill_between`` polygons:
+
+.. code-block:: python
+
+   result = skb.plot.gradient_fill_between(
+       ax,
+       time,
+       ocean_heat_content,
+       sea_surface_temperature,
+       cmap="YlOrBr",
+       resolution="auto",
+   )
+
+The returned ``GradientFillBetween`` object stores the generated image and
+clipping artists and provides ``result.remove()`` for cleanup.
+
+Directional Contours
+--------------------
+
+.. autofunction:: skyborn.plot.arrow_contour
+
+.. autofunction:: skyborn.plot.arrow_contour_clabel
+
+``arrow_contour`` keeps the contour line and its ``->`` arrowheads as one
+directional contour rendering. Positive closed contours default to clockwise
+orientation and negative closed contours to the opposite orientation. Use
+``positive_direction="counterclockwise"`` to reverse that convention. Arrow
+placement and tangent estimation are performed in displayed coordinates, so
+set final axis limits, pressure-axis inversion, or map projection before
+calling the function.
+
+.. code-block:: python
+
+   cs = skb.plot.arrow_contour(
+       ax,
+       lon,
+       lat,
+       streamfunction,
+       levels=[-2, -1, 1, 2],
+       arrow_count=1,
+       arrow_style="swept",
+       positive_direction="clockwise",
+   )
+   skb.plot.arrow_contour_clabel(cs, inline=True, fontsize=8)
+
+Shadowed Filled Contours
+------------------------
+
+.. autofunction:: skyborn.plot.shadow_contourf
+
+``shadow_contourf`` preserves the ordinary ``contourf`` return object while
+adding optional layered shadows. Matplotlib contour and contourf arguments
+are forwarded to the underlying plotting call; shadow-specific options
+include ``shadow``, ``shadow_offset``, ``shadow_alpha``, ``shadow_color``,
+``shadow_blur``, ``shadow_boundary_margin``, and ``shadow_backend``.
+
+.. code-block:: python
+
+   filled = skb.plot.shadow_contourf(
+       ax,
+       lon,
+       lat,
+       field,
+       levels=levels,
+       cmap="RdBu_r",
+       shadow=True,
+       shadow_backend="auto",
+   )
+   fig.colorbar(filled, ax=ax)
 
 Curly Vector Plots
 ------------------
@@ -101,6 +194,14 @@ Example Usage
    fig2, ax2 = plt.subplots()
    skb.plot.scatter(ax2, lat, level, where=profile_sig, density=2, s=4, c="0.2")
    ax2.invert_yaxis()
+
+   # Directional filled contours
+   contour = skb.plot.shadow_contourf(
+       ax, lon, lat, field, levels=levels, cmap="RdBu_r"
+   )
+   arrows = skb.plot.arrow_contour(
+       ax, lon, lat, field, levels=levels[::2], arrow_count=1
+   )
 
 Visualization Examples
 ----------------------

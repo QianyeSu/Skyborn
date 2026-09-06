@@ -34,8 +34,10 @@ Module Overview
    Interpolation and regridding functions with improved dimension handling
 
 **plot**
-   Specialized atmospheric data visualization with NCL-like curly vectors
-   and display-space-thinned scatter stippling for maps and vertical profiles.
+   Specialized atmospheric data visualization with NCL-like curly vectors,
+   display-space-thinned scatter stippling, directional contour arrows,
+   shadowed filled contours, smooth gradient fills, and centered shared
+   colorbar axes for maps and vertical profiles.
 
 **gradients**
    Spatial and temporal gradient calculations for atmospheric fields
@@ -97,9 +99,11 @@ To use any module, import Skyborn and access the module:
 
 **Version Highlights**
 
+* **v0.4.5**: Improved directional contour arrows, added centered shared
+  colorbar axes, and completed the plotting API documentation
+* **v0.4.4**: Added native causality and surrogate-generation backends
 * **v0.3.7**: Enhanced documentation with interactive particle effects entrance page
 * **v0.3.8**: Added comprehensive windspharm module and improved spherical harmonics support
-* **v0.3.9**: Current version with optimized build system and enhanced cross-platform compatibility
 * **v0.3.10**: Major GridFill module expansion with advanced interpolation capabilities and comprehensive tutorial
 
 For detailed API documentation, see :doc:`../api/index`.
