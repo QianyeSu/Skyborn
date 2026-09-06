@@ -15,6 +15,7 @@ from matplotlib.path import Path
 __all__ = [
     "GradientFillBetween",
     "add_equal_axes",
+    "add_centered_axes",
     "createFigure",
     "gradient_fill_between",
 ]
@@ -96,6 +97,99 @@ def add_equal_axes(ax, loc, pad, width):
     ax_new = fig.add_axes(bbox_new)
 
     return ax_new
+
+
+def add_centered_axes(
+    ax1: Axes,
+    ax2: Axes,
+    *,
+    loc: Literal["left", "right", "bottom", "top"] = "bottom",
+    pad: float = 0.02,
+    width: float = 0.03,
+    length: float | None = None,
+) -> Axes:
+    """Add an Axes centered across the span of two existing Axes.
+
+    This is useful for a shared colorbar in a two-panel layout. For a
+    horizontal Axes below or above the panels, the center is computed from
+    the combined ``x0`` and ``x1`` positions. For a vertical Axes, the
+    combined ``y0`` and ``y1`` positions are used instead.
+
+    Parameters
+    ----------
+    ax1, ax2 : matplotlib.axes.Axes
+        Axes whose combined outer span defines the center.
+    loc : {"left", "right", "bottom", "top"}, default: "bottom"
+        Side on which to place the new Axes.
+    pad : float, default: 0.02
+        Gap from the combined bounding box in figure coordinates.
+    width : float, default: 0.03
+        Thickness of the new Axes in figure coordinates.
+    length : float, optional
+        Length of the new Axes in figure coordinates. If omitted, it spans
+        the full combined extent of ``ax1`` and ``ax2``.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        A new Axes positioned at the requested centered location. It can be
+        passed directly as ``cax`` to :meth:`matplotlib.figure.Figure.colorbar`.
+
+    Raises
+    ------
+    TypeError
+        If either input is not a Matplotlib Axes.
+    ValueError
+        If the two Axes belong to different figures, or a layout parameter
+        is invalid.
+    """
+    if not isinstance(ax1, Axes) or not isinstance(ax2, Axes):
+        raise TypeError("ax1 and ax2 must be matplotlib.axes.Axes instances")
+    if ax1.get_figure() is not ax2.get_figure():
+        raise ValueError("ax1 and ax2 must belong to the same figure")
+    if loc not in {"left", "right", "bottom", "top"}:
+        raise ValueError("loc must be one of: 'left', 'right', 'bottom', or 'top'")
+
+    pad = float(pad)
+    width = float(width)
+    if pad < 0.0:
+        raise ValueError("pad must be non-negative")
+    if width <= 0.0:
+        raise ValueError("width must be positive")
+    if length is not None:
+        length = float(length)
+        if length <= 0.0:
+            raise ValueError("length must be positive")
+
+    bbox = mtransforms.Bbox.union([ax1.get_position(), ax2.get_position()])
+    fig = ax1.get_figure()
+
+    if loc in {"bottom", "top"}:
+        center = (bbox.x0 + bbox.x1) / 2.0
+        span = bbox.width if length is None else length
+        x0_new = center - span / 2.0
+        x1_new = center + span / 2.0
+        if loc == "bottom":
+            y0_new = bbox.y0 - pad - width
+        else:
+            y0_new = bbox.y1 + pad
+    else:
+        center = (bbox.y0 + bbox.y1) / 2.0
+        span = bbox.height if length is None else length
+        y0_new = center - span / 2.0
+        y1_new = center + span / 2.0
+        if loc == "left":
+            x0_new = bbox.x0 - pad - width
+        else:
+            x0_new = bbox.x1 + pad
+
+    if loc in {"bottom", "top"}:
+        y1_new = y0_new + width
+    else:
+        x1_new = x0_new + width
+
+    bbox_new = mtransforms.Bbox.from_extents(x0_new, y0_new, x1_new, y1_new)
+    return fig.add_axes(bbox_new)
 
 
 def createFigure(figsize=(12, 8), dpi=300, subplotAdj=None, **kwargs):

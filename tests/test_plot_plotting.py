@@ -11,7 +11,12 @@ import pytest
 from matplotlib.image import AxesImage
 from matplotlib.patches import PathPatch
 
-from skyborn.plot.plotting import add_equal_axes, createFigure, gradient_fill_between
+from skyborn.plot.plotting import (
+    add_centered_axes,
+    add_equal_axes,
+    createFigure,
+    gradient_fill_between,
+)
 
 
 class TestCreateFigure:
@@ -275,6 +280,76 @@ class TestAddEqualAxes:
         assert ax_new1 is not None
         assert ax_new2 is not None
 
+        plt.close(fig)
+
+
+class TestAddCenteredAxes:
+    """Test shared axes centered across two panels."""
+
+    def test_add_centered_axes_bottom_with_custom_length(self):
+        fig, axes = plt.subplots(1, 2, figsize=(8, 3))
+        axes[0].set_position([0.1, 0.2, 0.3, 0.6])
+        axes[1].set_position([0.55, 0.2, 0.3, 0.6])
+
+        cax = add_centered_axes(
+            axes[0], axes[1], loc="bottom", pad=0.04, width=0.03, length=0.5
+        )
+        position = cax.get_position()
+
+        assert position.x0 == pytest.approx(0.225)
+        assert position.x1 == pytest.approx(0.725)
+        assert position.y0 == pytest.approx(0.13)
+        assert position.y1 == pytest.approx(0.16)
+        plt.close(fig)
+
+    def test_add_centered_axes_top_and_right_use_full_span(self):
+        fig, axes = plt.subplots(1, 2, figsize=(8, 3))
+        axes[0].set_position([0.1, 0.2, 0.3, 0.4])
+        axes[1].set_position([0.55, 0.3, 0.3, 0.2])
+
+        top = add_centered_axes(axes[0], axes[1], loc="top")
+        right = add_centered_axes(axes[0], axes[1], loc="right")
+
+        top_position = top.get_position()
+        right_position = right.get_position()
+        assert top_position.x0 == pytest.approx(0.1)
+        assert top_position.x1 == pytest.approx(0.85)
+        assert right_position.y0 == pytest.approx(0.2)
+        assert right_position.y1 == pytest.approx(0.6)
+        plt.close(fig)
+
+    def test_add_centered_axes_validates_inputs(self):
+        fig, ax = plt.subplots()
+        other_fig, other_ax = plt.subplots()
+
+        with pytest.raises(TypeError, match="Axes"):
+            add_centered_axes(ax, object())
+        with pytest.raises(ValueError, match="same figure"):
+            add_centered_axes(ax, other_ax)
+        with pytest.raises(ValueError, match="loc"):
+            add_centered_axes(ax, ax, loc="middle")
+        with pytest.raises(ValueError, match="pad"):
+            add_centered_axes(ax, ax, pad=-0.1)
+        with pytest.raises(ValueError, match="width"):
+            add_centered_axes(ax, ax, width=0)
+        with pytest.raises(ValueError, match="length"):
+            add_centered_axes(ax, ax, length=0)
+
+        plt.close(fig)
+        plt.close(other_fig)
+
+    def test_add_centered_axes_can_be_used_as_colorbar_cax(self):
+        fig, axes = plt.subplots(1, 2, figsize=(8, 3))
+        data = np.arange(9).reshape(3, 3)
+        image = axes[0].imshow(data)
+        axes[1].imshow(data)
+        cax = add_centered_axes(
+            axes[0], axes[1], loc="bottom", pad=0.05, width=0.04, length=0.5
+        )
+
+        colorbar = fig.colorbar(image, cax=cax, orientation="horizontal")
+
+        assert colorbar.ax is cax
         plt.close(fig)
 
 

@@ -23,6 +23,10 @@ Version 0.4.5 (Current)
   ``skyborn.plot.shadow_contourf`` boundary handling, artist cleanup, and
   compatibility with Matplotlib-style contourf arguments
 
+* **Centered Shared Colorbars**: Added
+  ``skyborn.plot.add_centered_axes`` for creating a colorbar Axes centered
+  across two panels, with configurable side, padding, thickness, and length
+
 **Testing**
 
 * Expanded focused contour, arrow-contour, shadow-contourf, and vector-engine
