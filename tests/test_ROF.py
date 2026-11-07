@@ -593,12 +593,13 @@ class TestUtilityFunctions:
         # Check output shape
         assert result.shape == (nt - 1, nt - 1)
 
-        # Check that result is diagonal matrix
+        # Full inter-model covariance (Ribes et al. 2017): symmetric, not diagonal
         off_diagonal = result - np.diag(np.diag(result))
         np.testing.assert_allclose(
-            off_diagonal, np.zeros_like(off_diagonal), atol=1e-10
-        )
+        result, result.T, atol=1e-10
 
+        )
+        assert np.abs(off_diagonal).max() > 0
         # Check that diagonal values are non-negative
         assert np.all(np.diag(result) >= 0)
 
