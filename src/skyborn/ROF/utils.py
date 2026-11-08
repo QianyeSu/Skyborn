@@ -157,8 +157,10 @@ def SSM(X_dict: Dict[str, np.ndarray], X_mm: np.ndarray) -> np.ndarray:
     Xc = project_vectors(X.shape[0], X)
     Xc_mm = project_vectors(X.shape[0], X_mm)
 
-    return np.diag(((Xc - Xc_mm) ** 2.0).sum(axis=1))
-
+    # Full inter-model covariance (sum of outer products), as in Ribes et al. (2017).
+    D = Xc - Xc_mm
+    return D @ D.T
+    
 
 def get_nruns(X_dict: Dict[str, np.ndarray]) -> np.ndarray:
     """

@@ -93,12 +93,8 @@ class AttributionModel:
         Var_valid = np.dot(Z2t.T, Z2t) / nz2
         Var_beta_hat = np.linalg.multi_dot([Proj, Ft.T, Var_valid, Ft, Proj.T])
 
-        beta_hat_inf = beta_hat - 2.0 * stats.t.cdf(0.95, df=nz2) * np.sqrt(
-            np.diag(Var_beta_hat).T
-        )
-        beta_hat_sup = beta_hat + 2.0 * stats.t.cdf(0.95, df=nz2) * np.sqrt(
-            np.diag(Var_beta_hat).T
-        )
+        beta_hat_inf = beta_hat - stats.t.ppf(0.95, df=nz2) * np.sqrt(np.diag(Var_beta_hat).T)
+        beta_hat_sup = beta_hat + stats.t.ppf(0.95, df=nz2) * np.sqrt(np.diag(Var_beta_hat).T)
 
         # consistency check
         epsilon = _y - np.linalg.multi_dot([self.X, np.linalg.inv(Proj), beta_hat.T])
