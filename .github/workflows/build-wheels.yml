@@ -120,7 +120,9 @@ jobs:
         with:
           update: true
           install: >-
+            mingw-w64-x86_64-gcc
             mingw-w64-x86_64-gcc-fortran
+            mingw-w64-x86_64-libgomp
             mingw-w64-x86_64-pkgconf
 
       # Install delvewheel and expose gfortran/gcc in PATH for cibuildwheel
