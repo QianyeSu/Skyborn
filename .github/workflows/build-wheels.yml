@@ -392,6 +392,15 @@ jobs:
               echo "See [CHANGELOG](https://skyborn.readthedocs.io/en/latest/changelog.html) for details." >> release_body.md
             fi
 
+            if ! grep -q "@klemmeri" release_body.md; then
+              echo "" >> release_body.md
+              echo "---" >> release_body.md
+              echo "" >> release_body.md
+              echo "**Contributors:**" >> release_body.md
+              echo "" >> release_body.md
+              echo "* Special thanks to @klemmeri for contributing full inter-model covariance in SSM and t quantile interval calculation in ROF (#69)!" >> release_body.md
+            fi
+
             echo "" >> release_body.md
             echo "---" >> release_body.md
             echo "" >> release_body.md
@@ -415,6 +424,7 @@ jobs:
           body_path: release_body.md
           files: dist/*
           overwrite_files: true
+          generate_release_notes: true
 
       - name: Check whether this version is already on PyPI
         id: pypi_check

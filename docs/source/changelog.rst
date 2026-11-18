@@ -73,6 +73,10 @@ Version 0.4.6 (Current)
   regression tests raising ``ROF`` and ``plot`` statement coverage above 95%
   (99.05% combined)
 
+**Contributors**
+
+* Special thanks to @klemmeri for contributing full inter-model covariance in SSM and *t* quantile interval calculation in ROF (:pull:`69` / :issue:`68`)
+
 Version 0.4.5
 -------------
 
