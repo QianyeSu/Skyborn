@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import matplotlib.colors as mcolors
 import numpy as np
 
 from .._core.native import (
@@ -92,7 +93,10 @@ def _field_implies_grid(
     """Return whether a companion field requests 1D axes as a rectilinear grid."""
     if value is None:
         return False
-    array = _coord_helpers._normalized_field_array(value, target_dims=target_dims)
+    try:
+        array = _coord_helpers._normalized_field_array(value, target_dims=target_dims)
+    except ValueError:
+        return False
     return array.ndim == 2 and array.shape == grid_shape
 
 
@@ -115,13 +119,17 @@ def _prepare_1d_grid_candidates(
     y_axis, y_dim = y_axis_info
     target_dims = (y_dim, x_dim) if x_dim is not None and y_dim is not None else None
     candidate_shape = (int(y_axis.size), int(x_axis.size))
-    grid_like = x_axis.size != y_axis.size or any(
-        _field_implies_grid(
-            field,
-            grid_shape=candidate_shape,
-            target_dims=target_dims,
+    grid_like = (
+        x_axis.size != y_axis.size
+        or (target_dims is not None and target_dims[0] != target_dims[1])
+        or any(
+            _field_implies_grid(
+                field,
+                grid_shape=candidate_shape,
+                target_dims=target_dims,
+            )
+            for field in reference_fields
         )
-        for field in reference_fields
     )
     if not grid_like:
         return None
@@ -167,6 +175,7 @@ def _subset_scatter_value(
     candidate_source_positions: np.ndarray,
     retained_indices: np.ndarray,
     target_dims: tuple[Any, ...] | None,
+    key: str | None = None,
 ) -> Any:
     """Subset one scatter style argument to the points that survive thinning.
 
@@ -182,10 +191,30 @@ def _subset_scatter_value(
     if value is None or isinstance(value, str) or np.isscalar(value):
         return value
 
-    array = _coord_helpers._normalized_field_array(value, target_dims=target_dims)
+    if (
+        key in {"color", "facecolor", "edgecolor", "facecolors", "edgecolors", "c"}
+        and not isinstance(value, np.ndarray)
+        and mcolors.is_color_like(value)
+    ):
+        return value
+
+    try:
+        array = _coord_helpers._normalized_field_array(value, target_dims=target_dims)
+    except ValueError:
+        return value
+
     full_count = int(np.prod(candidate_shape))
     source_count = int(source_indices.size)
     generated_count = int(candidate_source_positions.size)
+
+    if (
+        array.ndim == 3
+        and len(candidate_shape) == 2
+        and array.shape[:2] == candidate_shape
+        and array.shape[2] in (3, 4)
+    ):
+        source_values = array.reshape(-1, array.shape[2])[source_indices]
+        return source_values[candidate_source_positions][retained_indices]
 
     if array.shape == candidate_shape:
         source_values = np.ravel(array)[source_indices]
@@ -226,6 +255,7 @@ def _subset_scatter_kwargs(
             candidate_source_positions=candidate_source_positions,
             retained_indices=retained_indices,
             target_dims=target_dims,
+            key=key,
         )
         for key, value in kwargs.items()
     }
@@ -362,7 +392,7 @@ def _scatter_impl(
         )
         cell_geometry = (
             _coord_helpers._scatter_cell_geometry(x_values, y_values)
-            if resolved_placement == "cells"
+            if resolved_placement == "cells" and grid_like
             else None
         )
 
@@ -510,6 +540,7 @@ def _scatter_impl(
         candidate_source_positions=candidate_source_positions,
         retained_indices=retained_indices,
         target_dims=target_dims,
+        key="c",
     )
     plot_kwargs = _subset_scatter_kwargs(
         kwargs,

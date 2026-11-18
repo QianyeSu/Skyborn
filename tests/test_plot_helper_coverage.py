@@ -34,6 +34,7 @@ from skyborn.plot._adapters.dataset_vector import (
 )
 from skyborn.plot._adapters.grid_prepare import (
     _build_curvilinear_target_grid,
+    _grid_spans_full_longitude,
     _maybe_as_scalar_field,
     _prepare_source_vector_grid,
     _rcm2rgrid_fields,
@@ -3495,3 +3496,282 @@ class TestVectorWrapperCoverage:
             assert mock_arrays.call_args.args[0] is ax
         finally:
             plt.close(fig)
+
+
+class TestPlotGeometryAndBugFixRegressions:
+    def test_geometry_helpers_cover_edge_branches(self):
+        from matplotlib.transforms import IdentityTransform
+
+        # Non-finite display_step in _display_step_to_data
+        assert _display_step_to_data(np.eye(2), np.array([np.inf, 1.0])) is None
+
+        # Zero chord_length in _evaluate_ncl_display_curve
+        closed_zero_chord = np.array([[0.0, 0.0], [10.0, 0.0], [0.0, 0.0]])
+        assert _evaluate_ncl_display_curve(
+            closed_zero_chord, IdentityTransform()
+        ) == (None, False)
+
+        # High total_turn (> 120 deg) with low tortuosity and no sign changes
+        headings_deg = [0.0, 42.0, 84.0, 126.0]
+        lengths = [10.0, 1.0, 1.0, 1.0]
+        pts = [np.array([0.0, 0.0])]
+        for h_deg, seg_len in zip(headings_deg, lengths):
+            rad = np.deg2rad(h_deg)
+            pts.append(pts[-1] + seg_len * np.array([np.cos(rad), np.sin(rad)]))
+        assert _evaluate_ncl_display_curve(
+            np.asarray(pts), IdentityTransform()
+        ) == (None, False)
+
+        # S-curve sign_changes > 0 and total_turn > 70 deg
+        s_headings = [0.0, 40.0, 0.0]
+        s_lengths = [10.0, 1.0, 1.0]
+        s_pts = [np.array([0.0, 0.0])]
+        for h_deg, seg_len in zip(s_headings, s_lengths):
+            rad = np.deg2rad(h_deg)
+            s_pts.append(s_pts[-1] + seg_len * np.array([np.cos(rad), np.sin(rad)]))
+        assert _evaluate_ncl_display_curve(
+            np.asarray(s_pts), IdentityTransform()
+        ) == (None, False)
+
+        # _local_display_jacobian error and non-finite shifted transform branches
+        grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0, 2.0]))
+        failing_shift = Mock()
+        failing_shift.transform.side_effect = [
+            np.array([[0.0, 0.0]]),
+            ValueError("shifted transform failed"),
+        ]
+        assert _local_display_jacobian(failing_shift, [1.0, 1.0], grid) is None
+
+        nonfinite_shift = Mock()
+        nonfinite_shift.transform.side_effect = [
+            np.array([[0.0, 0.0]]),
+            np.array([[np.nan, 0.0]]),
+            np.array([[0.0, 1.0]]),
+        ]
+        assert _local_display_jacobian(nonfinite_shift, [1.0, 1.0], grid) is None
+
+        # _trim_display_curve_from_end short/zero-distance/zero-segment branches
+        single = np.array([[1.0, 2.0]])
+        assert _trim_display_curve_from_end(single, 3.0) is single
+        line = np.array([[0.0, 0.0], [10.0, 0.0]])
+        assert _trim_display_curve_from_end(line, 0.0) is line
+
+        with_zero_tail = np.array([[0.0, 0.0], [10.0, 0.0], [11.0, 0.0], [11.0, 0.0]])
+        trimmed = _trim_display_curve_from_end(with_zero_tail, 2.0)
+        np.testing.assert_allclose(trimmed[-1], [9.0, 0.0])
+
+        # _point_at_arc_distance_from_end traversing multiple segments
+        l_shape = np.array([[0.0, 0.0], [2.0, 0.0], [2.0, 1.0]])
+        np.testing.assert_allclose(
+            _point_at_arc_distance_from_end(l_shape, 2.0), [1.0, 0.0]
+        )
+
+    def test_curly_vector_ref_length_px_masked_array_and_transposed_dataset(self):
+        from skyborn.plot import (
+            GradientFillBetween,
+            curly_vector,
+            curly_vector_key,
+            gradient_fill_between,
+            scatter,
+            shadow_contourf,
+        )
+
+        assert GradientFillBetween is not None
+
+        fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+        try:
+            x = np.linspace(0.0, 10.0, 6)
+            y = np.linspace(0.0, 8.0, 5)
+            u_raw = np.full((5, 6), 3.0)
+            v_raw = np.zeros((5, 6))
+            mask = np.zeros((5, 6), dtype=bool)
+            mask[0, 0] = True
+            u_masked = np.ma.array(u_raw, mask=mask, fill_value=1e20)
+            v_masked = np.ma.array(v_raw, mask=mask, fill_value=1e20)
+
+            res = curly_vector(ax, x, y, u_masked, v_masked, ref_length_px=24.0)
+            assert res.max_magnitude == pytest.approx(3.0)
+            assert res.glyph_length_axes_fraction(6.0) == pytest.approx(
+                2.0 * res.glyph_length_axes_fraction(3.0)
+            )
+
+            key = curly_vector_key(ax, res, U=6.0)
+            assert key.arrow_length == pytest.approx(
+                max(res.glyph_length_axes_fraction(6.0), 0.012)
+            )
+            with pytest.raises(TypeError, match="multiple values for argument 'ax'"):
+                curly_vector_key(ax, res, ax=ax)
+        finally:
+            plt.close(fig)
+
+        # Square Dataset with transposed ('lon', 'lat') dim order
+        fig2, ax2 = plt.subplots(figsize=(5, 4))
+        try:
+            lon = np.linspace(100.0, 110.0, 5)
+            lat = np.linspace(10.0, 20.0, 5)
+            u_data = np.broadcast_to(np.arange(5.0)[None, :], (5, 5)).copy()
+            v_data = np.ones((5, 5))
+            ds = xr.Dataset(
+                {
+                    "u": (("lon", "lat"), u_data),
+                    "v": (("lon", "lat"), v_data),
+                },
+                coords={"lon": ("lon", lon), "lat": ("lat", lat)},
+            )
+            res_ds = curly_vector(ds, "lon", "lat", "u", "v", ax=ax2)
+            # In ('lat', 'lon') orientation, v varies along rows (lat) after transpose
+            np.testing.assert_allclose(res_ds.magnitude, np.hypot(u_data.T, v_data.T))
+        finally:
+            plt.close(fig2)
+
+        # Cyclic endpoint longitude & NaN curvilinear unwrap fixes
+        cyclic_x = np.linspace(0.0, 360.0, 9)
+        y_src = np.linspace(-30.0, 30.0, 4)
+        u_src = np.ones((4, 9))
+        v_src = np.zeros((4, 9))
+        x_out, _, _, _, _ = _prepare_source_vector_grid(cyclic_x, y_src, u_src, v_src)
+        assert len(x_out) == 9
+        assert bool(_grid_spans_full_longitude(np.linspace(0.0, 300.0, 31))) is False
+        assert bool(_grid_spans_full_longitude(np.array([0.0]))) is False
+
+        from skyborn.plot._adapters.grid_prepare import _has_cyclic_longitude_endpoint
+
+        assert bool(_has_cyclic_longitude_endpoint(np.array([0.0]))) is False
+        gx_src, gy_src = np.meshgrid(
+            np.linspace(0.0, 10.0, 3), np.linspace(0.0, 5.0, 2)
+        )
+        x_2d, y_2d, _, _, _ = _prepare_source_vector_grid(
+            gx_src, gy_src, np.ones((2, 3)), np.zeros((2, 3))
+        )
+        assert x_2d.shape == (3,) and y_2d.shape == (2,)
+        with pytest.raises(ValueError, match="must match the source"):
+            _prepare_source_vector_grid(
+                np.array([0.0, 1.0]),
+                np.array([0.0, 1.0]),
+                np.ones((3, 2)),
+                np.ones((3, 2)),
+            )
+
+        lon2d_nan = np.array([[170.0, 175.0, -179.0], [np.nan, 175.0, -179.0]])
+        lat2d_nan = np.array([[10.0, 10.0, 10.0], [20.0, 20.0, 20.0]])
+        lon1d, lat1d = _build_curvilinear_target_grid(lon2d_nan, lat2d_nan, (4, 3))
+        assert np.all(np.isfinite(lon1d))
+        assert lon1d[-1] == pytest.approx(181.0)
+
+        # Inverted axis shadows, colors='none' with hatches, and all-NaN contourpy
+        fig3, ax3 = plt.subplots()
+        try:
+            gx, gy = np.meshgrid(
+                np.linspace(0.0, 10.0, 25), np.linspace(100.0, 1000.0, 25)
+            )
+            gz = np.exp(-((gx - 5.0) ** 2 + ((gy - 550.0) / 150.0) ** 2))
+            ax3.set_ylim(1000.0, 100.0)
+            cs_inv = shadow_contourf(gx, gy, gz, levels=[0.4, 0.8], ax=ax3)
+            # With inverted y-axis, interior peak [0.4, 0.8] should still emit a shadow
+            assert len(cs_inv._skyborn_shadow_artists) >= 2
+
+            cs_hatch = shadow_contourf(
+                gx, gy, gz, levels=[0.2, 0.8], colors="none", hatches=["//"], ax=ax3
+            )
+            assert len(cs_hatch._skyborn_shadow_artists) > 0
+
+            from skyborn.plot.contour import _resolve_contourpy_levels
+
+            all_nan = np.ma.masked_invalid(np.full((4, 4), np.nan))
+            assert _resolve_contourpy_levels(all_nan, None, False) is None
+            np.testing.assert_allclose(
+                _resolve_contourpy_levels(all_nan, [0.0, 1.0], False), [0.0, 1.0]
+            )
+        finally:
+            plt.close(fig3)
+
+        # gradient_fill_between crossing curves & aspect preservation
+        fig4, ax4 = plt.subplots()
+        try:
+            ax4.set_aspect("equal")
+            x_g = np.array([0.0, 1.0, 2.0])
+            y1_g = np.array([3.0, 1.5, 0.0])
+            y2_g = np.array([0.0, 1.5, 3.0])
+            gf = gradient_fill_between(
+                ax4, x_g, y1_g, y2_g, edge_mode="y1", resolution=(5, 31)
+            )
+            arr = np.asarray(gf.images[0].get_array())
+            # Left column x=0: y1=3 (top) -> 0.0, y2=0 (bottom) -> 1.0
+            assert arr[-1, 0] < 0.2 and arr[0, 0] > 0.8
+            assert ax4.get_aspect() == 1.0
+        finally:
+            plt.close(fig4)
+
+        # scatter tuple linestyle & 3-point RGB tuple color
+        fig5, ax5 = plt.subplots()
+        try:
+            sc = scatter(
+                ax5,
+                np.array([0.0, 1.0, 2.0]),
+                np.array([0.0, 1.0, 2.0]),
+                color=(0.1, 0.2, 0.8),
+                linestyle=(0, (3, 1)),
+            )
+            assert len(sc.get_offsets()) == 3
+        finally:
+            plt.close(fig5)
+
+    def test_native_plot_c_extension_safety_fixes(self):
+        from skyborn.plot._core import contour_arrows_core
+        from skyborn.plot.contour_core import _contour_core
+        from skyborn.plot.nclcurly_core import _ncl_curly_core
+
+        with pytest.raises(ValueError, match=r"\(N, 2\)"):
+            contour_arrows_core.select_arrow_end_distances(
+                np.array([0.0, 1.0, 2.0]), 2.0, 2, 0.2, None
+            )
+
+        with pytest.raises(ValueError, match="non-negative"):
+            contour_arrows_core.select_arrow_end_distances(
+                np.array([[0.0, 0.0], [10.0, 0.0]]), 10.0, -1, 1.0, None
+            )
+
+        dists = contour_arrows_core.select_arrow_end_distances(
+            np.array([[0.0, 0.0], [100.0, 0.0]]), 100.0, 4, 5.0, 90.0
+        )
+        assert np.all(np.diff(dists) >= 90.0 - 1e-9)
+
+        dists_tight = contour_arrows_core.select_arrow_end_distances(
+            np.array([[0.0, 0.0], [100.0, 0.0]]), 100.0, 4, 5.0, 95.0
+        )
+        assert len(dists_tight) == 1
+
+        # Closed degenerate square where point_at_distance can match endpoints
+        square = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]])
+        heads, meta = _contour_core.build_arrow_segments(square, 2, 4.0, 0.4)
+        assert heads.shape[0] == meta.shape[0] * 2
+        assert np.all(np.isfinite(heads))
+        assert np.all(np.isfinite(meta))
+
+        # thin_mapped_candidates filters NaN rows safely without UB
+        pts = np.array([[np.nan, 0.5], [0.2, 0.2], [0.8, 0.8], [np.inf, 0.1]])
+        kept = _ncl_curly_core.thin_mapped_candidates(pts, 0.05)
+        assert kept.tolist() == [1, 2]
+
+        # trace_ncl_direction with NaN max_length_px returns None
+        u = np.ones((4, 4), dtype=float)
+        v = np.zeros((4, 4), dtype=float)
+        gx, gy = np.meshgrid(np.linspace(0.0, 3.0, 4), np.linspace(0.0, 3.0, 4))
+        disp = np.stack([gx * 50.0, gy * 50.0], axis=-1)
+        valid = np.ones((3, 3), dtype=bool)
+        assert (
+            _ncl_curly_core.trace_ncl_direction(
+                u, v, disp, valid, 0.0, 0.0, 1.0, 1.0,
+                1.5, 1.5, float("nan"), 1.0, 4.0, 1.0, 0.0, 0.0, 200.0, 200.0,
+            )
+            is None
+        )
+
+        # trace_ncl_direction with tight remaining < back_len advances monotonically
+        pts_traced, disp_traced = _ncl_curly_core.trace_ncl_direction(
+            u, v, disp, valid, 0.0, 0.0, 1.0, 1.0,
+            0.5, 1.5, 5.0, 1.0, 4.0, 1.0, 0.0, 0.0, 200.0, 200.0,
+            return_display=True,
+        )
+        assert len(pts_traced) >= 2
+        assert np.all(np.diff(disp_traced[:, 0]) > 0.0)

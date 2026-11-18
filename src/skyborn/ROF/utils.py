@@ -30,24 +30,29 @@ def speco(C: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     eigenvalues_diag: numpy.ndarray
         The eigenvalues as a diagonal matrix
     """
-    # Compute eigenvalues and eigenvectors (the eigenvectors are non unique so the values may change from one software
-    # to another e.g. python, matlab, scilab)
-    raw_eigenvals, raw_eigenvecs = np.linalg.eig(C)
+    C_arr = np.asarray(C)
+    if C_arr.ndim != 2 or C_arr.shape[0] != C_arr.shape[1]:
+        raise ValueError("Matrix must be square")
 
-    # Take real part (to avoid numeric noise, eg small complex numbers)
-    if np.max(np.imag(raw_eigenvals)) / np.max(np.real(raw_eigenvals)) > 1e-12:
+    # Verify matrix symmetry before eigendecomposition
+    if np.iscomplexobj(C_arr):
+        imag_scale = max(float(np.max(np.abs(C_arr))), 1.0)
+        if float(np.max(np.abs(np.imag(C_arr)))) > 1e-12 * imag_scale:
+            raise ValueError("Matrix is not symmetric")
+        C_real = np.real(C_arr).astype(np.float64, copy=False)
+    else:
+        C_real = C_arr.astype(np.float64, copy=False)
+
+    if not np.allclose(C_real, C_real.T, rtol=1e-10, atol=1e-12):
         raise ValueError("Matrix is not symmetric")
 
-    # Check that C is symmetric (<=> real eigen-values/-vectors)
-    eigenvecs_real = np.real(raw_eigenvecs)
-    eigenvals_real = np.real(raw_eigenvals)
+    # Symmetrize floating-point noise and use eigh for an orthonormal basis
+    C_sym = 0.5 * (C_real + C_real.T)
+    eigenvals_asc, eigenvecs_asc = np.linalg.eigh(C_sym)
 
-    # Sort eigenvalues in descending order and get their indices to order the eigenvectors
-    eigenvals_sorted = np.sort(eigenvals_real)[::-1]
-    sort_indices = np.argsort(eigenvals_real)[::-1]
-
-    eigenvectors = eigenvecs_real[:, sort_indices]
-    eigenvalues_diag = np.diag(eigenvals_sorted)
+    # Sort eigenvalues and eigenvectors in descending order
+    eigenvectors = eigenvecs_asc[:, ::-1]
+    eigenvalues_diag = np.diag(eigenvals_asc[::-1])
 
     return eigenvectors, eigenvalues_diag
 
@@ -117,9 +122,8 @@ def unproject_vectors(nt: int, Xc: np.ndarray) -> np.ndarray:
     # Get eigenvectors
     eigenvectors, _ = speco(centering_matrix)
 
-    # Compute inverse projection matrix
-    # Note: This is the pseudo-inverse for the reduced subspace
-    inverse_projection = np.linalg.inv(eigenvectors.T)[:, : nt - 1]
+    # Transpose of orthonormal eigenvectors is its inverse on the reduced subspace
+    inverse_projection = eigenvectors[:, : nt - 1]
 
     # Apply inverse projection
     unprojected_X = np.dot(inverse_projection, Xc)
@@ -136,8 +140,8 @@ def SSM(X_dict: Dict[str, np.ndarray], X_mm: np.ndarray) -> np.ndarray:
     :param X_mm: numpy.ndarray
         Multi-model ensemble mean, shape (n_time,)
     :return:
-    np.diag(((Xc - Xc_mm) ** 2.).sum(axis=1)): numpy.ndarray
-        nt -1 x nt - 1 array of the difference between each model ensemble mean the multi-model mean
+    D @ D.T: numpy.ndarray
+        (nt - 1) x (nt - 1) full inter-model covariance matrix (sum of outer products)
     """
     # Make sure X_mm has right shape
     if X_mm.ndim == 1:
@@ -160,7 +164,6 @@ def SSM(X_dict: Dict[str, np.ndarray], X_mm: np.ndarray) -> np.ndarray:
     # Full inter-model covariance (sum of outer products), as in Ribes et al. (2017).
     D = Xc - Xc_mm
     return D @ D.T
-    
 
 def get_nruns(X_dict: Dict[str, np.ndarray]) -> np.ndarray:
     """
@@ -210,15 +213,20 @@ def Cm_estimate(
     for nr in nruns:
         Cv_all += Cv / nr
 
+    if nm < 2:
+        raise ValueError(
+            "At least two models (nm >= 2) are required to estimate Cm."
+        )
+
     # First estimation of Cm
     Cm_hat = (1.0 / (nm - 1.0)) * (_SSM - ((nm - 1.0) / nm) * Cv_all)
+    Cm_sym = 0.5 * (Cm_hat + Cm_hat.T)
 
-    # Set negative eigenvalues to zero and recompose the signal
-    S, X = np.linalg.eig(Cm_hat)
-    S[S < 0] = 0
-    Cm_pos_hat = np.linalg.multi_dot(
-        [X, np.diag(S), np.linalg.inv(X)]
-    )  # spectral decomposition
+    # Set negative eigenvalues to zero and recompose the signal using eigh
+    # so rank-deficient symmetric covariance matrices stay real and symmetric.
+    S, X = np.linalg.eigh(Cm_sym)
+    S = np.maximum(S, 0.0)
+    Cm_pos_hat = (X * S) @ X.T  # spectral decomposition
 
     Cm_pos_hat = (1.0 + (1.0 / nm)) * Cm_pos_hat
 

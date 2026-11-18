@@ -57,6 +57,7 @@ class AttributionModel:
         Proj: np.ndarray,
         Z2: np.ndarray,
         cons_test: Literal["AT99"] = "AT99",
+        confidence: float = 0.90,
     ) -> Dict[str, np.ndarray]:
         """
         Ordinary Least Square (OLS) estimation of beta from the linear model y = beta * X + epsilon as discussed in the
@@ -72,10 +73,20 @@ class AttributionModel:
         :param cons_test: str
             Which consistency test to be used
             - 'AT99' the formula provided by Allen & Tett (1999) (default)
+        :param confidence: float
+            Two-sided confidence level in (0, 1) (default 0.90 for 5-95% interval)
         :return:
         Beta_hat: dict
             Dictionary with estimation of beta_hat and the upper and lower confidence intervals
         """
+        if cons_test != "AT99":
+            raise ValueError(
+                f"Unsupported consistency test: {cons_test!r}. Expected 'AT99'."
+            )
+        if not 0.0 < confidence < 1.0:
+            raise ValueError(
+                f"confidence must be between 0 and 1, got {confidence!r}."
+            )
 
         # computes the covariance inverse
         Cf1 = np.linalg.inv(Cf)
@@ -93,18 +104,25 @@ class AttributionModel:
         Var_valid = np.dot(Z2t.T, Z2t) / nz2
         Var_beta_hat = np.linalg.multi_dot([Proj, Ft.T, Var_valid, Ft, Proj.T])
 
-        beta_hat_inf = beta_hat - stats.t.ppf(0.95, df=nz2) * np.sqrt(np.diag(Var_beta_hat).T)
-        beta_hat_sup = beta_hat + stats.t.ppf(0.95, df=nz2) * np.sqrt(np.diag(Var_beta_hat).T)
+        q = 0.5 + confidence / 2.0
+        t_crit = stats.t.ppf(q, df=nz2)
+        half_width = t_crit * np.sqrt(np.diag(Var_beta_hat).T)
+        beta_hat_inf = beta_hat - half_width
+        beta_hat_sup = beta_hat + half_width
 
         # consistency check
-        epsilon = _y - np.linalg.multi_dot([self.X, np.linalg.inv(Proj), beta_hat.T])
+        epsilon = _y - np.linalg.multi_dot(
+            [self.X, np.linalg.inv(Proj), beta_hat.T]
+        )
 
-        if cons_test == "AT99":  # formula provided by Allen & Tett (1999)
-            d_cons = np.linalg.multi_dot(
-                [epsilon.T, np.linalg.pinv(Var_valid), epsilon]
-            ) / (self.n_reduced - self.num_forcings)
-            rien = stats.f.cdf(d_cons, dfn=self.n_reduced - self.num_forcings, dfd=nz2)
-            pv_cons = 1 - rien
+        # AT99 formula provided by Allen & Tett (1999)
+        d_cons = np.linalg.multi_dot(
+            [epsilon.T, np.linalg.pinv(Var_valid), epsilon]
+        ) / (self.n_reduced - self.num_forcings)
+        rien = stats.f.cdf(
+            d_cons, dfn=self.n_reduced - self.num_forcings, dfd=nz2
+        )
+        pv_cons = float(np.squeeze(1 - rien))
 
         print("Consistency test: %s p-value: %.5f" % (cons_test, pv_cons))
 

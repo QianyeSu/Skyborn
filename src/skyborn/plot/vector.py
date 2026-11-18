@@ -86,6 +86,7 @@ _ARRAY_CURLY_VECTOR_KWARG_NAMES = (
     "ref_length_px",
     "min_frac_length",
     "min_distance",
+    "allow_non_uniform_grid",
     "ncl_preset",
 )
 _CURLY_VECTOR_NCL_KWARG_NAMES = (
@@ -928,6 +929,7 @@ def _curly_vector_from_dataset(
     ref_length_px: float | None = None,
     min_frac_length=0.0,
     min_distance: float | None = None,
+    allow_non_uniform_grid: bool = False,
     ncl_preset: str | None = None,
     regrid_shape: Any = None,
     curvilinear_regrid_shape: Any = None,
@@ -972,6 +974,7 @@ def _curly_vector_from_dataset(
         ref_length_px=ref_length_px,
         min_frac_length=min_frac_length,
         min_distance=min_distance,
+        allow_non_uniform_grid=allow_non_uniform_grid,
         ncl_preset=ncl_preset,
         regrid_shape=regrid_shape,
         curvilinear_regrid_shape=curvilinear_regrid_shape,
@@ -1021,8 +1024,10 @@ def _curly_vector_from_arrays(
     pivot: str | None = None,
     ref_magnitude: float | None = None,
     ref_length: float | None = None,
+    ref_length_px: float | None = None,
     min_frac_length=0.0,
     min_distance: float | None = None,
+    allow_non_uniform_grid: bool = False,
     ncl_preset: str | None = None,
     regrid_shape: Any = None,
     curvilinear_regrid_shape: Any = None,
@@ -1062,14 +1067,16 @@ def _curly_vector_from_arrays(
         pivot=pivot,
         ref_magnitude=ref_magnitude,
         ref_length=ref_length,
+        ref_length_px=ref_length_px,
         min_frac_length=min_frac_length,
         min_distance=min_distance,
+        allow_non_uniform_grid=allow_non_uniform_grid,
         ncl_preset=ncl_preset,
         regrid_shape=regrid_shape,
         curvilinear_regrid_shape=curvilinear_regrid_shape,
         target_extent=target_extent,
         resolve_curly_style_aliases_fn=_resolve_curly_style_aliases,
-        asarray_fn=np.asarray,
+        asarray_fn=_filled_float_array,
         prepare_curly_vector_dataset_inputs_fn=_prepare_curly_vector_dataset_inputs,
         collect_named_kwargs_fn=_collect_named_kwargs,
         array_curly_vector_kwarg_names=_ARRAY_CURLY_VECTOR_KWARG_NAMES,
@@ -1323,6 +1330,10 @@ def curly_vector_key(
 
     remaining_args = list(args)
     if remaining_args and _looks_like_axes(remaining_args[0]):
+        if ax_kwarg is not None:
+            raise TypeError(
+                "curly_vector_key() got multiple values for argument 'ax'"
+            )
         ax = remaining_args.pop(0)
     else:
         ax = ax_kwarg if ax_kwarg is not None else plt.gca()

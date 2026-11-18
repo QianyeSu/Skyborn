@@ -9,7 +9,6 @@ import matplotlib.collections as mcollections
 import matplotlib.colors as mcolors
 import matplotlib.lines as mlines
 import numpy as np
-from matplotlib import cm
 
 from .._artists import vector_artists as _artist_helpers
 from .._shared.coords import _coerce_matching_plot_field
@@ -19,6 +18,14 @@ from .thinning import (
     _map_ncl_display_points_to_viewport,
     _resolve_ncl_min_distance_fraction,
 )
+
+
+def _resolve_cmap(cmap, *, allow_none=False):
+    if cmap is None:
+        return None if allow_none else mpl.colormaps.get_cmap(None)
+    if isinstance(cmap, mcolors.Colormap):
+        return cmap
+    return mpl.colormaps.get_cmap(cmap)
 
 
 def _finite_plot_field_values(field, field_name):
@@ -210,11 +217,11 @@ def _curve_length_from_magnitude(magnitude_value, length_scale):
     max_length_px = length_scale["max_length_px"]
     min_length_px = length_scale["min_length_px"]
 
+    if not length_scale["adjust_min"] and max_mag > 1e-12:
+        return max(magnitude_value, 0.0) / max_mag * max_length_px
+
     if max_mag - min_mag <= 1e-12:
         return max_length_px
-
-    if not length_scale["adjust_min"]:
-        return np.clip(magnitude_value / max_mag, 0.0, 1.0) * max_length_px
 
     scale = np.clip(
         (magnitude_value - min_mag) / max(max_mag - min_mag, 1e-12), 0.0, 1.0
@@ -288,16 +295,25 @@ class Grid:
 
 
 def _resolve_curly_anchor(anchor, integration_direction):
-    mpl._api.check_in_list(
-        ["forward", "backward", "both"], integration_direction=integration_direction
-    )
+    valid_directions = ("forward", "backward", "both")
+    if integration_direction not in valid_directions:
+        raise ValueError(
+            f"{integration_direction!r} is not a valid value for "
+            f"integration_direction; supported values are "
+            f"{', '.join(valid_directions)}"
+        )
     if anchor is None:
         anchor = {
             "forward": "tail",
             "backward": "head",
             "both": "center",
         }[integration_direction]
-    mpl._api.check_in_list(["tail", "center", "head"], anchor=anchor)
+    valid_anchors = ("tail", "center", "head")
+    if anchor not in valid_anchors:
+        raise ValueError(
+            f"{anchor!r} is not a valid value for anchor; "
+            f"supported values are {', '.join(valid_anchors)}"
+        )
     return anchor
 
 
@@ -742,15 +758,16 @@ def _curly_vector_ncl_impl(
         _resolve_artist_coordinate_context(axes, transform)
     )
 
-    axes.update_datalim(
-        np.array(
-            [
-                [grid.x_origin, grid.y_origin],
-                [grid.x_origin + grid.width, grid.y_origin + grid.height],
-            ]
+    if transform is axes.transData:
+        axes.update_datalim(
+            np.array(
+                [
+                    [grid.x_origin, grid.y_origin],
+                    [grid.x_origin + grid.width, grid.y_origin + grid.height],
+                ]
+            )
         )
-    )
-    axes.autoscale_view()
+        axes.autoscale_view()
 
     if u.shape != grid.shape or v.shape != grid.shape:
         raise ValueError("'u' and 'v' must match the shape of the (x, y) grid")
@@ -782,7 +799,7 @@ def _curly_vector_ncl_impl(
             axes,
             linewidth,
             color,
-            cm._ensure_cmap(cmap) if cmap is not None else None,
+            _resolve_cmap(cmap, allow_none=True),
             arrowsize,
             arrowstyle,
             start_points,
@@ -792,6 +809,7 @@ def _curly_vector_ncl_impl(
             allow_non_uniform_grid,
             density=density,
             anchor=resolved_anchor,
+            ncl_preset=ncl_preset,
             length_scale=None,
             rasterized=rasterized,
         )
@@ -820,7 +838,7 @@ def _curly_vector_ncl_impl(
                 float(np.min(finite_color_values)) if vmin is None else float(vmin),
                 float(np.max(finite_color_values)) if vmax is None else float(vmax),
             )
-        cmap = cm._ensure_cmap(cmap)
+        cmap = _resolve_cmap(cmap)
     if line_width_field is not None:
         finite_line_width_values = _finite_plot_field_values(
             line_width_field, "linewidth"
@@ -860,6 +878,7 @@ def _curly_vector_ncl_impl(
         min_frac_length=min_frac_length,
         default_max_length_px=default_max_length_px,
     )
+    length_scale["axes_width_px"] = max(float(axes.bbox.width), 1.0)
     ref_length_frac = ref_length_px / max(float(axes.bbox.width), 1.0)
     step_px = max(1.5, axes.bbox.width * 0.0045)
     arrow_min_edge_px = max(axes.bbox.width * 0.003 * max(float(arrowsize), 0.1), 1.2)
@@ -989,8 +1008,9 @@ def _curly_vector_ncl_impl(
                 display_curve,
                 inverse_transform=artist_inverse_transform,
             )
-            if baked_curve is not None and len(baked_curve) >= 2:
-                artist_curve = baked_curve
+            if baked_curve is None or len(baked_curve) < 2:
+                continue
+            artist_curve = baked_curve
 
         if use_batched_open_heads:
             open_shafts.append(artist_curve)
@@ -1104,7 +1124,8 @@ def _curly_vector_ncl_impl(
             artist.set_rasterized(bool(rasterized))
         axes.add_collection(artist, autolim=False)
 
-    axes.autoscale_view()
+    if transform is axes.transData:
+        axes.autoscale_view()
     return result_cls(
         lc,
         tuple(arrows),

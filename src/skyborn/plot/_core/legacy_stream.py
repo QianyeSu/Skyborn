@@ -27,11 +27,11 @@ class DomainMap:
     def __init__(self, grid, mask):
         self.grid = grid
         self.mask = mask
-        self.x_grid2mask = (mask.nx - 1) / (grid.nx - 1)
-        self.y_grid2mask = (mask.ny - 1) / (grid.ny - 1)
+        self.x_grid2mask = max(mask.nx - 1, 1) / max(grid.nx - 1, 1)
+        self.y_grid2mask = max(mask.ny - 1, 1) / max(grid.ny - 1, 1)
 
-        self.x_mask2grid = 1.0 / self.x_grid2mask
-        self.y_mask2grid = 1.0 / self.y_grid2mask
+        self.x_mask2grid = 1.0 / max(self.x_grid2mask, 1e-12)
+        self.y_mask2grid = 1.0 / max(self.y_grid2mask, 1e-12)
 
         self.x_data2grid = 1.0 / grid.dx
         self.y_data2grid = 1.0 / grid.dy
@@ -81,7 +81,7 @@ class StreamMask:
             self.nx, self.ny = (30 * np.broadcast_to(density, 2)).astype(int)
         except ValueError as err:
             raise ValueError("'density' must be a scalar or be of length " "2") from err
-        if self.nx < 0 or self.ny < 0:
+        if self.nx <= 0 or self.ny <= 0:
             raise ValueError("'density' must be positive")
         self._mask = np.zeros((self.ny, self.nx))
         self.shape = self._mask.shape

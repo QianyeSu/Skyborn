@@ -7,6 +7,7 @@ Created: 2026-03-01 14:58:56
 
 from .contour import arrow_contour, arrow_contour_clabel, shadow_contourf
 from .plotting import (
+    GradientFillBetween,
     add_centered_axes,
     add_equal_axes,
     createFigure,
@@ -16,6 +17,7 @@ from .scatter import scatter
 from .vector import curly_vector, curly_vector_key
 
 __all__ = [
+    "GradientFillBetween",
     "add_equal_axes",
     "add_centered_axes",
     "arrow_contour",

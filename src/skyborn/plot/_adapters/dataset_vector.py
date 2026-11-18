@@ -94,10 +94,19 @@ def _extract_curly_vector_dataset_source(
     }
 
     if x_da.ndim == 1 and y_da.ndim == 1:
-        x_values = np.asarray(x_da.data, dtype=float)
-        y_values = np.asarray(y_da.data, dtype=float)
-        u_values = np.asarray(u_da.data, dtype=float)
-        v_values = np.asarray(v_da.data, dtype=float)
+        if x_da.dims[0] != y_da.dims[0] and set(u_da.dims) == {
+            y_da.dims[0],
+            x_da.dims[0],
+        }:
+            target_dims = (y_da.dims[0], x_da.dims[0])
+            u_da = _transpose_2d_dataarray_to_dims(u_da, target_dims, role="u")
+            v_da = _transpose_2d_dataarray_to_dims(v_da, target_dims, role="v")
+            metadata["vector_dims"] = tuple(u_da.dims)
+
+        x_values = _filled_scalar_field_array(x_da.data)
+        y_values = _filled_scalar_field_array(y_da.data)
+        u_values = _filled_scalar_field_array(u_da.data)
+        v_values = _filled_scalar_field_array(v_da.data)
 
         expected_shape = (y_da.size, x_da.size)
         if u_da.shape != expected_shape:
@@ -134,10 +143,10 @@ def _extract_curly_vector_dataset_source(
         raise ValueError("x and y must both be 1D or both be 2D")
 
     values = (
-        np.asarray(x_da.data, dtype=float),
-        np.asarray(y_da.data, dtype=float),
-        np.asarray(u_da.data, dtype=float),
-        np.asarray(v_da.data, dtype=float),
+        _filled_scalar_field_array(x_da.data),
+        _filled_scalar_field_array(y_da.data),
+        _filled_scalar_field_array(u_da.data),
+        _filled_scalar_field_array(v_da.data),
     )
     if return_metadata:
         return (*values, metadata)

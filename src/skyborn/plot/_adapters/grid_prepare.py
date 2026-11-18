@@ -47,6 +47,18 @@ def _default_curvilinear_regrid_shape(x, density):
     return nx, ny
 
 
+def _unwrap_curvilinear_longitudes(lon2d):
+    lon_arr = np.asarray(lon2d, dtype=float)
+    lon_work = np.atleast_2d(lon_arr).copy()
+    for row in range(lon_work.shape[0]):
+        row_finite = np.isfinite(lon_work[row])
+        if np.count_nonzero(row_finite) > 1:
+            lon_work[row, row_finite] = np.rad2deg(
+                np.unwrap(np.deg2rad(lon_work[row, row_finite]))
+            )
+    return lon_work.reshape(lon_arr.shape)
+
+
 def _build_curvilinear_target_grid(x, y, target_shape):
     nx, ny = _normalize_regrid_shape(target_shape)
     lon2d = np.asarray(x, dtype=float)
@@ -55,7 +67,7 @@ def _build_curvilinear_target_grid(x, y, target_shape):
     if not np.any(finite):
         raise ValueError("Curvilinear x/y coordinates contain no finite points")
 
-    lon_work = np.rad2deg(np.unwrap(np.deg2rad(lon2d), axis=1))
+    lon_work = _unwrap_curvilinear_longitudes(lon2d)
     lon1d = np.linspace(
         float(np.nanmin(lon_work[finite])), float(np.nanmax(lon_work[finite])), nx
     )
@@ -102,18 +114,19 @@ def _maybe_as_scalar_field(value, expected_shape):
 
 
 def _regrid_curvilinear_vectors(x, y, u, v, *scalars, target_shape):
-    lon1d, lat1d = _build_curvilinear_target_grid(x, y, target_shape)
-    regridded_fields = _rcm2rgrid_fields(y, x, (u, v, *scalars), lat1d, lon1d)
+    lon_work = _unwrap_curvilinear_longitudes(x)
+    lon1d, lat1d = _build_curvilinear_target_grid(lon_work, y, target_shape)
+    regridded_fields = _rcm2rgrid_fields(y, lon_work, (u, v, *scalars), lat1d, lon1d)
     u_reg, v_reg, *scalar_regs = regridded_fields
     return (lon1d, lat1d, u_reg, v_reg, *scalar_regs)
 
 
 def _prepare_source_vector_grid(x, y, u, v, scalars=()):
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    u = np.asarray(u, dtype=float)
-    v = np.asarray(v, dtype=float)
-    scalar_list = [np.asarray(s, dtype=float) for s in scalars]
+    x = _filled_scalar_field_array(x)
+    y = _filled_scalar_field_array(y)
+    u = _filled_scalar_field_array(u)
+    v = _filled_scalar_field_array(v)
+    scalar_list = [_filled_scalar_field_array(s) for s in scalars]
 
     if x.ndim == 2:
         x = x[0, :]
@@ -142,7 +155,7 @@ def _prepare_source_vector_grid(x, y, u, v, scalars=()):
         v = v[::-1, :]
         scalar_list = [s[::-1, :] for s in scalar_list]
 
-    if _grid_spans_full_longitude(x):
+    if _grid_spans_full_longitude(x) and not _has_cyclic_longitude_endpoint(x):
         x_base = x.copy()
         x, u = _append_cyclic_column(x_base, u)
         _, v = _append_cyclic_column(x_base, v)
@@ -156,7 +169,8 @@ def _grid_spans_full_longitude(x):
         return False
     spacing = float(np.nanmedian(np.diff(x)))
     span = float(x[-1] - x[0] + spacing)
-    return np.isfinite(span) and 300.0 <= span <= 370.0
+    tol = max(abs(spacing) * 1.5, 5.0)
+    return np.isfinite(span) and abs(span - 360.0) <= tol
 
 
 def _has_cyclic_longitude_endpoint(x, period=360.0):

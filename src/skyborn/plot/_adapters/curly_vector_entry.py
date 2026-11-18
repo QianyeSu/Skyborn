@@ -156,6 +156,7 @@ def _curly_vector_from_dataset_impl(
     ref_length_px: float | None = None,
     min_frac_length=0.0,
     min_distance: float | None = None,
+    allow_non_uniform_grid: bool = False,
     ncl_preset: str | None = None,
     regrid_shape: Any = None,
     curvilinear_regrid_shape: Any = None,
@@ -257,6 +258,7 @@ def _curly_vector_from_dataset_impl(
         "ref_length_px": ref_length_px,
         "min_frac_length": min_frac_length,
         "min_distance": min_distance,
+        "allow_non_uniform_grid": allow_non_uniform_grid,
         "ncl_preset": ncl_preset,
     }
     return array_curly_vector_fn(
@@ -305,6 +307,7 @@ def _curly_vector_from_arrays_impl(
     ref_length_px: float | None = None,
     min_frac_length=0.0,
     min_distance: float | None = None,
+    allow_non_uniform_grid: bool = False,
     ncl_preset: str | None = None,
     regrid_shape: Any = None,
     curvilinear_regrid_shape: Any = None,
@@ -373,6 +376,7 @@ def _curly_vector_from_arrays_impl(
         "ref_length_px": ref_length_px,
         "min_frac_length": min_frac_length,
         "min_distance": min_distance,
+        "allow_non_uniform_grid": allow_non_uniform_grid,
         "ncl_preset": ncl_preset,
     }
     return array_curly_vector_fn(

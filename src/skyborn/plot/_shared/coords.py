@@ -63,7 +63,10 @@ def _infer_grid_from_reference(
     """Infer whether 1D x/y should be expanded to a grid from companion fields."""
     if value is None:
         return False
-    array = _normalized_field_array(value, target_dims=target_dims)
+    try:
+        array = _normalized_field_array(value, target_dims=target_dims)
+    except ValueError:
+        return False
     return array.ndim == 2 and array.shape == grid_shape
 
 
@@ -98,7 +101,9 @@ def _normalize_coordinates(
         raise ValueError("x and y must each be 1D or 2D arrays")
 
     grid_shape = (int(y_values.size), int(x_values.size))
-    grid_like = x_values.size != y_values.size
+    grid_like = x_values.size != y_values.size or (
+        target_dims is not None and target_dims[0] != target_dims[1]
+    )
     if not grid_like:
         grid_like = any(
             _infer_grid_from_reference(field, grid_shape, target_dims)

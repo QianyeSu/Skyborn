@@ -88,7 +88,10 @@ class CurlyVectorPlotSet:
             return 0.0
 
         if self.length_scale is not None and self.axes is not None:
-            axes_width_px = max(float(self.axes.bbox.width), 1.0)
+            axes_width_px = max(
+                float(self.length_scale.get("axes_width_px") or self.axes.bbox.width),
+                1.0,
+            )
             length_px = _curve_length_from_magnitude(magnitude_value, self.length_scale)
             return max(float(length_px) / axes_width_px, 0.0)
 

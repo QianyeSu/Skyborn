@@ -1,9 +1,13 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#ifndef NPY_NO_DEPRECATED_API
+#define NPY_NO_DEPRECATED_API NPY_1_19_API_VERSION
+#endif
 #include <numpy/arrayobject.h>
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -28,16 +32,24 @@ static int point_at_distance(
     double total = 0.0;
     npy_intp i;
 
-    if (nvertices < 2) {
+    if (nvertices < 2 || !isfinite(distance)) {
         return 0;
     }
 
     for (i = 0; i < nvertices - 1; ++i) {
-        const double dx = vertices[(i + 1) * 2] - vertices[i * 2];
-        const double dy = vertices[(i + 1) * 2 + 1] - vertices[i * 2 + 1];
+        const double x0 = vertices[i * 2];
+        const double y0 = vertices[i * 2 + 1];
+        const double x1 = vertices[(i + 1) * 2];
+        const double y1 = vertices[(i + 1) * 2 + 1];
+        const double dx = x1 - x0;
+        const double dy = y1 - y0;
+        if (!isfinite(x0) || !isfinite(y0) || !isfinite(x1) || !isfinite(y1) ||
+            !isfinite(dx) || !isfinite(dy)) {
+            return 0;
+        }
         total += hypot2(dx, dy);
     }
-    if (total <= 0.0) {
+    if (!isfinite(total) || total <= 0.0) {
         return 0;
     }
     if (distance < 0.0) {
@@ -172,7 +184,7 @@ static int select_arrow_distances(
     int selected_count = 0;
     int i, j;
 
-    if (arrow_count <= 0 || path_length <= 0.0) {
+    if (arrow_count <= 0 || !isfinite(path_length) || path_length <= 0.0) {
         return 0;
     }
 
@@ -191,7 +203,10 @@ static int select_arrow_distances(
         return arrow_count;
     }
 
-    const int sample_count = arrow_count * 28 > 64 ? arrow_count * 28 : 64;
+    size_t raw_samples = (size_t)arrow_count * 28;
+    const int sample_count = (raw_samples > 2800000)
+        ? 2800000
+        : (raw_samples > 64 ? (int)raw_samples : 64);
     Candidate *candidates = (Candidate *)malloc((size_t)sample_count * sizeof(Candidate));
     if (candidates == NULL) {
         PyErr_NoMemory();
@@ -286,7 +301,8 @@ static PyObject *build_arrow_segments(PyObject *self, PyObject *args) {
         return NULL;
     }
     const npy_intp nvertices = PyArray_DIM(vertices_array, 0);
-    if (nvertices < 2 || arrow_count < 1 || arrow_length <= 0.0 || arrow_size <= 0.0) {
+    if (nvertices < 2 || arrow_count < 1 || !isfinite(arrow_length) || arrow_length <= 0.0 ||
+        !isfinite(arrow_size) || arrow_size <= 0.0) {
         Py_DECREF(vertices_array);
         npy_intp head_dims[3] = {0, 2, 2};
         npy_intp meta_dims[3] = {0, 2, 2};
@@ -302,6 +318,20 @@ static PyObject *build_arrow_segments(PyObject *self, PyObject *args) {
 
     const double *vertices = (const double *)PyArray_DATA(vertices_array);
     const double path_length = total_length(vertices, nvertices);
+    if (!isfinite(path_length) || path_length <= 0.0) {
+        Py_DECREF(vertices_array);
+        npy_intp head_dims[3] = {0, 2, 2};
+        npy_intp meta_dims[3] = {0, 2, 2};
+        PyObject *empty_heads = PyArray_SimpleNew(3, head_dims, NPY_DOUBLE);
+        PyObject *empty_meta = PyArray_SimpleNew(3, meta_dims, NPY_DOUBLE);
+        if (empty_heads == NULL || empty_meta == NULL) {
+            Py_XDECREF(empty_heads);
+            Py_XDECREF(empty_meta);
+            return NULL;
+        }
+        return Py_BuildValue("NN", empty_heads, empty_meta);
+    }
+
     double *distances = (double *)malloc((size_t)arrow_count * sizeof(double));
     if (distances == NULL) {
         Py_DECREF(vertices_array);
@@ -322,20 +352,20 @@ static PyObject *build_arrow_segments(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    npy_intp head_dims[3] = {selected_count * 2, 2, 2};
-    npy_intp meta_dims[3] = {selected_count, 2, 2};
-    PyArrayObject *head_array = (PyArrayObject *)PyArray_SimpleNew(3, head_dims, NPY_DOUBLE);
-    PyArrayObject *meta_array = (PyArrayObject *)PyArray_SimpleNew(3, meta_dims, NPY_DOUBLE);
-    if (head_array == NULL || meta_array == NULL) {
-        Py_XDECREF(head_array);
-        Py_XDECREF(meta_array);
-        free(distances);
-        Py_DECREF(vertices_array);
-        return NULL;
+    double *heads_buf = NULL;
+    double *meta_buf = NULL;
+    if (selected_count > 0) {
+        heads_buf = (double *)malloc((size_t)selected_count * 8 * sizeof(double));
+        meta_buf = (double *)malloc((size_t)selected_count * 4 * sizeof(double));
+        if (heads_buf == NULL || meta_buf == NULL) {
+            free(heads_buf);
+            free(meta_buf);
+            free(distances);
+            Py_DECREF(vertices_array);
+            return PyErr_NoMemory();
+        }
     }
 
-    double *heads = (double *)PyArray_DATA(head_array);
-    double *meta = (double *)PyArray_DATA(meta_array);
     int written = 0;
     int i;
     for (i = 0; i < selected_count; ++i) {
@@ -347,7 +377,7 @@ static PyObject *build_arrow_segments(PyObject *self, PyObject *args) {
         const double vx = ex - sx;
         const double vy = ey - sy;
         const double vector_length = hypot2(vx, vy);
-        if (vector_length <= 0.0) {
+        if (!isfinite(vector_length) || vector_length <= 0.0) {
             continue;
         }
         double tx = vx / vector_length;
@@ -367,7 +397,7 @@ static PyObject *build_arrow_segments(PyObject *self, PyObject *args) {
         const double bx = sx;
         const double by = sy;
 
-        double *h0 = heads + (written * 2) * 4;
+        double *h0 = heads_buf + (size_t)written * 8;
         h0[0] = ex;
         h0[1] = ey;
         h0[2] = bx + nx * width * 0.5;
@@ -377,7 +407,7 @@ static PyObject *build_arrow_segments(PyObject *self, PyObject *args) {
         h0[6] = bx - nx * width * 0.5;
         h0[7] = by - ny * width * 0.5;
 
-        double *m0 = meta + written * 4;
+        double *m0 = meta_buf + (size_t)written * 4;
         m0[0] = sx;
         m0[1] = sy;
         m0[2] = ex;
@@ -387,6 +417,25 @@ static PyObject *build_arrow_segments(PyObject *self, PyObject *args) {
 
     free(distances);
     Py_DECREF(vertices_array);
+
+    npy_intp head_dims[3] = {(npy_intp)written * 2, 2, 2};
+    npy_intp meta_dims[3] = {(npy_intp)written, 2, 2};
+    PyArrayObject *head_array = (PyArrayObject *)PyArray_SimpleNew(3, head_dims, NPY_DOUBLE);
+    PyArrayObject *meta_array = (PyArrayObject *)PyArray_SimpleNew(3, meta_dims, NPY_DOUBLE);
+    if (head_array == NULL || meta_array == NULL) {
+        Py_XDECREF(head_array);
+        Py_XDECREF(meta_array);
+        free(heads_buf);
+        free(meta_buf);
+        return NULL;
+    }
+
+    if (written > 0) {
+        memcpy(PyArray_DATA(head_array), heads_buf, (size_t)written * 8 * sizeof(double));
+        memcpy(PyArray_DATA(meta_array), meta_buf, (size_t)written * 4 * sizeof(double));
+    }
+    free(heads_buf);
+    free(meta_buf);
 
     return Py_BuildValue("NN", (PyObject *)head_array, (PyObject *)meta_array);
 }
@@ -414,10 +463,6 @@ static struct PyModuleDef moduledef = {
 };
 
 PyMODINIT_FUNC PyInit__contour_core(void) {
-    PyObject *module = PyModule_Create(&moduledef);
-    if (module == NULL) {
-        return NULL;
-    }
     import_array();
-    return module;
+    return PyModule_Create(&moduledef);
 }

@@ -661,14 +661,21 @@ def _arrow_contour_label_positions(contour_set: Any) -> List[tuple[float, float]
                 start_arr = np.asarray(start, dtype=float)
                 end_arr = np.asarray(end, dtype=float)
                 midpoint_data = (start_arr + end_arr) / 2.0
-                midpoints_display.append(transform.transform(midpoint_data))
+                midpoint_display = np.asarray(
+                    transform.transform(np.atleast_2d(midpoint_data)),
+                    dtype=float,
+                ).reshape(-1, 2)[0]
+                midpoints_display.append(midpoint_display)
 
             anchor_display = _label_anchor_away_from_arrows(
                 display_path, midpoints_display, closed
             )
             if anchor_display is None:
                 continue
-            anchor_data = inverted_transform.transform(anchor_display)
+            anchor_data = np.asarray(
+                inverted_transform.transform(np.atleast_2d(anchor_display)),
+                dtype=float,
+            ).reshape(-1, 2)[0]
             positions.append((float(anchor_data[0]), float(anchor_data[1])))
         except Exception as e:
             # Silently skip problematic contour lines rather than failing

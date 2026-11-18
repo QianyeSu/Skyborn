@@ -165,8 +165,12 @@ class PreProcess:
             b2 = min(bb2, d2)  # third estimate in L&W
             a2 = d2 - b2  # fourth estimate in L&W
 
-            alpha1 = b2 * m / d2
-            alpha2 = a2 / d2
+            if d2 <= 0.0:
+                alpha1 = 0.0
+                alpha2 = 1.0
+            else:
+                alpha1 = b2 * m / d2
+                alpha2 = a2 / d2
 
         elif method != "specified":
             raise NotImplementedError("Method not implemented yet")

@@ -209,10 +209,11 @@ class CurlyVectorKey(Artist):
             head_length = max(float(head_length), 0.0)
             head_width = max(float(head_width), 0.0)
             if head_length > 0.0 and head_width > 0.0:
-                return (
-                    min(head_length, self.arrow_length * 0.5),
-                    head_width,
-                )
+                max_head_length = self.arrow_length * 0.5
+                if head_length > max_head_length:
+                    head_width *= max_head_length / head_length
+                    head_length = max_head_length
+                return head_length, head_width
 
         fallback_length = min(
             max(self.arrow_length * 0.18, 0.010), self.arrow_length * 0.5
@@ -384,6 +385,7 @@ class CurlyVectorKey(Artist):
         self._set_text_artist(self.text2, None, text_x, center_y, text_ha, "center")
 
     def _update_layout(self, renderer: RendererBase) -> None:
+        self.arrow_length = self._calculate_arrow_length()
         top_text, bottom_text, side_text = self._resolve_text_blocks()
         if self.labelpos in ("E", "W"):
             self._layout_horizontal(renderer, side_text)

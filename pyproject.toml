@@ -180,7 +180,6 @@ omit = [
     "*/test_*",
     "setup.py",
     "*/skyborn/cdo/*",
-    "*/skyborn/plot/*",
 ]
 
 [tool.coverage.report]

@@ -9,13 +9,14 @@ from typing import Any, List, Optional, Tuple, Union
 
 import contourpy
 import matplotlib as mpl
+import matplotlib.colors as mcolors
 import matplotlib.patheffects as mpatheffects
 import matplotlib.pyplot as plt
 import matplotlib.transforms as mtransforms
 import numpy as np
 import numpy.ma as ma
 from contourpy import FillType
-from matplotlib.collections import PathCollection
+from matplotlib.collections import Collection, PathCollection
 from matplotlib.contour import ContourSet, QuadContourSet
 
 from ._core.contour_arrows import (
@@ -103,8 +104,9 @@ def _hide_contour_artists(contour_set: Any) -> None:
     if hasattr(contour_set, "set_visible"):
         contour_set.set_visible(False)
 
-    for collection in getattr(contour_set, "collections", ()):
-        collection.set_visible(False)
+    if not isinstance(contour_set, Collection):
+        for collection in getattr(contour_set, "collections", ()):
+            collection.set_visible(False)
 
 
 def _iter_contour_layers(contour_set: Any):
@@ -112,17 +114,33 @@ def _iter_contour_layers(contour_set: Any):
     if hasattr(contour_set, "get_paths") and hasattr(contour_set, "get_facecolors"):
         paths = list(contour_set.get_paths())
         facecolors = list(contour_set.get_facecolors())
-        for index, (path, facecolor) in enumerate(zip(paths, facecolors)):
+        for index, path in enumerate(paths):
+            facecolor = (
+                facecolors[index % len(facecolors)] if facecolors else "none"
+            )
             hatch = hatches[index % len(hatches)] if hatches else None
             yield path, facecolor, hatch
         return
 
     for index, collection in enumerate(getattr(contour_set, "collections", ())):
         facecolors = collection.get_facecolors()
-        facecolor = facecolors[0] if len(facecolors) else None
+        facecolor = facecolors[0] if len(facecolors) else "none"
         hatch = hatches[index % len(hatches)] if hatches else collection.get_hatch()
         for path in collection.get_paths():
             yield path, facecolor, hatch
+
+
+def _resolve_hatch_edge_color(contour_set: Any) -> Any:
+    hatch_color = mpl.rcParams.get("hatch.color", "edge")
+    if isinstance(hatch_color, str) and hatch_color.lower() == "edge":
+        get_edgecolors = getattr(contour_set, "get_edgecolors", None)
+        if callable(get_edgecolors):
+            for candidate in get_edgecolors():
+                rgba = mcolors.to_rgba(candidate)
+                if rgba[3] > 0.0:
+                    return rgba
+        return mpl.rcParams.get("lines.color", "black")
+    return hatch_color
 
 
 def _path_touches_view_boundary(path: Any, ax: Any, margin: float = 0.1) -> bool:
@@ -152,13 +170,18 @@ def _path_touches_view_boundary(path: Any, ax: Any, margin: float = 0.1) -> bool
 
     x_min, x_max = ax.get_xlim()
     y_min, y_max = ax.get_ylim()
+    x_low, x_high = (x_min, x_max) if x_min <= x_max else (x_max, x_min)
+    y_low, y_high = (y_min, y_max) if y_min <= y_max else (y_max, y_min)
+
+    margin_x = min(max(float(margin), 0.0), 0.25 * (x_high - x_low))
+    margin_y = min(max(float(margin), 0.0), 0.25 * (y_high - y_low))
 
     # Check if any vertex is near or beyond the boundaries
     touches = (
-        np.any(x_coords <= x_min + margin)
-        or np.any(x_coords >= x_max - margin)
-        or np.any(y_coords <= y_min + margin)
-        or np.any(y_coords >= y_max - margin)
+        np.any(x_coords <= x_low + margin_x)
+        or np.any(x_coords >= x_high - margin_x)
+        or np.any(y_coords <= y_low + margin_y)
+        or np.any(y_coords >= y_high - margin_y)
     )
 
     return touches
@@ -206,7 +229,9 @@ def _add_layered_shadow_artists(
         # Use matching edge color to eliminate white gaps between adjacent layers
         # caused by antialiasing artifacts. Disable antialiasing on fills to
         # eliminate gaps, but keep edges smooth with matching color and width.
-        edge_color = mpl.rcParams["hatch.color"] if hatch else facecolor
+        edge_color = (
+            _resolve_hatch_edge_color(contour_set) if hatch else facecolor
+        )
 
         # Compute adaptive edge width based on figure DPI for consistent appearance
         # across different display densities. Use 0 for hatched contours.
@@ -407,18 +432,22 @@ def _resolve_contourpy_levels(
     levels_arg: Any,
     logscale: bool,
 ) -> Optional[np.ndarray]:
-    zmin = float(z.min())
-    zmax = float(z.max())
+    if levels_arg is not None and not isinstance(levels_arg, Integral):
+        return np.asarray(levels_arg, dtype=np.float64)
+
+    z_valid = ma.masked_invalid(z, copy=False)
+    if ma.count(z_valid) == 0:
+        return None
+
+    zmin = float(z_valid.min())
+    zmax = float(z_valid.max())
 
     if levels_arg is None:
         if np.issubdtype(z.dtype, bool):
             return np.asarray([0.0, 0.5, 1.0], dtype=np.float64)
         return None if logscale else _auto_contour_levels(zmin, zmax, 7)
 
-    if isinstance(levels_arg, Integral):
-        return None if logscale else _auto_contour_levels(zmin, zmax, int(levels_arg))
-
-    return np.asarray(levels_arg, dtype=np.float64)
+    return None if logscale else _auto_contour_levels(zmin, zmax, int(levels_arg))
 
 
 def _validate_contourpy_levels(levels: np.ndarray) -> None:
@@ -687,8 +716,8 @@ def arrow_contour_clabel(contour_set: Any, *args: Any, **kwargs: Any):
 
     Returns
     -------
-    dict
-        The mapping of label text artists returned by ``Axes.clabel``.
+    list of matplotlib.text.Text
+        The label text artists returned by ``Axes.clabel``.
     """
     if "manual" not in kwargs:
         label_positions = _arrow_contour_label_positions(contour_set)

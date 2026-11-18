@@ -11,6 +11,7 @@
 #define NPY_NO_DEPRECATED_API NPY_1_19_API_VERSION
 #include <numpy/arrayobject.h>
 
+#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -622,6 +623,25 @@ static npy_intp lower_bound_bucket(
  * building an intermediate mapped_points array when they already have display
  * coordinates.
  */
+static inline long clamp_double_to_long(double value)
+{
+    const double min_val = (double)(LONG_MIN + 2);
+    const double max_val = (double)(LONG_MAX - 2);
+    if (!isfinite(value))
+    {
+        return 0L;
+    }
+    if (value < min_val)
+    {
+        return LONG_MIN + 2;
+    }
+    if (value > max_val)
+    {
+        return LONG_MAX - 2;
+    }
+    return (long)value;
+}
+
 static PyObject *thin_scaled_points(
     PyArrayObject *points_arr,
     double origin_x,
@@ -680,8 +700,18 @@ static PyObject *thin_scaled_points(
     {
         const double px = points_data[idx * 2];
         const double py = points_data[idx * 2 + 1];
-        entries[idx].bx = (long)floor((px - origin_x) * bucket_scale_x);
-        entries[idx].by = (long)floor((py - origin_y) * bucket_scale_y);
+        if (!isfinite(px) || !isfinite(py) || !isfinite(origin_x) || !isfinite(origin_y) ||
+            !isfinite(bucket_scale_x) || !isfinite(bucket_scale_y))
+        {
+            culled[idx] = 1;
+            entries[idx].bx = 0L;
+            entries[idx].by = 0L;
+        }
+        else
+        {
+            entries[idx].bx = clamp_double_to_long(floor((px - origin_x) * bucket_scale_x));
+            entries[idx].by = clamp_double_to_long(floor((py - origin_y) * bucket_scale_y));
+        }
         entries[idx].idx = idx;
     }
 
@@ -695,16 +725,21 @@ static PyObject *thin_scaled_points(
     for (idx = 0; idx < point_count; ++idx)
     {
         npy_intp pos;
-        const double base_x = points_data[idx * 2];
-        const double base_y = points_data[idx * 2 + 1];
-        const long bx = (long)floor((base_x - origin_x) * bucket_scale_x);
-        const long by = (long)floor((base_y - origin_y) * bucket_scale_y);
+        double base_x;
+        double base_y;
+        long bx;
+        long by;
         long search_x;
 
         if (culled[idx])
         {
             continue;
         }
+
+        base_x = points_data[idx * 2];
+        base_y = points_data[idx * 2 + 1];
+        bx = clamp_double_to_long(floor((base_x - origin_x) * bucket_scale_x));
+        by = clamp_double_to_long(floor((base_y - origin_y) * bucket_scale_y));
 
         selected_indices[selected_count++] = idx;
 
@@ -1080,6 +1115,13 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
         goto cleanup;
     }
 
+    if (!isfinite(max_length_px) || max_length_px <= 1e-6)
+    {
+        Py_INCREF(Py_None);
+        result = Py_None;
+        goto cleanup;
+    }
+
     /*
      * Preallocate the worst-case polyline length. If the branch terminates
      * early, the result is trimmed after tracing.
@@ -1135,7 +1177,9 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
         int clipped;
         double actual_step;
 
-        if (remaining <= 1e-6)
+        double back_len;
+
+        if (!isfinite(remaining) || remaining <= 1e-6)
         {
             break;
         }
@@ -1158,29 +1202,31 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
             break;
         }
 
-        /* Build the nominal NCL-like step length in display pixels. */
+        /* Apply the one-third backward correction before computing remaining budget. */
         current_display_x = state.display_x;
         current_display_y = state.display_y;
-        step_length = ncl_step_length_px(step_px, state.speed, speed_scale);
-        if (step_length > remaining)
-        {
-            step_length = remaining;
-        }
-        if (step_length <= 1e-6)
-        {
-            break;
-        }
-
-        /* Apply the one-third backward correction before stepping away again. */
         if (has_previous_display)
         {
             corrected_display_x = current_display_x - (current_display_x - previous_display_x) / 3.0;
             corrected_display_y = current_display_y - (current_display_y - previous_display_y) / 3.0;
+            back_len = hypot(current_display_x - corrected_display_x, current_display_y - corrected_display_y);
         }
         else
         {
             corrected_display_x = current_display_x;
             corrected_display_y = current_display_y;
+            back_len = 0.0;
+        }
+
+        /* Build the nominal NCL-like step length in display pixels. */
+        step_length = ncl_step_length_px(step_px, state.speed, speed_scale);
+        if (step_length > remaining + back_len)
+        {
+            step_length = remaining + back_len;
+        }
+        if (step_length <= 1e-6)
+        {
+            break;
         }
 
         /* First candidate uses the local tangent at the current sample point. */
@@ -1198,6 +1244,26 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
 
         display_step_x = candidate_display_x - current_display_x;
         display_step_y = candidate_display_y - current_display_y;
+        if (display_step_x * direction_sign * state.dir_x +
+            display_step_y * direction_sign * state.dir_y <= 0.0)
+        {
+            break;
+        }
+        {
+            double net_step = hypot(display_step_x, display_step_y);
+            if (!isfinite(net_step))
+            {
+                break;
+            }
+            if (net_step > remaining && net_step > 1e-12)
+            {
+                double scale = remaining / net_step;
+                display_step_x *= scale;
+                display_step_y *= scale;
+                candidate_display_x = current_display_x + display_step_x;
+                candidate_display_y = current_display_y + display_step_y;
+            }
+        }
         if (!display_step_to_data(
                 state.j00,
                 state.j01,
@@ -1240,18 +1306,20 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
                 double average_norm = hypot(average_direction_x, average_direction_y);
                 if (average_norm > 1e-12)
                 {
+                    double avg_dir_x = average_direction_x / average_norm;
+                    double avg_dir_y = average_direction_y / average_norm;
                     double average_speed = 0.5 * (state.speed + next_state.speed);
                     double average_step = ncl_step_length_px(step_px, average_speed, speed_scale);
                     double avg_j00;
                     double avg_j01;
                     double avg_j10;
                     double avg_j11;
-                    if (average_step > remaining)
+                    if (average_step > remaining + back_len)
                     {
-                        average_step = remaining;
+                        average_step = remaining + back_len;
                     }
-                    candidate_display_x = corrected_display_x + average_direction_x / average_norm * average_step;
-                    candidate_display_y = corrected_display_y + average_direction_y / average_norm * average_step;
+                    candidate_display_x = corrected_display_x + avg_dir_x * average_step;
+                    candidate_display_y = corrected_display_y + avg_dir_y * average_step;
                     clipped = clip_display_step_to_viewport(
                         corrected_display_x,
                         corrected_display_y,
@@ -1268,6 +1336,25 @@ static PyObject *trace_ncl_direction(PyObject *self, PyObject *args, PyObject *k
                     avg_j11 = 0.5 * (state.j11 + next_state.j11);
                     display_step_x = candidate_display_x - current_display_x;
                     display_step_y = candidate_display_y - current_display_y;
+                    if (display_step_x * avg_dir_x + display_step_y * avg_dir_y <= 0.0)
+                    {
+                        break;
+                    }
+                    {
+                        double net_step = hypot(display_step_x, display_step_y);
+                        if (!isfinite(net_step))
+                        {
+                            break;
+                        }
+                        if (net_step > remaining && net_step > 1e-12)
+                        {
+                            double scale = remaining / net_step;
+                            display_step_x *= scale;
+                            display_step_y *= scale;
+                            candidate_display_x = current_display_x + display_step_x;
+                            candidate_display_y = current_display_y + display_step_y;
+                        }
+                    }
                     if (!display_step_to_data(
                             avg_j00,
                             avg_j01,
@@ -2349,23 +2436,15 @@ static PyObject *generate_cell_candidates(PyObject *self, PyObject *args, PyObje
             continue;
         }
 
-        sub_x = (int)ceil((max_x - min_x) / spacing);
-        sub_y = (int)ceil((max_y - min_y) / spacing);
-        if (sub_x < 1)
         {
-            sub_x = 1;
-        }
-        else if (sub_x > 12)
-        {
-            sub_x = 12;
-        }
-        if (sub_y < 1)
-        {
-            sub_y = 1;
-        }
-        else if (sub_y > 12)
-        {
-            sub_y = 12;
+            double raw_sub_x = ceil((max_x - min_x) / spacing);
+            double raw_sub_y = ceil((max_y - min_y) / spacing);
+            sub_x = (!isfinite(raw_sub_x) || raw_sub_x < 1.0)
+                ? 1
+                : (raw_sub_x > 12.0 ? 12 : (int)raw_sub_x);
+            sub_y = (!isfinite(raw_sub_y) || raw_sub_y < 1.0)
+                ? 1
+                : (raw_sub_y > 12.0 ? 12 : (int)raw_sub_y);
         }
         total_count += (npy_intp)sub_x * (npy_intp)sub_y;
     }
@@ -2434,23 +2513,15 @@ static PyObject *generate_cell_candidates(PyObject *self, PyObject *args, PyObje
                 continue;
             }
 
-            sub_x = (int)ceil((max_x - min_x) / spacing);
-            sub_y = (int)ceil((max_y - min_y) / spacing);
-            if (sub_x < 1)
             {
-                sub_x = 1;
-            }
-            else if (sub_x > 12)
-            {
-                sub_x = 12;
-            }
-            if (sub_y < 1)
-            {
-                sub_y = 1;
-            }
-            else if (sub_y > 12)
-            {
-                sub_y = 12;
+                double raw_sub_x = ceil((max_x - min_x) / spacing);
+                double raw_sub_y = ceil((max_y - min_y) / spacing);
+                sub_x = (!isfinite(raw_sub_x) || raw_sub_x < 1.0)
+                    ? 1
+                    : (raw_sub_x > 12.0 ? 12 : (int)raw_sub_x);
+                sub_y = (!isfinite(raw_sub_y) || raw_sub_y < 1.0)
+                    ? 1
+                    : (raw_sub_y > 12.0 ? 12 : (int)raw_sub_y);
             }
 
             for (int row = 0; row < sub_y; ++row)
@@ -3145,11 +3216,6 @@ static struct PyModuleDef moduledef = {
 /* Module init: import NumPy C-API and create the extension module. */
 PyMODINIT_FUNC PyInit__ncl_curly_core(void)
 {
-    PyObject *module = PyModule_Create(&moduledef);
-    if (module == NULL)
-    {
-        return NULL;
-    }
     import_array();
-    return module;
+    return PyModule_Create(&moduledef);
 }

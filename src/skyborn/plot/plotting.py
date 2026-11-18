@@ -296,14 +296,21 @@ def _gradient_segment(
 
     bottom = np.minimum(y1i, y2i)
     top = np.maximum(y1i, y2i)
-    thickness = np.maximum(upper - lower, np.finfo(float).eps)
-    values = (yi[:, None] - lower[None, :]) / thickness[None, :]
+    span = upper - lower
+    eps = np.finfo(float).eps
+    safe_span = np.where(
+        np.abs(span) > eps,
+        span,
+        np.where(span < 0.0, -eps, eps),
+    )
+    values = (yi[:, None] - lower[None, :]) / safe_span[None, :]
     values = np.ma.masked_where(
         (yi[:, None] < bottom[None, :]) | (yi[:, None] > top[None, :]),
         values,
     )
     values = np.ma.clip(values, 0.0, 1.0)
 
+    prev_aspect = ax.get_aspect()
     image = ax.imshow(
         values,
         extent=(xmin, xmax, ymin, ymax),
@@ -314,6 +321,7 @@ def _gradient_segment(
         interpolation=interpolation,
         zorder=zorder,
     )
+    ax.set_aspect(prev_aspect)
 
     vertices = np.column_stack([x, y1]).tolist()
     vertices.extend(np.column_stack([x[::-1], y2[::-1]]).tolist())
@@ -385,14 +393,17 @@ def gradient_fill_between(
     if edge_mode not in {"auto", "y1", "y2"}:
         raise ValueError("edge_mode must be one of: 'auto', 'y1', or 'y2'")
 
-    x_values = _convert_x_to_float(x).ravel()
-    y1_values = np.asarray(y1, dtype=np.float64).ravel()
+    x_raw = _convert_x_to_float(x)
+    y1_raw = np.asarray(y1, dtype=np.float64)
+    if x_raw.shape != y1_raw.shape:
+        raise ValueError("x and y1 must have the same shape")
+
+    x_values = x_raw.ravel()
+    y1_values = y1_raw.ravel()
     y2_values = np.broadcast_to(
-        np.asarray(y2, dtype=np.float64), y1_values.shape
+        np.asarray(y2, dtype=np.float64), y1_raw.shape
     ).ravel()
 
-    if x_values.shape != y1_values.shape:
-        raise ValueError("x and y1 must have the same shape")
     if y2_values.shape != y1_values.shape:
         raise ValueError("y2 must be scalar or have the same shape as y1")
 
@@ -400,9 +411,23 @@ def gradient_fill_between(
     cmap = mpl.colormaps.get_cmap(cmap) if isinstance(cmap, str) else cmap
     valid = np.isfinite(x_values) & np.isfinite(y1_values) & np.isfinite(y2_values)
 
+    runs = list(_iter_valid_runs(valid))
+    if not runs:
+        raise ValueError("gradient_fill_between requires at least two finite points")
+
+    for run in runs:
+        xr_vals = x_values[run]
+        y1r_vals = y1_values[run]
+        y2r_vals = y2_values[run]
+        xmin, xmax = float(np.min(xr_vals)), float(np.max(xr_vals))
+        ymin = float(min(np.min(y1r_vals), np.min(y2r_vals)))
+        ymax = float(max(np.max(y1r_vals), np.max(y2r_vals)))
+        if xmin == xmax or ymin == ymax:
+            raise ValueError("gradient_fill_between requires non-zero x and y ranges")
+
     images: list[AxesImage] = []
     clip_paths: list[PathPatch] = []
-    for run in _iter_valid_runs(valid):
+    for run in runs:
         image, patch = _gradient_segment(
             ax,
             x_values[run],
@@ -418,8 +443,5 @@ def gradient_fill_between(
         )
         images.append(image)
         clip_paths.append(patch)
-
-    if not images:
-        raise ValueError("gradient_fill_between requires at least two finite points")
 
     return GradientFillBetween(images=images, clip_paths=clip_paths)

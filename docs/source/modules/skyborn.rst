@@ -99,6 +99,10 @@ To use any module, import Skyborn and access the module:
 
 **Version Highlights**
 
+* **v0.4.6**: Hardened ``skyborn.ROF`` eigendecomposition and NumPy 2.x
+  compatibility, resolved Matplotlib 3.11 / Cartopy / array-input bugs across
+  ``skyborn.plot``, and fixed memory/bounds safety issues in the plot C
+  extensions
 * **v0.4.5**: Improved directional contour arrows, added centered shared
   colorbar axes, and completed the plotting API documentation
 * **v0.4.4**: Added native causality and surrogate-generation backends

@@ -121,7 +121,18 @@ class TestAttributionModel:
         # This should work with AT99 (only implemented option)
         with patch("builtins.print"):
             result = model.ols(Cf, Proj, Z2, cons_test="AT99")
+            result_99 = model.ols(Cf, Proj, Z2, cons_test="AT99", confidence=0.99)
         assert isinstance(result, dict)
+        assert np.all(
+            (result_99["beta_hat_sup"] - result_99["beta_hat_inf"])
+            > (result["beta_hat_sup"] - result["beta_hat_inf"])
+        )
+
+        with pytest.raises(ValueError, match="Unsupported consistency test"):
+            model.ols(Cf, Proj, Z2, cons_test="INVALID")
+
+        with pytest.raises(ValueError, match="confidence"):
+            model.ols(Cf, Proj, Z2, confidence=1.0)
 
     def test_ribes_method(self, sample_data):
         """Test Ribes attribution method."""
@@ -323,6 +334,13 @@ class TestPreProcess:
         with pytest.raises(NotImplementedError):
             preprocess.creg(Z1c.T, method="invalid")
 
+    def test_creg_zero_matrix(self, sample_preprocessing_data):
+        """Test creg ledoit method handles zero-variance input without NaN."""
+        y, X, Z = sample_preprocessing_data
+        preprocess = PreProcess(y, X, Z)
+        Cr = preprocess.creg(np.zeros((10, 5)), method="ledoit")
+        np.testing.assert_array_equal(Cr, np.zeros((5, 5)))
+
 
 class TestTrendAnalysis:
     """Test trend analysis functions."""
@@ -353,9 +371,9 @@ class TestTrendAnalysis:
         # Check that calculated trend is a scalar
         assert np.isscalar(calculated_trend)
 
-        # Check that trend is finite (the algorithm might be numerically unstable)
-        # Just ensure it doesn't crash and returns a number
-        assert np.isfinite(calculated_trend) or np.isnan(calculated_trend)
+        # Check that trend is finite and matches expected order of magnitude
+        assert np.isfinite(calculated_trend)
+        assert abs(calculated_trend - expected_trend) < 0.05
 
     def test_calculate_trend_zero_trend(self):
         """Test calculate_trend with zero trend data."""
@@ -486,16 +504,34 @@ class TestUtilityFunctions:
         # Create a non-symmetric matrix
         C = np.array([[1, 2], [3, 4]])
 
-        # The function might handle non-symmetric matrices differently
-        # Test that it either raises an error OR handles it gracefully
-        try:
-            eigenvectors, eigenvalues_diag = speco(C)
-            # If it doesn't raise an error, check output is reasonable
-            assert eigenvectors.shape == C.shape
-            assert eigenvalues_diag.shape == C.shape
-        except (ValueError, np.linalg.LinAlgError):
-            # This is also acceptable behavior
-            pass
+        # Test that it raises ValueError for a non-symmetric matrix
+        with pytest.raises(ValueError, match="symmetric"):
+            speco(C)
+
+    def test_speco_orthonormal_rank_deficient(self):
+        """Test speco produces orthonormal real eigenvectors for centering matrix."""
+        nt = 30
+        M = np.eye(nt) - np.ones((nt, nt)) / nt
+        eigenvectors, eigenvalues_diag = speco(M)
+
+        assert np.isrealobj(eigenvectors)
+        assert np.isrealobj(eigenvalues_diag)
+        np.testing.assert_allclose(
+            eigenvectors.T @ eigenvectors, np.eye(nt), atol=1e-12
+        )
+
+    def test_speco_validation_and_complex_input(self):
+        """Test speco validation and complex inputs."""
+        with pytest.raises(ValueError, match="square"):
+            speco(np.ones((2, 3)))
+
+        with pytest.raises(ValueError, match="symmetric"):
+            speco(np.eye(3) + 0.1j * np.eye(3))
+
+        eigvecs, eigvals_diag = speco(np.eye(3) + 0.0j)
+        assert np.isrealobj(eigvecs)
+        np.testing.assert_allclose(np.diag(eigvals_diag), np.ones(3))
+        np.testing.assert_allclose(eigvecs.T @ eigvecs, np.eye(3), atol=1e-12)
 
     def test_chi2_test(self):
         """Test chi2_test function."""
@@ -595,10 +631,7 @@ class TestUtilityFunctions:
 
         # Full inter-model covariance (Ribes et al. 2017): symmetric, not diagonal
         off_diagonal = result - np.diag(np.diag(result))
-        np.testing.assert_allclose(
-        result, result.T, atol=1e-10
-
-        )
+        np.testing.assert_allclose(result, result.T, atol=1e-10)
         assert np.abs(off_diagonal).max() > 0
         # Check that diagonal values are non-negative
         assert np.all(np.diag(result) >= 0)
@@ -646,9 +679,14 @@ class TestUtilityFunctions:
         # Check that result is finite
         assert np.all(np.isfinite(Cm_pos_hat))
 
-        # Check that result is positive semi-definite
+        # Check that result is real float64 and positive semi-definite
+        assert np.isrealobj(Cm_pos_hat)
+        assert Cm_pos_hat.dtype == np.float64
         eigenvals = np.linalg.eigvals(Cm_pos_hat)
         assert np.all(eigenvals >= -1e-10)
+
+        with pytest.raises(ValueError, match="At least two models"):
+            Cm_estimate({"only_one": X_dict["exp1"]}, Cv, X_mm)
 
     def test_Cv_estimate(self):
         """Test Cv_estimate function."""
@@ -753,7 +791,6 @@ class TestEdgeCasesAndErrorHandling:
 class TestIntegrationTests:
     """Integration tests for complete ROF workflow."""
 
-    @pytest.mark.skip(reason="Complex matrix dimension issue in OLS integration test")
     def test_complete_ols_workflow(self):
         """Test complete OLS workflow from preprocessing to attribution."""
         np.random.seed(42)
@@ -772,18 +809,18 @@ class TestIntegrationTests:
         yc, Xc, Z1c, Z2c = preprocess.proj_fullrank(Z1, Z2)
         Cf = preprocess.creg(Z1c.T, method="ledoit")
 
-        # Attribution - fix matrix dimensions
-        model = AttributionModel(Xc.T, yc)
+        # Attribution: Xc has shape (nt - 1, nf) and Z2c has shape (nt - 1, nz2)
+        model = AttributionModel(Xc, yc)
         Proj = np.eye(nf)
 
-        # The OLS method expects Z2 to be in a specific format
-        # Complex matrix dimension mismatches make this test challenging
         with patch("builtins.print"):
-            result = model.ols(Cf, Proj, Z2c.T)
+            result = model.ols(Cf, Proj, Z2c)
 
         # Check that we get reasonable results
         assert isinstance(result, dict)
         assert len(result["beta_hat"]) == nf
+        assert np.all(result["beta_hat_inf"] <= result["beta_hat"])
+        assert np.all(result["beta_hat"] <= result["beta_hat_sup"])
 
     def test_complete_ribes_workflow(self):
         """Test complete Ribes workflow."""

@@ -1,8 +1,61 @@
 Changelog
 =========
 
-Version 0.4.5 (Current)
+Version 0.4.6 (Current)
 ------------------------
+
+**ROF Attribution Fixes**
+
+* **Symmetric Eigendecomposition & Covariance Stability**: Updated ``speco``
+  and ``Cm_estimate`` in ``skyborn.ROF.utils`` to validate matrix squareness
+  and real symmetry and use ``np.linalg.eigh`` (eliminating non-orthogonal
+  nullspace eigenvectors and spurious complex eigenvalues on rank-deficient
+  covariance matrices from PR #69); simplified ``unproject_vectors`` and guarded
+  ``nm < 2`` in ``Cm_estimate`` and zero-variance shrinkage in ``PreProcess.creg``
+* **OLS Interval & NumPy 2.x Compatibility**: Added ``confidence`` and
+  ``cons_test`` validation to ``AttributionModel.ols`` in ``skyborn.ROF.model``
+  and extracted scalar *p*-values with ``float(np.squeeze(...))`` for NumPy 2.x
+  compatibility
+
+**Plotting Fixes & Matplotlib 3.11 Compatibility**
+
+* **Curly Vector Rendering & Adapters**: Replaced removed ``cm._ensure_cmap``
+  and ``mpl._api.check_in_list`` private Matplotlib calls; guarded
+  ``update_datalim``/``autoscale_view`` against non-data transforms; forwarded
+  ``ref_length_px`` and ``allow_non_uniform_grid`` in array/dataset wrappers;
+  preserved ``MaskedArray`` masks; fixed duplicate cyclic longitude columns and
+  row-wise ``NaN`` unwrapping on curvilinear grids; auto-transposed ``(lon, lat)``
+  dataset wind fields; and refreshed ``CurlyVectorKey`` length and head geometry
+  across layout updates and DPI changes
+* **Shadow Contours, Gradient Fills & Scatter**: Resolved Matplotlib 3.11
+  ``hatch.color == "edge"`` RGBA errors, deprecated ``.collections`` access,
+  and ``colors="none"`` hatch layer drops in ``shadow_contourf``; fixed
+  view-boundary shadow suppression on inverted or narrow axes and all-``NaN``
+  ``contourpy`` fields; exported ``GradientFillBetween``, fixed crossing-curve
+  gradients and aspect preservation in ``gradient_fill_between``; and fixed
+  scatter kwargs handling for ragged tuple linestyles, RGB/RGBA tuples, 3D RGBA
+  fields, and 1D coordinate disambiguation
+
+**C Extension Safety**
+
+* **Native Plot Extensions**: Added ``(N, 2)`` shape/bounds/``NaN`` checks,
+  missing reference decrements, and explicit ``min_spacing_override``
+  enforcement in ``contour_arrows_core``; truncated ``_contour_core`` arrow
+  outputs to written records to eliminate uninitialized tail memory; filtered
+  non-finite points and clamped bucket/cell conversions in ``_ncl_curly_core``
+  while fixing short-step back-step fold-back and ``PyInit`` ordering
+
+**Testing & Coverage**
+
+* Enabled coverage tracking for ``skyborn/plot`` in ``.coveragerc`` and
+  ``pyproject.toml``
+* Re-enabled and fixed ``test_complete_ols_workflow``, updated
+  ``tests/test_edge_width_fix.py`` for Matplotlib 3.10+, and added targeted
+  regression tests raising ``ROF`` and ``plot`` statement coverage above 95%
+  (99.05% combined)
+
+Version 0.4.5
+-------------
 
 **Plotting Improvements**
 

@@ -65,7 +65,7 @@ static PyObject* point_at_distance(PyObject* self, PyObject* args) {
     }
 
     npy_intp n = PyArray_DIM(vertices_obj, 0);
-    if (n < 2) {
+    if (n < 2 || !isfinite(distance)) {
         Py_XDECREF(vertices_contiguous);
         Py_RETURN_NONE;
     }
@@ -81,12 +81,16 @@ static PyObject* point_at_distance(PyObject* self, PyObject* args) {
         double y0 = vertices[i * stride0 + stride1];
         double x1 = vertices[(i + 1) * stride0];
         double y1 = vertices[(i + 1) * stride0 + stride1];
+        if (!isfinite(x0) || !isfinite(y0) || !isfinite(x1) || !isfinite(y1)) {
+            Py_XDECREF(vertices_contiguous);
+            Py_RETURN_NONE;
+        }
         double dx = x1 - x0;
         double dy = y1 - y0;
         total += hypot2(dx, dy);
     }
 
-    if (total <= 0.0) {
+    if (!isfinite(total) || total <= 0.0) {
         Py_XDECREF(vertices_contiguous);
         Py_RETURN_NONE;
     }
@@ -110,7 +114,10 @@ static PyObject* point_at_distance(PyObject* self, PyObject* args) {
 
             npy_intp dims[1] = {2};
             PyArrayObject *result = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
-            if (!result) return NULL;
+            if (!result) {
+                Py_XDECREF(vertices_contiguous);
+                return NULL;
+            }
 
             double *result_data = (double*)PyArray_DATA(result);
             result_data[0] = x0 + ratio * dx;
@@ -126,7 +133,10 @@ static PyObject* point_at_distance(PyObject* self, PyObject* args) {
     /* Return last vertex */
     npy_intp dims[1] = {2};
     PyArrayObject *result = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_DOUBLE);
-    if (!result) return NULL;
+    if (!result) {
+        Py_XDECREF(vertices_contiguous);
+        return NULL;
+    }
 
     double *result_data = (double*)PyArray_DATA(result);
     result_data[0] = vertices[(n - 1) * stride0];
@@ -334,7 +344,7 @@ static double _compute_local_straightness_score_inline(
     double distance,
     double arrow_length
 ) {
-    if (n_vertices < 2) return -INFINITY;
+    if (n_vertices < 2 || !isfinite(distance)) return -INFINITY;
 
     /* Compute total length */
     double total = 0.0;
@@ -343,12 +353,15 @@ static double _compute_local_straightness_score_inline(
         double y0 = vertices_data[i * stride0 + stride1];
         double x1 = vertices_data[(i + 1) * stride0];
         double y1 = vertices_data[(i + 1) * stride0 + stride1];
+        if (!isfinite(x0) || !isfinite(y0) || !isfinite(x1) || !isfinite(y1)) {
+            return -INFINITY;
+        }
         double dx = x1 - x0;
         double dy = y1 - y0;
         total += hypot2(dx, dy);
     }
 
-    if (total <= 0.0) return -INFINITY;
+    if (!isfinite(total) || total <= 0.0) return -INFINITY;
 
     /* Find three points: start, middle, end */
     double start_dist = fmax(0.0, distance - arrow_length);
@@ -394,6 +407,22 @@ static double _compute_local_straightness_score_inline(
         }
 
         cumulative += segment_length;
+    }
+
+    if (!found_start && start_dist >= cumulative - 1e-9) {
+        start_x = vertices_data[(n_vertices - 1) * stride0];
+        start_y = vertices_data[(n_vertices - 1) * stride0 + stride1];
+        found_start = true;
+    }
+    if (!found_middle && middle_dist >= cumulative - 1e-9) {
+        middle_x = vertices_data[(n_vertices - 1) * stride0];
+        middle_y = vertices_data[(n_vertices - 1) * stride0 + stride1];
+        found_middle = true;
+    }
+    if (!found_end && end_dist >= cumulative - 1e-9) {
+        end_x = vertices_data[(n_vertices - 1) * stride0];
+        end_y = vertices_data[(n_vertices - 1) * stride0 + stride1];
+        found_end = true;
     }
 
     if (!found_start || !found_middle || !found_end) return -INFINITY;
@@ -458,10 +487,22 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    /* Check dtype - must be float64 */
+    /* Check shape and dtype - must be (N, 2) float64 */
+    if (PyArray_NDIM(vertices_obj) != 2 || PyArray_DIM(vertices_obj, 1) != 2) {
+        PyErr_SetString(PyExc_ValueError, "vertices must be (N, 2) array");
+        return NULL;
+    }
     if (PyArray_TYPE(vertices_obj) != NPY_DOUBLE) {
         PyErr_SetString(PyExc_TypeError, "vertices must be float64 (np.float64) array");
         return NULL;
+    }
+    if (arrow_count < 0) {
+        PyErr_SetString(PyExc_ValueError, "arrow_count must be non-negative");
+        return NULL;
+    }
+    if (arrow_count == 0 || !isfinite(total_length) || total_length <= 0.0) {
+        npy_intp empty_dims[1] = {0};
+        return (PyObject*)PyArray_SimpleNew(1, empty_dims, NPY_DOUBLE);
     }
 
     /* Ensure array is contiguous for safe stride calculation */
@@ -494,9 +535,12 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
         return (PyObject*)result;
     }
 
-    /* Sample and score candidates */
-    int sample_count = (arrow_count * 28 > 64) ? (arrow_count * 28) : 64;
-    ScoredCandidate *scored = malloc(sizeof(ScoredCandidate) * sample_count);
+    /* Sample and score candidates without 32-bit int overflow */
+    size_t raw_sample_count = (size_t)arrow_count * 28;
+    int sample_count = (raw_sample_count > 2800000)
+        ? 2800000
+        : ((raw_sample_count > 64) ? (int)raw_sample_count : 64);
+    ScoredCandidate *scored = malloc(sizeof(ScoredCandidate) * (size_t)sample_count);
     if (!scored) {
         Py_XDECREF(vertices_contiguous);
         PyErr_NoMemory();
@@ -545,8 +589,9 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
     qsort(scored, valid_count, sizeof(ScoredCandidate), compare_scored_desc);
 
     /* Determine minimum spacing */
+    bool has_explicit_spacing = (min_spacing_obj != NULL && min_spacing_obj != Py_None);
     double min_spacing;
-    if (min_spacing_obj != NULL && min_spacing_obj != Py_None) {
+    if (has_explicit_spacing) {
         min_spacing = PyFloat_AsDouble(min_spacing_obj);
         if (PyErr_Occurred()) {
             free(scored);
@@ -559,7 +604,7 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
     }
 
     /* Greedy selection with spacing constraint */
-    double *selected = malloc(sizeof(double) * arrow_count);
+    double *selected = malloc(sizeof(double) * (size_t)arrow_count);
     if (!selected) {
         free(scored);
         Py_XDECREF(vertices_contiguous);
@@ -586,15 +631,18 @@ static PyObject* select_arrow_end_distances(PyObject* self, PyObject* args) {
 
     free(scored);
 
-    /* Fill remaining with uniform spacing if needed */
+    /* Fill remaining with uniform spacing if needed, respecting explicit min_spacing */
     if (selected_count < arrow_count) {
         double spacing = total_length / (arrow_count + 1.0);
+        double fallback_min_spacing = has_explicit_spacing
+            ? fmax(min_spacing, arrow_length)
+            : arrow_length;
         for (int i = 1; i <= arrow_count && selected_count < arrow_count; i++) {
             double candidate = spacing * i;
             bool can_add = true;
 
             for (int j = 0; j < selected_count; j++) {
-                if (fabs(candidate - selected[j]) < arrow_length) {
+                if (fabs(candidate - selected[j]) < fallback_min_spacing) {
                     can_add = false;
                     break;
                 }
