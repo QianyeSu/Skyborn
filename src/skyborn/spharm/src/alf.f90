@@ -75,7 +75,7 @@ subroutine alfk(n, m, cp)
     fden = 2.0
 
     if (nmms2 >= 1) then
-        !$OMP SIMD PRIVATE(t1, nex)
+        ! t1/nex are loop-carried scaling recurrences: keep sequential.
         do i = 1, nmms2
             t1 = fnum * t1 / fden
             if (t1 > sc20) then
@@ -92,7 +92,7 @@ subroutine alfk(n, m, cp)
 
     t2 = 1.0
     if (ma > 0) then
-        !$OMP SIMD PRIVATE(fnmh)
+        ! t2/fnmh are loop-carried recurrences: keep sequential.
         do i = 1, ma
             t2 = fnmh * t2 / (fnmh + pm1)
             fnmh = fnmh + 2.0
@@ -473,7 +473,7 @@ subroutine lfpt(n, m, theta, cp, pb)
             st = 0.0
             sum = 0.5 * cp(1)
 
-            !$OMP SIMD PRIVATE(cth)
+            ! ct/st trigonometric recurrence and sum: keep sequential.
             do k = 2, kdo
                 cth = cdt * ct - sdt * st
                 st = sdt * ct + cdt * st
@@ -490,7 +490,7 @@ subroutine lfpt(n, m, theta, cp, pb)
             st = 0.0
             sum = 0.0
 
-            !$OMP SIMD PRIVATE(cth)
+            ! ct/st trigonometric recurrence and sum: keep sequential.
             do k = 1, kdo
                 cth = cdt * ct - sdt * st
                 st = sdt * ct + cdt * st
@@ -510,7 +510,7 @@ subroutine lfpt(n, m, theta, cp, pb)
             st = -sin(theta)
             sum = 0.0
 
-            !$OMP SIMD PRIVATE(cth)
+            ! ct/st trigonometric recurrence and sum: keep sequential.
             do k = 1, kdo
                 cth = cdt * ct - sdt * st
                 st = sdt * ct + cdt * st
@@ -526,7 +526,7 @@ subroutine lfpt(n, m, theta, cp, pb)
             st = -sin(theta)
             sum = 0.0
 
-            !$OMP SIMD PRIVATE(cth)
+            ! ct/st trigonometric recurrence and sum: keep sequential.
             do k = 1, kdo
                 cth = cdt * ct - sdt * st
                 st = sdt * ct + cdt * st

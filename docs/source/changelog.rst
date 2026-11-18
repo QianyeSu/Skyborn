@@ -44,6 +44,22 @@ Version 0.4.6 (Current)
   outputs to written records to eliminate uninitialized tail memory; filtered
   non-finite points and clamped bucket/cell conversions in ``_ncl_curly_core``
   while fixing short-step back-step fold-back and ``PyInit`` ordering
+* **Spherical Harmonics (Fortran)**: Replaced invalid bare ``!$OMP SIMD``
+  accumulations in the Gaussian-grid ``vhagc`` (``legfunc="computed"``) and
+  ``vhaes`` vector analysis loops with scalar accumulators and explicit
+  ``REDUCTION`` clauses; removed ``!$OMP SIMD`` from loop-carried trigonometric
+  and scaling recurrences in ``gaqd`` and ``alf``; added missing reductions in
+  ``specintrp``. Gaussian ``legfunc="computed"`` vector results can differ from
+  0.4.5 at single-precision rounding level (about 2e-7 relative)
+* **Reduced-Gaussian Transforms**: Removed the unsynchronized double-checked
+  cache lock and the shared ``SAVE`` work arrays; FFT tables and vector work
+  arrays are now built per call, so concurrent callers can no longer observe
+  each other's workspace (results are bit-identical; analysis calls are about
+  7-10% slower on small grids)
+* **Potential Intensity (GPI)**: ``error_flag`` is now always initialized and
+  aggregated deterministically (largest non-success code) instead of being
+  written concurrently from OpenMP loops; an all-masked gridded input now
+  reports success (``1``) instead of ``0``
 
 **Testing & Coverage**
 

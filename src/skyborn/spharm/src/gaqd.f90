@@ -239,7 +239,8 @@ subroutine tpdp(n, theta, cz, cp, dcp, pb, dpb)
             cth = cdt
             sth = sdt
 
-            !$OMP SIMD PRIVATE(chh)
+            ! Loop-carried trigonometric recurrence (cth/sth) and pb/dpb
+            ! accumulation: must stay sequential (no OMP SIMD).
             do k = 1, kdo
                 pb = pb + cp(k) * cth
                 dpb = dpb - dcp(k) * sth
@@ -256,7 +257,8 @@ subroutine tpdp(n, theta, cz, cp, dcp, pb, dpb)
         cth = cos(theta)
         sth = sin(theta)
 
-        !$OMP SIMD PRIVATE(chh)
+        ! Loop-carried trigonometric recurrence (cth/sth) and pb/dpb
+        ! accumulation: must stay sequential (no OMP SIMD).
         do k = 1, kdo
             pb = pb + cp(k) * cth
             dpb = dpb - dcp(k) * sth

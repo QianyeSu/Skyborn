@@ -157,6 +157,7 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     real :: tsn, fsn
     real :: br_val_0, cr_val_0
     real :: br_val_m, bi_val_m, cr_val_m, ci_val_m
+    real :: s_br, s_bi, s_cr, s_ci
     real :: zv_val, zw_val
 
     ! --- Precompute constants ---
@@ -552,16 +553,20 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                s_br = 0.0
+                !$OMP SIMD REDUCTION(+:s_br)
                 do i = 1, imid
-                    br(1, np1, k) = br(1, np1, k) + zv(np1, i) * ve(i, 1, k)
+                    s_br = s_br + zv(np1, i) * ve(i, 1, k)
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
             end do
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_cr)
                 do i = 1, imm1
-                    cr(1, np1, k) = cr(1, np1, k) - zv(np1, i) * wo(i, 1, k)
+                    s_cr = s_cr - zv(np1, i) * wo(i, 1, k)
                 end do
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
         end do
         ! m>0
@@ -573,11 +578,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_ci,s_cr)
                             do i = 1, imm1
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
+                                s_cr = s_cr - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
+                                s_ci = s_ci - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
                             end do
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
                                 ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
@@ -588,11 +597,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br)
                             do i = 1, imm1
-                                br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
+                                s_br = s_br + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
+                                s_bi = s_bi + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
                             if (mlat /= 0) then
                                 br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
                                 bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
@@ -607,10 +620,12 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                s_br = 0.0
+                !$OMP SIMD REDUCTION(+:s_br)
                 do i = 1, imid
-                    br(1, np1, k) = br(1, np1, k) + zv(np1, i) * ve(i, 1, k)
+                    s_br = s_br + zv(np1, i) * ve(i, 1, k)
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
             end do
         end do
         ! m>0
@@ -622,11 +637,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br)
                             do i = 1, imm1
-                                br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
+                                s_br = s_br + zv(np1 + mb, i) * ve(i, 2*mp1-2, k) + zw(np1 + mb, i) * wo(i, 2*mp1-1, k)
+                                s_bi = s_bi + zv(np1 + mb, i) * ve(i, 2*mp1-1, k) - zw(np1 + mb, i) * wo(i, 2*mp1-2, k)
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
                             if (mlat /= 0) then
                                 br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
                                 bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
@@ -641,10 +660,12 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_cr)
                 do i = 1, imm1
-                    cr(1, np1, k) = cr(1, np1, k) - zv(np1, i) * wo(i, 1, k)
+                    s_cr = s_cr - zv(np1, i) * wo(i, 1, k)
                 end do
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
         end do
         ! m>0
@@ -655,11 +676,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_ci,s_cr)
                             do i = 1, imm1
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
+                                s_cr = s_cr - zv(np1 + mb, i) * wo(i, 2*mp1-2, k) + zw(np1 + mb, i) * ve(i, 2*mp1-1, k)
+                                s_ci = s_ci - zv(np1 + mb, i) * wo(i, 2*mp1-1, k) - zw(np1 + mb, i) * ve(i, 2*mp1-2, k)
                             end do
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 cr(mp1, np1, k) = cr(mp1, np1, k) + zw(np1 + mb, imid) * ve(imid, 2*mp1-1, k)
                                 ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid) * ve(imid, 2*mp1-2, k)
@@ -674,16 +699,20 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_cr)
                 do i = 1, imid
-                    cr(1, np1, k) = cr(1, np1, k) - zv(np1, i) * we(i, 1, k)
+                    s_cr = s_cr - zv(np1, i) * we(i, 1, k)
                 end do
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                s_br = 0.0
+                !$OMP SIMD REDUCTION(+:s_br)
                 do i = 1, imm1
-                    br(1, np1, k) = br(1, np1, k) + zv(np1, i) * vo(i, 1, k)
+                    s_br = s_br + zv(np1, i) * vo(i, 1, k)
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
             end do
         end do
         ! m>0
@@ -695,11 +724,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br)
                             do i = 1, imm1
-                                br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
+                                s_br = s_br + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
+                                s_bi = s_bi + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
                             if (mlat /= 0) then
                                 br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid) * we(imid, 2*mp1-1, k)
                                 bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid) * we(imid, 2*mp1-2, k)
@@ -710,11 +743,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_ci,s_cr)
                             do i = 1, imm1
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-2, k) + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-1, k) - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
+                                s_cr = s_cr - zv(np1 + mb, i) * we(i, 2*mp1-2, k) + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
+                                s_ci = s_ci - zv(np1 + mb, i) * we(i, 2*mp1-1, k) - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
                             end do
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, imid) * we(imid, 2*mp1-2, k)
                                 ci(mp1, np1, k) = ci(mp1, np1, k) - zw(np1 + mb, imid) * we(imid, 2*mp1-1, k)
@@ -729,10 +766,12 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                s_br = 0.0
+                !$OMP SIMD REDUCTION(+:s_br)
                 do i = 1, imm1
-                    br(1, np1, k) = br(1, np1, k) + zv(np1, i) * vo(i, 1, k)
+                    s_br = s_br + zv(np1, i) * vo(i, 1, k)
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
             end do
         end do
         ! m>0
@@ -743,11 +782,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br)
                             do i = 1, imm1
-                                br(mp1, np1, k) = br(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
+                                s_br = s_br + zv(np1 + mb, i) * vo(i, 2*mp1-2, k) + zw(np1 + mb, i) * we(i, 2*mp1-1, k)
+                                s_bi = s_bi + zv(np1 + mb, i) * vo(i, 2*mp1-1, k) - zw(np1 + mb, i) * we(i, 2*mp1-2, k)
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
                             if (mlat /= 0) then
                                 br(mp1, np1, k) = br(mp1, np1, k) + zw(np1 + mb, imid) * we(imid, 2*mp1-1, k)
                                 bi(mp1, np1, k) = bi(mp1, np1, k) - zw(np1 + mb, imid) * we(imid, 2*mp1-2, k)
@@ -762,10 +805,12 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_cr)
                 do i = 1, imid
-                    cr(1, np1, k) = cr(1, np1, k) - zv(np1, i) * we(i, 1, k)
+                    s_cr = s_cr - zv(np1, i) * we(i, 1, k)
                 end do
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
         end do
         ! m>0
@@ -777,11 +822,15 @@ subroutine vhaes1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_ci,s_cr)
                             do i = 1, imm1
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-2, k) + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, i) * we(i, 2*mp1-1, k) - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
+                                s_cr = s_cr - zv(np1 + mb, i) * we(i, 2*mp1-2, k) + zw(np1 + mb, i) * vo(i, 2*mp1-1, k)
+                                s_ci = s_ci - zv(np1 + mb, i) * we(i, 2*mp1-1, k) - zw(np1 + mb, i) * vo(i, 2*mp1-2, k)
                             end do
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 cr(mp1, np1, k) = cr(mp1, np1, k) - zv(np1 + mb, imid) * we(imid, 2*mp1-2, k)
                                 ci(mp1, np1, k) = ci(mp1, np1, k) - zv(np1 + mb, imid) * we(imid, 2*mp1-1, k)

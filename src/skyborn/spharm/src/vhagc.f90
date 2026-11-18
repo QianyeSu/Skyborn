@@ -144,6 +144,7 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
     logical :: use_heavy_omp
     real :: tsn, fsn, tv, tw
     real :: tvo1, tvo2, tve1, tve2, two1, two2, twe1, twe2
+    real :: s_br, s_bi, s_cr, s_ci
 
     ! --- Precompute constants ---
     nlp1 = nlat + 1
@@ -251,26 +252,34 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         call vbin(0, nlat, nlon, 0, vb, iv, wvbin)
         ! m=0
         !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
-        !$OMP& PRIVATE(k, np1, i, tv, tw) &
+        !$OMP& PRIVATE(k, np1, i, tv, tw, s_br, s_bi, s_cr, s_ci) &
         !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, wts, vb, iv, ve, we, vo, wo, br, cr)
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                s_br = 0.0
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_br,s_cr) PRIVATE(tv,tw)
                 do i = 1, imid
                     tv = ve(i, 1, k) * wts(i)
                     tw = we(i, 1, k) * wts(i)
-                    br(1, np1, k) = br(1, np1, k) + vb(i, np1, iv) * tv
-                    cr(1, np1, k) = cr(1, np1, k) - vb(i, np1, iv) * tw
+                    s_br = s_br + vb(i, np1, iv) * tv
+                    s_cr = s_cr - vb(i, np1, iv) * tw
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                s_br = 0.0
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_br,s_cr) PRIVATE(tv,tw)
                 do i = 1, imm1
                     tv = vo(i, 1, k) * wts(i)
                     tw = wo(i, 1, k) * wts(i)
-                    br(1, np1, k) = br(1, np1, k) + vb(i, np1, iv) * tv
-                    cr(1, np1, k) = cr(1, np1, k) - vb(i, np1, iv) * tw
+                    s_br = s_br + vb(i, np1, iv) * tv
+                    s_cr = s_cr - vb(i, np1, iv) * tw
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
         end do
         !$OMP END PARALLEL DO
@@ -283,21 +292,29 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 call wbin(0, nlat, nlon, m, wb, iw, wwbin)
                 if (mp1 <= ndo1) then
                     !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
-                    !$OMP& PRIVATE(k, np1, i, tvo1, tvo2, tve1, tve2, two1, two2, twe1, twe2) &
+                    !$OMP& PRIVATE(k, np1, i, tvo1, tvo2, tve1, tve2, two1, two2, twe1, twe2, s_br, s_bi, s_cr, s_ci) &
                     !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, wts, vb, wb, iv, iw, vo, ve, wo, we, br, bi, cr, ci)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br,s_ci,s_cr) PRIVATE(tvo1,tvo2,tve1,tve2,two1,two2,twe1,twe2)
                             do i = 1, imm1
                                 tvo1 = vo(i, 2*mp1-1, k) * wts(i); tvo2 = vo(i, 2*mp1-2, k) * wts(i)
                                 tve1 = ve(i, 2*mp1-1, k) * wts(i); tve2 = ve(i, 2*mp1-2, k) * wts(i)
                                 two1 = wo(i, 2*mp1-1, k) * wts(i); two2 = wo(i, 2*mp1-2, k) * wts(i)
                                 twe1 = we(i, 2*mp1-1, k) * wts(i); twe2 = we(i, 2*mp1-2, k) * wts(i)
-                                br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * tvo2 + wb(i, np1, iw) * twe1
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb(i, np1, iv) * tvo1 - wb(i, np1, iw) * twe2
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1, iv) * two2 + wb(i, np1, iw) * tve1
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb(i, np1, iv) * two1 - wb(i, np1, iw) * tve2
+                                s_br = s_br + vb(i, np1, iv) * tvo2 + wb(i, np1, iw) * twe1
+                                s_bi = s_bi + vb(i, np1, iv) * tvo1 - wb(i, np1, iw) * twe2
+                                s_cr = s_cr - vb(i, np1, iv) * two2 + wb(i, np1, iw) * tve1
+                                s_ci = s_ci - vb(i, np1, iv) * two1 - wb(i, np1, iw) * tve2
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 i = imid
                                 br(mp1, np1, k) = br(mp1, np1, k) + wb(i, np1, iw) * we(i, 2*mp1-1, k) * wts(i)
@@ -311,21 +328,29 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end if
                 if (mp2 <= ndo2) then
                     !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
-                    !$OMP& PRIVATE(k, np1, i, tvo1, tvo2, tve1, tve2, two1, two2, twe1, twe2) &
+                    !$OMP& PRIVATE(k, np1, i, tvo1, tvo2, tve1, tve2, two1, two2, twe1, twe2, s_br, s_bi, s_cr, s_ci) &
                     !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, wts, vb, wb, iv, iw, vo, ve, wo, we, br, bi, cr, ci)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br,s_ci,s_cr) PRIVATE(tvo1,tvo2,tve1,tve2,two1,two2,twe1,twe2)
                             do i = 1, imm1
                                 tvo1 = vo(i, 2*mp1-1, k) * wts(i); tvo2 = vo(i, 2*mp1-2, k) * wts(i)
                                 tve1 = ve(i, 2*mp1-1, k) * wts(i); tve2 = ve(i, 2*mp1-2, k) * wts(i)
                                 two1 = wo(i, 2*mp1-1, k) * wts(i); two2 = wo(i, 2*mp1-2, k) * wts(i)
                                 twe1 = we(i, 2*mp1-1, k) * wts(i); twe2 = we(i, 2*mp1-2, k) * wts(i)
-                                br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * tve2 + wb(i, np1, iw) * two1
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb(i, np1, iv) * tve1 - wb(i, np1, iw) * two2
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1, iv) * twe2 + wb(i, np1, iw) * tvo1
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb(i, np1, iv) * twe1 - wb(i, np1, iw) * tvo2
+                                s_br = s_br + vb(i, np1, iv) * tve2 + wb(i, np1, iw) * two1
+                                s_bi = s_bi + vb(i, np1, iv) * tve1 - wb(i, np1, iw) * two2
+                                s_cr = s_cr - vb(i, np1, iv) * twe2 + wb(i, np1, iw) * tvo1
+                                s_ci = s_ci - vb(i, np1, iv) * twe1 - wb(i, np1, iw) * tvo2
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 i = imid
                                 br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * ve(i, 2*mp1-2, k) * wts(i)
@@ -344,22 +369,26 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         call vbin(0, nlat, nlon, 0, vb, iv, wvbin)
         ! m=0
         !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
-        !$OMP& PRIVATE(k, np1, i, tv) &
+        !$OMP& PRIVATE(k, np1, i, tv, s_br, s_bi, s_cr, s_ci) &
         !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, wts, vb, iv, ve, vo, br)
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                s_br = 0.0
+                !$OMP SIMD REDUCTION(+:s_br) PRIVATE(tv)
                 do i = 1, imid
                     tv = ve(i, 1, k) * wts(i)
-                    br(1, np1, k) = br(1, np1, k) + vb(i, np1, iv) * tv
+                    s_br = s_br + vb(i, np1, iv) * tv
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
             end do
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                s_br = 0.0
+                !$OMP SIMD REDUCTION(+:s_br) PRIVATE(tv)
                 do i = 1, imm1
                     tv = vo(i, 1, k) * wts(i)
-                    br(1, np1, k) = br(1, np1, k) + vb(i, np1, iv) * tv
+                    s_br = s_br + vb(i, np1, iv) * tv
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
             end do
         end do
         !$OMP END PARALLEL DO
@@ -371,17 +400,21 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 call wbin(0, nlat, nlon, m, wb, iw, wwbin)
                 if (mp1 <= ndo1) then
                     !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
-                    !$OMP& PRIVATE(k, np1, i, tvo1, tvo2, twe1, twe2) &
+                    !$OMP& PRIVATE(k, np1, i, tvo1, tvo2, twe1, twe2, s_br, s_bi, s_cr, s_ci) &
                     !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, wts, vb, wb, iv, iw, vo, we, br, bi)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br) PRIVATE(tvo1,tvo2,twe1,twe2)
                             do i = 1, imm1
                                 tvo1 = vo(i, 2*mp1-1, k) * wts(i); tvo2 = vo(i, 2*mp1-2, k) * wts(i)
                                 twe1 = we(i, 2*mp1-1, k) * wts(i); twe2 = we(i, 2*mp1-2, k) * wts(i)
-                                br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * tvo2 + wb(i, np1, iw) * twe1
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb(i, np1, iv) * tvo1 - wb(i, np1, iw) * twe2
+                                s_br = s_br + vb(i, np1, iv) * tvo2 + wb(i, np1, iw) * twe1
+                                s_bi = s_bi + vb(i, np1, iv) * tvo1 - wb(i, np1, iw) * twe2
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
                             if (mlat /= 0) then
                                 i = imid
                                 br(mp1, np1, k) = br(mp1, np1, k) + wb(i, np1, iw) * we(i, 2*mp1-1, k) * wts(i)
@@ -393,17 +426,21 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end if
                 if (mp2 <= ndo2) then
                     !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
-                    !$OMP& PRIVATE(k, np1, i, tve1, tve2, two1, two2) &
+                    !$OMP& PRIVATE(k, np1, i, tve1, tve2, two1, two2, s_br, s_bi, s_cr, s_ci) &
                     !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, wts, vb, wb, iv, iw, ve, wo, br, bi)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br) PRIVATE(tve1,tve2,two1,two2)
                             do i = 1, imm1
                                 tve1 = ve(i, 2*mp1-1, k) * wts(i); tve2 = ve(i, 2*mp1-2, k) * wts(i)
                                 two1 = wo(i, 2*mp1-1, k) * wts(i); two2 = wo(i, 2*mp1-2, k) * wts(i)
-                                br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * tve2 + wb(i, np1, iw) * two1
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb(i, np1, iv) * tve1 - wb(i, np1, iw) * two2
+                                s_br = s_br + vb(i, np1, iv) * tve2 + wb(i, np1, iw) * two1
+                                s_bi = s_bi + vb(i, np1, iv) * tve1 - wb(i, np1, iw) * two2
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
                             if (mlat /= 0) then
                                 i = imid
                                 br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * ve(i, 2*mp1-2, k) * wts(i)
@@ -420,22 +457,26 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         call vbin(0, nlat, nlon, 0, vb, iv, wvbin)
         ! m=0
         !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
-        !$OMP& PRIVATE(k, np1, i, tw) &
+        !$OMP& PRIVATE(k, np1, i, tw, s_br, s_bi, s_cr, s_ci) &
         !$OMP& SHARED(nt, ndo1, ndo2, imid, imm1, wts, vb, iv, we, wo, cr)
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_cr) PRIVATE(tw)
                 do i = 1, imid
                     tw = we(i, 1, k) * wts(i)
-                    cr(1, np1, k) = cr(1, np1, k) - vb(i, np1, iv) * tw
+                    s_cr = s_cr - vb(i, np1, iv) * tw
                 end do
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_cr) PRIVATE(tw)
                 do i = 1, imm1
                     tw = wo(i, 1, k) * wts(i)
-                    cr(1, np1, k) = cr(1, np1, k) - vb(i, np1, iv) * tw
+                    s_cr = s_cr - vb(i, np1, iv) * tw
                 end do
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
         end do
         !$OMP END PARALLEL DO
@@ -447,17 +488,21 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 call wbin(0, nlat, nlon, m, wb, iw, wwbin)
                 if (mp1 <= ndo1) then
                     !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
-                    !$OMP& PRIVATE(k, np1, i, tve1, tve2, two1, two2) &
+                    !$OMP& PRIVATE(k, np1, i, tve1, tve2, two1, two2, s_br, s_bi, s_cr, s_ci) &
                     !$OMP& SHARED(nt, mp1, ndo1, imm1, imid, mlat, wts, vb, wb, iv, iw, ve, wo, cr, ci)
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_ci,s_cr) PRIVATE(tve1,tve2,two1,two2)
                             do i = 1, imm1
                                 tve1 = ve(i, 2*mp1-1, k) * wts(i); tve2 = ve(i, 2*mp1-2, k) * wts(i)
                                 two1 = wo(i, 2*mp1-1, k) * wts(i); two2 = wo(i, 2*mp1-2, k) * wts(i)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1, iv) * two2 + wb(i, np1, iw) * tve1
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb(i, np1, iv) * two1 - wb(i, np1, iw) * tve2
+                                s_cr = s_cr - vb(i, np1, iv) * two2 + wb(i, np1, iw) * tve1
+                                s_ci = s_ci - vb(i, np1, iv) * two1 - wb(i, np1, iw) * tve2
                             end do
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 i = imid
                                 cr(mp1, np1, k) = cr(mp1, np1, k) + wb(i, np1, iw) * ve(i, 2*mp1-1, k) * wts(i)
@@ -469,17 +514,21 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 end if
                 if (mp2 <= ndo2) then
                     !$OMP PARALLEL DO DEFAULT(NONE) IF (use_heavy_omp) &
-                    !$OMP& PRIVATE(k, np1, i, twe1, twe2, tvo1, tvo2) &
+                    !$OMP& PRIVATE(k, np1, i, twe1, twe2, tvo1, tvo2, s_br, s_bi, s_cr, s_ci) &
                     !$OMP& SHARED(nt, mp1, mp2, ndo2, imm1, imid, mlat, wts, vb, wb, iv, iw, we, vo, cr, ci)
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_ci,s_cr) PRIVATE(twe1,twe2,tvo1,tvo2)
                             do i = 1, imm1
                                 twe1 = we(i, 2*mp1-1, k) * wts(i); twe2 = we(i, 2*mp1-2, k) * wts(i)
                                 tvo1 = vo(i, 2*mp1-1, k) * wts(i); tvo2 = vo(i, 2*mp1-2, k) * wts(i)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1, iv) * twe2 + wb(i, np1, iw) * tvo1
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb(i, np1, iv) * twe1 - wb(i, np1, iw) * tvo2
+                                s_cr = s_cr - vb(i, np1, iv) * twe2 + wb(i, np1, iw) * tvo1
+                                s_ci = s_ci - vb(i, np1, iv) * twe1 - wb(i, np1, iw) * tvo2
                             end do
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 i = imid
                                 cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1, iv) * we(i, 2*mp1-2, k) * wts(i)
@@ -497,18 +546,22 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                s_br = 0.0
+                !$OMP SIMD REDUCTION(+:s_br) PRIVATE(tv)
                 do i = 1, imid
                     tv = ve(i, 1, k) * wts(i)
-                    br(1, np1, k) = br(1, np1, k) + vb(i, np1, iv) * tv
+                    s_br = s_br + vb(i, np1, iv) * tv
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
             end do
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_cr) PRIVATE(tw)
                 do i = 1, imm1
                     tw = wo(i, 1, k) * wts(i)
-                    cr(1, np1, k) = cr(1, np1, k) - vb(i, np1, iv) * tw
+                    s_cr = s_cr - vb(i, np1, iv) * tw
                 end do
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
         end do
         ! m>0
@@ -520,13 +573,17 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_ci,s_cr) PRIVATE(two1,two2,tve1,tve2)
                             do i = 1, imm1
                                 two1 = wo(i, 2*mp1-1, k) * wts(i); two2 = wo(i, 2*mp1-2, k) * wts(i)
                                 tve1 = ve(i, 2*mp1-1, k) * wts(i); tve2 = ve(i, 2*mp1-2, k) * wts(i)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1, iv) * two2 + wb(i, np1, iw) * tve1
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb(i, np1, iv) * two1 - wb(i, np1, iw) * tve2
+                                s_cr = s_cr - vb(i, np1, iv) * two2 + wb(i, np1, iw) * tve1
+                                s_ci = s_ci - vb(i, np1, iv) * two1 - wb(i, np1, iw) * tve2
                             end do
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 i = imid
                                 cr(mp1, np1, k) = cr(mp1, np1, k) + wb(i, np1, iw) * ve(i, 2*mp1-1, k) * wts(i)
@@ -538,13 +595,17 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br) PRIVATE(two1,two2,tve1,tve2)
                             do i = 1, imm1
                                 two1 = wo(i, 2*mp1-1, k) * wts(i); two2 = wo(i, 2*mp1-2, k) * wts(i)
                                 tve1 = ve(i, 2*mp1-1, k) * wts(i); tve2 = ve(i, 2*mp1-2, k) * wts(i)
-                                br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * tve2 + wb(i, np1, iw) * two1
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb(i, np1, iv) * tve1 - wb(i, np1, iw) * two2
+                                s_br = s_br + vb(i, np1, iv) * tve2 + wb(i, np1, iw) * two1
+                                s_bi = s_bi + vb(i, np1, iv) * tve1 - wb(i, np1, iw) * two2
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
                             if (mlat /= 0) then
                                 i = imid
                                 br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * ve(i, 2*mp1-2, k) * wts(i)
@@ -561,11 +622,13 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                s_br = 0.0
+                !$OMP SIMD REDUCTION(+:s_br) PRIVATE(tv)
                 do i = 1, imid
                     tv = ve(i, 1, k) * wts(i)
-                    br(1, np1, k) = br(1, np1, k) + vb(i, np1, iv) * tv
+                    s_br = s_br + vb(i, np1, iv) * tv
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
             end do
         end do
         ! m>0
@@ -577,13 +640,17 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br) PRIVATE(two1,two2,tve1,tve2)
                             do i = 1, imm1
                                 two1 = wo(i, 2*mp1-1, k) * wts(i); two2 = wo(i, 2*mp1-2, k) * wts(i)
                                 tve1 = ve(i, 2*mp1-1, k) * wts(i); tve2 = ve(i, 2*mp1-2, k) * wts(i)
-                                br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * tve2 + wb(i, np1, iw) * two1
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb(i, np1, iv) * tve1 - wb(i, np1, iw) * two2
+                                s_br = s_br + vb(i, np1, iv) * tve2 + wb(i, np1, iw) * two1
+                                s_bi = s_bi + vb(i, np1, iv) * tve1 - wb(i, np1, iw) * two2
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
                             if (mlat /= 0) then
                                 i = imid
                                 br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * ve(i, 2*mp1-2, k) * wts(i)
@@ -600,11 +667,13 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_cr) PRIVATE(tw)
                 do i = 1, imm1
                     tw = wo(i, 1, k) * wts(i)
-                    cr(1, np1, k) = cr(1, np1, k) - vb(i, np1, iv) * tw
+                    s_cr = s_cr - vb(i, np1, iv) * tw
                 end do
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
         end do
         ! m>0
@@ -616,13 +685,17 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_ci,s_cr) PRIVATE(two1,two2,tve1,tve2)
                             do i = 1, imm1
                                 two1 = wo(i, 2*mp1-1, k) * wts(i); two2 = wo(i, 2*mp1-2, k) * wts(i)
                                 tve1 = ve(i, 2*mp1-1, k) * wts(i); tve2 = ve(i, 2*mp1-2, k) * wts(i)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1, iv) * two2 + wb(i, np1, iw) * tve1
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb(i, np1, iv) * two1 - wb(i, np1, iw) * tve2
+                                s_cr = s_cr - vb(i, np1, iv) * two2 + wb(i, np1, iw) * tve1
+                                s_ci = s_ci - vb(i, np1, iv) * two1 - wb(i, np1, iw) * tve2
                             end do
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 i = imid
                                 cr(mp1, np1, k) = cr(mp1, np1, k) + wb(i, np1, iw) * ve(i, 2*mp1-1, k) * wts(i)
@@ -639,18 +712,22 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_cr) PRIVATE(tw)
                 do i = 1, imid
                     tw = we(i, 1, k) * wts(i)
-                    cr(1, np1, k) = cr(1, np1, k) - vb(i, np1, iv) * tw
+                    s_cr = s_cr - vb(i, np1, iv) * tw
                 end do
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                s_br = 0.0
+                !$OMP SIMD REDUCTION(+:s_br) PRIVATE(tv)
                 do i = 1, imm1
                     tv = vo(i, 1, k) * wts(i)
-                    br(1, np1, k) = br(1, np1, k) + vb(i, np1, iv) * tv
+                    s_br = s_br + vb(i, np1, iv) * tv
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
             end do
         end do
         ! m>0
@@ -662,13 +739,17 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br) PRIVATE(twe1,twe2,tvo1,tvo2)
                             do i = 1, imm1
                                 twe1 = we(i, 2*mp1-1, k) * wts(i); twe2 = we(i, 2*mp1-2, k) * wts(i)
                                 tvo1 = vo(i, 2*mp1-1, k) * wts(i); tvo2 = vo(i, 2*mp1-2, k) * wts(i)
-                                br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * tvo2 + wb(i, np1, iw) * twe1
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb(i, np1, iv) * tvo1 - wb(i, np1, iw) * twe2
+                                s_br = s_br + vb(i, np1, iv) * tvo2 + wb(i, np1, iw) * twe1
+                                s_bi = s_bi + vb(i, np1, iv) * tvo1 - wb(i, np1, iw) * twe2
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
                             if (mlat /= 0) then
                                 i = imid
                                 br(mp1, np1, k) = br(mp1, np1, k) + wb(i, np1, iw) * we(i, 2*mp1-1, k) * wts(i)
@@ -680,13 +761,17 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_ci,s_cr) PRIVATE(twe1,twe2,tvo1,tvo2)
                             do i = 1, imm1
                                 twe1 = we(i, 2*mp1-1, k) * wts(i); twe2 = we(i, 2*mp1-2, k) * wts(i)
                                 tvo1 = vo(i, 2*mp1-1, k) * wts(i); tvo2 = vo(i, 2*mp1-2, k) * wts(i)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1, iv) * twe2 + wb(i, np1, iw) * tvo1
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb(i, np1, iv) * twe1 - wb(i, np1, iw) * tvo2
+                                s_cr = s_cr - vb(i, np1, iv) * twe2 + wb(i, np1, iw) * tvo1
+                                s_ci = s_ci - vb(i, np1, iv) * twe1 - wb(i, np1, iw) * tvo2
                             end do
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 i = imid
                                 cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1, iv) * we(i, 2*mp1-2, k) * wts(i)
@@ -703,11 +788,13 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 3, ndo1, 2
-                !$OMP SIMD
+                s_br = 0.0
+                !$OMP SIMD REDUCTION(+:s_br) PRIVATE(tv)
                 do i = 1, imm1
                     tv = vo(i, 1, k) * wts(i)
-                    br(1, np1, k) = br(1, np1, k) + vb(i, np1, iv) * tv
+                    s_br = s_br + vb(i, np1, iv) * tv
                 end do
+                br(1, np1, k) = br(1, np1, k) + s_br
             end do
         end do
         ! m>0
@@ -719,13 +806,17 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp1 <= ndo1) then
                     do k = 1, nt
                         do np1 = mp1, ndo1, 2
-                            !$OMP SIMD
+                            s_bi = 0.0
+                            s_br = 0.0
+                            !$OMP SIMD REDUCTION(+:s_bi,s_br) PRIVATE(twe1,twe2,tvo1,tvo2)
                             do i = 1, imm1
                                 twe1 = we(i, 2*mp1-1, k) * wts(i); twe2 = we(i, 2*mp1-2, k) * wts(i)
                                 tvo1 = vo(i, 2*mp1-1, k) * wts(i); tvo2 = vo(i, 2*mp1-2, k) * wts(i)
-                                br(mp1, np1, k) = br(mp1, np1, k) + vb(i, np1, iv) * tvo2 + wb(i, np1, iw) * twe1
-                                bi(mp1, np1, k) = bi(mp1, np1, k) + vb(i, np1, iv) * tvo1 - wb(i, np1, iw) * twe2
+                                s_br = s_br + vb(i, np1, iv) * tvo2 + wb(i, np1, iw) * twe1
+                                s_bi = s_bi + vb(i, np1, iv) * tvo1 - wb(i, np1, iw) * twe2
                             end do
+                            bi(mp1, np1, k) = bi(mp1, np1, k) + s_bi
+                            br(mp1, np1, k) = br(mp1, np1, k) + s_br
                             if (mlat /= 0) then
                                 i = imid
                                 br(mp1, np1, k) = br(mp1, np1, k) + wb(i, np1, iw) * we(i, 2*mp1-1, k) * wts(i)
@@ -742,11 +833,13 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
         ! m=0
         do k = 1, nt
             do np1 = 2, ndo2, 2
-                !$OMP SIMD
+                s_cr = 0.0
+                !$OMP SIMD REDUCTION(+:s_cr) PRIVATE(tw)
                 do i = 1, imid
                     tw = we(i, 1, k) * wts(i)
-                    cr(1, np1, k) = cr(1, np1, k) - vb(i, np1, iv) * tw
+                    s_cr = s_cr - vb(i, np1, iv) * tw
                 end do
+                cr(1, np1, k) = cr(1, np1, k) + s_cr
             end do
         end do
         ! m>0
@@ -758,13 +851,17 @@ subroutine vhagc1(nlat, nlon, ityp, nt, imid, idvw, jdvw, v, w, mdab, &
                 if (mp2 <= ndo2) then
                     do k = 1, nt
                         do np1 = mp2, ndo2, 2
-                            !$OMP SIMD
+                            s_ci = 0.0
+                            s_cr = 0.0
+                            !$OMP SIMD REDUCTION(+:s_ci,s_cr) PRIVATE(twe1,twe2,tvo1,tvo2)
                             do i = 1, imm1
                                 twe1 = we(i, 2*mp1-1, k) * wts(i); twe2 = we(i, 2*mp1-2, k) * wts(i)
                                 tvo1 = vo(i, 2*mp1-1, k) * wts(i); tvo2 = vo(i, 2*mp1-2, k) * wts(i)
-                                cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1, iv) * twe2 + wb(i, np1, iw) * tvo1
-                                ci(mp1, np1, k) = ci(mp1, np1, k) - vb(i, np1, iv) * twe1 - wb(i, np1, iw) * tvo2
+                                s_cr = s_cr - vb(i, np1, iv) * twe2 + wb(i, np1, iw) * tvo1
+                                s_ci = s_ci - vb(i, np1, iv) * twe1 - wb(i, np1, iw) * tvo2
                             end do
+                            ci(mp1, np1, k) = ci(mp1, np1, k) + s_ci
+                            cr(mp1, np1, k) = cr(mp1, np1, k) + s_cr
                             if (mlat /= 0) then
                                 i = imid
                                 cr(mp1, np1, k) = cr(mp1, np1, k) - vb(i, np1, iv) * we(i, 2*mp1-2, k) * wts(i)

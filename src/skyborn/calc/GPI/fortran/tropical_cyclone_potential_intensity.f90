@@ -76,7 +76,11 @@ subroutine calculate_pi_gridded_data(sst_in, psl_in, pressure_levels, temp_in, m
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
     real :: dummy_outflow_temp, dummy_outflow_level
     real :: dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd
-    integer :: ilat, ilon, k
+    integer :: ilat, ilon, k, local_error_flag, worst_flag
+
+    ! Initialize the status so an all-masked grid still reports success
+    error_flag = 1
+    worst_flag = -1
 
     ! Sequential loops with optimal cache locality for small-scale data
     do ilon = 1, nlon
@@ -104,10 +108,13 @@ subroutine calculate_pi_gridded_data(sst_in, psl_in, pressure_levels, temp_in, m
                                  mixing_ratio_gkg, num_levels, num_levels, &
                                  min_pressure(ilat, ilon), max_wind(ilat, ilon), &
                                  dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, &
-                                 dummy_lneff, dummy_lndiseq, dummy_lnckcd, error_flag, &
+                                 dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag, &
                                  0, 0.9)
+            if (local_error_flag /= 1) worst_flag = max(worst_flag, local_error_flag)
         end do
     end do
+
+    if (worst_flag >= 0) error_flag = worst_flag
 
 end subroutine calculate_pi_gridded_data
 
@@ -157,9 +164,10 @@ subroutine calculate_pi_gridded_with_missing(sst_in, psl_in, pressure_levels, te
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
     real :: dummy_outflow_temp, dummy_outflow_level
     real :: dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd
-    integer :: ilat, ilon, k, valid_start_level
+    integer :: ilat, ilon, k, valid_start_level, local_error_flag, worst_flag
 
     error_flag = 1
+    worst_flag = -1
 
     ! Sequential loops for missing value handling with SST/PSL pre-check optimization
     do ilon = 1, nlon
@@ -211,10 +219,13 @@ subroutine calculate_pi_gridded_with_missing(sst_in, psl_in, pressure_levels, te
                                  num_levels - valid_start_level + 1, &
                                  min_pressure(ilat, ilon), max_wind(ilat, ilon), &
                                  dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, &
-                                 dummy_lneff, dummy_lndiseq, dummy_lnckcd, error_flag, &
+                                 dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag, &
                                  0, 0.9)
+            if (local_error_flag /= 1) worst_flag = max(worst_flag, local_error_flag)
         end do
     end do
+
+    if (worst_flag >= 0) error_flag = worst_flag
 
 end subroutine calculate_pi_gridded_with_missing
 
@@ -255,7 +266,7 @@ subroutine calculate_pi_gridded_diagnostics(sst_in, psl_in, pressure_levels, tem
     real :: sst_celsius, psl_mb, ckcd_value
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
     real :: dummy_lnckcd
-    integer :: ilat, ilon, k, outflow_flag, local_error_flag
+    integer :: ilat, ilon, k, outflow_flag, local_error_flag, worst_flag
 
     outflow_flag = outflow_source_flag
     ckcd_value = 0.9
@@ -265,7 +276,9 @@ subroutine calculate_pi_gridded_diagnostics(sst_in, psl_in, pressure_levels, tem
     lnckcd = UNDEF
     if (ckcd_value > 0.0) lnckcd = log(ckcd_value)
 
-    !$omp parallel do default(shared) private(ilon, ilat, k, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) schedule(static)
+    worst_flag = -1
+
+    !$omp parallel do default(shared) private(ilon, ilat, k, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) reduction(max:worst_flag) schedule(static)
     do ilon = 1, nlon
         do ilat = 1, nlat
             psl_mb = psl_in(ilat, ilon) * PA_TO_MB
@@ -295,10 +308,11 @@ subroutine calculate_pi_gridded_diagnostics(sst_in, psl_in, pressure_levels, tem
                 outflow_temp(ilat, ilon), outflow_level(ilat, ilon), lnpi(ilat, ilon), &
                 lneff(ilat, ilon), lndiseq(ilat, ilon), dummy_lnckcd, local_error_flag, &
                 outflow_flag, ckcd_value)
-            if (local_error_flag /= 1) error_flag = local_error_flag
+            if (local_error_flag /= 1) worst_flag = max(worst_flag, local_error_flag)
         end do
     end do
     !$omp end parallel do
+    if (worst_flag >= 0) error_flag = worst_flag
 
 end subroutine calculate_pi_gridded_diagnostics
 
@@ -340,7 +354,7 @@ subroutine calculate_pi_gridded_diagnostics_with_missing(sst_in, psl_in, pressur
     real :: sst_celsius, psl_mb, ckcd_value
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
     real :: dummy_lnckcd
-    integer :: ilat, ilon, k, valid_start_level, outflow_flag, local_error_flag
+    integer :: ilat, ilon, k, valid_start_level, outflow_flag, local_error_flag, worst_flag
 
     outflow_flag = outflow_source_flag
     ckcd_value = 0.9
@@ -350,7 +364,9 @@ subroutine calculate_pi_gridded_diagnostics_with_missing(sst_in, psl_in, pressur
     lnckcd = UNDEF
     if (ckcd_value > 0.0) lnckcd = log(ckcd_value)
 
-    !$omp parallel do default(shared) private(ilon, ilat, k, valid_start_level, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) schedule(static)
+    worst_flag = -1
+
+    !$omp parallel do default(shared) private(ilon, ilat, k, valid_start_level, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) reduction(max:worst_flag) schedule(static)
     do ilon = 1, nlon
         do ilat = 1, nlat
             if (sst_in(ilat, ilon) == UNDEF) then
@@ -409,10 +425,11 @@ subroutine calculate_pi_gridded_diagnostics_with_missing(sst_in, psl_in, pressur
                 min_pressure(ilat, ilon), max_wind(ilat, ilon), outflow_temp(ilat, ilon), &
                 outflow_level(ilat, ilon), lnpi(ilat, ilon), lneff(ilat, ilon), &
                 lndiseq(ilat, ilon), dummy_lnckcd, local_error_flag, outflow_flag, ckcd_value)
-            if (local_error_flag /= 1) error_flag = local_error_flag
+            if (local_error_flag /= 1) worst_flag = max(worst_flag, local_error_flag)
         end do
     end do
     !$omp end parallel do
+    if (worst_flag >= 0) error_flag = worst_flag
 
 end subroutine calculate_pi_gridded_diagnostics_with_missing
 
@@ -874,14 +891,15 @@ subroutine calculate_pi_4d_data(sst_in, psl_in, pressure_levels, temp_in, mixing
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
     real :: dummy_outflow_temp, dummy_outflow_level
     real :: dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd
-    integer :: ilat, ilon, k, t, local_error_flag
+    integer :: ilat, ilon, k, t, local_error_flag, worst_flag
 
     ! Initialize error flag
     error_flag = 1
 
     ! MEMORY-OPTIMAL LOOP ORDER: j->i->t (4.2x performance improvement)
     ! Based on Fortran column-major storage and cache optimization
-    !$omp parallel do default(shared) private(ilon, ilat, t, k, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag) schedule(static)
+    worst_flag = -1
+    !$omp parallel do default(shared) private(ilon, ilat, t, k, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag) reduction(max:worst_flag) schedule(static)
     do ilon = 1, nlon
         do ilat = 1, nlat
             do t = 1, num_times
@@ -910,11 +928,12 @@ subroutine calculate_pi_4d_data(sst_in, psl_in, pressure_levels, temp_in, mixing
                                      dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, &
                                      dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag, &
                                      0, 0.9)
-                if (local_error_flag /= 1) error_flag = local_error_flag
+                if (local_error_flag /= 1) worst_flag = max(worst_flag, local_error_flag)
             end do
         end do
     end do
     !$omp end parallel do
+    if (worst_flag >= 0) error_flag = worst_flag
 
 end subroutine calculate_pi_4d_data
 
@@ -951,7 +970,7 @@ subroutine calculate_pi_4d_diagnostics(sst_in, psl_in, pressure_levels, temp_in,
     real :: sst_celsius, psl_mb, ckcd_value
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
     real :: dummy_lnckcd
-    integer :: ilat, ilon, k, t, outflow_flag, local_error_flag
+    integer :: ilat, ilon, k, t, outflow_flag, local_error_flag, worst_flag
 
     outflow_flag = outflow_source_flag
     ckcd_value = 0.9
@@ -961,7 +980,9 @@ subroutine calculate_pi_4d_diagnostics(sst_in, psl_in, pressure_levels, temp_in,
     lnckcd = UNDEF
     if (ckcd_value > 0.0) lnckcd = log(ckcd_value)
 
-    !$omp parallel do default(shared) private(ilon, ilat, t, k, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) schedule(static)
+    worst_flag = -1
+
+    !$omp parallel do default(shared) private(ilon, ilat, t, k, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) reduction(max:worst_flag) schedule(static)
     do ilon = 1, nlon
         do ilat = 1, nlat
             do t = 1, num_times
@@ -992,11 +1013,12 @@ subroutine calculate_pi_4d_diagnostics(sst_in, psl_in, pressure_levels, temp_in,
                     outflow_temp(t, ilat, ilon), outflow_level(t, ilat, ilon), lnpi(t, ilat, ilon), &
                     lneff(t, ilat, ilon), lndiseq(t, ilat, ilon), dummy_lnckcd, local_error_flag, &
                     outflow_flag, ckcd_value)
-                if (local_error_flag /= 1) error_flag = local_error_flag
+                if (local_error_flag /= 1) worst_flag = max(worst_flag, local_error_flag)
             end do
         end do
     end do
     !$omp end parallel do
+    if (worst_flag >= 0) error_flag = worst_flag
 
 end subroutine calculate_pi_4d_diagnostics
 
@@ -1051,14 +1073,15 @@ subroutine calculate_pi_4d_with_missing(sst_in, psl_in, pressure_levels, temp_in
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
     real :: dummy_outflow_temp, dummy_outflow_level
     real :: dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd
-    integer :: ilat, ilon, k, t, valid_start_level, local_error_flag
+    integer :: ilat, ilon, k, t, valid_start_level, local_error_flag, worst_flag
 
     ! Initialize error flag
     error_flag = 1
 
     ! MEMORY-OPTIMAL LOOP ORDER: j->i->t (4.2x performance improvement)
     ! Based on Fortran column-major storage and cache optimization
-    !$omp parallel do default(shared) private(ilon, ilat, t, k, valid_start_level, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag) schedule(static)
+    worst_flag = -1
+    !$omp parallel do default(shared) private(ilon, ilat, t, k, valid_start_level, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag) reduction(max:worst_flag) schedule(static)
     do ilon = 1, nlon
         do ilat = 1, nlat
             do t = 1, num_times
@@ -1111,11 +1134,12 @@ subroutine calculate_pi_4d_with_missing(sst_in, psl_in, pressure_levels, temp_in
                                      dummy_outflow_temp, dummy_outflow_level, dummy_lnpi, &
                                      dummy_lneff, dummy_lndiseq, dummy_lnckcd, local_error_flag, &
                                      0, 0.9)
-                if (local_error_flag /= 1) error_flag = local_error_flag
+                if (local_error_flag /= 1) worst_flag = max(worst_flag, local_error_flag)
             end do
         end do
     end do
     !$omp end parallel do
+    if (worst_flag >= 0) error_flag = worst_flag
 
 end subroutine calculate_pi_4d_with_missing
 
@@ -1153,7 +1177,7 @@ subroutine calculate_pi_4d_diagnostics_with_missing(sst_in, psl_in, pressure_lev
     real :: sst_celsius, psl_mb, ckcd_value
     real :: temp_celsius(num_levels), mixing_ratio_gkg(num_levels)
     real :: dummy_lnckcd
-    integer :: ilat, ilon, k, t, valid_start_level, outflow_flag, local_error_flag
+    integer :: ilat, ilon, k, t, valid_start_level, outflow_flag, local_error_flag, worst_flag
 
     outflow_flag = outflow_source_flag
     ckcd_value = 0.9
@@ -1163,7 +1187,9 @@ subroutine calculate_pi_4d_diagnostics_with_missing(sst_in, psl_in, pressure_lev
     lnckcd = UNDEF
     if (ckcd_value > 0.0) lnckcd = log(ckcd_value)
 
-    !$omp parallel do default(shared) private(ilon, ilat, t, k, valid_start_level, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) schedule(static)
+    worst_flag = -1
+
+    !$omp parallel do default(shared) private(ilon, ilat, t, k, valid_start_level, sst_celsius, psl_mb, temp_celsius, mixing_ratio_gkg, dummy_lnckcd, local_error_flag) reduction(max:worst_flag) schedule(static)
     do ilon = 1, nlon
         do ilat = 1, nlat
             do t = 1, num_times
@@ -1223,11 +1249,12 @@ subroutine calculate_pi_4d_diagnostics_with_missing(sst_in, psl_in, pressure_lev
                     min_pressure(t, ilat, ilon), max_wind(t, ilat, ilon), outflow_temp(t, ilat, ilon), &
                     outflow_level(t, ilat, ilon), lnpi(t, ilat, ilon), lneff(t, ilat, ilon), &
                     lndiseq(t, ilat, ilon), dummy_lnckcd, local_error_flag, outflow_flag, ckcd_value)
-                if (local_error_flag /= 1) error_flag = local_error_flag
+                if (local_error_flag /= 1) worst_flag = max(worst_flag, local_error_flag)
             end do
         end do
     end do
     !$omp end parallel do
+    if (worst_flag >= 0) error_flag = worst_flag
 
 end subroutine calculate_pi_4d_diagnostics_with_missing
 

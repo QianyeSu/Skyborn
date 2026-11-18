@@ -17,6 +17,7 @@ subroutine specintrp(rlon, ntrunc, datnm, scrm, pnm, ob)
     ! Local variables
     integer :: m, n, nm, nmstrt, mwaves
     real :: m_rlon, cos_m_rlon, sin_m_rlon
+    complex :: csum
     complex, parameter :: zero = (0.0, 0.0)
 
     mwaves = ntrunc + 1
@@ -24,13 +25,14 @@ subroutine specintrp(rlon, ntrunc, datnm, scrm, pnm, ob)
     ! First pass: compute Fourier coefficients in latitude direction
     nmstrt = 0
     do m = 1, mwaves
-        scrm(m) = zero
+        csum = zero
 
-        !$OMP SIMD PRIVATE(nm)
+        !$OMP SIMD REDUCTION(+:csum) PRIVATE(nm)
         do n = 1, mwaves - m + 1
             nm = nmstrt + n
-            scrm(m) = scrm(m) + datnm(nm) * pnm(nm)
+            csum = csum + datnm(nm) * pnm(nm)
         end do
+        scrm(m) = csum
         nmstrt = nmstrt + mwaves - m + 1
     end do
 
@@ -39,7 +41,7 @@ subroutine specintrp(rlon, ntrunc, datnm, scrm, pnm, ob)
     ob = real(scrm(1))
 
     ! Add m>=2 terms with optimized trigonometric evaluation
-    !$OMP SIMD PRIVATE(m_rlon, cos_m_rlon, sin_m_rlon)
+    !$OMP SIMD REDUCTION(+:ob) PRIVATE(m_rlon, cos_m_rlon, sin_m_rlon)
     do m = 2, mwaves
         m_rlon = real(m-1) * rlon
         cos_m_rlon = cos(m_rlon)

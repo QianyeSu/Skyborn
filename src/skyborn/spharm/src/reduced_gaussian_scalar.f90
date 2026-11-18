@@ -9,28 +9,24 @@
 module reduced_gaussian_fft_cache_mod
     implicit none
 
-    integer, save :: reduced_gaussian_fft_cache_nlat = 0
-    integer, save :: reduced_gaussian_fft_cache_max_wsave = 0
-    integer, save :: reduced_gaussian_vector_fft_cache_nlat = 0
-    integer, save :: reduced_gaussian_vector_fft_cache_ntrunc = -1
-    integer, allocatable, save :: reduced_gaussian_fft_cache_pl(:)
-    real, allocatable, save :: reduced_gaussian_fft_wsave(:, :)
-    double precision, allocatable, save :: reduced_gaussian_u_cos_fft(:, :)
-    double precision, allocatable, save :: reduced_gaussian_u_sin_fft(:, :)
-    double precision, allocatable, save :: reduced_gaussian_v_cos_fft(:, :)
-    double precision, allocatable, save :: reduced_gaussian_v_sin_fft(:, :)
+    ! The FFT trigonometric tables are built per call into caller-owned
+    ! storage. There is deliberately no process-wide cache: a shared cache
+    ! would need locking on every access and could be rebuilt by one caller
+    ! while another is still transforming with it. Building the tables costs
+    ! O(sum(pl)) trigonometric evaluations, which is negligible next to the
+    ! transform itself.
 
 contains
 
-    subroutine reduced_gaussian_prepare_fft_cache(pl, nlat, ierror)
+    subroutine reduced_gaussian_build_fft_wsave(pl, nlat, wsave, ierror)
         implicit none
 
         integer, intent(in) :: nlat
         integer, intent(in) :: pl(nlat)
+        real, allocatable, intent(out) :: wsave(:, :)
         integer, intent(out) :: ierror
 
         integer :: j, max_nlon, max_wsave, alloc_status
-        logical :: cache_matches
 
         external :: hrffti
 
@@ -44,124 +40,19 @@ contains
         end do
         max_wsave = 2 * max_nlon + 15
 
-        cache_matches = allocated(reduced_gaussian_fft_cache_pl) .and. &
-            allocated(reduced_gaussian_fft_wsave) .and. &
-            reduced_gaussian_fft_cache_nlat == nlat .and. &
-            reduced_gaussian_fft_cache_max_wsave >= max_wsave
-        if (cache_matches) then
-            if (all(reduced_gaussian_fft_cache_pl(1:nlat) == pl(1:nlat))) then
-                ierror = 0
-                return
-            end if
-        end if
-
-!$omp critical
-        cache_matches = allocated(reduced_gaussian_fft_cache_pl) .and. &
-            allocated(reduced_gaussian_fft_wsave) .and. &
-            reduced_gaussian_fft_cache_nlat == nlat .and. &
-            reduced_gaussian_fft_cache_max_wsave >= max_wsave
-        if (cache_matches) then
-            if (all(reduced_gaussian_fft_cache_pl(1:nlat) == pl(1:nlat))) then
-                ierror = 0
-            else
-                cache_matches = .false.
-            end if
-        end if
-
-        if (.not. cache_matches) then
-            if (allocated(reduced_gaussian_fft_cache_pl)) then
-                deallocate(reduced_gaussian_fft_cache_pl)
-            end if
-            if (allocated(reduced_gaussian_fft_wsave)) then
-                deallocate(reduced_gaussian_fft_wsave)
-            end if
-
-            allocate(reduced_gaussian_fft_cache_pl(nlat), &
-                     reduced_gaussian_fft_wsave(max_wsave, nlat), &
-                     stat=alloc_status)
-            if (alloc_status /= 0) then
-                reduced_gaussian_fft_cache_nlat = 0
-                reduced_gaussian_fft_cache_max_wsave = 0
-                ierror = 2
-            else
-                reduced_gaussian_fft_cache_pl(:) = pl(:)
-                reduced_gaussian_fft_wsave(:, :) = 0.0
-                do j = 1, nlat
-                    call hrffti(pl(j), reduced_gaussian_fft_wsave(1, j))
-                end do
-                reduced_gaussian_fft_cache_nlat = nlat
-                reduced_gaussian_fft_cache_max_wsave = max_wsave
-                ierror = 0
-            end if
-        end if
-!$omp end critical
-
-    end subroutine reduced_gaussian_prepare_fft_cache
-
-    subroutine reduced_gaussian_prepare_vector_fft_cache(nlat, ntrunc, ierror)
-        implicit none
-
-        integer, intent(in) :: nlat, ntrunc
-        integer, intent(out) :: ierror
-
-        integer :: alloc_status
-        logical :: cache_matches
-
-        ierror = 1
-        if (nlat < 1 .or. ntrunc < 0) return
-
-        cache_matches = allocated(reduced_gaussian_u_cos_fft) .and. &
-            allocated(reduced_gaussian_u_sin_fft) .and. &
-            allocated(reduced_gaussian_v_cos_fft) .and. &
-            allocated(reduced_gaussian_v_sin_fft) .and. &
-            reduced_gaussian_vector_fft_cache_nlat == nlat .and. &
-            reduced_gaussian_vector_fft_cache_ntrunc >= ntrunc
-        if (cache_matches) then
-            ierror = 0
+        allocate(wsave(max_wsave, nlat), stat=alloc_status)
+        if (alloc_status /= 0) then
+            ierror = 2
             return
         end if
 
-!$omp critical
-        cache_matches = allocated(reduced_gaussian_u_cos_fft) .and. &
-            allocated(reduced_gaussian_u_sin_fft) .and. &
-            allocated(reduced_gaussian_v_cos_fft) .and. &
-            allocated(reduced_gaussian_v_sin_fft) .and. &
-            reduced_gaussian_vector_fft_cache_nlat == nlat .and. &
-            reduced_gaussian_vector_fft_cache_ntrunc >= ntrunc
-        if (cache_matches) then
-            ierror = 0
-        else
-            if (allocated(reduced_gaussian_u_cos_fft)) then
-                deallocate(reduced_gaussian_u_cos_fft)
-            end if
-            if (allocated(reduced_gaussian_u_sin_fft)) then
-                deallocate(reduced_gaussian_u_sin_fft)
-            end if
-            if (allocated(reduced_gaussian_v_cos_fft)) then
-                deallocate(reduced_gaussian_v_cos_fft)
-            end if
-            if (allocated(reduced_gaussian_v_sin_fft)) then
-                deallocate(reduced_gaussian_v_sin_fft)
-            end if
+        wsave(:, :) = 0.0
+        do j = 1, nlat
+            call hrffti(pl(j), wsave(1, j))
+        end do
+        ierror = 0
 
-            allocate(reduced_gaussian_u_cos_fft(nlat, 0:ntrunc), &
-                     reduced_gaussian_u_sin_fft(nlat, 0:ntrunc), &
-                     reduced_gaussian_v_cos_fft(nlat, 0:ntrunc), &
-                     reduced_gaussian_v_sin_fft(nlat, 0:ntrunc), &
-                     stat=alloc_status)
-            if (alloc_status /= 0) then
-                reduced_gaussian_vector_fft_cache_nlat = 0
-                reduced_gaussian_vector_fft_cache_ntrunc = -1
-                ierror = 2
-            else
-                reduced_gaussian_vector_fft_cache_nlat = nlat
-                reduced_gaussian_vector_fft_cache_ntrunc = ntrunc
-                ierror = 0
-            end if
-        end if
-!$omp end critical
-
-    end subroutine reduced_gaussian_prepare_vector_fft_cache
+    end subroutine reduced_gaussian_build_fft_wsave
 
 end module reduced_gaussian_fft_cache_mod
 
@@ -331,9 +222,10 @@ end subroutine reduced_gaussian_legendre_derivative_basis
 
 subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
                                       ngptot, nlat, ntrunc, nt, ierror)
-    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
-        reduced_gaussian_fft_wsave
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_build_fft_wsave
     implicit none
+
+    real, allocatable :: reduced_gaussian_fft_wsave(:, :)
 
     integer, intent(in) :: ngptot, nlat, ntrunc, nt
     real, intent(in) :: datagrid(ngptot, nt)
@@ -375,7 +267,7 @@ subroutine reduced_gaussian_grdtospec(datagrid, pl, weights, basis, dataspec, &
     ierror = 4
     if (total /= ngptot) return
 
-    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    call reduced_gaussian_build_fft_wsave(pl, nlat, reduced_gaussian_fft_wsave, alloc_status)
     ierror = 5
     if (alloc_status /= 0) return
 
@@ -456,9 +348,10 @@ end subroutine reduced_gaussian_grdtospec
 
 subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
                                       nmdim, nlat, ntrunc, nt, ngptot, ierror)
-    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
-        reduced_gaussian_fft_wsave
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_build_fft_wsave
     implicit none
+
+    real, allocatable :: reduced_gaussian_fft_wsave(:, :)
 
     integer, intent(in) :: nmdim, nlat, ntrunc, nt, ngptot
     complex, intent(in) :: dataspec(nmdim, nt)
@@ -509,7 +402,7 @@ subroutine reduced_gaussian_spectogrd(dataspec, pl, basis, datagrid, &
         if (pl(j) /= pl(nlat - j + 1)) symmetric_pl = .false.
     end do
 
-    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    call reduced_gaussian_build_fft_wsave(pl, nlat, reduced_gaussian_fft_wsave, alloc_status)
     ierror = 6
     if (alloc_status /= 0) return
 
@@ -742,9 +635,10 @@ end subroutine reduced_gaussian_spectogrd
 subroutine reduced_gaussian_spectogrd_pair(speca, specb, pl, basis, &
                                            grida, gridb, nmdim, nlat, &
                                            ntrunc, nt, ngptot, ierror)
-    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
-        reduced_gaussian_fft_wsave
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_build_fft_wsave
     implicit none
+
+    real, allocatable :: reduced_gaussian_fft_wsave(:, :)
 
     integer, intent(in) :: nmdim, nlat, ntrunc, nt, ngptot
     complex, intent(in) :: speca(nmdim, nt)
@@ -800,7 +694,7 @@ subroutine reduced_gaussian_spectogrd_pair(speca, specb, pl, basis, &
     ierror = 5
     if (total /= ngptot) return
 
-    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    call reduced_gaussian_build_fft_wsave(pl, nlat, reduced_gaussian_fft_wsave, alloc_status)
     ierror = 6
     if (alloc_status /= 0) return
 
@@ -1050,9 +944,10 @@ end subroutine reduced_gaussian_spectogrd_pair
 subroutine reduced_gaussian_getgrad(dataspec, pl, basis, dbasis, sin_theta, &
                                     ugrad, vgrad, nmdim, nlat, ntrunc, nt, &
                                     ngptot, rsphere, ierror)
-    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
-        reduced_gaussian_fft_wsave
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_build_fft_wsave
     implicit none
+
+    real, allocatable :: reduced_gaussian_fft_wsave(:, :)
 
     integer, intent(in) :: nmdim, nlat, ntrunc, nt, ngptot
     integer, intent(in) :: pl(nlat)
@@ -1121,7 +1016,7 @@ subroutine reduced_gaussian_getgrad(dataspec, pl, basis, dbasis, sin_theta, &
         if (pl(j) /= pl(nlat - j + 1)) symmetric_pl = .false.
     end do
 
-    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    call reduced_gaussian_build_fft_wsave(pl, nlat, reduced_gaussian_fft_wsave, alloc_status)
     ierror = 7
     if (alloc_status /= 0) return
 
@@ -1416,9 +1311,10 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
                                          sin_theta, a_ugrad, a_vgrad, &
                                          b_ugrad, b_vgrad, nmdim, nlat, &
                                          ntrunc, nt, ngptot, rsphere, ierror)
-    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
-        reduced_gaussian_fft_wsave
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_build_fft_wsave
     implicit none
+
+    real, allocatable :: reduced_gaussian_fft_wsave(:, :)
 
     integer, intent(in) :: nmdim, nlat, ntrunc, nt, ngptot
     integer, intent(in) :: pl(nlat)
@@ -1501,7 +1397,7 @@ subroutine reduced_gaussian_getgrad_pair(speca, specb, pl, basis, dbasis, &
     ierror = 6
     if (total /= ngptot) return
 
-    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    call reduced_gaussian_build_fft_wsave(pl, nlat, reduced_gaussian_fft_wsave, alloc_status)
     ierror = 7
     if (alloc_status /= 0) return
 
@@ -1941,11 +1837,14 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
                                           dbasis, sin_theta, vrtspec, divspec, &
                                           ngptot, nlat, ntrunc, nt, rsphere, &
                                           ierror)
-    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
-        reduced_gaussian_prepare_vector_fft_cache, reduced_gaussian_fft_wsave, &
-        reduced_gaussian_u_cos_fft, reduced_gaussian_u_sin_fft, &
-        reduced_gaussian_v_cos_fft, reduced_gaussian_v_sin_fft
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_build_fft_wsave
     implicit none
+
+    real, allocatable :: reduced_gaussian_fft_wsave(:, :)
+    double precision, allocatable :: reduced_gaussian_u_cos_fft(:, :)
+    double precision, allocatable :: reduced_gaussian_u_sin_fft(:, :)
+    double precision, allocatable :: reduced_gaussian_v_cos_fft(:, :)
+    double precision, allocatable :: reduced_gaussian_v_sin_fft(:, :)
 
     integer, intent(in) :: ngptot, nlat, ntrunc, nt
     real, intent(in) :: ugrid(ngptot, nt)
@@ -2013,13 +1912,22 @@ subroutine reduced_gaussian_getvrtdivspec(ugrid, vgrid, pl, weights, basis, &
     ierror = 5
     if (total /= ngptot) return
 
-    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    call reduced_gaussian_build_fft_wsave(pl, nlat, reduced_gaussian_fft_wsave, alloc_status)
     ierror = 6
     if (alloc_status /= 0) return
 
-    call reduced_gaussian_prepare_vector_fft_cache(nlat, ntrunc, alloc_status)
+    ! Per-call work arrays (never shared between concurrent calls).
+    allocate(reduced_gaussian_u_cos_fft(nlat, 0:ntrunc), &
+             reduced_gaussian_u_sin_fft(nlat, 0:ntrunc), &
+             reduced_gaussian_v_cos_fft(nlat, 0:ntrunc), &
+             reduced_gaussian_v_sin_fft(nlat, 0:ntrunc), &
+             stat=alloc_status)
     ierror = 7
     if (alloc_status /= 0) return
+    reduced_gaussian_u_cos_fft(:, :) = 0.0d0
+    reduced_gaussian_u_sin_fft(:, :) = 0.0d0
+    reduced_gaussian_v_cos_fft(:, :) = 0.0d0
+    reduced_gaussian_v_sin_fft(:, :) = 0.0d0
 
     inv_r = 1.0d0 / dble(rsphere)
     do j = 1, nlat
@@ -2399,9 +2307,10 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
                                                  outspec, ngptot, nlat, &
                                                  ntrunc, nt, rsphere, &
                                                  component, ierror)
-    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_prepare_fft_cache, &
-        reduced_gaussian_fft_wsave
+    use reduced_gaussian_fft_cache_mod, only: reduced_gaussian_build_fft_wsave
     implicit none
+
+    real, allocatable :: reduced_gaussian_fft_wsave(:, :)
 
     integer, intent(in) :: ngptot, nlat, ntrunc, nt, component
     real, intent(in) :: ugrid(ngptot, nt)
@@ -2471,7 +2380,7 @@ subroutine reduced_gaussian_getvecspec_component(ugrid, vgrid, pl, weights, &
     ierror = 6
     if (total /= ngptot) return
 
-    call reduced_gaussian_prepare_fft_cache(pl, nlat, alloc_status)
+    call reduced_gaussian_build_fft_wsave(pl, nlat, reduced_gaussian_fft_wsave, alloc_status)
     ierror = 7
     if (alloc_status /= 0) return
 
