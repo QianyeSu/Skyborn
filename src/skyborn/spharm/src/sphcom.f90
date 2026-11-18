@@ -1662,7 +1662,6 @@ subroutine dzvt(nlat, m, n, th, czv, zvh)
         if (nmod == 0) then ! n even
             cth = cdt; sth = sdt
             if (mmod == 0) then ! m even
-                !$OMP SIMD REDUCTION(+:zvh)
                 do k = 1, ls
                     zvh = zvh + czv(k + 1) * sth
                     chh = cdt * cth - sdt * sth
@@ -1671,7 +1670,6 @@ subroutine dzvt(nlat, m, n, th, czv, zvh)
                 end do
             else ! m odd
                 zvh = 0.5_real64 * czv(1)
-                !$OMP SIMD REDUCTION(+:zvh)
                 do k = 2, lq
                     zvh = zvh + czv(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -1682,7 +1680,6 @@ subroutine dzvt(nlat, m, n, th, czv, zvh)
             end if
         else ! n odd
             if (mmod == 0) then ! m even
-                !$OMP SIMD REDUCTION(+:zvh)
                 do k = 1, lq
                     zvh = zvh + czv(k + 1) * sth
                     chh = cdt * cth - sdt * sth
@@ -1690,7 +1687,6 @@ subroutine dzvt(nlat, m, n, th, czv, zvh)
                     cth = chh
                 end do
             else ! m odd
-                !$OMP SIMD REDUCTION(+:zvh)
                 do k = 1, lq
                     zvh = zvh + czv(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -1703,7 +1699,6 @@ subroutine dzvt(nlat, m, n, th, czv, zvh)
         if (nmod == 0) then ! n even
             cth = cdt; sth = sdt
             if (mmod == 0) then ! m even
-                !$OMP SIMD REDUCTION(+:zvh)
                 do k = 1, lq
                     zvh = zvh + czv(k + 1) * sth
                     chh = cdt * cth - sdt * sth
@@ -1712,7 +1707,6 @@ subroutine dzvt(nlat, m, n, th, czv, zvh)
                 end do
             else ! m odd
                 zvh = 0.5_real64 * czv(1)
-                !$OMP SIMD REDUCTION(+:zvh)
                 do k = 2, lc
                     zvh = zvh + czv(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -1722,7 +1716,6 @@ subroutine dzvt(nlat, m, n, th, czv, zvh)
             end if
         else ! n odd
             if (mmod == 0) then ! m even
-                !$OMP SIMD REDUCTION(+:zvh)
                 do k = 1, lq
                     zvh = zvh + czv(k + 1) * sth
                     chh = cdt * cth - sdt * sth
@@ -1731,7 +1724,6 @@ subroutine dzvt(nlat, m, n, th, czv, zvh)
                 end do
             else ! m odd
                 zvh = 0.5_real64 * czv(lc) * cos(real(nlat - 1, kind=real64) * th)
-                !$OMP SIMD REDUCTION(+:zvh)
                 do k = 1, lq
                     zvh = zvh + czv(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -1894,7 +1886,6 @@ subroutine dzwt(nlat, m, n, th, czw, zwh)
     if (lmod /= 0) then ! nlat odd
         if (nmod == 0) then ! n even
             if (mmod == 0) then ! m even
-                !$OMP SIMD REDUCTION(+:zwh)
                 do k = 1, lq
                     zwh = zwh + czw(k + 1) * sth
                     chh = cdt * cth - sdt * sth
@@ -1902,7 +1893,6 @@ subroutine dzwt(nlat, m, n, th, czw, zwh)
                     cth = chh
                 end do
             else ! m odd
-                !$OMP SIMD REDUCTION(+:zwh)
                 do k = 1, lq
                     zwh = zwh + czw(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -1913,7 +1903,6 @@ subroutine dzwt(nlat, m, n, th, czw, zwh)
         else ! n odd
             cth = cdt; sth = sdt
             if (mmod == 0) then ! m even
-                !$OMP SIMD REDUCTION(+:zwh)
                 do k = 1, ls
                     zwh = zwh + czw(k + 1) * sth
                     chh = cdt * cth - sdt * sth
@@ -1922,7 +1911,6 @@ subroutine dzwt(nlat, m, n, th, czw, zwh)
                 end do
             else ! m odd
                 zwh = 0.5_real64 * czw(1)
-                !$OMP SIMD REDUCTION(+:zwh)
                 do k = 2, lq
                     zwh = zwh + czw(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -1935,7 +1923,6 @@ subroutine dzwt(nlat, m, n, th, czw, zwh)
     else ! nlat even
         if (nmod == 0) then ! n even
             if (mmod == 0) then ! m even
-                !$OMP SIMD REDUCTION(+:zwh)
                 do k = 1, lq
                     zwh = zwh + czw(k + 1) * sth
                     chh = cdt * cth - sdt * sth
@@ -1944,7 +1931,6 @@ subroutine dzwt(nlat, m, n, th, czw, zwh)
                 end do
             else ! m odd
                 zwh = 0.5_real64 * czw(lc) * cos(real(nlat - 1, kind=real64) * th)
-                !$OMP SIMD REDUCTION(+:zwh)
                 do k = 1, lq
                     zwh = zwh + czw(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -1955,7 +1941,6 @@ subroutine dzwt(nlat, m, n, th, czw, zwh)
         else ! n odd
             cth = cdt; sth = sdt
             if (mmod == 0) then ! m even
-                !$OMP SIMD REDUCTION(+:zwh)
                 do k = 1, lq
                     zwh = zwh + czw(k + 1) * sth
                     chh = cdt * cth - sdt * sth
@@ -1964,7 +1949,6 @@ subroutine dzwt(nlat, m, n, th, czw, zwh)
                 end do
             else ! m odd
                 zwh = 0.5_real64 * czw(1)
-                !$OMP SIMD REDUCTION(+:zwh)
                 do k = 2, lc
                     zwh = zwh + czw(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -2795,7 +2779,6 @@ subroutine dvtt(m, n, theta, cv, vh)
         cth = cdt; sth = sdt
         ncv = n / 2
         if (mmod == 0) then ! m even
-            !$OMP SIMD REDUCTION(+:vh)
             do k = 1, ncv
                 vh = vh + cv(k) * cth
                 chh = cdt * cth - sdt * sth
@@ -2803,7 +2786,6 @@ subroutine dvtt(m, n, theta, cv, vh)
                 cth = chh
             end do
         else ! m odd
-            !$OMP SIMD REDUCTION(+:vh)
             do k = 1, ncv
                 vh = vh + cv(k) * sth
                 chh = cdt * cth - sdt * sth
@@ -2814,7 +2796,6 @@ subroutine dvtt(m, n, theta, cv, vh)
     else ! n odd
         ncv = (n + 1) / 2
         if (mmod == 0) then ! m even
-            !$OMP SIMD REDUCTION(+:vh)
             do k = 1, ncv
                 vh = vh + cv(k) * cth
                 chh = cdt * cth - sdt * sth
@@ -2822,7 +2803,6 @@ subroutine dvtt(m, n, theta, cv, vh)
                 cth = chh
             end do
         else ! m odd
-            !$OMP SIMD REDUCTION(+:vh)
             do k = 1, ncv
                 vh = vh + cv(k) * sth
                 chh = cdt * cth - sdt * sth
@@ -2938,7 +2918,6 @@ subroutine dwtt(m, n, theta, cw, wh)
     if (nmod == 0) then ! n even
         ncw = n / 2
         if (mmod == 0) then ! m even
-            !$OMP SIMD REDUCTION(+:wh)
             do k = 1, ncw
                 wh = wh + cw(k) * cth
                 chh = cdt * cth - sdt * sth
@@ -2946,7 +2925,6 @@ subroutine dwtt(m, n, theta, cw, wh)
                 cth = chh
             end do
         else ! m odd
-            !$OMP SIMD REDUCTION(+:wh)
             do k = 1, ncw
                 wh = wh + cw(k) * sth
                 chh = cdt * cth - sdt * sth
@@ -2958,7 +2936,6 @@ subroutine dwtt(m, n, theta, cw, wh)
         cth = cdt; sth = sdt
         if (mmod == 0) then ! m even
             ncw = (n - 1) / 2
-            !$OMP SIMD REDUCTION(+:wh)
             do k = 1, ncw
                 wh = wh + cw(k) * cth
                 chh = cdt * cth - sdt * sth
@@ -2969,7 +2946,6 @@ subroutine dwtt(m, n, theta, cw, wh)
             ncw = (n + 1) / 2
             wh = 0.0_real64
             if (ncw < 2) return
-            !$OMP SIMD REDUCTION(+:wh)
             do k = 2, ncw
                 wh = wh + cw(k) * sth
                 chh = cdt * cth - sdt * sth
@@ -3400,7 +3376,6 @@ subroutine dnlft(m, n, theta, cp, pb)
             if (n == 0) return
             cth = cdt
             sth = sdt
-            !$OMP SIMD REDUCTION(+:pb)
             do k = 1, kdo
                 pb = pb + cp(k + 1) * cth
                 chh = cdt * cth - sdt * sth
@@ -3412,7 +3387,6 @@ subroutine dnlft(m, n, theta, cp, pb)
             if (kdo == 0) return
             cth = cdt
             sth = sdt
-            !$OMP SIMD REDUCTION(+:pb)
             do k = 1, kdo
                 pb = pb + cp(k) * sth
                 chh = cdt * cth - sdt * sth
@@ -3426,7 +3400,6 @@ subroutine dnlft(m, n, theta, cp, pb)
         sth = sin(theta)
         if (mod(m, 2) == 0) then ! m even
             pb = 0.0_real64
-            !$OMP SIMD REDUCTION(+:pb)
             do k = 1, kdo
                 pb = pb + cp(k) * cth
                 chh = cdt * cth - sdt * sth
@@ -3435,7 +3408,6 @@ subroutine dnlft(m, n, theta, cp, pb)
             end do
         else ! m odd
             pb = 0.0_real64
-            !$OMP SIMD REDUCTION(+:pb)
             do k = 1, kdo
                 pb = pb + cp(k) * sth
                 chh = cdt * cth - sdt * sth
@@ -3488,7 +3460,6 @@ subroutine dnlftd(m, n, theta, cp, pb)
             if (n == 0) return
             cth = cdt
             sth = sdt
-            !$OMP SIMD REDUCTION(+:pb)
             do k = 1, kdo
                 pb = pb - (2.0_real64 * real(k, kind=real64)) * cp(k + 1) * sth
                 chh = cdt * cth - sdt * sth
@@ -3500,7 +3471,6 @@ subroutine dnlftd(m, n, theta, cp, pb)
             if (kdo == 0) return
             cth = cdt
             sth = sdt
-            !$OMP SIMD REDUCTION(+:pb)
             do k = 1, kdo
                 pb = pb + (2.0_real64 * real(k, kind=real64)) * cp(k) * cth
                 chh = cdt * cth - sdt * sth
@@ -3514,7 +3484,6 @@ subroutine dnlftd(m, n, theta, cp, pb)
         sth = sin(theta)
         if (mod(abs(m), 2) == 0) then ! m even
             pb = 0.0_real64
-            !$OMP SIMD REDUCTION(+:pb)
             do k = 1, kdo
                 pb = pb - (2.0_real64 * real(k, kind=real64) - 1.0_real64) * cp(k) * sth
                 chh = cdt * cth - sdt * sth
@@ -3523,7 +3492,6 @@ subroutine dnlftd(m, n, theta, cp, pb)
             end do
         else ! m odd
             pb = 0.0_real64
-            !$OMP SIMD REDUCTION(+:pb)
             do k = 1, kdo
                 pb = pb + (2.0_real64 * real(k, kind=real64) - 1.0_real64) * cp(k) * cth
                 chh = cdt * cth - sdt * sth
@@ -3966,7 +3934,6 @@ subroutine dvbt(m, n, theta, cv, vh)
         cth = cdt; sth = sdt
         ncv = n / 2
         if (mmod == 0) then ! m even
-            !$OMP SIMD REDUCTION(+:vh)
             do k = 1, ncv
                 vh = vh + cv(k) * sth
                 chh = cdt * cth - sdt * sth
@@ -3974,7 +3941,6 @@ subroutine dvbt(m, n, theta, cv, vh)
                 cth = chh
             end do
         else ! m odd
-            !$OMP SIMD REDUCTION(+:vh)
             do k = 1, ncv
                 vh = vh + cv(k) * cth
                 chh = cdt * cth - sdt * sth
@@ -3985,7 +3951,6 @@ subroutine dvbt(m, n, theta, cv, vh)
     else ! n odd
         ncv = (n + 1) / 2
         if (mmod == 0) then ! m even
-            !$OMP SIMD REDUCTION(+:vh)
             do k = 1, ncv
                 vh = vh + cv(k) * sth
                 chh = cdt * cth - sdt * sth
@@ -3993,7 +3958,6 @@ subroutine dvbt(m, n, theta, cv, vh)
                 cth = chh
             end do
         else ! m odd
-            !$OMP SIMD REDUCTION(+:vh)
             do k = 1, ncv
                 vh = vh + cv(k) * cth
                 chh = cdt * cth - sdt * sth
@@ -4121,7 +4085,6 @@ subroutine dwbt(m, n, theta, cw, wh)
     if (nmod == 0) then ! n even
         ncw = n / 2
         if (mmod == 0) then ! m even
-            !$OMP SIMD REDUCTION(+:wh)
             do k = 1, ncw
                 wh = wh + cw(k) * sth
                 chh = cdt * cth - sdt * sth
@@ -4129,7 +4092,6 @@ subroutine dwbt(m, n, theta, cw, wh)
                 cth = chh
             end do
         else ! m odd
-            !$OMP SIMD REDUCTION(+:wh)
             do k = 1, ncw
                 wh = wh + cw(k) * cth
                 chh = cdt * cth - sdt * sth
@@ -4141,7 +4103,6 @@ subroutine dwbt(m, n, theta, cw, wh)
         cth = cdt; sth = sdt
         if (mmod == 0) then ! m even
             ncw = (n - 1) / 2
-            !$OMP SIMD REDUCTION(+:wh)
             do k = 1, ncw
                 wh = wh + cw(k) * sth
                 chh = cdt * cth - sdt * sth
@@ -4152,7 +4113,6 @@ subroutine dwbt(m, n, theta, cw, wh)
             ncw = (n + 1) / 2
             wh = 0.5_real64 * cw(1)
             if (ncw < 2) return
-            !$OMP SIMD REDUCTION(+:wh)
             do k = 2, ncw
                 wh = wh + cw(k) * cth
                 chh = cdt * cth - sdt * sth
@@ -4208,7 +4168,6 @@ subroutine dnzft(nlat, m, n, th, cz, zh)
             if (mmod == 0) then ! m even
                 zh = 0.5_real64 * (cz(1) + cz(lc) * cos(2.0_real64 * lq * th))
                 cth = cdt; sth = sdt
-                !$OMP SIMD REDUCTION(+:zh)
                 do k = 2, lq
                     zh = zh + cz(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -4217,7 +4176,6 @@ subroutine dnzft(nlat, m, n, th, cz, zh)
                 end do
             else ! m odd
                 cth = cdt; sth = sdt
-                !$OMP SIMD REDUCTION(+:zh)
                 do k = 1, ls
                     zh = zh + cz(k + 1) * sth
                     chh = cdt * cth - sdt * sth
@@ -4228,7 +4186,6 @@ subroutine dnzft(nlat, m, n, th, cz, zh)
         else ! n odd
             cth = cos(th); sth = sin(th)
             if (mmod == 0) then ! m even
-                !$OMP SIMD REDUCTION(+:zh)
                 do k = 1, lq
                     zh = zh + cz(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -4236,7 +4193,6 @@ subroutine dnzft(nlat, m, n, th, cz, zh)
                     cth = chh
                 end do
             else ! m odd
-                !$OMP SIMD REDUCTION(+:zh)
                 do k = 1, lq
                     zh = zh + cz(k + 1) * sth
                     chh = cdt * cth - sdt * sth
@@ -4251,7 +4207,6 @@ subroutine dnzft(nlat, m, n, th, cz, zh)
             cth = cdt; sth = sdt
             if (mmod == 0) then ! m even
                 zh = 0.5_real64 * cz(1)
-                !$OMP SIMD REDUCTION(+:zh)
                 do k = 2, lc
                     zh = zh + cz(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -4259,7 +4214,6 @@ subroutine dnzft(nlat, m, n, th, cz, zh)
                     cth = chh
                 end do
             else ! m odd
-                !$OMP SIMD REDUCTION(+:zh)
                 do k = 1, lq
                     zh = zh + cz(k + 1) * sth
                     chh = cdt * cth - sdt * sth
@@ -4271,7 +4225,6 @@ subroutine dnzft(nlat, m, n, th, cz, zh)
             cth = cos(th); sth = sin(th)
             if (mmod == 0) then ! m even
                 zh = 0.5_real64 * cz(lc) * cos(real(nlat - 1, kind=real64) * th)
-                !$OMP SIMD REDUCTION(+:zh)
                 do k = 1, lq
                     zh = zh + cz(k) * cth
                     chh = cdt * cth - sdt * sth
@@ -4279,7 +4232,6 @@ subroutine dnzft(nlat, m, n, th, cz, zh)
                     cth = chh
                 end do
             else ! m odd
-                !$OMP SIMD REDUCTION(+:zh)
                 do k = 1, lq
                     zh = zh + cz(k + 1) * sth
                     chh = cdt * cth - sdt * sth

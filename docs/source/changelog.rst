@@ -48,7 +48,10 @@ Version 0.4.6 (Current)
   accumulations in the Gaussian-grid ``vhagc`` (``legfunc="computed"``) and
   ``vhaes`` vector analysis loops with scalar accumulators and explicit
   ``REDUCTION`` clauses; removed ``!$OMP SIMD`` from loop-carried trigonometric
-  and scaling recurrences in ``gaqd`` and ``alf``; added missing reductions in
+  and scaling recurrences in ``gaqd``, ``alf`` and the shared ``sphcom`` basis
+  routines (48 loops; transform outputs are bit-identical, only tiny stored
+  Gaussian vector workspace entries change at the 1e-14 level); added missing
+  reductions in
   ``specintrp``. Gaussian ``legfunc="computed"`` vector results can differ from
   0.4.5 at single-precision rounding level (about 2e-7 relative)
 * **Reduced-Gaussian Transforms**: Removed the unsynchronized double-checked
