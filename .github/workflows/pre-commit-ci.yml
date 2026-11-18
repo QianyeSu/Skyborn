@@ -46,7 +46,7 @@ jobs:
 
       # Auto-fix minor issues with pre-commit-ci lite
       - name: Auto-fix with pre-commit-ci
-        uses: pre-commit-ci/lite-action@v1.1.0
+        uses: pre-commit-ci/lite-action@v1.2.0
         if: always()  # Run even if previous steps fail
         with:
           msg: "pre-commit-ci: auto fixes from GitHub Actions"
