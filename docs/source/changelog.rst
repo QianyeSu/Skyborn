@@ -1,8 +1,23 @@
 Changelog
 =========
 
-Version 0.4.6 (Current)
-------------------------
+Version 0.4.7 (Current)
+-----------------------
+
+**Plotting Fixes**
+
+* **Closed Open-Arrow Tips (``arrowstyle="->"``)**: Updated
+  ``build_open_arrow_segments`` in ``skyborn.plot.nclcurly_core`` and the
+  batched open-head assembly in ``skyborn.plot`` to emit one continuous
+  3-vertex ``[left, tip, right]`` V-polyline per glyph instead of two disjoint
+  2-point segments, paired with ``capstyle="butt"`` and ``joinstyle="round"``
+  on the output ``LineCollection``. Converted ``build_open_arrow_segments`` to
+  a single-pass C loop with zero accuracy loss against the reference head
+  geometry while halving head segment count and reducing head vertex count by
+  25%.
+
+Version 0.4.6
+-------------
 
 **ROF Attribution Fixes**
 

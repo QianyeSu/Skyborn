@@ -392,7 +392,7 @@ jobs:
               echo "See [CHANGELOG](https://skyborn.readthedocs.io/en/latest/changelog.html) for details." >> release_body.md
             fi
 
-            if ! grep -q "@klemmeri" release_body.md; then
+            if [ "$VERSION_NUM" = "0.4.6" ] && ! grep -q "@klemmeri" release_body.md; then
               echo "" >> release_body.md
               echo "---" >> release_body.md
               echo "" >> release_body.md

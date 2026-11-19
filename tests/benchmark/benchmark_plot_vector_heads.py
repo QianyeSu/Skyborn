@@ -430,22 +430,20 @@ def main() -> None:
             head_lengths_px=np.asarray([sample.head_length_px], dtype=float),
             head_widths_px=np.asarray([sample.head_width_px], dtype=float),
         )
-        np.testing.assert_array_equal(native_sources, np.array([0, 0], dtype=int))
-        ref_segments = np.asarray(
+        np.testing.assert_array_equal(native_sources, np.array([0], dtype=int))
+        ref_polyline = np.vstack(
             [
-                np.vstack([ref_geom["left_display"], ref_geom["tip_display"]]),
-                np.vstack([ref_geom["right_display"], ref_geom["tip_display"]]),
-            ],
-            dtype=float,
+                ref_geom["left_display"],
+                ref_geom["tip_display"],
+                ref_geom["right_display"],
+            ]
         )
         native_display_segments = helper_transform.transform(
             native_segments.reshape(-1, 2)
-        ).reshape(-1, 2, 2)
-        for native_seg, ref_seg in zip(
-            native_display_segments, ref_segments, strict=True
-        ):
+        ).reshape(-1, 3, 2)
+        for native_seg in native_display_segments:
             segment_count += 1
-            diff = np.max(np.abs(np.asarray(native_seg) - np.asarray(ref_seg)))
+            diff = np.max(np.abs(np.asarray(native_seg) - ref_polyline))
             max_display_abs_diff = max(max_display_abs_diff, float(diff))
             max_segment_abs_diff = max(max_segment_abs_diff, float(diff))
 

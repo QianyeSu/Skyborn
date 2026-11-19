@@ -132,7 +132,7 @@ def _call_native_build_open_arrow_segments(
     head_lengths_px,
     head_widths_px,
 ):
-    """Build compact batched open-arrow display segments through the native kernel."""
+    """Build compact batched open-arrow display polylines ``(K, 3, 2)`` through the native kernel."""
 
     segments, source_positions = native_builder(
         display_points=np.asarray(display_points, dtype=float),
@@ -142,7 +142,7 @@ def _call_native_build_open_arrow_segments(
     )
     segments = np.asarray(segments, dtype=float)
     source_positions = np.asarray(source_positions, dtype=int)
-    if segments.ndim != 3 or segments.shape[1:] != (2, 2):
+    if segments.ndim != 3 or segments.shape[1:] != (3, 2):
         return None
     if source_positions.shape != (segments.shape[0],):
         return None

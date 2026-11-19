@@ -99,6 +99,9 @@ To use any module, import Skyborn and access the module:
 
 **Version Highlights**
 
+* **v0.4.7**: Closed open-arrow tips (``arrowstyle="->"``) in ``skyborn.plot``
+  by emitting single-pass 3-vertex V-polylines with ``capstyle="butt"`` and
+  ``joinstyle="round"``
 * **v0.4.6**: Hardened ``skyborn.ROF`` eigendecomposition and NumPy 2.x
   compatibility, resolved Matplotlib 3.11 / Cartopy / array-input bugs across
   ``skyborn.plot``, and fixed memory/bounds safety issues in the plot C

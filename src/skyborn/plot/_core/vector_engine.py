@@ -785,6 +785,8 @@ def _curly_vector_ncl_impl(
             transform=artist_transform,
             zorder=zorder,
             alpha=alpha,
+            capstyle="butt",
+            joinstyle="round",
         )
         if rasterized is not None:
             lc.set_rasterized(bool(rasterized))
@@ -1101,7 +1103,7 @@ def _curly_vector_ncl_impl(
                 )
             )
 
-    line_kw = {"zorder": zorder}
+    line_kw = {"zorder": zorder, "capstyle": "butt", "joinstyle": "round"}
     if use_multicolor_lines:
         line_kw["colors"] = line_colors
     else:

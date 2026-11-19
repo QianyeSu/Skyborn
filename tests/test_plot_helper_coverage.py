@@ -864,6 +864,19 @@ class TestNativeHelpers:
             vector_module._native_helpers._call_native_build_open_arrow_segments(
                 lambda **kwargs: (
                     np.array([[[0.0, 0.0], [1.0, 1.0]]], dtype=float),
+                    np.array([0], dtype=int),
+                ),
+                np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float),
+                np.array([0, 2], dtype=np.intp),
+                np.array([1.0]),
+                np.array([1.0]),
+            )
+            is None
+        )
+        assert (
+            vector_module._native_helpers._call_native_build_open_arrow_segments(
+                lambda **kwargs: (
+                    np.array([[[0.0, 0.0], [1.0, 1.0], [0.5, 0.5]]], dtype=float),
                     np.array([0, 1], dtype=int),
                 ),
                 np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float),
@@ -2103,7 +2116,7 @@ class TestVectorEngineHelpers:
                 select_ncl_centers_fn=lambda **kwargs: [(np.array([0.5, 0.5]), 1.0)],
                 sample_grid_field_fn=lambda grid, field, x, y: None,
                 build_open_arrow_segments_batch_fn=lambda **kwargs: (
-                    np.empty((0, 2, 2), dtype=float),
+                    np.empty((0, 3, 2), dtype=float),
                     np.empty(0, dtype=int),
                 ),
                 build_filled_arrow_polygons_batch_fn=lambda **kwargs: (
@@ -2150,13 +2163,12 @@ class TestVectorEngineHelpers:
         try:
             open_head_segments = np.array(
                 [
-                    [[0.70, 0.70], [0.75, 0.75]],
-                    [[0.80, 0.80], [0.75, 0.75]],
+                    [[0.70, 0.70], [0.75, 0.75], [0.80, 0.80]],
                 ],
                 dtype=float,
             )
             batch_builder = Mock(
-                return_value=(open_head_segments, np.array([0, 0], dtype=int))
+                return_value=(open_head_segments, np.array([0], dtype=int))
             )
 
             result = _curly_vector_ncl_impl(
@@ -2183,7 +2195,9 @@ class TestVectorEngineHelpers:
                 result_cls=CurlyVectorPlotSet,
             )
 
-            assert len(result.lines.get_segments()) == 3
+            assert len(result.lines.get_segments()) == 2
+            assert result.lines.get_capstyle() == "butt"
+            assert result.lines.get_joinstyle() == "round"
             batch_builder.assert_called_once()
             assert len(batch_builder.call_args.kwargs["display_curves"]) == 1
         finally:
@@ -2616,7 +2630,7 @@ class TestVectorArtistCoverage:
             head_widths_px=np.array([1.0]),
             build_open_arrow_segments_batch_fn=None,
         )
-        assert segments.shape == (0, 2, 2)
+        assert segments.shape == (0, 3, 2)
         assert sources.shape == (0,)
 
         segments, sources = _build_open_arrow_segments_batch(
@@ -2626,7 +2640,7 @@ class TestVectorArtistCoverage:
             head_widths_px=np.array([1.0]),
             build_open_arrow_segments_batch_fn=lambda *args: None,
         )
-        assert segments.shape == (0, 2, 2)
+        assert segments.shape == (0, 3, 2)
         assert sources.shape == (0,)
 
         segments, sources = _build_open_arrow_segments_batch(
@@ -2635,11 +2649,24 @@ class TestVectorArtistCoverage:
             head_lengths_px=np.array([1.0]),
             head_widths_px=np.array([1.0]),
             build_open_arrow_segments_batch_fn=lambda *args: (
-                np.empty((0, 2, 2), dtype=float),
+                np.empty((0, 3, 2), dtype=float),
                 np.empty(0, dtype=int),
             ),
         )
-        assert segments.shape == (0, 2, 2)
+        assert segments.shape == (0, 3, 2)
+        assert sources.shape == (0,)
+
+        segments, sources = _build_open_arrow_segments_batch(
+            transform=Affine2D(),
+            display_curves=[curve],
+            head_lengths_px=np.array([1.0]),
+            head_widths_px=np.array([1.0]),
+            build_open_arrow_segments_batch_fn=lambda *args: (
+                np.array([[[0.0, 0.0]]], dtype=float),
+                np.array([0], dtype=int),
+            ),
+        )
+        assert segments.shape == (0, 3, 2)
         assert sources.shape == (0,)
 
         segments, sources = _build_open_arrow_segments_batch(
@@ -2648,11 +2675,11 @@ class TestVectorArtistCoverage:
             head_lengths_px=np.array([1.0]),
             head_widths_px=np.array([1.0]),
             build_open_arrow_segments_batch_fn=lambda *args: (
-                np.array([[[0.0, 0.0], [1.0, 1.0]]], dtype=float),
+                np.array([[[0.0, 0.0], [1.0, 1.0], [0.5, 0.0]]], dtype=float),
                 np.array([0], dtype=int),
             ),
         )
-        assert segments.shape == (0, 2, 2)
+        assert segments.shape == (0, 3, 2)
         assert sources.shape == (0,)
 
         segments, sources = _build_open_arrow_segments_batch(
@@ -2661,11 +2688,14 @@ class TestVectorArtistCoverage:
             head_lengths_px=np.array([1.0]),
             head_widths_px=np.array([1.0]),
             build_open_arrow_segments_batch_fn=lambda *args: (
-                np.array([[[np.nan, np.nan], [np.nan, np.nan]]], dtype=float),
+                np.array(
+                    [[[np.nan, np.nan], [np.nan, np.nan], [np.nan, np.nan]]],
+                    dtype=float,
+                ),
                 np.array([0], dtype=int),
             ),
         )
-        assert segments.shape == (0, 2, 2)
+        assert segments.shape == (0, 3, 2)
         assert sources.shape == (0,)
 
     def test_batched_filled_arrow_helpers_cover_error_and_empty_paths(self):
@@ -2841,6 +2871,30 @@ class TestVectorArtistCoverage:
         assert colors == ["red", "red", "red", "blue", "blue", "blue"]
         assert widths == [1.5, 1.5, 1.5, 2.0, 2.0, 2.0]
 
+        poly_heads = np.array(
+            [
+                [[0.9, 0.1], [1.0, 0.0], [0.9, -0.1]],
+                [[2.9, 0.1], [3.0, 0.0], [2.9, -0.1]],
+            ],
+            dtype=float,
+        )
+        poly_streamlines, poly_colors, poly_widths = _assemble_open_head_streamlines(
+            shafts=shafts,
+            shaft_colors=["red", "blue"],
+            shaft_linewidths=[1.5, 2.0],
+            head_segments=poly_heads,
+            source_positions=np.array([0, 1], dtype=int),
+            use_multicolor_lines=True,
+            use_linewidth_field=True,
+        )
+        assert len(poly_streamlines) == 4
+        np.testing.assert_allclose(poly_streamlines[0], shafts[0])
+        np.testing.assert_allclose(poly_streamlines[1], poly_heads[0])
+        np.testing.assert_allclose(poly_streamlines[2], shafts[1])
+        np.testing.assert_allclose(poly_streamlines[3], poly_heads[1])
+        assert poly_colors == ["red", "red", "blue", "blue"]
+        assert poly_widths == [1.5, 1.5, 2.0, 2.0]
+
     def test_assemble_open_head_streamlines_rejects_bad_source_shape(self):
         with pytest.raises(ValueError, match="source_positions must match"):
             _assemble_open_head_streamlines(
@@ -2925,23 +2979,27 @@ class TestVectorArtistCoverage:
             build_open_arrow_segments_batch_fn=native_builder,
         )
 
-        assert segments.shape == (4, 2, 2)
-        np.testing.assert_array_equal(source_positions, np.array([0, 0, 1, 1]))
+        assert segments.shape == (2, 3, 2)
+        np.testing.assert_array_equal(source_positions, np.array([0, 1]))
         np.testing.assert_allclose(
             segments[0],
-            np.vstack([expected_1["left_display"], expected_1["tip_display"]]),
+            np.vstack(
+                [
+                    expected_1["left_display"],
+                    expected_1["tip_display"],
+                    expected_1["right_display"],
+                ]
+            ),
         )
         np.testing.assert_allclose(
             segments[1],
-            np.vstack([expected_1["right_display"], expected_1["tip_display"]]),
-        )
-        np.testing.assert_allclose(
-            segments[2],
-            np.vstack([expected_2["left_display"], expected_2["tip_display"]]),
-        )
-        np.testing.assert_allclose(
-            segments[3],
-            np.vstack([expected_2["right_display"], expected_2["tip_display"]]),
+            np.vstack(
+                [
+                    expected_2["left_display"],
+                    expected_2["tip_display"],
+                    expected_2["right_display"],
+                ]
+            ),
         )
 
         native_segments = build_open_arrow_segments(
@@ -2951,8 +3009,50 @@ class TestVectorArtistCoverage:
             head_widths_px=head_widths,
         )
         native_display_segments, native_sources = native_segments
-        np.testing.assert_array_equal(native_sources, np.array([0, 0, 1, 1]))
+        assert native_display_segments.shape == (2, 3, 2)
+        np.testing.assert_array_equal(native_sources, np.array([0, 1]))
         np.testing.assert_allclose(native_display_segments, segments)
+
+        empty_segments, empty_sources = build_open_arrow_segments(
+            display_points=np.empty((0, 2), dtype=float),
+            curve_offsets=np.array([0], dtype=np.intp),
+            head_lengths_px=np.empty(0, dtype=float),
+            head_widths_px=np.empty(0, dtype=float),
+        )
+        assert empty_segments.shape == (0, 3, 2)
+        assert empty_sources.shape == (0,)
+
+        degenerate = np.array([[5.0, 5.0]], dtype=float)
+        zero_len = np.array([[2.0, 2.0], [2.0, 2.0]], dtype=float)
+        mixed_points = np.vstack([degenerate, curve_1, zero_len, curve_2])
+        mixed_offsets = np.array(
+            [
+                0,
+                len(degenerate),
+                len(degenerate) + len(curve_1),
+                len(degenerate) + len(curve_1) + len(zero_len),
+                len(mixed_points),
+            ],
+            dtype=np.intp,
+        )
+        trimmed_segments, trimmed_sources = build_open_arrow_segments(
+            display_points=mixed_points,
+            curve_offsets=mixed_offsets,
+            head_lengths_px=np.array([1.0, 1.0, 0.5, 0.5], dtype=float),
+            head_widths_px=np.array([2.0, 2.0, 1.0, 1.0], dtype=float),
+        )
+        assert trimmed_segments.shape == (2, 3, 2)
+        np.testing.assert_array_equal(trimmed_sources, np.array([1, 3]))
+        np.testing.assert_allclose(trimmed_segments, segments)
+
+        all_bad_segments, all_bad_sources = build_open_arrow_segments(
+            display_points=np.vstack([degenerate, zero_len]),
+            curve_offsets=np.array([0, 1, 3], dtype=np.intp),
+            head_lengths_px=np.array([1.0, 1.0], dtype=float),
+            head_widths_px=np.array([2.0, 2.0], dtype=float),
+        )
+        assert all_bad_segments.shape == (0, 3, 2)
+        assert all_bad_sources.shape == (0,)
 
     def test_batched_filled_arrow_helpers_match_scalar_geometry(self):
         curve_1 = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 1.0]], dtype=float)
@@ -3507,9 +3607,10 @@ class TestPlotGeometryAndBugFixRegressions:
 
         # Zero chord_length in _evaluate_ncl_display_curve
         closed_zero_chord = np.array([[0.0, 0.0], [10.0, 0.0], [0.0, 0.0]])
-        assert _evaluate_ncl_display_curve(
-            closed_zero_chord, IdentityTransform()
-        ) == (None, False)
+        assert _evaluate_ncl_display_curve(closed_zero_chord, IdentityTransform()) == (
+            None,
+            False,
+        )
 
         # High total_turn (> 120 deg) with low tortuosity and no sign changes
         headings_deg = [0.0, 42.0, 84.0, 126.0]
@@ -3518,9 +3619,10 @@ class TestPlotGeometryAndBugFixRegressions:
         for h_deg, seg_len in zip(headings_deg, lengths):
             rad = np.deg2rad(h_deg)
             pts.append(pts[-1] + seg_len * np.array([np.cos(rad), np.sin(rad)]))
-        assert _evaluate_ncl_display_curve(
-            np.asarray(pts), IdentityTransform()
-        ) == (None, False)
+        assert _evaluate_ncl_display_curve(np.asarray(pts), IdentityTransform()) == (
+            None,
+            False,
+        )
 
         # S-curve sign_changes > 0 and total_turn > 70 deg
         s_headings = [0.0, 40.0, 0.0]
@@ -3529,9 +3631,10 @@ class TestPlotGeometryAndBugFixRegressions:
         for h_deg, seg_len in zip(s_headings, s_lengths):
             rad = np.deg2rad(h_deg)
             s_pts.append(s_pts[-1] + seg_len * np.array([np.cos(rad), np.sin(rad)]))
-        assert _evaluate_ncl_display_curve(
-            np.asarray(s_pts), IdentityTransform()
-        ) == (None, False)
+        assert _evaluate_ncl_display_curve(np.asarray(s_pts), IdentityTransform()) == (
+            None,
+            False,
+        )
 
         # _local_display_jacobian error and non-finite shifted transform branches
         grid = Grid(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0, 2.0]))
@@ -3761,16 +3864,48 @@ class TestPlotGeometryAndBugFixRegressions:
         valid = np.ones((3, 3), dtype=bool)
         assert (
             _ncl_curly_core.trace_ncl_direction(
-                u, v, disp, valid, 0.0, 0.0, 1.0, 1.0,
-                1.5, 1.5, float("nan"), 1.0, 4.0, 1.0, 0.0, 0.0, 200.0, 200.0,
+                u,
+                v,
+                disp,
+                valid,
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                1.5,
+                1.5,
+                float("nan"),
+                1.0,
+                4.0,
+                1.0,
+                0.0,
+                0.0,
+                200.0,
+                200.0,
             )
             is None
         )
 
         # trace_ncl_direction with tight remaining < back_len advances monotonically
         pts_traced, disp_traced = _ncl_curly_core.trace_ncl_direction(
-            u, v, disp, valid, 0.0, 0.0, 1.0, 1.0,
-            0.5, 1.5, 5.0, 1.0, 4.0, 1.0, 0.0, 0.0, 200.0, 200.0,
+            u,
+            v,
+            disp,
+            valid,
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            0.5,
+            1.5,
+            5.0,
+            1.0,
+            4.0,
+            1.0,
+            0.0,
+            0.0,
+            200.0,
+            200.0,
             return_display=True,
         )
         assert len(pts_traced) >= 2

@@ -46,7 +46,7 @@ def _build_open_arrow_segments_batch(
     """
 
     if build_open_arrow_segments_batch_fn is None:
-        return np.empty((0, 2, 2), dtype=float), np.empty(0, dtype=int)
+        return np.empty((0, 3, 2), dtype=float), np.empty(0, dtype=int)
     packed_points, curve_offsets = _pack_display_curves(display_curves)
     native_result = build_open_arrow_segments_batch_fn(
         packed_points,
@@ -55,25 +55,31 @@ def _build_open_arrow_segments_batch(
         np.asarray(head_widths_px, dtype=float),
     )
     if native_result is None:
-        return np.empty((0, 2, 2), dtype=float), np.empty(0, dtype=int)
+        return np.empty((0, 3, 2), dtype=float), np.empty(0, dtype=int)
 
     display_segments, source_positions = native_result
+    display_segments = np.asarray(display_segments, dtype=float)
+    if (
+        display_segments.ndim != 3
+        or display_segments.shape[2] != 2
+        or display_segments.shape[1] < 2
+    ):
+        return np.empty((0, 3, 2), dtype=float), np.empty(0, dtype=int)
     if len(display_segments) == 0:
-        return np.empty((0, 2, 2), dtype=float), np.empty(0, dtype=int)
+        return np.empty((0, 3, 2), dtype=float), np.empty(0, dtype=int)
+    n_verts = display_segments.shape[1]
     try:
         inverse = (
             transform.inverted() if inverse_transform is None else inverse_transform
         )
-        data_points = inverse.transform(
-            np.asarray(display_segments, dtype=float).reshape(-1, 2)
-        )
+        data_points = inverse.transform(display_segments.reshape(-1, 2))
     except Exception:
-        return np.empty((0, 2, 2), dtype=float), np.empty(0, dtype=int)
+        return np.empty((0, 3, 2), dtype=float), np.empty(0, dtype=int)
 
-    data_segments = np.asarray(data_points, dtype=float).reshape(-1, 2, 2)
+    data_segments = np.asarray(data_points, dtype=float).reshape(-1, n_verts, 2)
     finite_valid = np.isfinite(data_segments).all(axis=(1, 2))
     if not np.any(finite_valid):
-        return np.empty((0, 2, 2), dtype=float), np.empty(0, dtype=int)
+        return np.empty((0, 3, 2), dtype=float), np.empty(0, dtype=int)
     return (
         data_segments[finite_valid],
         np.asarray(source_positions, dtype=int)[finite_valid],
@@ -90,7 +96,7 @@ def _assemble_open_head_streamlines(
     use_multicolor_lines,
     use_linewidth_field,
 ):
-    """Merge shaft curves and batched open-head segments into line-collection inputs.
+    """Merge shaft curves and batched open-head polylines into line-collection inputs.
 
     Parameters
     ----------
@@ -101,9 +107,10 @@ def _assemble_open_head_streamlines(
     shaft_linewidths : sequence of float
         Per-glyph shaft linewidths aligned with ``shafts``.
     head_segments : ndarray
-        Batched head segments with shape ``(N, 2, 2)`` in data coordinates.
+        Batched open-arrow head V-polylines with shape ``(N, 3, 2)`` in data
+        coordinates.
     source_positions : array-like of int
-        Source glyph index for each segment.
+        Source glyph index for each polyline.
     use_multicolor_lines : bool
         Whether a per-segment color array should be emitted.
     use_linewidth_field : bool
@@ -150,7 +157,9 @@ def _assemble_open_head_streamlines(
         seg_count = seg_end - seg_start
 
         streamlines[cursor] = shafts[idx]
-        if seg_count > 0:
+        if seg_count == 1:
+            streamlines[cursor + 1] = head_segments[seg_start]
+        elif seg_count > 1:
             streamlines[cursor + 1 : cursor + 1 + seg_count] = list(
                 head_segments[seg_start:seg_end]
             )

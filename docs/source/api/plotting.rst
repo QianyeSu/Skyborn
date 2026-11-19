@@ -124,6 +124,10 @@ The same ``skyborn.plot.curly_vector`` entry point supports both call styles:
 - ``curly_vector(ax, x, y, u, v, ...)`` for direct NumPy / Matplotlib input
 - ``curly_vector(ds, x="lon", y="lat", u="u", v="v", ax=ax, ...)`` for xarray dataset input
 
+For ``arrowstyle="->"``, each open arrow head is rendered as a single continuous
+3-vertex V-polyline in ``lines`` with ``capstyle="butt"`` and
+``joinstyle="round"`` so arrow tips close cleanly without apex notches.
+
 .. autofunction:: skyborn.plot.curly_vector_key
 
 Scatter Stippling

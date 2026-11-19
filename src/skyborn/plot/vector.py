@@ -407,7 +407,9 @@ def _array_curly_vector(
         Scaling factor for the arrow size.
     arrowstyle : str
         Supported arrow-head style. Use ``"->"`` for the open NCL-like line
-        head or ``"-|>"`` for a filled triangular head.
+        head (rendered as a continuous 3-vertex V-polyline with
+        ``capstyle="butt"`` and ``joinstyle="round"`` so the apex closes
+        cleanly) or ``"-|>"`` for a filled triangular head.
     transform : Transform, optional
         Coordinate transformation for the plot. Defaults to axes.transData.
     zorder : float
@@ -473,8 +475,9 @@ def _array_curly_vector(
         - ``lines``: `.LineCollection` of streamlines
 
         - ``arrows``: tuple of the actual filled arrow-head patches added to
-          the axes. Open arrow styles use line segments only and therefore
-          return an empty tuple.
+          the axes. Open ``"->"`` arrow styles append continuous 3-vertex
+          V-polylines directly into ``lines`` (with ``capstyle="butt"`` and
+          ``joinstyle="round"``) and therefore return an empty tuple.
     """
     color, linewidth, facecolor, edgecolor, vmin, vmax = _resolve_curly_style_aliases(
         color=color,
@@ -1142,7 +1145,9 @@ def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
         Scaling factor for the arrow size.
     arrowstyle : str, optional
         Supported arrow-head style. Use ``"->"`` for the open NCL-like line
-        head or ``"-|>"`` for a filled triangular head.
+        head (rendered as a continuous 3-vertex V-polyline with
+        ``capstyle="butt"`` and ``joinstyle="round"`` so the apex closes
+        cleanly) or ``"-|>"`` for a filled triangular head.
     transform : optional
         Coordinate transformation for the plot. Standard Matplotlib transforms
         are forwarded directly. Cartopy CRS-like objects are normalized
@@ -1208,10 +1213,12 @@ def curly_vector(*args: Any, **kwargs: Any) -> CurlyVectorPlotSet:
     CurlyVectorPlotSet
         Container object with attributes
 
-        - ``lines``: `.LineCollection` of the curved vector shafts.
+        - ``lines``: `.LineCollection` of the curved vector shafts (plus open
+          ``"->"`` head V-polylines when ``arrowstyle="->"``).
         - ``arrows``: tuple of arrow-head artists added to the axes. Open
-          arrow styles use line segments only and may therefore return an empty
-          tuple.
+          ``"->"`` arrow styles append continuous 3-vertex V-polylines
+          directly into ``lines`` (with ``capstyle="butt"`` and
+          ``joinstyle="round"``) and therefore return an empty tuple.
 
     Notes
     -----
@@ -1331,9 +1338,7 @@ def curly_vector_key(
     remaining_args = list(args)
     if remaining_args and _looks_like_axes(remaining_args[0]):
         if ax_kwarg is not None:
-            raise TypeError(
-                "curly_vector_key() got multiple values for argument 'ax'"
-            )
+            raise TypeError("curly_vector_key() got multiple values for argument 'ax'")
         ax = remaining_args.pop(0)
     else:
         ax = ax_kwarg if ax_kwarg is not None else plt.gca()

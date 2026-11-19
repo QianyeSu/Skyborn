@@ -2764,11 +2764,11 @@ static PyObject *validate_display_curve(PyObject *self, PyObject *args, PyObject
 }
 
 /*
- * Build compact open-arrow display segments directly in native code.
+ * Build compact open-arrow display polylines directly in native code.
  *
  * Output layout:
- * - segments: (K, 2, 2), where each valid curve contributes two segments
- * - source_positions: (K,), repeating the source curve index for both segments
+ * - segments: (K, 3, 2), one continuous [left, tip, right] V-polyline per valid curve
+ * - source_positions: (K,), one source curve index per polyline
  */
 static PyObject *build_open_arrow_segments(PyObject *self, PyObject *args, PyObject *kwargs)
 {
@@ -2874,26 +2874,28 @@ static PyObject *build_open_arrow_segments(PyObject *self, PyObject *args, PyObj
         }
     }
 
-    for (npy_intp curve_idx = 0; curve_idx < n_curves; ++curve_idx)
+    if (n_curves == 0)
     {
-        npy_intp start = curve_offsets[curve_idx];
-        npy_intp end = curve_offsets[curve_idx + 1];
-        double vertices[6];
-        if (build_open_arrow_vertices_for_curve(
-                display_points + start * 2,
-                end - start,
-                head_lengths[curve_idx],
-                head_widths[curve_idx],
-                vertices))
+        output_dims_segments[0] = 0;
+        output_dims_segments[1] = 3;
+        output_dims_segments[2] = 2;
+        output_dims_positions[0] = 0;
+        segments_arr = (PyArrayObject *)PyArray_SimpleNew(3, output_dims_segments, NPY_DOUBLE);
+        source_positions_arr = (PyArrayObject *)PyArray_SimpleNew(1, output_dims_positions, NPY_INTP);
+        if (segments_arr == NULL || source_positions_arr == NULL)
         {
-            valid_curves += 1;
+            goto cleanup;
         }
+        result = Py_BuildValue("NN", (PyObject *)segments_arr, (PyObject *)source_positions_arr);
+        segments_arr = NULL;
+        source_positions_arr = NULL;
+        goto cleanup;
     }
 
-    output_dims_segments[0] = valid_curves * 2;
-    output_dims_segments[1] = 2;
+    output_dims_segments[0] = n_curves;
+    output_dims_segments[1] = 3;
     output_dims_segments[2] = 2;
-    output_dims_positions[0] = valid_curves * 2;
+    output_dims_positions[0] = n_curves;
     segments_arr = (PyArrayObject *)PyArray_SimpleNew(3, output_dims_segments, NPY_DOUBLE);
     source_positions_arr = (PyArrayObject *)PyArray_SimpleNew(1, output_dims_positions, NPY_INTP);
     if (segments_arr == NULL || source_positions_arr == NULL)
@@ -2904,37 +2906,57 @@ static PyObject *build_open_arrow_segments(PyObject *self, PyObject *args, PyObj
     segments = (double *)PyArray_DATA(segments_arr);
     source_positions = (npy_intp *)PyArray_DATA(source_positions_arr);
 
+    for (npy_intp curve_idx = 0; curve_idx < n_curves; ++curve_idx)
     {
-        npy_intp out_idx = 0;
-        for (npy_intp curve_idx = 0; curve_idx < n_curves; ++curve_idx)
+        npy_intp start = curve_offsets[curve_idx];
+        npy_intp end = curve_offsets[curve_idx + 1];
+        double vertices[6];
+        if (!build_open_arrow_vertices_for_curve(
+                display_points + start * 2,
+                end - start,
+                head_lengths[curve_idx],
+                head_widths[curve_idx],
+                vertices))
         {
-            npy_intp start = curve_offsets[curve_idx];
-            npy_intp end = curve_offsets[curve_idx + 1];
-            double vertices[6];
-            if (!build_open_arrow_vertices_for_curve(
-                    display_points + start * 2,
-                    end - start,
-                    head_lengths[curve_idx],
-                    head_widths[curve_idx],
-                    vertices))
-            {
-                continue;
-            }
-
-            segments[out_idx * 4 + 0] = vertices[0];
-            segments[out_idx * 4 + 1] = vertices[1];
-            segments[out_idx * 4 + 2] = vertices[2];
-            segments[out_idx * 4 + 3] = vertices[3];
-            source_positions[out_idx] = curve_idx;
-            out_idx += 1;
-
-            segments[out_idx * 4 + 0] = vertices[4];
-            segments[out_idx * 4 + 1] = vertices[5];
-            segments[out_idx * 4 + 2] = vertices[2];
-            segments[out_idx * 4 + 3] = vertices[3];
-            source_positions[out_idx] = curve_idx;
-            out_idx += 1;
+            continue;
         }
+
+        memcpy(segments + valid_curves * 6, vertices, 6 * sizeof(double));
+        source_positions[valid_curves] = curve_idx;
+        valid_curves += 1;
+    }
+
+    if (valid_curves < n_curves)
+    {
+        PyArrayObject *trimmed_segments_arr = NULL;
+        PyArrayObject *trimmed_positions_arr = NULL;
+        output_dims_segments[0] = valid_curves;
+        output_dims_segments[1] = 3;
+        output_dims_segments[2] = 2;
+        output_dims_positions[0] = valid_curves;
+        trimmed_segments_arr = (PyArrayObject *)PyArray_SimpleNew(3, output_dims_segments, NPY_DOUBLE);
+        trimmed_positions_arr = (PyArrayObject *)PyArray_SimpleNew(1, output_dims_positions, NPY_INTP);
+        if (trimmed_segments_arr == NULL || trimmed_positions_arr == NULL)
+        {
+            Py_XDECREF(trimmed_segments_arr);
+            Py_XDECREF(trimmed_positions_arr);
+            goto cleanup;
+        }
+        if (valid_curves > 0)
+        {
+            memcpy(
+                PyArray_DATA(trimmed_segments_arr),
+                segments,
+                (size_t)(valid_curves * 6) * sizeof(double));
+            memcpy(
+                PyArray_DATA(trimmed_positions_arr),
+                source_positions,
+                (size_t)valid_curves * sizeof(npy_intp));
+        }
+        Py_DECREF(segments_arr);
+        Py_DECREF(source_positions_arr);
+        segments_arr = trimmed_segments_arr;
+        source_positions_arr = trimmed_positions_arr;
     }
 
     result = Py_BuildValue("NN", (PyObject *)segments_arr, (PyObject *)source_positions_arr);

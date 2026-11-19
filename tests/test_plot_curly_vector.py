@@ -1,12 +1,15 @@
 """Tests for the dataset-level curly-vector plotting modules."""
 
+import io
 import warnings
+from functools import partial
 from unittest.mock import Mock, patch
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import xarray as xr
+from matplotlib.transforms import Affine2D
 
 import skyborn.plot as plot_module
 import skyborn.plot.vector as vector_module
@@ -23,6 +26,11 @@ from skyborn.plot._adapters.grid_prepare import (
     _prepare_source_vector_grid,
     _wrap_periodic_grid_queries,
 )
+from skyborn.plot._artists.vector_artists import _build_open_arrow_segments_batch
+from skyborn.plot._shared.style import (
+    _ncl_arrow_edge_size_px,
+    _resolve_open_arrow_size,
+)
 from skyborn.plot.vector import (
     CurlyVectorKey,
     CurlyVectorPlotSet,
@@ -36,6 +44,7 @@ from skyborn.plot.vector import (
     curly_vector,
     curly_vector_key,
 )
+from tests.plot_reference_geometry import open_arrow_geometry_reference
 
 
 class TestVectorFacade:
@@ -1835,3 +1844,179 @@ class TestDatasetCurlyVectorErrorHandling:
             )
 
         plt.close(fig)
+
+
+class TestCurlyVectorOpenHeadGeometry:
+    """Verify closed open-arrow tip geometry and display-space accuracy."""
+
+    def test_curly_vector_open_head_is_single_closed_polyline(self):
+        fig, ax = plt.subplots(figsize=(3, 3), dpi=600)
+        try:
+            x = np.linspace(-2.0, 2.0, 9)
+            y = np.linspace(-2.0, 2.0, 9)
+            angle = np.deg2rad(151.35)
+            u = np.full((9, 9), np.cos(angle))
+            v = np.full((9, 9), np.sin(angle))
+
+            ax.set_xlim(-2.0, 2.0)
+            ax.set_ylim(-2.0, 2.0)
+            ax.set_axis_off()
+
+            result = curly_vector(
+                ax,
+                x,
+                y,
+                u,
+                v,
+                start_points=np.array([[0.0, 0.0]]),
+                integration_direction="forward",
+                arrowstyle="->",
+                color="black",
+                linewidth=2.0,
+                arrowsize=2.0,
+            )
+
+            segments = result.lines.get_segments()
+            assert len(segments) == 2
+            shaft = np.asarray(segments[0], dtype=float)
+            head = np.asarray(segments[1], dtype=float)
+            assert head.shape == (3, 2)
+            np.testing.assert_allclose(head[1], shaft[-1], rtol=0.0, atol=1e-12)
+            assert result.lines.get_capstyle() == "butt"
+            assert result.lines.get_joinstyle() == "round"
+
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png", dpi=600, facecolor="white")
+            buf.seek(0)
+            img = plt.imread(buf)
+
+            tip_disp = ax.transData.transform(head[1])
+            col = int(round(tip_disp[0]))
+            row = int(round(img.shape[0] - tip_disp[1]))
+            assert 1 <= row < img.shape[0] - 1
+            assert 1 <= col < img.shape[1] - 1
+            assert float(img[row, col, :3].mean()) < 0.25
+            patch_lum = img[row - 1 : row + 2, col - 1 : col + 2, :3].mean(axis=-1)
+            assert int(np.sum(patch_lum < 0.25)) >= 4
+        finally:
+            plt.close(fig)
+
+    def test_curly_vector_open_head_accuracy_matches_reference(self):
+        native_builder = partial(
+            vector_module._native_helpers._call_native_build_open_arrow_segments,
+            vector_module._build_open_arrow_segments_native,
+        )
+        display_curves = [
+            np.array([[10.0, 20.0], [35.0, 28.0], [52.0, 44.0]], dtype=float),
+            np.array([[120.0, 90.0], [95.0, 102.0], [74.0, 108.0]], dtype=float),
+        ]
+        head_lengths = np.array([8.4, 6.2], dtype=float)
+        head_widths = np.array([5.2, 4.0], dtype=float)
+
+        for transform in (
+            Affine2D().scale(2.5, 2.5).translate(10.0, 15.0),
+            Affine2D().scale(12.0, -0.35).translate(40.0, 480.0),
+        ):
+            data_polylines, sources = _build_open_arrow_segments_batch(
+                transform=transform,
+                display_curves=display_curves,
+                head_lengths_px=head_lengths,
+                head_widths_px=head_widths,
+                build_open_arrow_segments_batch_fn=native_builder,
+            )
+            assert data_polylines.shape == (2, 3, 2)
+            np.testing.assert_array_equal(sources, np.array([0, 1], dtype=int))
+            disp_polylines = transform.transform(data_polylines.reshape(-1, 2)).reshape(
+                -1, 3, 2
+            )
+            for idx, (curve, hlen, hwid) in enumerate(
+                zip(display_curves, head_lengths, head_widths, strict=True)
+            ):
+                ref = open_arrow_geometry_reference(curve, hlen, hwid)
+                assert ref is not None
+                expected = np.vstack(
+                    [ref["left_display"], ref["tip_display"], ref["right_display"]]
+                )
+                assert float(np.max(np.abs(disp_polylines[idx] - expected))) < 1e-11
+
+        cases = [
+            ("uniform", (6, 4), (-10.0, 10.0), (-5.0, 5.0), False),
+            ("cross_section", (8, 3), (-60.0, 60.0), (1000.0, 100.0), True),
+        ]
+        for _, figsize, xlim, ylim, invert_y in cases:
+            fig_open, ax_open = plt.subplots(figsize=figsize, dpi=100)
+            fig_fill, ax_fill = plt.subplots(figsize=figsize, dpi=100)
+            try:
+                for ax in (ax_open, ax_fill):
+                    ax.set_xlim(*xlim)
+                    ax.set_ylim(min(ylim), max(ylim))
+                    if invert_y:
+                        ax.invert_yaxis()
+
+                x = np.linspace(xlim[0], xlim[1], 13)
+                y = np.linspace(min(ylim), max(ylim), 11)
+                xx, _ = np.meshgrid(x, y, indexing="xy")
+                theta = 0.08 * (xx - xlim[0])
+                u = 5.0 * np.cos(theta)
+                v = 5.0 * np.sin(theta)
+
+                res_open = curly_vector(
+                    ax_open,
+                    x,
+                    y,
+                    u,
+                    v,
+                    density=0.7,
+                    integration_direction="forward",
+                    arrowstyle="->",
+                )
+                res_fill = curly_vector(
+                    ax_fill,
+                    x,
+                    y,
+                    u,
+                    v,
+                    density=0.7,
+                    integration_direction="forward",
+                    arrowstyle="-|>",
+                )
+
+                open_segs = res_open.lines.get_segments()
+                fill_segs = res_fill.lines.get_segments()
+                assert len(open_segs) == 2 * len(fill_segs)
+                assert len(fill_segs) > 0
+
+                arrow_min_edge_px = max(ax_open.bbox.width * 0.003, 1.2)
+                arrow_max_edge_px = max(ax_open.bbox.width * 0.012, arrow_min_edge_px)
+                head_len_px, head_wid_px = _resolve_open_arrow_size(
+                    _ncl_arrow_edge_size_px(
+                        5.0,
+                        max_mag=5.0,
+                        min_edge_px=arrow_min_edge_px,
+                        max_edge_px=arrow_max_edge_px,
+                    )
+                )
+
+                for idx, fill_shaft in enumerate(fill_segs):
+                    open_shaft = np.asarray(open_segs[2 * idx], dtype=float)
+                    open_head = np.asarray(open_segs[2 * idx + 1], dtype=float)
+                    np.testing.assert_allclose(
+                        open_shaft,
+                        np.asarray(fill_shaft, dtype=float),
+                        rtol=0.0,
+                        atol=1e-12,
+                    )
+                    assert open_head.shape == (3, 2)
+                    shaft_disp = ax_open.transData.transform(open_shaft)
+                    head_disp = ax_open.transData.transform(open_head)
+                    ref = open_arrow_geometry_reference(
+                        shaft_disp, head_len_px, head_wid_px
+                    )
+                    assert ref is not None
+                    expected = np.vstack(
+                        [ref["left_display"], ref["tip_display"], ref["right_display"]]
+                    )
+                    assert float(np.max(np.abs(head_disp - expected))) < 1e-11
+            finally:
+                plt.close(fig_open)
+                plt.close(fig_fill)
