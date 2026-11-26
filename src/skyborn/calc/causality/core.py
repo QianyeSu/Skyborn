@@ -21,6 +21,7 @@ __all__ = [
     "signif_isopersist",
     "signif_isospec",
 ]
+import inspect
 import sys
 from importlib import import_module
 from importlib import util as importlib_util
@@ -334,8 +335,11 @@ def granger_causality(
         raise ValueError("Timeseries must be of same length")
 
     x = np.array([y1, y2]).T
-    res = grangercausalitytests(x, maxlag=maxlag, addconst=addconst, verbose=verbose)
-    return res
+    if "verbose" in inspect.signature(grangercausalitytests).parameters:
+        return grangercausalitytests(
+            x, maxlag=maxlag, addconst=addconst, verbose=verbose
+        )
+    return grangercausalitytests(x, maxlag=maxlag, addconst=addconst)
 
 
 def phaseran(recblk: np.ndarray, nsurr: int) -> np.ndarray:

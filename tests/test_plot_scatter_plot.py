@@ -1,5 +1,6 @@
 """Tests for the display-space-thinned scatter plotting helpers."""
 
+import importlib
 from unittest.mock import Mock, patch
 
 import matplotlib.pyplot as plt
@@ -11,6 +12,8 @@ from matplotlib.collections import PathCollection
 from skyborn.plot import scatter as public_scatter
 from skyborn.plot.nclcurly_core import thin_display_candidates, thin_mapped_candidates
 from skyborn.plot.scatter import _array_scatter as array_scatter
+
+_scatter_module = importlib.import_module("skyborn.plot.scatter")
 
 
 class TestScatterPlot:
@@ -505,7 +508,7 @@ class TestScatterWrapper:
 
         plt.close(fig)
 
-    @patch("skyborn.plot.scatter._array_scatter")
+    @patch.object(_scatter_module, "_array_scatter")
     def test_public_scatter_converts_crs_like_transform(self, mock_array_scatter):
         fig, ax = plt.subplots(figsize=(6, 4))
         mock_result = Mock(spec=PathCollection)
@@ -527,7 +530,7 @@ class TestScatterWrapper:
         assert mock_array_scatter.call_args.kwargs["transform"] is converted_transform
         plt.close(fig)
 
-    @patch("skyborn.plot.scatter._array_scatter")
+    @patch.object(_scatter_module, "_array_scatter")
     def test_public_scatter_rejects_duplicate_axes(self, mock_array_scatter):
         fig, ax = plt.subplots(figsize=(6, 4))
 

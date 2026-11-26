@@ -30,7 +30,7 @@ jobs:
               git+https://github.com/skyborn-org/skyborn-backend.git
           }
           pip install -r requirements/base.txt --no-deps || true
-          pip install pandas xarray matplotlib netCDF4 metpy tqdm statsmodels scipy scikit-learn dask
+          pip install pytest pandas xarray matplotlib netCDF4 metpy tqdm statsmodels scipy scikit-learn dask
           pip install --no-deps -e .
 
       - name: Run unit tests

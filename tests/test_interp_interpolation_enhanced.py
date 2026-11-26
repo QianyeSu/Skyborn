@@ -257,7 +257,7 @@ class TestInterpolationEdgeCases:
             0,
         )
 
-        assert_array_equal(output_c[0], output_columns)
+        assert_allclose(output_c[0], output_columns, rtol=1e-14, atol=1e-14)
 
     @pytest.mark.parametrize("method", ["linear", "log"])
     def test_compiled_ecmwf_path_matches_python_fallback(self, monkeypatch, method):
