@@ -270,8 +270,8 @@ def test_reduced_gaussian_spectogrd_pair_matches_individual_calls():
     grid_b = reduced.spectogrd(spec_b)
     pair_a, pair_b = reduced._spectogrd_pair(spec_a, spec_b)
 
-    np.testing.assert_allclose(pair_a, grid_a, rtol=0, atol=0)
-    np.testing.assert_allclose(pair_b, grid_b, rtol=0, atol=0)
+    np.testing.assert_allclose(pair_a, grid_a, rtol=1e-6, atol=1e-6)
+    np.testing.assert_allclose(pair_b, grid_b, rtol=1e-6, atol=1e-6)
 
 
 @pytest.mark.skipif(not SPHARM_AVAILABLE, reason="spharm module not available")

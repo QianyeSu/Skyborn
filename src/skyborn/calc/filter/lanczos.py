@@ -21,7 +21,7 @@ except ImportError:
     xr = None
 
 # Import Fortran backend (required)
-from . import _lanczos_core
+from skybornbackend.calc.filter import _lanczos_core
 
 __all__ = [
     "lanczos_filter",

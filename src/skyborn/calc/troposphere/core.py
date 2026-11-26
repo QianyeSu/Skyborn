@@ -49,7 +49,7 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import numpy.ma as ma
 
-from . import tropopause_height
+from skybornbackend.calc.troposphere import tropopause_height
 
 __all__ = ["trop_wmo", "trop_wmo_profile"]
 

@@ -9,7 +9,6 @@ on:
       - "requirements/**"
       - "pyproject.toml"
       - ".github/workflows/test-coverage.yml"
-      - ".gitattributes"
   pull_request:
     branches: [main, dev]
   workflow_dispatch:
@@ -23,296 +22,35 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # Fetch full history for coverage comparison
+          fetch-depth: 0
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
-      - name: Install system dependencies
+      - name: Install system toolchain (for optional git fallback builds)
         run: |
           sudo apt-get update
-
-          # Ubuntu 24.04 already ships GCC 13/14 in the official repositories.
-          # Avoid Launchpad PPA network flakiness during CI bootstrap.
-          sudo apt-get install -y build-essential
-          sudo apt-get install -y gcc-13 gfortran-13 g++-13
-          sudo apt-get install -y gcc-14 gfortran-14 g++-14 || echo "GCC-14 not available, using GCC-13"
-
-          # Install OpenMP and math libraries
-          sudo apt-get install -y libomp-dev libopenblas-dev libblas-dev liblapack-dev
-          # Install build tools
-          sudo apt-get install -y meson ninja-build pkg-config cmake
-          # Install eccodes for meteorological data support
-          sudo apt-get install -y libeccodes-dev || echo "eccodes installation optional"
-
-          # Set up compiler alternatives - prioritize GCC 13+
-          # Try GCC-14 first, fallback to GCC-13
-          if [ -x "/usr/bin/gcc-14" ]; then
-            echo "Setting up GCC-14 as primary compiler"
-            sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 140 --slave /usr/bin/g++ g++ /usr/bin/g++-14
-            sudo update-alternatives --install /usr/bin/gfortran gfortran /usr/bin/gfortran-14 140
-            sudo update-alternatives --set gcc /usr/bin/gcc-14
-            sudo update-alternatives --set gfortran /usr/bin/gfortran-14
-          else
-            echo "Setting up GCC-13 as primary compiler"
-            sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 130 --slave /usr/bin/g++ g++ /usr/bin/g++-13
-            sudo update-alternatives --install /usr/bin/gfortran gfortran /usr/bin/gfortran-13 130
-            sudo update-alternatives --set gcc /usr/bin/gcc-13
-            sudo update-alternatives --set gfortran /usr/bin/gfortran-13
-          fi
+          sudo apt-get install -y build-essential gfortran pkg-config libeccodes-dev || true
 
       - name: Install dependencies
         run: |
-          export OPENBLAS_ROOT=/usr
-          export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}
-          python -m pip install --upgrade pip setuptools wheel
-          # Install build dependencies first, including meson for f2py
-          pip install build "cython>=3.0.0" numpy meson ninja
-
-          # Try to install package in development mode, but continue if it fails
-          echo "=== Attempting to install package ==="
-          if pip install -e . --no-deps; then
-            echo "✓ Package installed successfully"
-          else
-            echo "✗ Package installation failed, trying manual setup"
-            # Try to at least get the Python modules working
-            export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
-            echo "Set PYTHONPATH to include src directory"
-          fi
-
+          python -m pip install --upgrade pip setuptools wheel meson ninja "cython>=3.0.0" numpy
+          pip install skyborn-plot skyborn-spharm skyborn-backend || {
+            pip install --no-build-isolation \
+              git+https://github.com/skyborn-org/skyborn-plot.git \
+              git+https://github.com/skyborn-org/skyborn-spharm.git \
+              git+https://github.com/skyborn-org/skyborn-backend.git
+          }
           pip install -r requirements/base.txt
           pip install -r requirements/dev.txt
+          pip install -e . --no-deps
           pip install pytest-xdist coverage[toml]
-          # Try to install eccodes, but don't fail if it doesn't work
-          pip install eccodes || echo "eccodes installation failed, continuing without it"
 
-      - name: Verify coverage tooling
-        run: |
-          python -m pip show pytest pytest-cov coverage
-          pytest --version
-          pytest --help | grep -- --cov
-
-      - name: Verify compiler environment
-        run: |
-          echo "=== Compiler Environment Verification ==="
-          gcc --version | head -1
-          gfortran --version | head -1
-
-          # Check gfortran version is 13+
-          GFORTRAN_VERSION=$(gfortran --version | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1 | cut -d. -f1)
-          echo "gfortran major version: $GFORTRAN_VERSION"
-          if [ "$GFORTRAN_VERSION" -ge 13 ]; then
-            echo "✓ gfortran $GFORTRAN_VERSION.x meets requirement (13+)"
-          else
-            echo "✗ gfortran $GFORTRAN_VERSION.x is below requirement (13+)"
-            exit 1
-          fi
-
-          echo "=== Setting up build environment ==="
-          export CC=gcc
-          export FC=gfortran
-          export F77=gfortran
-          export F90=gfortran
-          export CXX=g++
-          echo "Compilers: CC=$CC, FC=$FC, CXX=$CXX"
-
-          echo "=== Testing f2py with gfortran $GFORTRAN_VERSION ==="
-          echo 'subroutine test_compile()
-          print *, "gfortran compilation test"
-          end subroutine' > test.f90
-          python -m numpy.f2py -c test.f90 -m test_mod --fcompiler=gnu95 && echo "✓ f2py works with gfortran $GFORTRAN_VERSION" || echo "✗ f2py failed"
-          rm -f test.f90 test_mod*.so *.mod
-
-      - name: Manual build attempt with detailed output
-        run: |
-          echo "=== Attempting manual build with verbose output ==="
-          # Set explicit compiler environment variables with OpenMP support
-          export FC=gfortran
-          export F77=gfortran
-          export F90=gfortran
-          export CC=gcc
-          export CXX=g++
-          export OPENBLAS_ROOT=/usr
-          export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}
-          export FFLAGS="-O3 -fPIC -fopenmp -fno-second-underscore -std=legacy"
-          export CFLAGS="-O3 -fPIC -fopenmp"
-          export LDFLAGS="-fopenmp"
-          export NPY_NUM_BUILD_JOBS=2
-
-          echo "=== Environment setup ==="
-          echo "FC=$FC, F77=$F77, F90=$F90, CC=$CC, CXX=$CXX"
-          echo "FFLAGS=$FFLAGS"
-          echo "CFLAGS=$CFLAGS"
-          echo "LDFLAGS=$LDFLAGS"
-
-          # Verify compiler versions one more time
-          $FC --version | head -1
-          $CC --version | head -1
-
-          # Clean any previous build artifacts
-          echo "=== Cleaning previous build artifacts ==="
-          rm -rf build/ dist/ *.egg-info/
-          find . -name "*.so" -delete
-          find . -name "*.pyd" -delete
-          find . -name "*.mod" -delete
-          # Keep committed C shim sources under src/.  The direct Fortran/C
-          # Meson modules use files such as *_module.c as real source files.
-          find . -name "*module.c" -type f ! -path "./src/*" -delete
-          find . -name "*-f2pywrappers*.f" -type f ! -path "./src/*" -delete
-
-          # Try building with maximum verbosity and error capture
-          echo "=== Building with detailed f2py output ==="
-          if ! python setup.py build_ext --inplace --verbose 2>&1 | tee build_output.log; then
-            echo "=== Build failed, analyzing error output ==="
-            echo "=== Last 100 lines of build output ==="
-            tail -100 build_output.log || echo "No build_output.log found"
-            echo "=== Checking for specific f2py errors ==="
-            grep -i "error\|failed\|undefined\|cannot find\|no such file" build_output.log || echo "No obvious errors found"
-            echo "=== Checking compiler-specific errors ==="
-            grep -i "gfortran\|gcc\|compile\|link" build_output.log || echo "No compiler errors found"
-            echo "=== Checking for any compiled modules despite failure ==="
-            find . -name "*.so" -o -name "*.pyd" | head -10
-          else
-            echo "=== Build succeeded, checking compiled modules ==="
-            find . -name "*.so" -o -name "*.pyd" | head -10
-            echo "=== Validating extension locations ==="
-
-            # Meson inplace builds already place modules in the correct package
-            # directories. Do not guess-copy compiled modules into
-            # src/skyborn/interp/, because that would shadow Python wrapper
-            # modules such as interp/rcm2points.py.
-            unexpected_interp_extensions=$(find src/skyborn/interp -maxdepth 1 -type f \( \
-              -name 'rcm2points*.so' -o -name 'rcm2points*.pyd' -o -name 'rcm2points*.dylib' -o \
-              -name 'rcm2rgrid*.so' -o -name 'rcm2rgrid*.pyd' -o -name 'rcm2rgrid*.dylib' -o \
-              -name 'triple2grid*.so' -o -name 'triple2grid*.pyd' -o -name 'triple2grid*.dylib' -o \
-              -name 'grid2triple*.so' -o -name 'grid2triple*.pyd' -o -name 'grid2triple*.dylib' \
-            \))
-            if [ -n "$unexpected_interp_extensions" ]; then
-              echo "$unexpected_interp_extensions" | while IFS= read -r unexpected; do
-                echo "::error::Unexpected compiled interp module at package root: $unexpected"
-              done
-              echo "These files shadow the Python wrapper modules in src/skyborn/interp/."
-              exit 1
-            fi
-
-            echo "=== Final extension locations ==="
-            find src/skyborn/ -name "*.so" -o -name "*.pyd" -exec ls -la {} \;
-          fi
-
-          echo "=== Setting up Python environment ==="
-          export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
-          echo "PYTHONPATH set to: $PYTHONPATH"
-
-          echo "=== Checking Python import capabilities ==="
-          python -c "import sys; print('Python executable:', sys.executable)"
-          python -c "import sys; print('Python path:', sys.path[:3])"
-          python -c "
-          try:
-              import numpy
-              print('✓ numpy version:', numpy.__version__)
-          except Exception as e:
-              print('✗ numpy import failed:', e)
-          "
-          python -c "
-          try:
-              import skyborn
-              print('✓ skyborn imported successfully')
-          except Exception as e:
-              print('✗ skyborn import failed:', e)
-          "
-          python -c "
-          try:
-              import skyborn.interp.rcm2points as rcm2points_module
-              from skyborn.interp import rcm2points
-              print('✓ interp wrapper imported successfully:', rcm2points_module.__file__)
-              print('✓ skyborn.interp.rcm2points callable imported successfully:', callable(rcm2points))
-          except Exception as e:
-              print('✗ interp wrapper import failed:', e)
-              import traceback
-              traceback.print_exc()
-          "
-          python -c "
-          try:
-              from skyborn.gridfill import fill
-              print('✓ gridfill imported successfully')
-          except Exception as e:
-              print('✗ gridfill import failed:', e)
-          "
-          python -c "
-          try:
-              from skyborn.spharm import _spherepack
-              print('✓ _spherepack imported successfully')
-          except Exception as e:
-              print('✗ _spherepack import failed:', e)
-              print('Available files in spharm directory:')
-              import os
-              try:
-                  files = os.listdir('src/skyborn/spharm')
-                  for f in files:
-                      if '_spherepack' in f or f.endswith('.so') or f.endswith('.pyd'):
-                          print(f'  {f}')
-              except:
-                  pass
-          "
-          python -c "
-          try:
-              from skyborn.spharm import Spharmt
-              print('✓ spharm.Spharmt imported successfully')
-          except Exception as e:
-              print('✗ spharm.Spharmt import failed:', e)
-              import traceback
-              traceback.print_exc()
-          "
-
-      - name: Run tests with coverage (focus on working modules)
+      - name: Run tests with coverage
         id: run_tests_with_coverage
         run: |
-          echo "=== Setting up test environment ==="
-          export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
-          echo "PYTHONPATH: $PYTHONPATH"
-
-          echo "=== Pre-test import verification ==="
-          python -c "import sys; print('Python path:', sys.path[:3])"
-          python -c "
-          try:
-              import skyborn
-              print('✓ skyborn imported')
-          except Exception as e:
-              print('✗ skyborn import failed:', e)
-          "
-          python -c "
-          try:
-              from skyborn.gridfill import fill
-              print('✓ gridfill imported')
-          except Exception as e:
-              print('✗ gridfill import failed:', e)
-          "
-
-          echo "=== Testing module imports ==="
-          # Test all skyborn submodules dynamically
-          for subdir in src/skyborn/*/; do
-            if [ -f "${subdir}__init__.py" ]; then
-              submodule=$(basename "$subdir")
-              echo "Testing skyborn.$submodule..."
-              python -c "
-              try:
-                  import skyborn.$submodule
-                  print('✓ skyborn.$submodule imported successfully')
-              except Exception as e:
-                  print('✗ skyborn.$submodule failed:', str(e)[:100])
-              " 2>/dev/null || echo "✗ skyborn.$submodule failed"
-            fi
-          done
-
-          echo "=== Checking compiled extensions ==="
-          find src/ -name "*.so" -o -name "*.pyd" | head -10
-          ls -la src/skyborn/spharm/ || echo "spharm directory not found"
-          ls -la src/skyborn/gridfill/ || echo "gridfill directory not found"
-
-          echo "=== Running tests with coverage ==="
-          # Run all tests, but preserve the exit code so later steps can still inspect coverage files.
           set +e
           pytest tests/ \
             --cov=src/skyborn \
@@ -323,50 +61,11 @@ jobs:
             -v --tb=short 2>&1 | tee pytest-coverage.log
           pytest_exit=${PIPESTATUS[0]}
           set -e
-
           echo "pytest exit code: $pytest_exit"
-          if [ "$pytest_exit" -ne 0 ]; then
-            echo "Pytest reported failures. Coverage upload will continue if coverage.xml exists."
-          fi
-
-          echo "=== Test execution completed ==="
-
-      - name: Check if coverage files exist
-        run: |
-          echo "Checking for coverage files..."
-          ls -la .coverage* || echo ".coverage data not found"
-          ls -la coverage.xml || echo "coverage.xml not found"
-          ls -la htmlcov/ || echo "htmlcov directory not found"
-          ls -la pytest-coverage.log || echo "pytest-coverage.log not found"
-
-      - name: Generate coverage report even if tests failed
-        if: always() && steps.run_tests_with_coverage.outcome != 'skipped'
-        run: |
-          # If coverage.xml doesn't exist, try to generate it from raw coverage data.
-          if [ ! -f coverage.xml ]; then
-            if [ -f .coverage ]; then
-              echo "Attempting to generate coverage report manually from .coverage ..."
-              coverage xml --fail-under=0
-            else
-              echo "Raw .coverage data not found."
-            fi
-          fi
-
-      - name: Validate coverage report presence
-        if: always() && steps.run_tests_with_coverage.outcome != 'skipped'
-        run: |
-          if [ ! -f coverage.xml ]; then
-            echo "::error::coverage.xml was not generated, so Codecov would show 0% or no data."
-            if [ -f pytest-coverage.log ]; then
-              echo "=== Last 120 lines of pytest-coverage.log ==="
-              tail -120 pytest-coverage.log
-            fi
-            exit 1
-          fi
-          echo "coverage.xml is present and ready for Codecov upload."
+          exit $pytest_exit
 
       - name: Upload coverage to Codecov
-        if: always() && steps.run_tests_with_coverage.outcome != 'skipped'
+        if: always()
         uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml
@@ -387,82 +86,6 @@ jobs:
             pytest-coverage.log
         continue-on-error: true
 
-  # Performance benchmarks
-  performance:
-    name: Performance Benchmarks
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install -e . --no-deps || echo "Package install failed, continuing with available modules"
-          pip install pytest-benchmark memory-profiler numpy xarray
-
-      - name: Run performance tests
-        run: |
-          python -c "
-          import time
-          import numpy as np
-          print('Performance benchmarks:')
-
-          # Test basic numpy operations (always available)
-          data = np.random.rand(1000, 1000)
-          start = time.time()
-          result = np.sum(data)
-          end = time.time()
-          print(f'Numpy sum (1000x1000): {end-start:.4f}s')
-
-          # Test gridfill if available
-          try:
-              import skyborn.gridfill
-              print('✓ Gridfill module available')
-
-              # Simple gridfill performance test
-              import numpy.ma as ma
-              data = np.random.rand(100, 100)
-              mask = np.zeros_like(data, dtype=bool)
-              mask[40:60, 40:60] = True
-              masked_data = ma.array(data, mask=mask)
-
-              start = time.time()
-              filled, converged = skyborn.gridfill.fill(masked_data, xdim=1, ydim=0, eps=1e-3, itermax=50)
-              end = time.time()
-              print(f'Gridfill (100x100, 400 missing): {end-start:.4f}s, converged: {converged[0]}')
-          except Exception as e:
-              print(f'✗ Gridfill performance test failed: {e}')
-
-          # Test other skyborn functions if available
-          try:
-              import skyborn
-              print('✓ Basic skyborn module available')
-
-              # Test gradient calculation if available
-              try:
-                  data_1d = np.random.rand(1000)
-                  coords_1d = np.linspace(-90, 90, 1000)
-                  start = time.time()
-                  grad = skyborn.calculate_gradient(data_1d, coords_1d)
-                  end = time.time()
-                  print(f'Gradient calculation (1000 points): {end-start:.4f}s')
-              except Exception:
-                  print('Gradient calculation not available')
-
-          except Exception as e:
-              print(f'✗ Skyborn module not available: {e}')
-
-          print('Performance tests completed!')
-          "
-
-  # Documentation build test
   docs:
     name: Documentation Build Test
     runs-on: ubuntu-latest
@@ -476,30 +99,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            gfortran \
-            libopenblas-dev \
-            libblas-dev \
-            liblapack-dev \
-            pkg-config
-
       - name: Install dependencies
         run: |
-          export OPENBLAS_ROOT=/usr
-          export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}
           python -m pip install --upgrade pip setuptools wheel
-          pip install -e . --no-deps
-          pip install -r requirements/base.txt
-          pip install -r requirements/docs.txt
+          SKYBORN_DOCS_BUILD=1 pip install -e . --no-deps
+          pip install -r requirements/docs.txt || pip install sphinx myst-nb sphinx-copybutton furo toml
 
       - name: Test documentation build
         run: |
           cd docs
-          sphinx-build -b html source build/html --quiet
+          SKYBORN_DOCS_BUILD=1 sphinx-build -b html source build/html --quiet
 
       - name: Upload docs artifacts
         uses: actions/upload-artifact@v7

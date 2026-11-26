@@ -6,7 +6,7 @@ import numpy as np
 import xarray as xr
 
 from .errors import ChunkError, CoordinateError
-from .fortran.rcm2rgrid import drcm2rgrid, drgrid2rcm
+from skybornbackend.interp.fortran.rcm2rgrid import drcm2rgrid, drgrid2rcm
 from .missing_values import fort2py_msg, py2fort_msg
 
 supported_types = typing.Union[xr.DataArray, np.ndarray]

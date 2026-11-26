@@ -2,10 +2,6 @@
 requires = [
     "setuptools>=61.0",
     "wheel",
-    "numpy>=1.24.0",
-    "Cython>=3.0.0",
-    "meson",
-    "ninja",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -48,10 +44,10 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/QianyeSu/Skyborn"
+"Homepage" = "https://github.com/skyborn-org/Skyborn"
 "Documentation" = "https://skyborn.readthedocs.io/"
-"Repository" = "https://github.com/QianyeSu/Skyborn"
-"Bug Tracker" = "https://github.com/QianyeSu/Skyborn/issues"
+"Repository" = "https://github.com/skyborn-org/Skyborn"
+"Bug Tracker" = "https://github.com/skyborn-org/Skyborn/issues"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

@@ -10,6 +10,9 @@ This module provides various interpolation methods including:
 - Grid to/from triple format conversion
 """
 
+from skybornbackend.interp import regrid
+
+from .._package_alias import register_module_alias, register_subpackage_alias
 from .interpolation import (
     delta_pressure_hybrid,
     interp_hybrid_to_pressure,
@@ -33,6 +36,10 @@ from .regridding import (
     regrid_dataset,
 )
 from .triple_to_grid import grid_to_triple, triple_to_grid
+
+register_module_alias("skyborn.interp.regrid", "skybornbackend.interp.regrid")
+register_module_alias("skyborn.interp.fortran", "skybornbackend.interp.fortran")
+register_subpackage_alias("skyborn.interp.fortran", "skybornbackend.interp.fortran")
 
 __all__ = [
     "delta_pressure_hybrid",

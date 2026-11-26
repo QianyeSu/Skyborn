@@ -1,8 +1,31 @@
 Changelog
 =========
 
-Version 0.4.7 (Current)
+Version 0.5.0 (Current)
 -----------------------
+
+**Modular Architecture & Pure-Python Core**
+
+* **Modular Package Split under ``skyborn-org``**: Extracted compiled C,
+  Fortran, and Cython components into dedicated packages while preserving
+  100% API and import compatibility across all ``skyborn.*`` namespaces:
+
+  - ``skyborn-plot`` (``import skybornplot``): Pure-C Matplotlib plotting
+    engines (``curly_vector``, ``arrow_contour``, ``shadow_contourf``,
+    ``scatter``), seamlessly re-exported via ``skyborn.plot``.
+  - ``skyborn-spharm`` (``import skybornspharm``): Fortran/OpenMP
+    SPHEREPACK & reduced Gaussian spherical harmonic transforms, seamlessly
+    re-exported via ``skyborn.spharm``.
+  - ``skyborn-backend`` (``import skybornbackend``): Compiled computational
+    kernels for ``skyborn.calc``, ``skyborn.interp``, and
+    ``skyborn.gridfill``.
+
+* **Instant Pure-Python Distribution**: ``skyborn`` now builds as a universal
+  pure-Python wheel (``py3-none-any.whl``) with zero local Fortran/C
+  compilation overhead.
+
+Version 0.4.7
+-------------
 
 **Plotting Fixes**
 

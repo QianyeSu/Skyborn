@@ -1,17 +1,12 @@
-name: Build and publish wheels
+name: Build and publish pure-Python wheel
 
 on:
   push:
-    branches: [main, dev] # Add dev branch for testing
+    branches: [main, dev]
     tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      reason:
-        description: "Reason for manual trigger"
-        required: false
-        default: "Manual testing"
   release:
     types: [published]
 
@@ -23,349 +18,91 @@ permissions:
   contents: read
 
 jobs:
-  build_wheels:
-    name: Build wheel ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-    runs-on: ${{ matrix.buildplat[0] }}
-    strategy:
-      fail-fast: false
-      matrix:
-        # Following NumPy's matrix pattern
-        buildplat:
-          - [ubuntu-latest, manylinux_x86_64]
-          - [ubuntu-latest, manylinux2014_x86_64] # manylinux2014 (glibc 2.17) for older servers
-          # - [ubuntu-22.04, manylinux_aarch64]  # ARM64 Linux support - disabled due to Python version availability
-          - [macos-15-intel, macosx_x86_64] # macOS Intel
-          - [macos-15, macosx_arm64] # macOS Apple Silicon
-          - [windows-2022, win_amd64]
-        python: ["cp39", "cp310", "cp311", "cp312", "cp313", "cp314"]
-        # exclude:
-          # manylinux2014 (CentOS7/glibc 2.17) only ships cp39 and cp310
-          # interpreters; cp311+ builds are unreliable on that image.
-          # Users on Python 3.11+ almost always have glibc > 2.17 and can use
-          # manylinux_2_28 wheels.
-          # DISABLED: We support manylinux2014 for all Python versions with numpy<2.4.5 constraint
-          # - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-          #   python: "cp311"
-          # - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-          #   python: "cp312"
-          # - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-          #   python: "cp313"
-          # - buildplat: [ubuntu-latest, manylinux2014_x86_64]
-          #   python: "cp314"
-        #   # Exclude unsupported Python versions on ARM64 Linux
-        #   - buildplat: [ubuntu-22.04, manylinux_aarch64]
-        #     python: "cp39"  # Python 3.9 not available in ARM64 images
-        #   - buildplat: [ubuntu-22.04, manylinux_aarch64]
-        #     python: "cp313"  # Python 3.13 not yet available in ARM64 images
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      # Set up QEMU for cross-compilation (ARM64 Linux) - Temporarily disabled
-      # - name: Set up QEMU
-      #   if: matrix.buildplat[1] == 'manylinux_aarch64'
-      #   uses: docker/setup-qemu-action@v3
-      #   with:
-      #     platforms: arm64
-
-      # Setup for macOS with a dynamically discovered Homebrew GCC toolchain
-      - name: Setup macOS
-        if: startsWith(matrix.buildplat[0], 'macos')
-        shell: bash
-        run: |
-          set -euxo pipefail
-          export HOMEBREW_NO_AUTO_UPDATE=1
-
-          brew list gcc >/dev/null 2>&1 || brew install gcc
-
-          GCC_PREFIX="$(brew --prefix gcc)"
-          GCC_BIN_DIR="${GCC_PREFIX}/bin"
-          C_BIN="$(compgen -G "${GCC_BIN_DIR}/gcc-[0-9]*" | sort -V | tail -1)"
-          CXX_BIN="$(compgen -G "${GCC_BIN_DIR}/g++-[0-9]*" | sort -V | tail -1)"
-          F_BIN="$(compgen -G "${GCC_BIN_DIR}/gfortran-[0-9]*" | sort -V | tail -1)"
-
-          test -n "${C_BIN}"
-          test -n "${CXX_BIN}"
-          test -n "${F_BIN}"
-
-          echo "${GCC_BIN_DIR}" >> "$GITHUB_PATH"
-          echo "MACOS_CC=${C_BIN}" >> "$GITHUB_ENV"
-          echo "MACOS_CXX=${CXX_BIN}" >> "$GITHUB_ENV"
-          echo "MACOS_FC=${F_BIN}" >> "$GITHUB_ENV"
-          echo "MACOS_F77=${F_BIN}" >> "$GITHUB_ENV"
-          echo "MACOS_F90=${F_BIN}" >> "$GITHUB_ENV"
-
-          echo "MACOSX_DEPLOYMENT_TARGET=15.0" >> "$GITHUB_ENV"
-
-      # Setup for Linux (install gfortran in container)
-      - name: Setup Linux environment
-        if: startsWith(matrix.buildplat[1], 'manylinux')
-        run: |
-          # Set environment for Linux builds
-          echo "CIBW_BEFORE_BUILD_LINUX=yum install -y gcc-gfortran || dnf install -y gcc-gfortran || echo 'gfortran install failed'" >> "$GITHUB_ENV"
-
-      # Setup for Windows
-      # - name: Setup Windows
-      #   if: matrix.buildplat[1] == 'win_amd64'
-      #   run: |
-      #     # Set environment for Windows builds
-      #     echo "CIBW_BEFORE_BUILD_WINDOWS=choco install -y mingw --no-progress && pip install delvewheel" >> "$GITHUB_ENV"
-      #     echo "CIBW_REPAIR_WHEEL_COMMAND_WINDOWS=delvewheel repair -w {dest_dir} {wheel}" >> "$GITHUB_ENV"
-      - name: Setup Windows MSYS2
-        if: matrix.buildplat[1] == 'win_amd64'
-        uses: msys2/setup-msys2@v2
-        with:
-          update: true
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-gcc-fortran
-            mingw-w64-x86_64-libgomp
-            mingw-w64-x86_64-pkgconf
-
-      # Install delvewheel and expose gfortran/gcc in PATH for cibuildwheel
-      - name: Setup Windows Fortran and delvewheel
-        if: matrix.buildplat[1] == 'win_amd64'
-        shell: pwsh
-        run: |
-          function Resolve-MsysTool([string]$name) {
-            $candidates = @(
-              (Join-Path $env:RUNNER_TEMP "msys64\\mingw64\\bin\\$name.exe"),
-              "D:\\a\\_temp\\msys64\\mingw64\\bin\\$name.exe",
-              "C:\\msys64\\mingw64\\bin\\$name.exe"
-            )
-            foreach ($candidate in $candidates) {
-              if (Test-Path $candidate) {
-                return (Resolve-Path $candidate).Path
-              }
-            }
-
-            $command = Get-Command "$name.exe" -ErrorAction SilentlyContinue |
-              Where-Object { $_.Source -like '*mingw64\\bin\\*' } |
-              Select-Object -First 1
-            if ($command) {
-              return $command.Source
-            }
-
-            throw "Could not resolve MSYS2 tool: $name.exe"
-          }
-
-          $gcc = Resolve-MsysTool "gcc"
-          $gxx = Resolve-MsysTool "g++"
-          $gfortran = Resolve-MsysTool "gfortran"
-          $pkgConfig = Resolve-MsysTool "pkg-config"
-          $mingwBin = Split-Path $gcc -Parent
-
-          $mingwBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          "MSYS2_BIN=$($mingwBin -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MSYS2_CC=$($gcc -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MSYS2_CXX=$($gxx -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MSYS2_FC=$($gfortran -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MSYS2_PKG_CONFIG=$($pkgConfig -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          pip install delvewheel
-
-      - name: Validate matrix combination
-        shell: bash
-        run: |
-          echo "Python: ${{ matrix.python }}"
-          echo "Build platform: ${{ matrix.buildplat[1] }}"
-          echo "CIBW_BUILD would be: ${{ matrix.python }}-${{ matrix.buildplat[1] }}"
-
-          if [ -z "${{ matrix.python }}" ] || [ -z "${{ matrix.buildplat[1] }}" ]; then
-            echo "Invalid matrix combination: python='${{ matrix.python }}', plat='${{ matrix.buildplat[1] }}'"
-            exit 1
-          fi
-
-          # Check if the combination makes sense
-          CIBW_BUILD="${{ matrix.python }}-${{ matrix.buildplat[1] }}"
-          if [ "$CIBW_BUILD" = "-" ] || [ "$CIBW_BUILD" = "" ]; then
-            echo "CIBW_BUILD would be empty or invalid: '$CIBW_BUILD'"
-            exit 1
-          fi
-
-          echo "Matrix combination is valid"
-
-      # Use different cibuildwheel versions for different platforms
-      - name: Build wheels (Windows)
-        if: matrix.buildplat[1] == 'win_amd64'
-        # uses: pypa/cibuildwheel@v2.21.3
-        uses: pypa/cibuildwheel@e090b81e30c4d855ea63bf4b6e59204c09a101ae # v4.2.1
-        with:
-          output-dir: wheelhouse
-        env:
-          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-          CIBW_SKIP: "*-win32 *-musllinux*"
-          CIBW_BEFORE_BUILD_WINDOWS: pip install meson ninja
-          CIBW_ENVIRONMENT_WINDOWS: CC=${{ env.MSYS2_CC }} CXX=${{ env.MSYS2_CXX }} FC=${{ env.MSYS2_FC }} F77=${{ env.MSYS2_FC }} F90=${{ env.MSYS2_FC }} PKG_CONFIG=${{ env.MSYS2_PKG_CONFIG }}
-          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair -w {dest_dir} {wheel}
-          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
-          CIBW_BUILD_VERBOSITY: 1
-
-      - name: Build wheels (macOS x86_64)
-        if: matrix.buildplat[1] == 'macosx_x86_64'
-        uses: pypa/cibuildwheel@v4.0.0
-        with:
-          output-dir: wheelhouse
-        env:
-          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-          CIBW_SKIP: "*-win32 *-musllinux*"
-          CIBW_BEFORE_BUILD: python -m pip install meson ninja
-          CIBW_ENVIRONMENT_MACOS: FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
-          MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
-          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
-          CIBW_BUILD_VERBOSITY: 1
-
-      - name: Build wheels (macOS arm64)
-        if: matrix.buildplat[1] == 'macosx_arm64'
-        uses: pypa/cibuildwheel@v4.0.0
-        with:
-          output-dir: wheelhouse
-        env:
-          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-          CIBW_SKIP: "*-win32 *-musllinux*"
-          CIBW_BEFORE_BUILD: python -m pip install meson ninja
-          CIBW_ENVIRONMENT_MACOS: FC=${{ env.MACOS_FC }} F77=${{ env.MACOS_F77 }} F90=${{ env.MACOS_F90 }} CC=${{ env.MACOS_CC }} CXX=${{ env.MACOS_CXX }} MACOSX_DEPLOYMENT_TARGET=${{ env.MACOSX_DEPLOYMENT_TARGET }}
-          MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
-          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
-          CIBW_BUILD_VERBOSITY: 1
-
-      - name: Build wheels (Linux x86_64)
-        if: matrix.buildplat[1] == 'manylinux_x86_64'
-        # uses: pypa/cibuildwheel@v2.21.3
-        uses: pypa/cibuildwheel@e090b81e30c4d855ea63bf4b6e59204c09a101ae # v4.2.1
-        with:
-          output-dir: wheelhouse
-        env:
-          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-          CIBW_SKIP: "*-win32 *-musllinux*"
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
-          CIBW_BEFORE_BUILD_LINUX: |
-            dnf install -y gcc-gfortran || yum install -y gcc-gfortran || echo 'gfortran install failed'
-          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc
-          CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed')"
-          CIBW_BUILD_VERBOSITY: 1
-
-      - name: Build wheels (Linux manylinux2014 x86_64)
-        if: matrix.buildplat[1] == 'manylinux2014_x86_64'
-        uses: pypa/cibuildwheel@e090b81e30c4d855ea63bf4b6e59204c09a101ae # v4.2.1
-        with:
-          output-dir: wheelhouse
-        env:
-          CIBW_BUILD: ${{ matrix.python }}-manylinux_x86_64
-          CIBW_SKIP: "*-win32 *-musllinux*"
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
-          CIBW_BEFORE_BUILD_LINUX: |
-            yum install -y gcc-gfortran || echo 'gfortran install failed'
-            echo "numpy<2.4.5" > /tmp/constraints.txt
-          CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PIP_CONSTRAINT=/tmp/constraints.txt
-          # Skip wheel test: manylinux2014 test env lacks binary wheels for heavy deps
-          # (scipy, cartopy, netCDF4, etc.) and source builds fail on old CentOS7 libraries.
-          # The wheel itself is built correctly; real-world install on the target server is the actual test.
-          CIBW_TEST_SKIP: "*"
-          CIBW_BUILD_VERBOSITY: 1
-      # Build wheels (Linux aarch64) - Temporarily disabled due to Python version availability
-      # - name: Build wheels (Linux aarch64)
-      #   if: matrix.buildplat[1] == 'manylinux_aarch64'
-      #   uses: pypa/cibuildwheel@e090b81e30c4d855ea63bf4b6e59204c09a101ae # v4.2.1
-      #   with:
-      #     output-dir: wheelhouse
-      #   env:
-      #     CIBW_BUILD: ${{ matrix.python }}-${{ matrix.buildplat[1] }}
-      #     CIBW_SKIP: "*-win32 *-musllinux*"
-      #     CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
-      #     CIBW_BEFORE_BUILD_LINUX: |
-      #       # Install gfortran and dependencies
-      #       dnf install -y gcc-gfortran || yum install -y gcc-gfortran || echo 'gfortran install failed'
-      #       # Install modern geospatial stack from conda-forge (more reliable)
-      #       curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-aarch64.sh -o mambaforge.sh
-      #       bash mambaforge.sh -b -p /opt/mambaforge
-      #       /opt/mambaforge/bin/mamba install -y -c conda-forge "proj>=9.4.0" "pyproj>=3.6.0" geos gdal sqlite
-      #       # Verify PROJ version
-      #       /opt/mambaforge/bin/proj --version || echo 'PROJ not available'
-      #     CIBW_ENVIRONMENT_LINUX: FC=gfortran CC=gcc PROJ_DIR=/opt/mambaforge PKG_CONFIG_PATH=/opt/mambaforge/lib/pkgconfig PATH=/opt/mambaforge/bin:$PATH LD_LIBRARY_PATH=/opt/mambaforge/lib:$LD_LIBRARY_PATH
-      #     CIBW_TEST_COMMAND: python -c "import skyborn; print('Basic import test passed on aarch64')"
-      #     CIBW_BUILD_VERBOSITY: 1
-
-      - name: Upload wheels
-        uses: actions/upload-artifact@v7
-        with:
-          name: wheel-${{ matrix.python }}-${{ matrix.buildplat[1] }}
-          path: ./wheelhouse/*.whl
-
-  build_sdist:
-    name: Build source distribution
+  build_dist:
+    name: Build pure-Python wheel and sdist
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Build sdist
+      - name: Build pure-Python wheel and source distribution
         run: |
           python -m pip install --upgrade pip build
-          python -m build --sdist
+          python -m build --outdir dist
+          ls -lh dist/
+          test -f dist/skyborn-*-py3-none-any.whl
+          (cd dist && sha256sum * > SHA256SUMS.txt)
 
-      - name: Upload sdist
+      - name: Verify pure-Python wheel contents
+        run: |
+          python -B -c '
+          import glob, zipfile
+          whl = glob.glob("dist/skyborn-*-py3-none-any.whl")[0]
+          with zipfile.ZipFile(whl) as zf:
+              compiled = [n for n in zf.namelist() if n.endswith((".so", ".pyd", ".dylib", ".f90", ".c", ".pyx"))]
+          assert not compiled, f"Unexpected compiled files in pure wheel: {compiled}"
+          print("Verified pure-Python wheel:", whl)
+          '
+
+      - name: Upload distributions
         uses: actions/upload-artifact@v7
         with:
-          name: sdist
-          path: dist/*.tar.gz
+          name: skyborn-dist
+          path: dist/*
 
-  # Publish distributions (only on tags or release)
+  test_install:
+    name: Test wheel installation on ${{ matrix.os }} / Python ${{ matrix.python }}
+    needs: [build_dist]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-15]
+        python: ["3.10", "3.12", "3.14"]
+
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Download distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: skyborn-dist
+          path: dist
+
+      - name: Install pure-Python wheel without compiling
+        run: |
+          WHEEL=$(python -c "import glob; print(glob.glob('dist/skyborn-*-py3-none-any.whl')[0])")
+          python -m pip install --no-deps "$WHEEL"
+          python -B -c "import skyborn; print('skyborn pure wheel import passed:', skyborn.__version__)"
+
   publish:
-    name: Publish distributions
-    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'release' && github.event.action == 'published') || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v'))
-    needs: [build_wheels, build_sdist]
+    name: Publish to GitHub Release & PyPI
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'release' && github.event.action == 'published')
+    needs: [build_dist, test_install]
     runs-on: ubuntu-latest
     permissions:
-      actions: read # Download wheel and sdist artifacts from this workflow run
-      contents: write # Upload distributions to the GitHub release
-      id-token: write # Use trusted publishing
+      actions: read
+      contents: write
+      id-token: write
+
     steps:
-      - name: Checkout repository for release notes
+      - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Download wheel artifacts
+      - name: Download distributions
         uses: actions/download-artifact@v8
         with:
-          pattern: "wheel-*"
-          path: dist-artifacts/wheels
-          merge-multiple: true
-
-      - name: Download source distribution artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: sdist
-          path: dist-artifacts/sdist
-          merge-multiple: true
-
-      - name: Prepare dist directory
-        run: |
-          set -euo pipefail
-          echo "Downloaded artifacts:"
-          find dist-artifacts -maxdepth 3 -type f -print | sort
-          wheel_count="$(find dist-artifacts/wheels -type f -name '*.whl' | wc -l)"
-          sdist_count="$(find dist-artifacts/sdist -type f -name '*.tar.gz' | wc -l)"
-          if [[ "$wheel_count" -eq 0 || "$sdist_count" -eq 0 ]]; then
-            echo "Expected wheel and sdist artifacts, found ${wheel_count} wheels and ${sdist_count} sdists." >&2
-            exit 1
-          fi
-          mkdir -p dist
-          find dist-artifacts/wheels -type f -name "*.whl" -exec cp {} dist/ \;
-          find dist-artifacts/sdist -type f -name "*.tar.gz" -exec cp {} dist/ \;
-          (cd dist && sha256sum * > SHA256SUMS.txt)
-          ls -la dist/
-          mkdir -p pypi-dist
-          find dist -maxdepth 1 \( -name "skyborn-*.whl" -o -name "skyborn-*.tar.gz" \) -exec cp {} pypi-dist/ \;
-          ls -la pypi-dist/
+          name: skyborn-dist
+          path: dist
 
       - name: Generate release notes
         id: release_notes
@@ -373,50 +110,20 @@ jobs:
           VERSION="${{ github.ref_name }}"
           VERSION_NUM="${VERSION#v}"
           RELEASE_DATE="$(LC_ALL=C date '+%b %d, %Y' | sed 's/^Sep /Sept /')"
-
-          # Check if there's a pre-written release notes file
-          if [ -f "release_notes_${VERSION_NUM}.md" ]; then
-            echo "Using pre-written release notes"
-            cp "release_notes_${VERSION_NUM}.md" release_body.md
-          else
-            # Generate release notes from changelog
-            : > release_body.md
-
-            # Extract version section from changelog
-            if [ -f "docs/source/changelog.rst" ]; then
-              # Try to extract the current version section from changelog
-              # This is a simple extraction; adjust based on your changelog format
-              sed -n "/Version ${VERSION_NUM}/,/Version [0-9]/p" docs/source/changelog.rst | \
-                head -n -1 >> release_body.md || echo "See CHANGELOG for details." >> release_body.md
-            else
-              echo "See [CHANGELOG](https://skyborn.readthedocs.io/en/latest/changelog.html) for details." >> release_body.md
-            fi
-
-            if [ "$VERSION_NUM" = "0.4.6" ] && ! grep -q "@klemmeri" release_body.md; then
-              echo "" >> release_body.md
-              echo "---" >> release_body.md
-              echo "" >> release_body.md
-              echo "**Contributors:**" >> release_body.md
-              echo "" >> release_body.md
-              echo "* Special thanks to @klemmeri for contributing full inter-model covariance in SSM and t quantile interval calculation in ROF (#69)!" >> release_body.md
-            fi
-
-            echo "" >> release_body.md
-            echo "---" >> release_body.md
-            echo "" >> release_body.md
-            echo "**Installation:**" >> release_body.md
-            echo '```bash' >> release_body.md
-            echo "pip install --upgrade skyborn==${VERSION_NUM}" >> release_body.md
-            echo '```' >> release_body.md
+          : > release_body.md
+          if [ -f "docs/source/changelog.rst" ]; then
+            sed -n "/Version ${VERSION_NUM}/,/Version [0-9]/p" docs/source/changelog.rst | head -n -1 >> release_body.md || true
           fi
-
-          # Release titles already identify the version; omit changelog status labels.
+          echo "" >> release_body.md
+          echo "---" >> release_body.md
+          echo "**Installation:**" >> release_body.md
+          echo '```bash' >> release_body.md
+          echo "pip install --upgrade skyborn==${VERSION_NUM}" >> release_body.md
+          echo '```' >> release_body.md
           sed -i -E 's/^(Version [0-9]+\.[0-9]+\.[0-9]+) \(Current\)$/\1/' release_body.md
-
           echo "RELEASE_DATE=${RELEASE_DATE}" >> "$GITHUB_OUTPUT"
-          cat release_body.md
 
-      - name: Upload distributions to GitHub release
+      - name: Upload to GitHub release
         uses: softprops/action-gh-release@v3
         with:
           name: ${{ github.ref_name }} (${{ steps.release_notes.outputs.RELEASE_DATE || env.RELEASE_DATE }})
@@ -426,129 +133,8 @@ jobs:
           overwrite_files: true
           generate_release_notes: true
 
-      - name: Check whether this version is already on PyPI
-        id: pypi_check
-        shell: bash
-        run: |
-          set -euo pipefail
-          artifact="$(find dist -maxdepth 1 \( -name 'skyborn-*.whl' -o -name 'skyborn-*.tar.gz' \) | sort | head -n1)"
-          if [[ -z "$artifact" ]]; then
-            echo "No distribution artifacts found in dist/" >&2
-            exit 1
-          fi
-
-          filename="$(basename "$artifact")"
-          if [[ "$filename" == *.tar.gz ]]; then
-            version="${filename#skyborn-}"
-            version="${version%.tar.gz}"
-          else
-            version="${filename#skyborn-}"
-            version="${version%%-*}"
-          fi
-
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-          status_code="$(
-            curl -sS -o /dev/null -w '%{http_code}' \
-              "https://pypi.org/pypi/skyborn/${version}/json"
-          )"
-
-          case "$status_code" in
-            200)
-              echo "should_publish=false" >> "$GITHUB_OUTPUT"
-              echo "PyPI already has skyborn ${version}; skipping publish."
-              ;;
-            404)
-              echo "should_publish=true" >> "$GITHUB_OUTPUT"
-              echo "PyPI does not have skyborn ${version}; continuing publish."
-              ;;
-            *)
-              echo "Unexpected response from PyPI for skyborn ${version}: HTTP ${status_code}" >&2
-              exit 1
-              ;;
-          esac
-
-      - name: Report skipped publish
-        if: steps.pypi_check.outputs.should_publish != 'true'
-        shell: bash
-        run: |
-          echo "Skipping PyPI publish because skyborn ${{ steps.pypi_check.outputs.version }} already exists."
-
       - name: Publish to PyPI
-        if: steps.pypi_check.outputs.should_publish == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
-          packages-dir: pypi-dist
-
-  # Test installation (multi-platform, multi-Python)
-  test_install:
-    name: Test installation on ${{ matrix.os }} / Python ${{ matrix.python }}
-    needs: [build_wheels]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, windows-latest, macos-15, macos-15-intel]
-        python: ["cp39", "cp310", "cp311", "cp312", "cp313", "cp314"]
-    steps:
-      - name: Map abi tag to python version
-        id: mapver
-        shell: bash
-        run: |
-          case "${{ matrix.python }}" in
-            cp39)  echo "PYVER=3.9"  >> $GITHUB_ENV ;;
-            cp310) echo "PYVER=3.10" >> $GITHUB_ENV ;;
-            cp311) echo "PYVER=3.11" >> $GITHUB_ENV ;;
-            cp312) echo "PYVER=3.12" >> $GITHUB_ENV ;;
-            cp313) echo "PYVER=3.13" >> $GITHUB_ENV ;;
-            cp314) echo "PYVER=3.14" >> $GITHUB_ENV ;;
-          esac
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYVER }}
-
-      - name: Download wheels
-        uses: actions/download-artifact@v8
-        with:
-          pattern: "wheel-${{ matrix.python }}-*"
-          path: wheels
-          merge-multiple: true
-
-      - name: Install from wheel
-        shell: bash
-        run: |
-          PYTAG=${{ matrix.python }}
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            # We build two Linux wheels for cp39/cp310 (manylinux2014 + manylinux_2_28).
-            # Pick exactly one wheel to avoid passing two local wheel files to pip.
-            if [[ "$PYTAG" == "cp39" || "$PYTAG" == "cp310" ]]; then
-              WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-manylinux2014_x86_64*.whl | head -n 1)
-            else
-              WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl | head -n 1)
-            fi
-            echo "Selected wheel: $WHEEL"
-            pip install --no-deps "$WHEEL"
-            # Install only minimal deps required for importing skyborn.
-            pip install --prefer-binary numpy xarray matplotlib scipy dask statsmodels tqdm metpy scikit-learn || pip install numpy xarray matplotlib
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            if [[ "${{ matrix.os }}" == "macos-15" ]]; then
-              WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-macosx*_arm64.whl | head -n 1)
-            elif [[ "${{ matrix.os }}" == "macos-15-intel" ]]; then
-              WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-macosx*_x86_64.whl | head -n 1)
-            else
-              echo "Unsupported macOS runner: ${{ matrix.os }}"
-              exit 1
-            fi
-            echo "Selected wheel: $WHEEL"
-            pip install --no-deps "$WHEEL"
-            pip install --prefer-binary numpy xarray matplotlib scipy dask statsmodels tqdm metpy scikit-learn || pip install numpy xarray matplotlib
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            WHEEL=$(ls -1 wheels/skyborn*-$PYTAG-*-win_amd64*.whl | head -n 1)
-            echo "Selected wheel: $WHEEL"
-            pip install --no-deps "$WHEEL"
-            pip install --prefer-binary numpy xarray matplotlib scipy dask statsmodels tqdm metpy scikit-learn || pip install numpy xarray matplotlib
-          fi
-          python -c "import skyborn; print('Wheel installation test passed')"
+          packages-dir: dist

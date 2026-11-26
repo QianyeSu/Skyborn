@@ -51,7 +51,13 @@ Examples
 """
 
 # Import high-level Python core interface (user-facing API)
+from ..._package_alias import register_module_alias
 from .core import GeostrophicWind, geostrophic_speed, geostrophic_uv, geostrophic_wind
+
+register_module_alias(
+    "skyborn.calc.geostrophic.geostrophicwind",
+    "skybornbackend.calc.geostrophic.geostrophicwind",
+)
 
 # Define public API - only high-level functions for users
 __all__ = [

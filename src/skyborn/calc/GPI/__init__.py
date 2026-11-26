@@ -59,6 +59,8 @@ cyclone potential intensity 1. Interannual to interdecadal variability.
 Journal of Geophysical Research, 107(D24), 4801.
 """
 
+from skybornbackend.calc.GPI import tropical_cyclone_potential_intensity
+
 from . import xarray
 from .core import log_decompose_pi, pi_log_decomposition, potential_intensity
 
@@ -68,4 +70,5 @@ __all__ = [
     "log_decompose_pi",
     "pi_log_decomposition",
     "potential_intensity",
+    "tropical_cyclone_potential_intensity",
 ]

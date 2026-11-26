@@ -47,7 +47,7 @@ __all__ = [
     "most_unstable_cape_cin_grid",
 ]
 
-_BACKEND = import_module(f"{__package__}.cape_core")
+_BACKEND = import_module("skybornbackend.calc.cape.cape_core")
 
 
 def _as_numpy(values):

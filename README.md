@@ -1,18 +1,18 @@
 <p align="center">
-  <a href="https://github.com/QianyeSu/Skyborn" target="_blank">
-    <img src="https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/_static/SkyBornLogo.svg" alt="Skyborn Logo" width="400"/>
+  <a href="https://github.com/skyborn-org/Skyborn" target="_blank">
+    <img src="https://raw.githubusercontent.com/skyborn-org/Skyborn/main/docs/source/_static/SkyBornLogo.svg" alt="Skyborn Logo" width="400"/>
   </a>
 </p>
 
 [![PyPI version](https://badge.fury.io/py/skyborn.svg)](https://badge.fury.io/py/skyborn)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/skyborn)](https://pypi.org/project/skyborn/)
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/skyborn)](https://pypi.org/project/skyborn/)
-[![codecov](https://codecov.io/gh/QianyeSu/Skyborn/graph/badge.svg?token=YOUR_TOKEN_HERE)](https://codecov.io/gh/QianyeSu/Skyborn)
-[![License](https://img.shields.io/github/license/QianyeSu/Skyborn)](https://github.com/QianyeSu/Skyborn/blob/main/LICENSE)
-[![Tests](https://github.com/QianyeSu/Skyborn/actions/workflows/stable-ci.yml/badge.svg)](https://github.com/QianyeSu/Skyborn/actions/workflows/stable-ci.yml)
-[![Platform](https://img.shields.io/badge/platform-Windows-blue)](https://github.com/QianyeSu/Skyborn)
+[![codecov](https://codecov.io/gh/skyborn-org/Skyborn/graph/badge.svg?token=YOUR_TOKEN_HERE)](https://codecov.io/gh/skyborn-org/Skyborn)
+[![License](https://img.shields.io/github/license/skyborn-org/Skyborn)](https://github.com/skyborn-org/Skyborn/blob/main/LICENSE)
+[![Tests](https://github.com/skyborn-org/Skyborn/actions/workflows/stable-ci.yml/badge.svg)](https://github.com/skyborn-org/Skyborn/actions/workflows/stable-ci.yml)
+[![Platform](https://img.shields.io/badge/platform-Windows-blue)](https://github.com/skyborn-org/Skyborn)
 [![Code style](https://img.shields.io/badge/code%20style-black-blue.svg)](https://github.com/psf/black)
-[![Build Status](https://github.com/QianyeSu/Skyborn/actions/workflows/test-coverage.yml/badge.svg?branch=main)](https://github.com/QianyeSu/Skyborn/actions/workflows/test-coverage.yml?query=branch%3Amain)
+[![Build Status](https://github.com/skyborn-org/Skyborn/actions/workflows/test-coverage.yml/badge.svg?branch=main)](https://github.com/skyborn-org/Skyborn/actions/workflows/test-coverage.yml?query=branch%3Amain)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://skyborn.readthedocs.io/en/latest/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18075252.svg)](https://doi.org/10.5281/zenodo.18075252)
 
@@ -49,7 +49,7 @@ pip install -U --index-url https://pypi.org/simple/ skyborn
 
 Skyborn provides ultra-fast spatial trend calculation and climate index regression analysis for atmospheric data:
 
-![Precipitation Trends Comparison](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/precipitation_trends_comparison_1979_2014.png)
+![Precipitation Trends Comparison](https://raw.githubusercontent.com/skyborn-org/Skyborn/main/docs/source/images/precipitation_trends_comparison_1979_2014.png)
 
 **Key Capabilities:**
 - **High-Speed Spatial Trends**: Calculate long-term climate trends across global grids
@@ -85,7 +85,7 @@ gridded climate-analysis tasks as well as standard single-series trend tests.
 
 The Skyborn `windspharm` submodule provides powerful tools for analyzing global wind patterns through **streamfunction** and **velocity potential** calculations:
 
-![Streamfunction and Velocity Potential](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/windspharm_sfvp_analysis.png)
+![Streamfunction and Velocity Potential](https://raw.githubusercontent.com/skyborn-org/Skyborn/main/docs/source/images/windspharm_sfvp_analysis.png)
 
 **Key Capabilities:**
 - **Streamfunction Analysis**: Identifies rotational (non-divergent) wind components
@@ -108,7 +108,7 @@ The Skyborn `windspharm` submodule provides powerful tools for analyzing global 
 
 The Skyborn `gridfill` submodule provides advanced interpolation techniques for filling missing data in atmospheric and climate datasets:
 
-![Gridfill Missing Data Interpolation](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/gridfill_demo_result_readme.png)
+![Gridfill Missing Data Interpolation](https://raw.githubusercontent.com/skyborn-org/Skyborn/main/docs/source/images/gridfill_demo_result_readme.png)
 
 **Key Features:**
 - **Poisson-based Interpolation**: Physically consistent gap filling
@@ -131,7 +131,7 @@ The example above demonstrates filling gaps in global precipitation data, where 
 
 Skyborn provides an NCL-like `curly_vector` renderer for atmospheric wind fields while keeping a Matplotlib and Cartopy compatible API.
 
-![Curly Vector WRF Example](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/wrf_curly_vector_integration_direction_density08_ref10.png)
+![Curly Vector WRF Example](https://raw.githubusercontent.com/skyborn-org/Skyborn/main/docs/source/images/wrf_curly_vector_integration_direction_density08_ref10.png)
 
 **Key Capabilities:**
 - **NCL-like Curved Vectors**: Curved tails and lighter arrow heads for cleaner large-scale flow visualization
@@ -142,7 +142,7 @@ Skyborn provides an NCL-like `curly_vector` renderer for atmospheric wind fields
 
 Skyborn `curly_vector` also supports vertical cross-section rendering, for example latitude-pressure plots using meridional wind and scaled omega:
 
-![Curly Vector Vertical Profile Example](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/hadley_msf_v_omega_ncl_curly.png)
+![Curly Vector Vertical Profile Example](https://raw.githubusercontent.com/skyborn-org/Skyborn/main/docs/source/images/hadley_msf_v_omega_ncl_curly.png)
 
 **Minimal Example:**
 ```python
@@ -181,7 +181,7 @@ ax.set_global()
 
 The Skyborn `windspharm` submodule delivers **~25% performance improvement** over standard implementations through modernized Fortran code and optimized algorithms:
 
-![Windspharm Performance Comparison](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/windspharm_performance_comparison.png)
+![Windspharm Performance Comparison](https://raw.githubusercontent.com/skyborn-org/Skyborn/main/docs/source/images/windspharm_performance_comparison.png)
 
 **Key Performance Metrics:**
 - **Vorticity Calculation**: ~25% faster
@@ -193,21 +193,21 @@ The Skyborn `windspharm` submodule delivers **~25% performance improvement** ove
 
 The Genesis Potential Index (GPI) module achieves **dramatic speedups** through vectorized Fortran implementation and native 3D processing:
 
-![GPI Speed Comparison](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/gpi_speed_comparison.png)
+![GPI Speed Comparison](https://raw.githubusercontent.com/skyborn-org/Skyborn/main/docs/source/images/gpi_speed_comparison.png)
 
 **Performance Highlights:**
 - **About 25x faster** than point-by-point implementations
 - Processes entire atmospheric grids in seconds
 - Native multi-dimensional support (3D/4D data)
 
-![GPI Global Distribution](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/gpi_global_distribution.png)
+![GPI Global Distribution](https://raw.githubusercontent.com/skyborn-org/Skyborn/main/docs/source/images/gpi_global_distribution.png)
 
 **Accuracy Validation:**
 - Correlation is effectively 1.0 against the reference implementation
 - RMSE is now on the order of **1e-4** for the core PI outputs, with very small overall error
 - Log-decomposition diagnostics also remain tightly matched to the updated `tcpyPI` results
 
-![GPI Scatter Comparison](https://raw.githubusercontent.com/QianyeSu/Skyborn/main/docs/source/images/gpi_scatter_comparison.png)
+![GPI Scatter Comparison](https://raw.githubusercontent.com/skyborn-org/Skyborn/main/docs/source/images/gpi_scatter_comparison.png)
 
 ## 📖 Citation
 

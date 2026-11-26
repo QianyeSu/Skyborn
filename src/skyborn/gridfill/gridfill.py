@@ -52,7 +52,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import numpy as np
 import numpy.ma as ma
 
-from ._gridfill import poisson_fill_grids as _poisson_fill_grids
+from skybornbackend.gridfill._gridfill import poisson_fill_grids as _poisson_fill_grids
 
 __all__ = ["fill"]
 

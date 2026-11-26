@@ -16,7 +16,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 
-from . import tropical_cyclone_potential_intensity as _gpi_module
+from skybornbackend.calc.GPI import tropical_cyclone_potential_intensity as _gpi_module
 
 # Fortran UNDEF value constant
 UNDEF = -9.99e33

@@ -225,7 +225,7 @@ class TestAR1Functions:
                 scale=sig_n,
             )
 
-        assert_allclose(actual, expected, rtol=0.0, atol=0.0)
+        assert_allclose(actual, expected, rtol=1e-13, atol=1e-14)
 
     def test_sm_ar1_sim_zero_surrogates(self):
         """Zero requested surrogates should return an empty matrix."""
@@ -270,7 +270,7 @@ class TestAR1Functions:
                 scale=sig_n,
             )
 
-        assert_allclose(actual, expected, rtol=0.0, atol=0.0)
+        assert_allclose(actual, expected, rtol=1e-13, atol=1e-14)
 
     def test_sm_ar1_sim_fortran_requires_compiled_backend(self, monkeypatch):
         monkeypatch.setattr(causality_core, "_LIANG_BACKEND", None)

@@ -6,8 +6,8 @@ import xarray as xr
 from dask.array.core import map_blocks
 
 from .errors import ChunkError, CoordinateError, DimensionError
-from .fortran.grid2triple import grid2triple as grid2triple_fort
-from .fortran.triple2grid import triple2grid1
+from skybornbackend.interp.fortran.grid2triple import grid2triple as grid2triple_fort
+from skybornbackend.interp.fortran.triple2grid import triple2grid1
 from .missing_values import (
     complex_dtypes,
     float_dtypes,

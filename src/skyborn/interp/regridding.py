@@ -19,7 +19,7 @@ import numpy as np
 import xarray
 from sklearn import neighbors
 
-from . import regrid as _native_regrid
+from skybornbackend.interp import regrid as _native_regrid
 
 _native_nearest_neighbor_indices = _native_regrid.nearest_neighbor_indices
 _native_nearest_regrid_apply = _native_regrid.nearest_regrid_apply

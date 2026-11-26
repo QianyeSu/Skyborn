@@ -53,7 +53,9 @@ def _load_core_module_from(
                     sys_modules["mann_kendall_core"] = previous
                 continue
 
-    candidate_names = []
+    candidate_names = [
+        "skybornbackend.calc.mann_kendall.mann_kendall_core",
+    ]
     if package_name:
         candidate_names.append(f"{package_name}.mann_kendall_core")
     candidate_names.append("skyborn.calc.mann_kendall.mann_kendall_core")

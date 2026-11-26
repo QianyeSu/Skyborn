@@ -38,7 +38,12 @@ from statsmodels.tsa.stattools import grangercausalitytests
 
 
 def _load_liang_backend() -> Optional[ModuleType]:
-    """Load the compiled Liang backend from source or an installed package."""
+    """Load the compiled Liang backend from ``skybornbackend`` or local source."""
+    try:
+        return import_module("skybornbackend.calc.causality._causality_core")
+    except Exception:
+        pass
+
     backend_dir = Path(__file__).resolve().parent
     module_name = f"{__package__}._causality_core"
 

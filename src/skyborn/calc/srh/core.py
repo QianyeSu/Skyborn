@@ -32,7 +32,7 @@ __all__ = [
     "srh_grid",
 ]
 
-_BACKEND = import_module(f"{__package__}.srh_core")
+_BACKEND = import_module("skybornbackend.calc.srh.srh_core")
 
 
 def _as_numpy(values):

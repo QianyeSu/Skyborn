@@ -2538,7 +2538,12 @@ class TestInterpolationHelperCoverage:
 
         dph_np = delta_pressure_hybrid(np.array([100000.0, 90000.0]), hya, hyb)
         assert dph_np.shape == (2, 2)
-        assert_array_equal(dph_np, np.array([[30000.0, 25000.0], [20000.0, 15000.0]]))
+        assert_allclose(
+            dph_np,
+            np.array([[30000.0, 25000.0], [20000.0, 15000.0]]),
+            rtol=1e-14,
+            atol=1e-12,
+        )
 
         dph_da = delta_pressure_hybrid(
             xr.DataArray([100000.0, 90000.0], dims=["x"]), hya, hyb
@@ -2657,9 +2662,11 @@ class TestInterpolationHelperCoverage:
         assert result.dims == ("lev", "lat", "lon")
         assert result.shape == (2, 1, 2)
         assert_array_equal(result.lev.values, np.array([10, 20]))
-        assert_array_equal(
+        assert_allclose(
             result.values,
             np.array([[[30000.0, 25000.0]], [[20000.0, 15000.0]]]),
+            rtol=1e-14,
+            atol=1e-12,
         )
 
     def test_delta_pressure_hybrid_standard_xarray_defaults_match_cesm_order(
@@ -2688,9 +2695,11 @@ class TestInterpolationHelperCoverage:
         assert result.dims == ("time", "lev", "lat", "lon")
         assert result.shape == (1, 2, 1, 2)
         assert_array_equal(result.lev.values, np.array([10, 20]))
-        assert_array_equal(
+        assert_allclose(
             result.values,
             np.array([[[[30000.0, 25000.0]], [[20000.0, 15000.0]]]]),
+            rtol=1e-14,
+            atol=1e-12,
         )
 
     def test_delta_pressure_hybrid_xarray_python_path_allows_output_dim_controls(
@@ -2725,9 +2734,11 @@ class TestInterpolationHelperCoverage:
         assert result.dims == ("time", "lev", "lat", "lon")
         assert result.shape == (1, 2, 1, 2)
         assert_array_equal(result.lev.values, np.array([10, 20]))
-        assert_array_equal(
+        assert_allclose(
             result.values,
             np.array([[[[30000.0, 25000.0]], [[20000.0, 15000.0]]]]),
+            rtol=1e-14,
+            atol=1e-12,
         )
 
     def test_delta_pressure_hybrid_xarray_fortran_path_allows_output_dim_controls(

@@ -22,18 +22,23 @@ from skyborn.windspharm import tools as _windspharm_tools
 
 def _load_geostrophic_backend() -> ModuleType:
     """Load the compiled backend without re-entering the package namespace."""
-    qualified_name = f"{__package__}.geostrophicwind"
-    try:
-        backend = import_module(qualified_name)
-    except ImportError:
-        legacy_backend = sys.modules.get("geostrophicwind")
-        if legacy_backend is None:
-            raise
-        return legacy_backend
+    for qualified_name in (
+        "skybornbackend.calc.geostrophic.geostrophicwind",
+        f"{__package__}.geostrophicwind",
+    ):
+        try:
+            backend = import_module(qualified_name)
+            sys.modules.setdefault("geostrophicwind", backend)
+            return backend
+        except ImportError:
+            continue
 
-    # Preserve the legacy top-level alias used by existing tests and callers.
-    sys.modules.setdefault("geostrophicwind", backend)
-    return backend
+    legacy_backend = sys.modules.get("geostrophicwind")
+    if legacy_backend is not None:
+        return legacy_backend
+    raise ImportError(
+        "skyborn.calc.geostrophic requires skybornbackend.calc.geostrophic.geostrophicwind"
+    )
 
 
 _geostrophic_module = _load_geostrophic_backend()

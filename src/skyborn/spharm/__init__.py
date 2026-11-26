@@ -1,47 +1,37 @@
-"""
-spharm - Spherical harmonic transforms for atmospheric/oceanic modeling
+"""Compatibility namespace re-exporting :mod:`skybornspharm` (``skyborn-spharm``)."""
 
-This module provides Python interfaces to NCAR's SPHEREPACK Fortran library
-for spherical harmonic transforms on the sphere. It is particularly useful
-for atmospheric and oceanic modeling applications.
+from __future__ import annotations
 
-Main classes:
-    Spharmt: Main interface for spherical harmonic transforms
-    ReducedGaussianSpharmt: Interface for packed reduced Gaussian transforms
+import importlib
+from typing import Any
 
-Example:
-    >>> from skyborn.spharm import Spharmt
-    >>> sht = Spharmt(nlon=144, nlat=73)
-    >>> spec = sht.grdtospec(data)  # Grid to spectral transform
-    >>> data_back = sht.spectogrd(spec)  # Spectral to grid transform
-"""
+import skybornspharm as _skybornspharm
 
-from .reduced_gaussian import ReducedGaussianSpharmt
-from .spherical_harmonics import (
-    Spharmt,
-    SpheremackError,
-    ValidationError,
-    gaussian_lats_wts,
-    getgeodesicpts,
-    getspecindx,
-    legendre,
-    regrid,
-    specintrp,
-)
+from .._package_alias import register_subpackage_alias
 
-__all__ = [
-    "Spharmt",
-    "SpheremackError",
-    "ValidationError",
-    "regrid",
-    "gaussian_lats_wts",
-    "getspecindx",
-    "getgeodesicpts",
-    "legendre",
-    "specintrp",
-    "ReducedGaussianSpharmt",
-]
+register_subpackage_alias("skyborn.spharm", "skybornspharm")
+
+__author__ = getattr(_skybornspharm, "__author__", "Qianye Su")
+__license__ = getattr(_skybornspharm, "__license__", "BSD-3-Clause")
+__all__ = [name for name in _skybornspharm.__all__ if name != "__version__"]
+
+for _name in __all__:
+    globals()[_name] = getattr(_skybornspharm, _name)
 
 
-__author__ = "Qianye Su"
-__license__ = "BSD-3-Clause"
+def __getattr__(name: str) -> Any:
+    try:
+        return getattr(_skybornspharm, name)
+    except AttributeError:
+        try:
+            mod = importlib.import_module(f"skyborn.spharm.{name}")
+            globals()[name] = mod
+            return mod
+        except ImportError as exc:
+            raise AttributeError(
+                f"module {__name__!r} has no attribute {name!r}"
+            ) from exc
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

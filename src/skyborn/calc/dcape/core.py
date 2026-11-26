@@ -11,7 +11,7 @@ import xarray as xr
 __all__ = ["calculate_dcape", "dcape_profile", "dcape_grid"]
 
 
-_BACKEND = import_module(f"{__package__}.dcape_core")
+_BACKEND = import_module("skybornbackend.calc.dcape.dcape_core")
 
 
 def _as_numpy(values):

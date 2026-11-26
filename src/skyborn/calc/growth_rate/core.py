@@ -40,11 +40,15 @@ from skyborn.interp.interpolation import interp_pressure_1d
 
 from ..troposphere import trop_wmo as _trop_wmo
 from ..troposphere import trop_wmo_profile as _trop_wmo_profile
-from .growth_rate_kernels import dbaroc_growth_rate_1d as _dbaroc_growth_rate_1d
-from .growth_rate_kernels import (
+from skybornbackend.calc.growth_rate.growth_rate_kernels import (
+    dbaroc_growth_rate_1d as _dbaroc_growth_rate_1d,
+)
+from skybornbackend.calc.growth_rate.growth_rate_kernels import (
     dbaroc_growth_rate_profiles as _dbaroc_growth_rate_profiles,
 )
-from .growth_rate_kernels import dbarot_growth_rate_1d as _dbarot_growth_rate_1d
+from skybornbackend.calc.growth_rate.growth_rate_kernels import (
+    dbarot_growth_rate_1d as _dbarot_growth_rate_1d,
+)
 
 GAS_CONSTANT_DRY = 287.04
 HEAT_CAPACITY = 1004.7

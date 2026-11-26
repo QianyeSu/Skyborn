@@ -1,31 +1,41 @@
-"""Public Skyborn plotting API.
+"""Compatibility namespace re-exporting :mod:`skybornplot` (``skyborn-plot``)."""
 
-Author: Qianye Su <suqianye2000@gmail.com>
-Copyright (c) 2025-2026 Qianye Su
-Created: 2026-03-01 14:58:56
-"""
+from __future__ import annotations
 
-from .contour import arrow_contour, arrow_contour_clabel, shadow_contourf
-from .plotting import (
-    GradientFillBetween,
-    add_centered_axes,
-    add_equal_axes,
-    createFigure,
-    gradient_fill_between,
-)
-from .scatter import scatter
-from .vector import curly_vector, curly_vector_key
+import importlib
+import sys
+from typing import Any
 
-__all__ = [
-    "GradientFillBetween",
-    "add_equal_axes",
-    "add_centered_axes",
-    "arrow_contour",
-    "arrow_contour_clabel",
-    "createFigure",
-    "curly_vector",
-    "curly_vector_key",
-    "gradient_fill_between",
-    "scatter",
-    "shadow_contourf",
-]
+import skybornplot as _skybornplot
+
+from .._package_alias import register_subpackage_alias
+
+register_subpackage_alias("skyborn.plot", "skybornplot")
+
+for _submod in ("contour", "plotting", "scatter", "vector"):
+    sys.modules[f"{__name__}.{_submod}"] = importlib.import_module(
+        f"skybornplot.{_submod}"
+    )
+
+__all__ = [name for name in _skybornplot.__all__ if name != "__version__"]
+
+for _name in __all__:
+    globals()[_name] = getattr(_skybornplot, _name)
+
+
+def __getattr__(name: str) -> Any:
+    try:
+        return getattr(_skybornplot, name)
+    except AttributeError:
+        try:
+            mod = importlib.import_module(f"skyborn.plot.{name}")
+            globals()[name] = mod
+            return mod
+        except ImportError as exc:
+            raise AttributeError(
+                f"module {__name__!r} has no attribute {name!r}"
+            ) from exc
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

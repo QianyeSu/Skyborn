@@ -99,6 +99,9 @@ To use any module, import Skyborn and access the module:
 
 **Version Highlights**
 
+* **v0.5.0**: Modular pure-Python architecture split across ``skyborn-org``
+  (``skyborn-plot``, ``skyborn-spharm``, and ``skyborn-backend``) with full
+  ``skyborn.*`` namespace compatibility
 * **v0.4.7**: Closed open-arrow tips (``arrowstyle="->"``) in ``skyborn.plot``
   by emitting single-pass 3-vertex V-polylines with ``capstyle="butt"`` and
   ``joinstyle="round"``

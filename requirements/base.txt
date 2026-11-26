@@ -9,3 +9,6 @@ statsmodels
 scipy
 scikit-learn
 dask
+skyborn-plot>=0.1.0
+skyborn-spharm>=0.1.0
+skyborn-backend>=0.1.0

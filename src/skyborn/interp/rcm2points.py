@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 
 from .errors import ChunkError, CoordinateError, DimensionError
-from .fortran.rcm2points import drcm2points
+from skybornbackend.interp.fortran.rcm2points import drcm2points
 from .missing_values import (
     complex_dtypes,
     float_dtypes,
