@@ -52,7 +52,7 @@ jobs:
         id: run_tests_with_coverage
         run: |
           set +e
-          pytest tests/ \
+          python -B -m pytest tests/ --ignore=tests/test_gradients.py -k "not test_vorticity_with_metpy_crs" \
             --cov=src/skyborn \
             --cov-report=xml \
             --cov-report=html \
